@@ -1,0 +1,21 @@
+# >>> agent-layer
+.agent-layer/
+
+# Agent Layer launcher
+al
+
+# Agent Layer-generated instruction shims
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.github/copilot-instructions.md
+
+# Agent Layer-generated client configs + artifacts
+.mcp.json
+.codex/
+.gemini/
+.claude/
+.vscode/mcp.json
+# <<< agent-layer
+
+.DS_Store
