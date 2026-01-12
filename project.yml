@@ -15,6 +15,7 @@ targets:
       - target: ProjectWorkspacesCore
     settings:
       base:
+        PRODUCT_NAME: ProjectWorkspaces
         PRODUCT_BUNDLE_IDENTIFIER: com.projectworkspaces.ProjectWorkspaces
         INFOPLIST_FILE: ProjectWorkspacesApp/Info.plist
 

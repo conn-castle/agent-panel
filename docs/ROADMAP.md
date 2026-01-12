@@ -46,11 +46,11 @@ Phase template (incomplete):
 - [x] Create Xcode targets: `ProjectWorkspacesApp` (SwiftUI menu bar agent, LSUIElement), `ProjectWorkspacesCore` (pure Swift module), `pwctl` (CLI tool).
 - [x] Canonical Xcode entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` in v1).
 - [x] Ensure the repo builds from the CLI via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` (Xcode GUI is optional for day-to-day development).
-- [ ] Add repo scripts for deterministic builds/tests (no Xcode UI required): `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`.
-- [ ] In `scripts/dev_bootstrap.sh`, validate the Xcode toolchain is installed and selected; fail loudly with copy/paste fix instructions when missing/misconfigured.
+- [x] Add repo scripts for deterministic builds/tests (no Xcode UI required): `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`.
+- [x] In `scripts/dev_bootstrap.sh`, validate the Xcode toolchain is installed and selected; fail loudly with copy/paste fix instructions when missing/misconfigured.
 - [ ] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
-- [ ] In `scripts/build.sh`, build `ProjectWorkspaces.app` and `pwctl` via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` with pinned scheme/configuration.
-- [ ] In `scripts/test.sh`, run unit tests via `xcodebuild -project ProjectWorkspaces.xcodeproj test ...` (CI uses this path).
+- [x] In `scripts/build.sh`, build `ProjectWorkspaces.app` and `pwctl` via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` with pinned scheme/configuration.
+- [x] In `scripts/test.sh`, run unit tests via `xcodebuild -project ProjectWorkspaces.xcodeproj test ...` (CI uses this path).
 - [ ] Implement the `pwctl` command surface with locked subcommands: `doctor`, `list`, `activate`, `close`, `logs`.
 - [ ] Define and centralize filesystem paths (config, generated VS Code workspaces, state, logs, tool-owned `code` shim).
 - [ ] Select and pin a SwiftPM TOML parsing dependency (the only third-party runtime dependency allowed in v1).

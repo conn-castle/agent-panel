@@ -20,22 +20,46 @@ scripts/regenerate_xcodeproj.sh
 
 Run from repo root. Prerequisites: `xcodegen` installed (for example via `brew install xcodegen`).
 
+## Bootstrap
+
+Validate Xcode toolchain selection and first-launch state:
+
+```bash
+scripts/dev_bootstrap.sh
+```
+
+Run from repo root. Prerequisites: full Xcode installed and selected via `xcode-select`.
+If this fails due to first-launch state, run the printed fix commands (for example `sudo xcodebuild -runFirstLaunch`).
+
 ## Build
 
 Build the app + CLI (Debug), without code signing:
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData build CODE_SIGNING_ALLOWED=NO
+scripts/build.sh
 ```
 
-Run from repo root. Prerequisites: Xcode installed and selected via `xcode-select`.
+Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `.agent-layer/tmp`.
+
+Reference (underlying `xcodebuild`):
+
+```bash
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -derivedDataPath .agent-layer/tmp/DerivedData -resolvePackageDependencies
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData build CODE_SIGNING_ALLOWED=NO
+```
 
 ## Test
 
 Run unit tests (Debug), without code signing:
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData test CODE_SIGNING_ALLOWED=NO
+scripts/test.sh
 ```
 
-Run from repo root. Prerequisites: Xcode installed and selected via `xcode-select`.
+Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `.agent-layer/tmp`.
+
+Reference (underlying `xcodebuild`):
+
+```bash
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData test CODE_SIGNING_ALLOWED=NO
+```

@@ -369,7 +369,7 @@ Exit codes:
 
 End users do not need Xcode. Developers and CI runners do: building a native Swift/SwiftUI macOS app (and signing/notarization) requires Apple’s toolchain (practically: full Xcode installed).
 
-Opening the Xcode GUI is optional day-to-day; common workflows are driven by `xcodebuild` (see `docs/COMMANDS.md`). Script wrappers are planned (see `docs/ROADMAP.md`).
+Opening the Xcode GUI is optional day-to-day; common workflows are driven by `scripts/build.sh` and `scripts/test.sh` (see `docs/COMMANDS.md`).
 
 Canonical entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` unless the repo contains 2+ `.xcodeproj` files that must be built together).
 
@@ -382,7 +382,7 @@ SwiftPM lockfile path (once dependencies are added): `ProjectWorkspaces.xcodepro
 Recommended (no Xcode UI required):
 
 1) (When changing targets/settings) Run `scripts/regenerate_xcodeproj.sh`.
-2) Build/test using the commands in `docs/COMMANDS.md`.
+2) Build/test using `scripts/build.sh` and `scripts/test.sh` (see `docs/COMMANDS.md`).
 3) Grant Accessibility permission to the debug build.
 4) Once implemented, use `pwctl doctor` and `pwctl activate <projectId>` during iteration.
 

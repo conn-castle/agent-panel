@@ -436,6 +436,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ProjectWorkspaces;
+				PRODUCT_NAME = ProjectWorkspaces;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -467,6 +468,7 @@
 					"@executable_path/../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ProjectWorkspaces;
+				PRODUCT_NAME = ProjectWorkspaces;
 				SDKROOT = macosx;
 			};
 			name = Debug;
