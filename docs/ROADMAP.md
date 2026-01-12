@@ -43,9 +43,9 @@ Phase template (incomplete):
 - Lock file paths + config/state contracts and validate them via `doctor`.
 
 ### Tasks
-- [ ] Create Xcode targets: `ProjectWorkspacesApp` (SwiftUI menu bar agent, LSUIElement), `ProjectWorkspacesCore` (pure Swift module), `pwctl` (CLI tool).
-- [ ] Canonical Xcode entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` in v1).
-- [ ] Ensure the repo builds from the CLI via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` (Xcode GUI is optional for day-to-day development).
+- [x] Create Xcode targets: `ProjectWorkspacesApp` (SwiftUI menu bar agent, LSUIElement), `ProjectWorkspacesCore` (pure Swift module), `pwctl` (CLI tool).
+- [x] Canonical Xcode entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` in v1).
+- [x] Ensure the repo builds from the CLI via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` (Xcode GUI is optional for day-to-day development).
 - [ ] Add repo scripts for deterministic builds/tests (no Xcode UI required): `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`.
 - [ ] In `scripts/dev_bootstrap.sh`, validate the Xcode toolchain is installed and selected; fail loudly with copy/paste fix instructions when missing/misconfigured.
 - [ ] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).

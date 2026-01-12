@@ -4,6 +4,10 @@ ProjectWorkspaces is a macOS menu bar app that provides **project-first context 
 
 It creates and manages a lightweight "virtual workspace" per project using **AeroSpace workspaces**, so switching projects hides unrelated windows and brings the right ones back with the right layout.
 
+## Status
+
+This repository is currently in **Phase 0 (scaffold)**; `pwctl` subcommands (including `doctor`) are not implemented yet. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
+
 ## What it does (behavioral contract)
 
 ProjectWorkspaces implements two primary actions:
@@ -73,7 +77,7 @@ Layouts are persisted **per project per display mode**.
 
 ### Prerequisites
 
-1) macOS
+1) macOS 15.7+
 2) **AeroSpace installed and running**
 3) Accessibility permission for `ProjectWorkspaces.app`
 4) Google Chrome
@@ -97,7 +101,9 @@ System Settings → Privacy & Security → Accessibility:
 
 - Enable `ProjectWorkspaces`
 
-### Run doctor
+### Run doctor (planned)
+
+`pwctl doctor` is not implemented yet. Once available (via installation or local build), run:
 
 ```bash
 pwctl doctor
@@ -276,7 +282,7 @@ Important note: if you keep a window “show on all desktops” (e.g., Messages)
 
 `pwctl` exists for debugging, CI-style checks, and as a fallback interface if the UI is unavailable.
 
-Commands (locked):
+Commands (locked; planned):
 
 ```bash
 pwctl doctor
@@ -363,9 +369,11 @@ Exit codes:
 
 End users do not need Xcode. Developers and CI runners do: building a native Swift/SwiftUI macOS app (and signing/notarization) requires Apple’s toolchain (practically: full Xcode installed).
 
-Opening the Xcode GUI is optional day-to-day; common workflows are driven by `xcodebuild` scripts.
+Opening the Xcode GUI is optional day-to-day; common workflows are driven by `xcodebuild` (see `docs/COMMANDS.md`). Script wrappers are planned (see `docs/ROADMAP.md`).
 
 Canonical entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` unless the repo contains 2+ `.xcodeproj` files that must be built together).
+
+Xcode project definition: edit `project.yml`, then regenerate `ProjectWorkspaces.xcodeproj` via `scripts/regenerate_xcodeproj.sh`.
 
 SwiftPM lockfile path (once dependencies are added): `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` (commit this file).
 
@@ -373,10 +381,10 @@ SwiftPM lockfile path (once dependencies are added): `ProjectWorkspaces.xcodepro
 
 Recommended (no Xcode UI required):
 
-1) Run `scripts/dev_bootstrap.sh` (ensures the correct Xcode toolchain is installed/selected).
-2) Run `scripts/build.sh` and `scripts/test.sh` (both call `xcodebuild`).
+1) (When changing targets/settings) Run `scripts/regenerate_xcodeproj.sh`.
+2) Build/test using the commands in `docs/COMMANDS.md`.
 3) Grant Accessibility permission to the debug build.
-4) Use `pwctl doctor` and `pwctl activate <projectId>` during iteration.
+4) Once implemented, use `pwctl doctor` and `pwctl activate <projectId>` during iteration.
 
 Optional:
 - Open the project in Xcode for occasional debugging/provisioning tasks.

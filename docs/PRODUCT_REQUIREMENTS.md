@@ -309,6 +309,10 @@ Per project, IDE launch priority is:
 - In this repo, the expected SwiftPM lockfile path is `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` (commit this file; do not add duplicate copies).
 - The release artifact is a signed + notarized `.app`, shipped via both a Homebrew cask (recommended) and a direct download (`.zip` or `.dmg`).
 
+### NFR-006 — Platform support
+
+- The minimum supported macOS version is 15.7.
+
 ---
 
 ## 8. Acceptance criteria (end-to-end)

@@ -1,0 +1,57 @@
+name: ProjectWorkspaces
+
+options:
+  bundleIdPrefix: com.projectworkspaces
+  deploymentTarget:
+    macOS: "15.7"
+
+targets:
+  ProjectWorkspacesApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: ProjectWorkspacesApp
+    dependencies:
+      - target: ProjectWorkspacesCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.projectworkspaces.ProjectWorkspaces
+        INFOPLIST_FILE: ProjectWorkspacesApp/Info.plist
+
+  ProjectWorkspacesCore:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: ProjectWorkspacesCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+  pwctl:
+    type: tool
+    platform: macOS
+    sources:
+      - path: pwctl
+    dependencies:
+      - target: ProjectWorkspacesCore
+
+  ProjectWorkspacesCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ProjectWorkspacesCoreTests
+    dependencies:
+      - target: ProjectWorkspacesCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  ProjectWorkspaces:
+    build:
+      targets:
+        ProjectWorkspacesApp: all
+        pwctl: all
+    test:
+      targets:
+        - ProjectWorkspacesCoreTests

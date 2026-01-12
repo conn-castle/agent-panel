@@ -15,6 +15,21 @@ Entry format:
     Tradeoffs: <what is gained and what is lost>
 
 <!-- ENTRIES START -->
+- Decision 2026-01-12 9fd499c: Minimum supported macOS version
+    Decision: Set the minimum supported macOS version to 15.7.
+    Reason: This is the product requirement for the initial release.
+    Tradeoffs: Older macOS versions are unsupported, which may exclude some users and reduces compatibility testing scope.
+
+- Decision 2026-01-12 9fd499c: Generate Xcode project via XcodeGen
+    Decision: Track `project.yml` and regenerate `ProjectWorkspaces.xcodeproj` via `scripts/regenerate_xcodeproj.sh` (XcodeGen) instead of editing `.pbxproj` by hand.
+    Reason: Keep the Xcode project definition reviewable and avoid brittle manual edits and merge conflicts in the generated project file.
+    Tradeoffs: Contributors must install `xcodegen` to change targets/settings; generated diffs can be large and require regeneration discipline.
+
+- Decision 2026-01-11 9fd499c: Core target is a static framework
+    Decision: Build `ProjectWorkspacesCore` as a static framework so `pwctl` can link it without requiring embedded runtime frameworks.
+    Reason: A command-line tool does not embed dependent dynamic frameworks by default, which causes runtime loader failures during development.
+    Tradeoffs: Static linking can increase binary size and can duplicate code between the app and CLI; switching to a dynamic framework later would require explicit embedding and runtime search path configuration.
+
 - Decision 2026-01-11 000000: CLI-driven builds without Xcode UI
     Decision: Keep a single repo-level `ProjectWorkspaces.xcodeproj` (no `.xcworkspace` in v1) and drive build/test/archive/notarization via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`, `scripts/archive.sh`, `scripts/notarize.sh`); commit the SwiftPM lockfile at `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and resolve packages in CI; require the Apple toolchain (full Xcode) for developers/CI while keeping the Xcode GUI optional day-to-day.
     Reason: Deterministic builds/signing/notarization with minimal IDE friction and fewer “it works on my machine” differences.
