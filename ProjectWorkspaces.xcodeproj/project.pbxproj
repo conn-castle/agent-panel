@@ -8,12 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
+		2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */; };
 		31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */; };
 		345AC9F26EE8EA40DDA6D1C5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E82A0992420A094C6BC1789 /* main.swift */; };
 		4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */; };
 		59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */; };
 		62FED868FA129C98FED3D0AC /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		90F079F8156706BEF99CACD6 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
+		CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */; };
+		DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */; };
+		F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,13 +47,17 @@
 /* Begin PBXFileReference section */
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
 		22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectWorkspacesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPathsTests.swift; sourceTree = "<group>"; };
 		3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesCoreTests.swift; sourceTree = "<group>"; };
 		3DE2FA81C4BD12C763EA0DF7 /* ProjectWorkspacesCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectWorkspacesCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesCore.swift; sourceTree = "<group>"; };
 		4C4A4F3F4BE0D94FAE368FD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7E82A0992420A094C6BC1789 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPaths.swift; sourceTree = "<group>"; };
+		BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlCommand.swift; sourceTree = "<group>"; };
 		BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = ProjectWorkspacesCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		CE07B01C725DCD484B2140BC /* pwctl */ = {isa = PBXFileReference; includeInIndex = 0; path = pwctl; sourceTree = BUILT_PRODUCTS_DIR; };
+		E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlArgumentParserTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +92,8 @@
 			isa = PBXGroup;
 			children = (
 				3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */,
+				22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */,
+				E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */,
 			);
 			path = ProjectWorkspacesCoreTests;
 			sourceTree = "<group>";
@@ -131,6 +141,8 @@
 			isa = PBXGroup;
 			children = (
 				3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */,
+				9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */,
+				BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */,
 			);
 			path = ProjectWorkspacesCore;
 			sourceTree = "<group>";
@@ -265,6 +277,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */,
+				F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */,
+				2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -273,6 +287,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */,
+				DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */,
+				CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

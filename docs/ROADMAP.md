@@ -48,12 +48,13 @@ Phase template (incomplete):
 - [x] Ensure the repo builds from the CLI via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` (Xcode GUI is optional for day-to-day development).
 - [x] Add repo scripts for deterministic builds/tests (no Xcode UI required): `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`.
 - [x] In `scripts/dev_bootstrap.sh`, validate the Xcode toolchain is installed and selected; fail loudly with copy/paste fix instructions when missing/misconfigured.
-- [ ] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
+- [x] Add CI workflow that runs `scripts/build.sh` and `scripts/test.sh` (and resolves SwiftPM packages before building).
 - [x] In `scripts/build.sh`, build `ProjectWorkspaces.app` and `pwctl` via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` with pinned scheme/configuration.
 - [x] In `scripts/test.sh`, run unit tests via `xcodebuild -project ProjectWorkspaces.xcodeproj test ...` (CI uses this path).
-- [ ] Implement the `pwctl` command surface with locked subcommands: `doctor`, `list`, `activate`, `close`, `logs`.
-- [ ] Define and centralize filesystem paths (config, generated VS Code workspaces, state, logs, tool-owned `code` shim).
+- [x] Implement the `pwctl` command surface with locked subcommands: `doctor`, `list`, `activate`, `close`, `logs`.
+- [x] Define and centralize filesystem paths (config, generated VS Code workspaces, state, logs, tool-owned `code` shim).
 - [ ] Select and pin a SwiftPM TOML parsing dependency (the only third-party runtime dependency allowed in v1).
+- [ ] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` after adding the SwiftPM TOML dependency.
 - [ ] Implement TOML parsing into typed models with strict validation, explicit documented defaults, and tolerant unknown-key handling (unknown keys must not cause a parse failure).
 - [ ] Implement `pwctl doctor` with PASS/FAIL/WARN checks, actionable "Fix:" guidance, and copy/paste config snippets for discovered values.
 - [ ] In `doctor`, enforce FAIL vs WARN rules for missing config keys and invalid values (defaults applied exactly as documented).

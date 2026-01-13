@@ -9,47 +9,104 @@ private enum PwctlExitCode: Int32 {
     case usage = 64
 }
 
-/// Builds the `pwctl` usage string.
-private func usageText() -> String {
-    """
-    pwctl (ProjectWorkspaces CLI) — \(ProjectWorkspacesCore.version)
+/// Builds the `pwctl` usage string for a given help topic.
+/// - Parameter topic: Command topic to render usage for.
+/// - Returns: A usage string for the provided topic.
+private func usageText(for topic: PwctlHelpTopic) -> String {
+    switch topic {
+    case .root:
+        return """
+        pwctl (ProjectWorkspaces CLI) — \(ProjectWorkspacesCore.version)
 
-    Usage:
-      pwctl <command> [args]
+        Usage:
+          pwctl <command> [args]
 
-    Commands (locked surface; not fully implemented yet):
-      doctor
-      list
-      activate <projectId>
-      close <projectId>
-      logs
+        Commands (locked surface; not fully implemented yet):
+          doctor
+          list
+          activate <projectId>
+          close <projectId>
+          logs --tail <n>
 
-    Options:
-      -h, --help   Show help
-    """
+        Options:
+          -h, --help   Show help
+        """
+    case .doctor:
+        return """
+        Usage:
+          pwctl doctor
+
+        Options:
+          -h, --help   Show help
+        """
+    case .list:
+        return """
+        Usage:
+          pwctl list
+
+        Options:
+          -h, --help   Show help
+        """
+    case .activate:
+        return """
+        Usage:
+          pwctl activate <projectId>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .close:
+        return """
+        Usage:
+          pwctl close <projectId>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .logs:
+        return """
+        Usage:
+          pwctl logs --tail <n>
+
+        Options:
+          -h, --help   Show help
+        """
+    }
 }
 
 /// Prints text to stderr.
+/// - Parameter text: Text to write to stderr.
 private func printStderr(_ text: String) {
     FileHandle.standardError.write(Data((text + "\n").utf8))
 }
 
 let args = Array(CommandLine.arguments.dropFirst())
+let parser = PwctlArgumentParser()
 
-if args.isEmpty || args.contains("-h") || args.contains("--help") {
-    print(usageText())
-    exit(PwctlExitCode.ok.rawValue)
-}
-
-let command = args[0]
-
-switch command {
-case "doctor", "list", "activate", "close", "logs":
-    printStderr("error: `pwctl \(command)` is not implemented yet")
-    exit(PwctlExitCode.failure.rawValue)
-default:
-    printStderr("error: unknown command: \(command)\n")
-    printStderr(usageText())
+switch parser.parse(arguments: args) {
+case .success(let command):
+    switch command {
+    case .help(let topic):
+        print(usageText(for: topic))
+        exit(PwctlExitCode.ok.rawValue)
+    case .doctor:
+        printStderr("error: `pwctl doctor` is not implemented yet")
+        exit(PwctlExitCode.failure.rawValue)
+    case .list:
+        printStderr("error: `pwctl list` is not implemented yet")
+        exit(PwctlExitCode.failure.rawValue)
+    case .activate(let projectId):
+        printStderr("error: `pwctl activate \(projectId)` is not implemented yet")
+        exit(PwctlExitCode.failure.rawValue)
+    case .close(let projectId):
+        printStderr("error: `pwctl close \(projectId)` is not implemented yet")
+        exit(PwctlExitCode.failure.rawValue)
+    case .logs(let tail):
+        printStderr("error: `pwctl logs --tail \(tail)` is not implemented yet")
+        exit(PwctlExitCode.failure.rawValue)
+    }
+case .failure(let error):
+    printStderr("error: \(error.message)")
+    printStderr(usageText(for: error.usageTopic))
     exit(PwctlExitCode.usage.rawValue)
 }
-
