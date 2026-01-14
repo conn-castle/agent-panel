@@ -4,25 +4,15 @@ import XCTest
 
 final class DoctorTests: XCTestCase {
     func testDoctorFailsWhenHotkeyUnavailable() {
-        let config = """
-        [global]
-        defaultIde = "vscode"
-        globalChromeUrls = []
-
-        [display]
-        ultrawideMinWidthPx = 5000
-
-        [[project]]
-        id = "codex"
-        name = "Codex"
-        path = "/Users/tester/src/codex"
-        colorHex = "#7C3AED"
-        """
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
             "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
         ], directories: [
             "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
         ])
 
         let appDiscovery = TestAppDiscovery(
@@ -37,12 +27,18 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
             fileSystem: fileSystem,
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: false),
-            accessibilityChecker: TestAccessibilityChecker(isTrusted: true)
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
         )
 
         let report = doctor.run()
@@ -52,32 +48,32 @@ final class DoctorTests: XCTestCase {
     }
 
     func testDoctorWarnsOnSwitcherHotkey() {
-        let config = """
-        [global]
-        defaultIde = "vscode"
-        globalChromeUrls = []
-        switcherHotkey = "Ctrl+Space"
-
-        [display]
-        ultrawideMinWidthPx = 5000
-
-        [[project]]
-        id = "codex"
-        name = "Codex"
-        path = "/Users/tester/src/codex"
-        colorHex = "#7C3AED"
-        """
+        let config = makeValidConfig(includeSwitcherHotkey: true)
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
             "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
         ], directories: [
             "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
         ])
 
         let appDiscovery = TestAppDiscovery(
-            bundleIdMap: ["com.google.Chrome": "/Applications/Google Chrome.app"],
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
             nameMap: [:],
-            bundleIdForPath: ["/Applications/Google Chrome.app": "com.google.Chrome"]
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
         )
 
         let doctor = Doctor(
@@ -85,7 +81,8 @@ final class DoctorTests: XCTestCase {
             fileSystem: fileSystem,
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
-            accessibilityChecker: TestAccessibilityChecker(isTrusted: true)
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
         )
 
         let report = doctor.run()
@@ -94,13 +91,25 @@ final class DoctorTests: XCTestCase {
     }
 
     func testDoctorFailsWhenConfigMissing() {
-        let fileSystem = TestFileSystem(files: [:], directories: [])
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+        let fileSystem = TestFileSystem(files: [:], directories: [], executableFiles: [
+            aerospacePath
+        ])
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-inbox"
+        )
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
             fileSystem: fileSystem,
-            appDiscovery: TestAppDiscovery(bundleIdMap: [:], nameMap: [:], bundleIdForPath: [:]),
+            appDiscovery: TestAppDiscovery(
+                bundleIdMap: ["com.google.Chrome": "/Applications/Google Chrome.app"],
+                nameMap: [:],
+                bundleIdForPath: ["/Applications/Google Chrome.app": "com.google.Chrome"]
+            ),
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
-            accessibilityChecker: TestAccessibilityChecker(isTrusted: true)
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
         )
 
         let report = doctor.run()
@@ -108,15 +117,161 @@ final class DoctorTests: XCTestCase {
         XCTAssertTrue(report.hasFailures)
         XCTAssertTrue(report.findings.contains { $0.title == "Config file missing" })
     }
+
+    func testDoctorFailsWhenAerospaceCliMissing() {
+        let config = makeValidConfig()
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            "/usr/bin/which"
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
+                CommandResult(exitCode: 1, stdout: "", stderr: "not found")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "AeroSpace CLI not found" })
+    }
+
+    func testDoctorWarnsWhenAerospaceRestoreFails() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+                CommandResult(exitCode: 1, stdout: "", stderr: "restore failed")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertFalse(report.hasFailures)
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Doctor changed your AeroSpace workspace to pw-inbox but could not restore the previous workspace."
+        })
+    }
+
+    func testDoctorFailsWhenFocusedWorkspaceIsNotInboxAfterSwitch() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "AeroSpace did not switch to pw-inbox" })
+    }
 }
 
 private struct TestFileSystem: FileSystem {
     let files: [String: Data]
     let directories: Set<String>
+    let executableFiles: Set<String>
 
-    init(files: [String: Data], directories: Set<String>) {
+    init(files: [String: Data], directories: Set<String>, executableFiles: Set<String> = []) {
         self.files = files
         self.directories = directories
+        self.executableFiles = executableFiles
     }
 
     func fileExists(at url: URL) -> Bool {
@@ -127,12 +282,93 @@ private struct TestFileSystem: FileSystem {
         directories.contains(url.path)
     }
 
+    func isExecutableFile(at url: URL) -> Bool {
+        executableFiles.contains(url.path)
+    }
+
     func readFile(at url: URL) throws -> Data {
         if let data = files[url.path] {
             return data
         }
         throw NSError(domain: "TestFileSystem", code: 1)
     }
+}
+
+private struct CommandSignature: Hashable {
+    let path: String
+    let arguments: [String]
+}
+
+private final class TestCommandRunner: CommandRunning {
+    private var results: [CommandSignature: [CommandResult]]
+
+    init(results: [CommandSignature: [CommandResult]]) {
+        self.results = results
+    }
+
+    /// Runs a stubbed command and returns the next queued result.
+    /// - Parameters:
+    ///   - command: Executable URL to run.
+    ///   - arguments: Arguments passed to the command.
+    ///   - environment: Environment variables (unused in this stub).
+    /// - Returns: The queued command result.
+    /// - Throws: Error when no stubbed result exists for the command.
+    func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult {
+        let _ = environment
+        let signature = CommandSignature(path: command.path, arguments: arguments)
+        guard var queue = results[signature], !queue.isEmpty else {
+            throw NSError(domain: "TestCommandRunner", code: 1)
+        }
+        let result = queue.removeFirst()
+        results[signature] = queue
+        return result
+    }
+}
+
+/// Builds a valid TOML config fixture.
+/// - Parameter includeSwitcherHotkey: Whether to include the ignored switcherHotkey field.
+/// - Returns: TOML config string.
+private func makeValidConfig(includeSwitcherHotkey: Bool = false) -> String {
+    let switcherLine = includeSwitcherHotkey ? "switcherHotkey = \"Ctrl+Space\"" : ""
+    return """
+    [global]
+    defaultIde = "vscode"
+    globalChromeUrls = []
+    \(switcherLine)
+    [display]
+    ultrawideMinWidthPx = 5000
+
+    [[project]]
+    id = "codex"
+    name = "Codex"
+    path = "/Users/tester/src/codex"
+    colorHex = "#7C3AED"
+    """
+}
+
+/// Builds a passing command runner fixture for AeroSpace connectivity checks.
+/// - Parameters:
+///   - executablePath: Resolved AeroSpace CLI path.
+///   - previousWorkspace: Workspace name to restore after the check.
+/// - Returns: A command runner stub with success results.
+private func makePassingCommandRunner(executablePath: String, previousWorkspace: String) -> TestCommandRunner {
+    var results: [CommandSignature: [CommandResult]] = [:]
+    let focusedKey = CommandSignature(path: executablePath, arguments: ["list-workspaces", "--focused"])
+    results[focusedKey] = [
+        CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: ""),
+        CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
+        CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: "")
+    ]
+
+    let switchInboxKey = CommandSignature(path: executablePath, arguments: ["workspace", "pw-inbox"])
+    results[switchInboxKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
+
+    if previousWorkspace != "pw-inbox" {
+        let restoreKey = CommandSignature(path: executablePath, arguments: ["workspace", previousWorkspace])
+        results[restoreKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
+    }
+
+    return TestCommandRunner(results: results)
 }
 
 private struct TestAppDiscovery: AppDiscovering {

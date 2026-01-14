@@ -7,6 +7,7 @@ public struct Doctor {
     private let appDiscovery: AppDiscovering
     private let hotkeyChecker: HotkeyChecking
     private let accessibilityChecker: AccessibilityChecking
+    private let commandRunner: CommandRunning
     private let configParser: ConfigParser
 
     /// Creates a Doctor runner with default dependencies.
@@ -16,18 +17,21 @@ public struct Doctor {
     ///   - appDiscovery: App discovery implementation.
     ///   - hotkeyChecker: Hotkey availability checker.
     ///   - accessibilityChecker: Accessibility permission checker.
+    ///   - commandRunner: Command runner used for CLI checks.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
         fileSystem: FileSystem = DefaultFileSystem(),
         appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
         hotkeyChecker: HotkeyChecking = CarbonHotkeyChecker(),
-        accessibilityChecker: AccessibilityChecking = DefaultAccessibilityChecker()
+        accessibilityChecker: AccessibilityChecking = DefaultAccessibilityChecker(),
+        commandRunner: CommandRunning = DefaultCommandRunner()
     ) {
         self.paths = paths
         self.fileSystem = fileSystem
         self.appDiscovery = appDiscovery
         self.hotkeyChecker = hotkeyChecker
         self.accessibilityChecker = accessibilityChecker
+        self.commandRunner = commandRunner
         self.configParser = ConfigParser()
     }
 
@@ -99,6 +103,7 @@ public struct Doctor {
             findings.append(contentsOf: checkApps(outcome: nil))
         }
 
+        findings.append(contentsOf: checkAerospaceConnectivity())
         findings.append(accessibilityFinding())
         findings.append(hotkeyFinding())
 
@@ -177,6 +182,332 @@ public struct Doctor {
         }
 
         return findings
+    }
+
+    private enum DoctorCheckResult<Success> {
+        case success(Success)
+        case failure(DoctorFinding)
+    }
+
+    private enum CommandOutcome {
+        case success(CommandResult)
+        case failure(String)
+    }
+
+    /// Checks AeroSpace connectivity by switching to `pw-inbox` and restoring the previous workspace.
+    /// - Returns: Findings for AeroSpace CLI resolution and workspace switching behavior.
+    private func checkAerospaceConnectivity() -> [DoctorFinding] {
+        var findings: [DoctorFinding] = []
+
+        switch resolveAerospaceExecutable() {
+        case .failure(let failure):
+            return [failure]
+        case .success(let executable):
+            findings.append(
+                DoctorFinding(
+                    severity: .pass,
+                    title: "AeroSpace CLI resolved",
+                    detail: executable.path
+                )
+            )
+
+            let previousWorkspaceResult = focusedWorkspace(
+                executable: executable,
+                context: "before switching to pw-inbox"
+            )
+
+            switch previousWorkspaceResult {
+            case .failure(let failure):
+                findings.append(failure)
+                return findings
+            case .success(let previousWorkspace):
+                let switchResult = runCommand(
+                    executable: executable,
+                    arguments: ["workspace", "pw-inbox"]
+                )
+
+                switch switchResult {
+                case .failure(let detail):
+                    findings.append(
+                        DoctorFinding(
+                            severity: .fail,
+                            title: "AeroSpace failed to switch to pw-inbox",
+                            detail: detail,
+                            fix: "Ensure AeroSpace is running, then try `aerospace workspace pw-inbox`."
+                        )
+                    )
+                    return findings
+                case .success:
+                    break
+                }
+
+                let focusedAfterSwitch = focusedWorkspace(
+                    executable: executable,
+                    context: "after switching to pw-inbox"
+                )
+
+                switch focusedAfterSwitch {
+                case .failure(let failure):
+                    findings.append(failure)
+                    return findings
+                case .success(let currentWorkspace):
+                    if currentWorkspace != "pw-inbox" {
+                        findings.append(
+                            DoctorFinding(
+                                severity: .fail,
+                                title: "AeroSpace did not switch to pw-inbox",
+                                detail: "Focused workspace is \(currentWorkspace).",
+                                fix: "Ensure AeroSpace can switch workspaces, then try `aerospace workspace pw-inbox`."
+                            )
+                        )
+                        return findings
+                    }
+                }
+
+                findings.append(
+                    DoctorFinding(
+                        severity: .pass,
+                        title: "AeroSpace connectivity check passed",
+                        detail: "Switched to pw-inbox and verified focus."
+                    )
+                )
+
+                if previousWorkspace != "pw-inbox" {
+                    let restoreResult = runCommand(
+                        executable: executable,
+                        arguments: ["workspace", previousWorkspace]
+                    )
+
+                    switch restoreResult {
+                    case .failure(let detail):
+                        findings.append(
+                            restoreWarning(previousWorkspace: previousWorkspace, detail: detail)
+                        )
+                        return findings
+                    case .success:
+                        break
+                    }
+
+                    let focusedAfterRestore = focusedWorkspace(
+                        executable: executable,
+                        context: "after restoring previous workspace"
+                    )
+
+                    switch focusedAfterRestore {
+                    case .failure(let failure):
+                        findings.append(
+                            restoreWarning(
+                                previousWorkspace: previousWorkspace,
+                                detail: failure.detail ?? "Unable to verify focused workspace."
+                            )
+                        )
+                    case .success(let restoredWorkspace):
+                        if restoredWorkspace != previousWorkspace {
+                            findings.append(
+                                restoreWarning(
+                                    previousWorkspace: previousWorkspace,
+                                    detail: "Focused workspace is \(restoredWorkspace)."
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        return findings
+    }
+
+    /// Resolves the AeroSpace CLI executable using deterministic paths and a controlled `which` lookup.
+    /// - Returns: The resolved executable URL or a failure finding.
+    private func resolveAerospaceExecutable() -> DoctorCheckResult<URL> {
+        let candidatePaths = [
+            "/opt/homebrew/bin/aerospace",
+            "/usr/local/bin/aerospace"
+        ]
+        let controlledPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        let searchContext = "Checked /opt/homebrew/bin/aerospace, /usr/local/bin/aerospace, and `which aerospace` with PATH=\(controlledPath)."
+
+        for candidatePath in candidatePaths {
+            let candidateURL = URL(fileURLWithPath: candidatePath, isDirectory: false)
+            if fileSystem.isExecutableFile(at: candidateURL) {
+                return .success(candidateURL)
+            }
+        }
+
+        let whichURL = URL(fileURLWithPath: "/usr/bin/which", isDirectory: false)
+
+        guard fileSystem.isExecutableFile(at: whichURL) else {
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: "Expected /usr/bin/which to be executable for lookup. \(searchContext)",
+                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
+                )
+            )
+        }
+
+        let result: CommandResult
+        do {
+            result = try commandRunner.run(
+                command: whichURL,
+                arguments: ["aerospace"],
+                environment: ["PATH": controlledPath]
+            )
+        } catch {
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: "Failed to run /usr/bin/which: \(error). \(searchContext)",
+                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
+                )
+            )
+        }
+
+        if result.exitCode != 0 {
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: commandFailureDetail(
+                        exitCode: result.exitCode,
+                        stdout: result.stdout,
+                        stderr: result.stderr,
+                        prefix: "which aerospace failed"
+                    ) + " " + searchContext,
+                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
+                )
+            )
+        }
+
+        let resolvedPath = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !resolvedPath.isEmpty else {
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: "which aerospace returned empty output with PATH=\(controlledPath). \(searchContext)",
+                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
+                )
+            )
+        }
+
+        let resolvedURL = URL(fileURLWithPath: resolvedPath, isDirectory: false)
+        guard fileSystem.isExecutableFile(at: resolvedURL) else {
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: "Resolved path is not executable: \(resolvedPath). \(searchContext)",
+                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
+                )
+            )
+        }
+
+        return .success(resolvedURL)
+    }
+
+    /// Returns the focused AeroSpace workspace name.
+    /// - Parameters:
+    ///   - executable: Resolved AeroSpace executable URL.
+    ///   - context: Description of when the lookup is performed.
+    /// - Returns: Focused workspace name or a failure finding.
+    private func focusedWorkspace(executable: URL, context: String) -> DoctorCheckResult<String> {
+        let arguments = ["list-workspaces", "--focused"]
+        let commandLabel = "aerospace \(arguments.joined(separator: " "))"
+        let result = runCommand(executable: executable, arguments: arguments)
+
+        switch result {
+        case .failure(let detail):
+            return .failure(
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace focused workspace lookup failed",
+                    detail: "Context: \(context). Command: \(commandLabel). \(detail)",
+                    fix: "Ensure AeroSpace is running, then try `aerospace list-workspaces --focused`."
+                )
+            )
+        case .success(let output):
+            let workspace = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            if workspace.isEmpty {
+                return .failure(
+                    DoctorFinding(
+                        severity: .fail,
+                        title: "AeroSpace focused workspace output was empty",
+                        detail: "Context: \(context). Command: \(commandLabel).",
+                        fix: "Ensure AeroSpace is running, then try `aerospace list-workspaces --focused`."
+                    )
+                )
+            }
+            return .success(workspace)
+        }
+    }
+
+    /// Runs a command and returns the result or a formatted failure detail.
+    /// - Parameters:
+    ///   - executable: Executable file URL.
+    ///   - arguments: Arguments to pass to the executable.
+    /// - Returns: Command result or a failure detail string.
+    private func runCommand(executable: URL, arguments: [String]) -> CommandOutcome {
+        do {
+            let result = try commandRunner.run(command: executable, arguments: arguments, environment: nil)
+            if result.exitCode == 0 {
+                return .success(result)
+            }
+            return .failure(
+                commandFailureDetail(
+                    exitCode: result.exitCode,
+                    stdout: result.stdout,
+                    stderr: result.stderr,
+                    prefix: "Command failed"
+                )
+            )
+        } catch {
+            return .failure("Command failed to launch: \(error)")
+        }
+    }
+
+    /// Builds a warning finding for restore failures after switching to `pw-inbox`.
+    /// - Parameters:
+    ///   - previousWorkspace: Workspace name captured before switching.
+    ///   - detail: Detail describing the restore failure.
+    /// - Returns: A WARN finding instructing manual restoration.
+    private func restoreWarning(previousWorkspace: String, detail: String?) -> DoctorFinding {
+        let detailText = detail.map { "Previous workspace: \(previousWorkspace). \($0)" }
+            ?? "Previous workspace: \(previousWorkspace)."
+        return DoctorFinding(
+            severity: .warn,
+            title: "Doctor changed your AeroSpace workspace to pw-inbox but could not restore the previous workspace.",
+            detail: detailText,
+            fix: "Manually run `aerospace workspace \(previousWorkspace)`."
+        )
+    }
+
+    /// Formats command failure details from stdout/stderr and exit status.
+    /// - Parameters:
+    ///   - exitCode: Process exit status.
+    ///   - stdout: Captured standard output.
+    ///   - stderr: Captured standard error.
+    ///   - prefix: Prefix string to lead the detail text.
+    /// - Returns: Formatted failure detail string.
+    private func commandFailureDetail(
+        exitCode: Int32,
+        stdout: String,
+        stderr: String,
+        prefix: String
+    ) -> String {
+        var components: [String] = ["\(prefix). Exit code: \(exitCode)"]
+        let trimmedStdout = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedStderr = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedStdout.isEmpty {
+            components.append("Stdout: \(trimmedStdout)")
+        }
+        if !trimmedStderr.isEmpty {
+            components.append("Stderr: \(trimmedStderr)")
+        }
+        return components.joined(separator: " | ")
     }
 
     /// Checks Google Chrome discovery via Launch Services.

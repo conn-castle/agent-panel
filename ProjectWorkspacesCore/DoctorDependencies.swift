@@ -13,6 +13,10 @@ public protocol FileSystem {
     /// - Parameter url: Directory URL to check.
     func directoryExists(at url: URL) -> Bool
 
+    /// Returns true when an executable file exists at the given URL.
+    /// - Parameter url: File URL to check.
+    func isExecutableFile(at url: URL) -> Bool
+
     /// Reads file contents at the given URL.
     /// - Parameter url: File URL to read.
     /// - Returns: File contents as Data.
@@ -43,11 +47,86 @@ public struct DefaultFileSystem: FileSystem {
         return exists && isDirectory.boolValue
     }
 
+    /// Returns true when an executable file exists at the given URL.
+    /// - Parameter url: File URL to check.
+    public func isExecutableFile(at url: URL) -> Bool {
+        fileManager.isExecutableFile(atPath: url.path)
+    }
+
     /// Reads file contents at the given URL.
     /// - Parameter url: File URL to read.
     /// - Returns: File contents as Data.
     public func readFile(at url: URL) throws -> Data {
         try Data(contentsOf: url)
+    }
+}
+
+/// Result of a command execution.
+public struct CommandResult: Equatable, Sendable {
+    public let exitCode: Int32
+    public let stdout: String
+    public let stderr: String
+
+    /// Creates a command result payload.
+    /// - Parameters:
+    ///   - exitCode: Process termination status.
+    ///   - stdout: Captured standard output.
+    ///   - stderr: Captured standard error.
+    public init(exitCode: Int32, stdout: String, stderr: String) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+}
+
+/// Command runner used by Doctor to invoke external CLIs.
+public protocol CommandRunning {
+    /// Executes a command and captures stdout/stderr.
+    /// - Parameters:
+    ///   - command: Executable file URL.
+    ///   - arguments: Arguments passed to the command.
+    ///   - environment: Environment variables to override; when nil, inherits current environment.
+    /// - Returns: Command execution result.
+    /// - Throws: Error when the process fails to launch.
+    func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult
+}
+
+/// Default command runner backed by `Process`.
+public struct DefaultCommandRunner: CommandRunning {
+    /// Creates a default command runner.
+    public init() {}
+
+    /// Executes a command and captures stdout/stderr.
+    /// - Parameters:
+    ///   - command: Executable file URL.
+    ///   - arguments: Arguments passed to the command.
+    ///   - environment: Environment variables to override; when nil, inherits current environment.
+    /// - Returns: Command execution result.
+    /// - Throws: Error when the process fails to launch.
+    public func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult {
+        let process = Process()
+        process.executableURL = command
+        process.arguments = arguments
+        if let environment {
+            process.environment = environment
+        } else {
+            process.environment = ProcessInfo.processInfo.environment
+        }
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+
+        return CommandResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
     }
 }
 

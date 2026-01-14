@@ -62,7 +62,7 @@ Phase template (incomplete):
 - [x] In `doctor`, FAIL if the ⌘⇧Space hotkey cannot be registered (conflict / OS denial) and print actionable fix guidance (hotkey is not configurable).
 - [x] In `doctor`, implement Launch Services app discovery when `ide.*.appPath` / `bundleId` are omitted; FAIL only when an undiscoverable app is required by any project's effective IDE selection(s) or Chrome.
 - [x] In `doctor`, enforce reserved IDs: FAIL if any `project.id == "inbox"` (reserved for `pw-inbox` fallback behavior).
-- [ ] In `doctor`, perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
+- [x] In `doctor`, perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
 - [ ] Implement `pwctl list` to print configured projects from `config.toml`.
 - [ ] Implement `pwctl logs --tail <n>` to print the last N lines of the primary log.
 - [ ] Implement logging to `~/.local/state/project-workspaces/logs/workspaces.log` with deterministic rotation (rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5`) and structured output.

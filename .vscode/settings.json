@@ -15,7 +15,10 @@
     "/^pytest(\\b.*)?$/": true,
     "/^node(\\b.*)?$/": true,
     "/^npm(\\b.*)?$/": true,
-    "/^pnpm(\\b.*)?$/": true
+    "/^pnpm(\\b.*)?$/": true,
+    "/^git rev-parse(\\b.*)?$/": true,
+    "/^head(\\b.*)?$/": true,
+    "/^tail(\\b.*)?$/": true
   },
   "chatgpt.commentCodeLensEnabled": false
 }
