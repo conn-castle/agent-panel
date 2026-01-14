@@ -6,7 +6,7 @@ It creates and manages a lightweight "virtual workspace" per project using **Aer
 
 ## Status
 
-This repository is currently in **Phase 0 (scaffold)**; `pwctl doctor` is implemented, and other `pwctl` subcommands are still in progress. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
+This repository is currently in **Phase 0 (scaffold)**; `pwctl doctor`, `pwctl list`, and `pwctl logs` are implemented, and other `pwctl` subcommands are still in progress. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
 
 ## What it does (behavioral contract)
 
@@ -187,7 +187,7 @@ Doctor FAIL if missing/invalid:
 - Any project missing/invalid: `id` (regex + unique + not `inbox`), `name` (non-empty), `path` (exists), `colorHex` (`#RRGGBB`)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
 - Accessibility permission not granted (required for layout)
-- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial)
+- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor skips this check and reports PASS with a note.
 
 Doctor WARN if present:
 - `global.switcherHotkey` (ignored; hotkey is fixed to ⌘⇧Space)
@@ -283,7 +283,7 @@ Important note: if you keep a window “show on all desktops” (e.g., Messages)
 
 `pwctl` exists for debugging, CI-style checks, and as a fallback interface if the UI is unavailable.
 
-Commands (locked surface; `doctor` implemented, others planned):
+Commands (locked surface; `doctor`, `list`, and `logs` implemented; others planned):
 
 ```bash
 pwctl doctor

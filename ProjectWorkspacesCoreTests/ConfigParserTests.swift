@@ -31,8 +31,12 @@ final class ConfigParserTests: XCTestCase {
         XCTAssertTrue(outcome.effectiveIdeKinds.contains(.vscode))
 
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: global.defaultIde = \"vscode\"")
+        assertFinding(outcome.findings, severity: .warn, title: "Default applied: global.globalChromeUrls = []")
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: display.ultrawideMinWidthPx = 5000")
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: project[0].ide = \"vscode\"")
+        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].ideUseAgentLayerLauncher = true")
+        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].ideCommand = \"\"")
+        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].chromeUrls = []")
     }
 
     func testUnknownKeysAreReported() {
@@ -71,6 +75,72 @@ final class ConfigParserTests: XCTestCase {
 
         XCTAssertNil(outcome.config)
         assertFinding(outcome.findings, severity: .fail, title: "project[0].id is invalid")
+    }
+
+    func testMissingProjectsFails() {
+        let toml = """
+        [global]
+        defaultIde = "vscode"
+        globalChromeUrls = []
+        [display]
+        ultrawideMinWidthPx = 5000
+        """
+
+        let outcome = ConfigParser().parse(toml: toml)
+
+        XCTAssertNil(outcome.config)
+        assertFinding(outcome.findings, severity: .fail, title: "No [[project]] entries")
+    }
+
+    func testReservedProjectIdFails() {
+        let toml = """
+        [[project]]
+        id = "inbox"
+        name = "Inbox"
+        path = "/Users/tester/src/inbox"
+        colorHex = "#7C3AED"
+        """
+
+        let outcome = ConfigParser().parse(toml: toml)
+
+        XCTAssertNil(outcome.config)
+        assertFinding(outcome.findings, severity: .fail, title: "project[0].id is reserved")
+    }
+
+    func testDuplicateProjectIdsFail() {
+        let toml = """
+        [[project]]
+        id = "codex"
+        name = "Codex"
+        path = "/Users/tester/src/codex"
+        colorHex = "#7C3AED"
+
+        [[project]]
+        id = "codex"
+        name = "Codex Two"
+        path = "/Users/tester/src/codex-two"
+        colorHex = "#7C3AED"
+        """
+
+        let outcome = ConfigParser().parse(toml: toml)
+
+        XCTAssertNil(outcome.config)
+        assertFinding(outcome.findings, severity: .fail, title: "Duplicate project.id values")
+    }
+
+    func testInvalidColorHexFails() {
+        let toml = """
+        [[project]]
+        id = "codex"
+        name = "Codex"
+        path = "/Users/tester/src/codex"
+        colorHex = "#GGGGGG"
+        """
+
+        let outcome = ConfigParser().parse(toml: toml)
+
+        XCTAssertNil(outcome.config)
+        assertFinding(outcome.findings, severity: .fail, title: "project[0].colorHex is invalid")
     }
 
     private func assertFinding(

@@ -253,6 +253,7 @@ Per project, IDE launch priority is:
   - Chrome installed
   - VS Code installed (and Antigravity if configured)
   - global hotkey ⌘⇧Space can be registered (FAIL if registration fails due to conflict / OS denial)
+  - if the agent app is running, Doctor must skip the hotkey registration check and report PASS with a note that the hotkey is managed by the agent
   - config parses and is valid
   - project paths exist
   - required directories are writable

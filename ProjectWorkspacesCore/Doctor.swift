@@ -7,7 +7,9 @@ public struct Doctor {
     private let appDiscovery: AppDiscovering
     private let hotkeyChecker: HotkeyChecking
     private let accessibilityChecker: AccessibilityChecking
+    private let runningApplicationChecker: RunningApplicationChecking
     private let commandRunner: CommandRunning
+    private let aerospaceBinaryResolver: AeroSpaceBinaryResolving
     private let configParser: ConfigParser
 
     /// Creates a Doctor runner with default dependencies.
@@ -17,6 +19,7 @@ public struct Doctor {
     ///   - appDiscovery: App discovery implementation.
     ///   - hotkeyChecker: Hotkey availability checker.
     ///   - accessibilityChecker: Accessibility permission checker.
+    ///   - aerospaceBinaryResolver: Resolver for the AeroSpace CLI executable.
     ///   - commandRunner: Command runner used for CLI checks.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
@@ -24,14 +27,25 @@ public struct Doctor {
         appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
         hotkeyChecker: HotkeyChecking = CarbonHotkeyChecker(),
         accessibilityChecker: AccessibilityChecking = DefaultAccessibilityChecker(),
-        commandRunner: CommandRunning = DefaultCommandRunner()
+        runningApplicationChecker: RunningApplicationChecking = DefaultRunningApplicationChecker(),
+        commandRunner: CommandRunning = DefaultCommandRunner(),
+        aerospaceBinaryResolver: AeroSpaceBinaryResolving? = nil
     ) {
         self.paths = paths
         self.fileSystem = fileSystem
         self.appDiscovery = appDiscovery
         self.hotkeyChecker = hotkeyChecker
         self.accessibilityChecker = accessibilityChecker
+        self.runningApplicationChecker = runningApplicationChecker
         self.commandRunner = commandRunner
+        if let aerospaceBinaryResolver {
+            self.aerospaceBinaryResolver = aerospaceBinaryResolver
+        } else {
+            self.aerospaceBinaryResolver = DefaultAeroSpaceBinaryResolver(
+                fileSystem: fileSystem,
+                commandRunner: commandRunner
+            )
+        }
         self.configParser = ConfigParser()
     }
 
@@ -199,9 +213,16 @@ public struct Doctor {
     private func checkAerospaceConnectivity() -> [DoctorFinding] {
         var findings: [DoctorFinding] = []
 
-        switch resolveAerospaceExecutable() {
-        case .failure(let failure):
-            return [failure]
+        switch aerospaceBinaryResolver.resolve() {
+        case .failure(let error):
+            return [
+                DoctorFinding(
+                    severity: .fail,
+                    title: "AeroSpace CLI not found",
+                    detail: error.detail,
+                    fix: error.fix
+                )
+            ]
         case .success(let executable):
             findings.append(
                 DoctorFinding(
@@ -316,97 +337,6 @@ public struct Doctor {
         }
 
         return findings
-    }
-
-    /// Resolves the AeroSpace CLI executable using deterministic paths and a controlled `which` lookup.
-    /// - Returns: The resolved executable URL or a failure finding.
-    private func resolveAerospaceExecutable() -> DoctorCheckResult<URL> {
-        let candidatePaths = [
-            "/opt/homebrew/bin/aerospace",
-            "/usr/local/bin/aerospace"
-        ]
-        let controlledPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        let searchContext = "Checked /opt/homebrew/bin/aerospace, /usr/local/bin/aerospace, and `which aerospace` with PATH=\(controlledPath)."
-
-        for candidatePath in candidatePaths {
-            let candidateURL = URL(fileURLWithPath: candidatePath, isDirectory: false)
-            if fileSystem.isExecutableFile(at: candidateURL) {
-                return .success(candidateURL)
-            }
-        }
-
-        let whichURL = URL(fileURLWithPath: "/usr/bin/which", isDirectory: false)
-
-        guard fileSystem.isExecutableFile(at: whichURL) else {
-            return .failure(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "AeroSpace CLI not found",
-                    detail: "Expected /usr/bin/which to be executable for lookup. \(searchContext)",
-                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
-                )
-            )
-        }
-
-        let result: CommandResult
-        do {
-            result = try commandRunner.run(
-                command: whichURL,
-                arguments: ["aerospace"],
-                environment: ["PATH": controlledPath]
-            )
-        } catch {
-            return .failure(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "AeroSpace CLI not found",
-                    detail: "Failed to run /usr/bin/which: \(error). \(searchContext)",
-                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
-                )
-            )
-        }
-
-        if result.exitCode != 0 {
-            return .failure(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "AeroSpace CLI not found",
-                    detail: commandFailureDetail(
-                        exitCode: result.exitCode,
-                        stdout: result.stdout,
-                        stderr: result.stderr,
-                        prefix: "which aerospace failed"
-                    ) + " " + searchContext,
-                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
-                )
-            )
-        }
-
-        let resolvedPath = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !resolvedPath.isEmpty else {
-            return .failure(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "AeroSpace CLI not found",
-                    detail: "which aerospace returned empty output with PATH=\(controlledPath). \(searchContext)",
-                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
-                )
-            )
-        }
-
-        let resolvedURL = URL(fileURLWithPath: resolvedPath, isDirectory: false)
-        guard fileSystem.isExecutableFile(at: resolvedURL) else {
-            return .failure(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "AeroSpace CLI not found",
-                    detail: "Resolved path is not executable: \(resolvedPath). \(searchContext)",
-                    fix: "Install AeroSpace and ensure the `aerospace` CLI is installed, then re-run pwctl doctor."
-                )
-            )
-        }
-
-        return .success(resolvedURL)
     }
 
     /// Returns the focused AeroSpace workspace name.
@@ -681,6 +611,14 @@ public struct Doctor {
     /// Builds the hotkey availability finding.
     /// - Returns: Finding for Cmd+Shift+Space registration status.
     private func hotkeyFinding() -> DoctorFinding {
+        if runningApplicationChecker.isApplicationRunning(bundleIdentifier: ProjectWorkspacesCore.appBundleIdentifier) {
+            return DoctorFinding(
+                severity: .pass,
+                title: "Cmd+Shift+Space hotkey check skipped",
+                detail: "ProjectWorkspaces agent is running; hotkey is managed by the app."
+            )
+        }
+
         let result = hotkeyChecker.checkCommandShiftSpace()
         if result.isAvailable {
             return DoctorFinding(

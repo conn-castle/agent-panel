@@ -15,6 +15,16 @@ Entry format:
     Tradeoffs: <what is gained and what is lost>
 
 <!-- ENTRIES START -->
+- Decision 2026-01-14 02e7dee: Keep pwctl doctor and skip hotkey check when agent runs
+    Decision: Keep both `pwctl doctor` and the in-app “Run Doctor,” and skip the hotkey registration check when the agent is running.
+    Reason: This matches the locked deliverables while preventing false FAIL results during normal use.
+    Tradeoffs: The CLI surface remains supported and the hotkey check relies on agent detection.
+
+- Decision 2026-01-14 02e7dee: Log format is JSON Lines
+    Decision: Write log entries as JSON Lines with UTC ISO-8601 timestamps.
+    Reason: Structured logs are easy to parse and filter while remaining append-only.
+    Tradeoffs: Logs are less human-readable without tooling, and the schema must be kept stable.
+
 - Decision 2026-01-13 c8c343a: Select TOMLDecoder for TOML parsing
     Decision: Use the Swift package `TOMLDecoder` pinned to version `0.4.3` as the single third-party runtime dependency.
     Reason: It is a maintained Swift Package Manager library with a dedicated library product and aligns with the dependency policy.

@@ -21,6 +21,31 @@ public protocol FileSystem {
     /// - Parameter url: File URL to read.
     /// - Returns: File contents as Data.
     func readFile(at url: URL) throws -> Data
+
+    /// Creates a directory at the given URL, including intermediate directories.
+    /// - Parameter url: Directory URL to create.
+    func createDirectory(at url: URL) throws
+
+    /// Returns the file size in bytes at the given URL.
+    /// - Parameter url: File URL to inspect.
+    /// - Returns: File size in bytes.
+    func fileSize(at url: URL) throws -> UInt64
+
+    /// Removes the file or directory at the given URL.
+    /// - Parameter url: File or directory URL to remove.
+    func removeItem(at url: URL) throws
+
+    /// Moves a file from source to destination.
+    /// - Parameters:
+    ///   - sourceURL: Existing file URL.
+    ///   - destinationURL: Destination URL.
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws
+
+    /// Appends data to a file at the given URL, creating it if needed.
+    /// - Parameters:
+    ///   - url: File URL to append to.
+    ///   - data: Data to append.
+    func appendFile(at url: URL, data: Data) throws
 }
 
 /// Default file system implementation backed by `FileManager`.
@@ -58,6 +83,56 @@ public struct DefaultFileSystem: FileSystem {
     /// - Returns: File contents as Data.
     public func readFile(at url: URL) throws -> Data {
         try Data(contentsOf: url)
+    }
+
+    /// Creates a directory at the given URL, including intermediate directories.
+    /// - Parameter url: Directory URL to create.
+    public func createDirectory(at url: URL) throws {
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+    }
+
+    /// Returns the file size in bytes at the given URL.
+    /// - Parameter url: File URL to inspect.
+    /// - Returns: File size in bytes.
+    public func fileSize(at url: URL) throws -> UInt64 {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard let size = attributes[.size] as? NSNumber else {
+            throw NSError(
+                domain: "DefaultFileSystem",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "File size unavailable for \(url.path)"]
+            )
+        }
+        return size.uint64Value
+    }
+
+    /// Removes the file or directory at the given URL.
+    /// - Parameter url: File or directory URL to remove.
+    public func removeItem(at url: URL) throws {
+        try fileManager.removeItem(at: url)
+    }
+
+    /// Moves a file from source to destination.
+    /// - Parameters:
+    ///   - sourceURL: Existing file URL.
+    ///   - destinationURL: Destination URL.
+    public func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+        try fileManager.moveItem(at: sourceURL, to: destinationURL)
+    }
+
+    /// Appends data to a file at the given URL, creating it if needed.
+    /// - Parameters:
+    ///   - url: File URL to append to.
+    ///   - data: Data to append.
+    public func appendFile(at url: URL, data: Data) throws {
+        if fileManager.fileExists(atPath: url.path) {
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+        } else {
+            try data.write(to: url, options: .atomic)
+        }
     }
 }
 
@@ -250,5 +325,24 @@ public struct DefaultAccessibilityChecker: AccessibilityChecking {
         let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [promptKey: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+}
+
+/// Running application lookup interface for Doctor policies.
+public protocol RunningApplicationChecking {
+    /// Returns true when an application with the given bundle identifier is running.
+    /// - Parameter bundleIdentifier: Bundle identifier to check.
+    func isApplicationRunning(bundleIdentifier: String) -> Bool
+}
+
+/// Default running application checker backed by AppKit.
+public struct DefaultRunningApplicationChecker: RunningApplicationChecking {
+    /// Creates a running application checker.
+    public init() {}
+
+    /// Returns true when an application with the given bundle identifier is running.
+    /// - Parameter bundleIdentifier: Bundle identifier to check.
+    public func isApplicationRunning(bundleIdentifier: String) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
     }
 }

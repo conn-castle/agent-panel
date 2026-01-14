@@ -63,12 +63,12 @@ Phase template (incomplete):
 - [x] In `doctor`, implement Launch Services app discovery when `ide.*.appPath` / `bundleId` are omitted; FAIL only when an undiscoverable app is required by any project's effective IDE selection(s) or Chrome.
 - [x] In `doctor`, enforce reserved IDs: FAIL if any `project.id == "inbox"` (reserved for `pw-inbox` fallback behavior).
 - [x] In `doctor`, perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
-- [ ] Implement `pwctl list` to print configured projects from `config.toml`.
-- [ ] Implement `pwctl logs --tail <n>` to print the last N lines of the primary log.
-- [ ] Implement logging to `~/.local/state/project-workspaces/logs/workspaces.log` with deterministic rotation (rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5`) and structured output.
-- [ ] Add an in-app "Run Doctor" action that runs doctor and shows results in the menu bar app UI.
-- [ ] After in-app Doctor is integrated, remove `pwctl doctor` from the CLI surface and update documentation to reference the app-driven Doctor.
-- [ ] Add unit tests for config defaults/validation, doctor severity rules, and log rotation behavior.
+- [x] Implement `pwctl list` to print configured projects from `config.toml`.
+- [x] Implement `pwctl logs --tail <n>` to print the last N lines of the primary log.
+- [x] Implement logging to `~/.local/state/project-workspaces/logs/workspaces.log` with deterministic rotation (rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5`) and structured output.
+- [x] Add an in-app "Run Doctor" action that runs doctor and shows results in the menu bar app UI.
+- [x] Keep `pwctl doctor` permanently; ensure in-app “Run Doctor” calls the same core engine and produces identical report content/severity.
+- [x] Add unit tests for config defaults/validation, doctor severity rules, and log rotation behavior.
 
 ### Exit criteria
 - `ProjectWorkspaces.app` runs as a menu bar agent (LSUIElement) in debug.
@@ -83,8 +83,8 @@ Phase template (incomplete):
 - Provide a reliable, testable wrapper around the `aerospace` CLI and window enumeration.
 
 ### Tasks
-- [ ] Resolve the `aerospace` binary path once at startup (no hardcoded PATH assumptions).
-- [ ] Implement `AeroSpaceClient` command execution with timeouts and structured stdout/stderr capture.
+- [x] Resolve the `aerospace` binary path once at startup (no hardcoded PATH assumptions).
+- [x] Implement `AeroSpaceClient` command execution with timeouts and structured stdout/stderr capture.
 - [ ] Decode `aerospace list-windows ... --json` output into typed models.
 - [ ] Add retry policy for “AeroSpace not ready” failures (max 3 retries, 200ms backoff).
 - [ ] Add unit tests for AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks (CI-required).

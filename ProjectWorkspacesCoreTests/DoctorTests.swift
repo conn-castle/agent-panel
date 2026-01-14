@@ -3,6 +3,94 @@ import XCTest
 @testable import ProjectWorkspacesCore
 
 final class DoctorTests: XCTestCase {
+    func testDoctorFailsWhenAccessibilityMissing() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: false),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "Accessibility permission missing" })
+    }
+
+    func testDoctorFailsWhenChromeMissing() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "Google Chrome not found" })
+    }
+
     func testDoctorFailsWhenHotkeyUnavailable() {
         let config = makeValidConfig()
         let aerospacePath = "/opt/homebrew/bin/aerospace"
@@ -38,6 +126,7 @@ final class DoctorTests: XCTestCase {
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: false),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -45,6 +134,51 @@ final class DoctorTests: XCTestCase {
 
         XCTAssertTrue(report.hasFailures)
         XCTAssertTrue(report.findings.contains { $0.title == "Cmd+Shift+Space hotkey cannot be registered" })
+    }
+
+    func testDoctorSkipsHotkeyCheckWhenAgentRunning() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: false),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: true),
+            commandRunner: commandRunner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertFalse(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "Cmd+Shift+Space hotkey check skipped" })
     }
 
     func testDoctorWarnsOnSwitcherHotkey() {
@@ -82,6 +216,7 @@ final class DoctorTests: XCTestCase {
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -109,6 +244,7 @@ final class DoctorTests: XCTestCase {
             ),
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -152,6 +288,7 @@ final class DoctorTests: XCTestCase {
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -203,6 +340,7 @@ final class DoctorTests: XCTestCase {
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -253,6 +391,7 @@ final class DoctorTests: XCTestCase {
             appDiscovery: appDiscovery,
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner
         )
 
@@ -263,10 +402,10 @@ final class DoctorTests: XCTestCase {
     }
 }
 
-private struct TestFileSystem: FileSystem {
-    let files: [String: Data]
-    let directories: Set<String>
-    let executableFiles: Set<String>
+private final class TestFileSystem: FileSystem {
+    private var files: [String: Data]
+    private var directories: Set<String>
+    private var executableFiles: Set<String>
 
     init(files: [String: Data], directories: Set<String>, executableFiles: Set<String> = []) {
         self.files = files
@@ -291,6 +430,46 @@ private struct TestFileSystem: FileSystem {
             return data
         }
         throw NSError(domain: "TestFileSystem", code: 1)
+    }
+
+    func createDirectory(at url: URL) throws {
+        directories.insert(url.path)
+    }
+
+    func fileSize(at url: URL) throws -> UInt64 {
+        guard let data = files[url.path] else {
+            throw NSError(domain: "TestFileSystem", code: 2)
+        }
+        return UInt64(data.count)
+    }
+
+    func removeItem(at url: URL) throws {
+        if files.removeValue(forKey: url.path) != nil {
+            return
+        }
+        if directories.remove(url.path) != nil {
+            return
+        }
+        throw NSError(domain: "TestFileSystem", code: 3)
+    }
+
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+        guard let data = files.removeValue(forKey: sourceURL.path) else {
+            throw NSError(domain: "TestFileSystem", code: 4)
+        }
+        if files[destinationURL.path] != nil {
+            throw NSError(domain: "TestFileSystem", code: 5)
+        }
+        files[destinationURL.path] = data
+    }
+
+    func appendFile(at url: URL, data: Data) throws {
+        if var existing = files[url.path] {
+            existing.append(data)
+            files[url.path] = existing
+        } else {
+            files[url.path] = data
+        }
     }
 }
 
@@ -408,5 +587,14 @@ private struct TestAccessibilityChecker: AccessibilityChecking {
 
     func isProcessTrusted() -> Bool {
         isTrusted
+    }
+}
+
+private struct TestRunningApplicationChecker: RunningApplicationChecking {
+    let isRunning: Bool
+
+    func isApplicationRunning(bundleIdentifier: String) -> Bool {
+        let _ = bundleIdentifier
+        return isRunning
     }
 }
