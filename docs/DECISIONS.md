@@ -15,6 +15,11 @@ Entry format:
     Tradeoffs: <what is gained and what is lost>
 
 <!-- ENTRIES START -->
+- Decision 2026-01-13 c8c343a: Select TOMLDecoder for TOML parsing
+    Decision: Use the Swift package `TOMLDecoder` pinned to version `0.4.3` as the single third-party runtime dependency.
+    Reason: It is a maintained Swift Package Manager library with a dedicated library product and aligns with the dependency policy.
+    Tradeoffs: The project now depends on an external library that must be kept compatible with the supported macOS toolchain.
+
 - Decision 2026-01-12 9fd499c: Minimum supported macOS version
     Decision: Set the minimum supported macOS version to 15.7.
     Reason: This is the product requirement for the initial release.

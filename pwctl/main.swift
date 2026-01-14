@@ -21,7 +21,7 @@ private func usageText(for topic: PwctlHelpTopic) -> String {
         Usage:
           pwctl <command> [args]
 
-        Commands (locked surface; not fully implemented yet):
+        Commands (locked surface; doctor implemented, others in progress):
           doctor
           list
           activate <projectId>
@@ -90,8 +90,9 @@ case .success(let command):
         print(usageText(for: topic))
         exit(PwctlExitCode.ok.rawValue)
     case .doctor:
-        printStderr("error: `pwctl doctor` is not implemented yet")
-        exit(PwctlExitCode.failure.rawValue)
+        let report = Doctor().run()
+        print(report.rendered())
+        exit(report.hasFailures ? PwctlExitCode.failure.rawValue : PwctlExitCode.ok.rawValue)
     case .list:
         printStderr("error: `pwctl list` is not implemented yet")
         exit(PwctlExitCode.failure.rawValue)

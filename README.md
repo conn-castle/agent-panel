@@ -6,7 +6,7 @@ It creates and manages a lightweight "virtual workspace" per project using **Aer
 
 ## Status
 
-This repository is currently in **Phase 0 (scaffold)**; `pwctl` subcommands (including `doctor`) are not implemented yet. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
+This repository is currently in **Phase 0 (scaffold)**; `pwctl doctor` is implemented, and other `pwctl` subcommands are still in progress. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
 
 ## What it does (behavioral contract)
 
@@ -101,9 +101,9 @@ System Settings → Privacy & Security → Accessibility:
 
 - Enable `ProjectWorkspaces`
 
-### Run doctor (planned)
+### Run doctor
 
-`pwctl doctor` is not implemented yet. Once available (via installation or local build), run:
+Once available (via installation or local build), run:
 
 ```bash
 pwctl doctor
@@ -277,12 +277,13 @@ Important note: if you keep a window “show on all desktops” (e.g., Messages)
 
 - Accessibility permission is required for window geometry control.
 - No SIP disabling is required or allowed.
+- Running `pwctl doctor` will prompt for Accessibility permission if it is missing.
 
 ## CLI (`pwctl`)
 
 `pwctl` exists for debugging, CI-style checks, and as a fallback interface if the UI is unavailable.
 
-Commands (locked; planned):
+Commands (locked surface; `doctor` implemented, others planned):
 
 ```bash
 pwctl doctor
@@ -384,7 +385,7 @@ Recommended (no Xcode UI required):
 1) (When changing targets/settings) Run `scripts/regenerate_xcodeproj.sh`.
 2) Build/test using `scripts/build.sh` and `scripts/test.sh` (see `docs/COMMANDS.md`).
 3) Grant Accessibility permission to the debug build.
-4) Once implemented, use `pwctl doctor` and `pwctl activate <projectId>` during iteration.
+4) Use `pwctl doctor` during iteration. Run `pwctl activate <projectId>` once it is implemented.
 
 Optional:
 - Open the project in Xcode for occasional debugging/provisioning tasks.

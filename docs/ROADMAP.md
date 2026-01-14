@@ -53,20 +53,21 @@ Phase template (incomplete):
 - [x] In `scripts/test.sh`, run unit tests via `xcodebuild -project ProjectWorkspaces.xcodeproj test ...` (CI uses this path).
 - [x] Implement the `pwctl` command surface with locked subcommands: `doctor`, `list`, `activate`, `close`, `logs`.
 - [x] Define and centralize filesystem paths (config, generated VS Code workspaces, state, logs, tool-owned `code` shim).
-- [ ] Select and pin a SwiftPM TOML parsing dependency (the only third-party runtime dependency allowed in v1).
-- [ ] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` after adding the SwiftPM TOML dependency.
-- [ ] Implement TOML parsing into typed models with strict validation, explicit documented defaults, and tolerant unknown-key handling (unknown keys must not cause a parse failure).
-- [ ] Implement `pwctl doctor` with PASS/FAIL/WARN checks, actionable "Fix:" guidance, and copy/paste config snippets for discovered values.
-- [ ] In `doctor`, enforce FAIL vs WARN rules for missing config keys and invalid values (defaults applied exactly as documented).
-- [ ] In `doctor`, WARN if `global.switcherHotkey` is present (ignored; hotkey is fixed to ⌘⇧Space).
-- [ ] In `doctor`, FAIL if the ⌘⇧Space hotkey cannot be registered (conflict / OS denial) and print actionable fix guidance (hotkey is not configurable).
-- [ ] In `doctor`, implement Launch Services app discovery when `ide.*.appPath` / `bundleId` are omitted; FAIL only when an undiscoverable app is required by any project's effective IDE selection(s) or Chrome.
-- [ ] In `doctor`, enforce reserved IDs: FAIL if any `project.id == "inbox"` (reserved for `pw-inbox` fallback behavior).
+- [x] Select and pin a SwiftPM TOML parsing dependency (the only third-party runtime dependency allowed in v1).
+- [x] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` after adding the SwiftPM TOML dependency.
+- [x] Implement TOML parsing into typed models with strict validation, explicit documented defaults, and tolerant unknown-key handling (unknown keys must not cause a parse failure).
+- [x] Implement `pwctl doctor` with PASS/FAIL/WARN checks, actionable "Fix:" guidance, and copy/paste config snippets for discovered values.
+- [x] In `doctor`, enforce FAIL vs WARN rules for missing config keys and invalid values (defaults applied exactly as documented).
+- [x] In `doctor`, WARN if `global.switcherHotkey` is present (ignored; hotkey is fixed to ⌘⇧Space).
+- [x] In `doctor`, FAIL if the ⌘⇧Space hotkey cannot be registered (conflict / OS denial) and print actionable fix guidance (hotkey is not configurable).
+- [x] In `doctor`, implement Launch Services app discovery when `ide.*.appPath` / `bundleId` are omitted; FAIL only when an undiscoverable app is required by any project's effective IDE selection(s) or Chrome.
+- [x] In `doctor`, enforce reserved IDs: FAIL if any `project.id == "inbox"` (reserved for `pw-inbox` fallback behavior).
 - [ ] In `doctor`, perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
 - [ ] Implement `pwctl list` to print configured projects from `config.toml`.
 - [ ] Implement `pwctl logs --tail <n>` to print the last N lines of the primary log.
 - [ ] Implement logging to `~/.local/state/project-workspaces/logs/workspaces.log` with deterministic rotation (rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5`) and structured output.
 - [ ] Add an in-app "Run Doctor" action that runs doctor and shows results in the menu bar app UI.
+- [ ] After in-app Doctor is integrated, remove `pwctl doctor` from the CLI surface and update documentation to reference the app-driven Doctor.
 - [ ] Add unit tests for config defaults/validation, doctor severity rules, and log rotation behavior.
 
 ### Exit criteria

@@ -5,6 +5,11 @@ options:
   deploymentTarget:
     macOS: "15.7"
 
+packages:
+  TOMLDecoder:
+    url: https://github.com/dduan/TOMLDecoder
+    exactVersion: 0.4.3
+
 targets:
   ProjectWorkspacesApp:
     type: application
@@ -24,6 +29,8 @@ targets:
     platform: macOS
     sources:
       - path: ProjectWorkspacesCore
+    dependencies:
+      - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

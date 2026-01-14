@@ -7,16 +7,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */; };
+		1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */; };
 		27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */; };
 		31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */; };
 		345AC9F26EE8EA40DDA6D1C5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E82A0992420A094C6BC1789 /* main.swift */; };
+		388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */; };
 		4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */; };
 		59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */; };
 		62FED868FA129C98FED3D0AC /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		90F079F8156706BEF99CACD6 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
+		A083CFBB0B652F6FE250D38B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */; };
+		A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0980D9F296FC33846D2EF524 /* DoctorModels.swift */; };
+		BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34BA28935316C4E65502857 /* ConfigParser.swift */; };
 		CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */; };
 		DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */; };
+		E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */; };
+		E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */; };
 		F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */; };
 /* End PBXBuildFile section */
 
@@ -45,6 +53,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0980D9F296FC33846D2EF524 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
 		22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectWorkspacesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPathsTests.swift; sourceTree = "<group>"; };
@@ -54,10 +63,16 @@
 		4C4A4F3F4BE0D94FAE368FD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7E82A0992420A094C6BC1789 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPaths.swift; sourceTree = "<group>"; };
+		A34BA28935316C4E65502857 /* ConfigParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParser.swift; sourceTree = "<group>"; };
+		A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserTests.swift; sourceTree = "<group>"; };
 		BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlCommand.swift; sourceTree = "<group>"; };
 		BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = ProjectWorkspacesCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorDependencies.swift; sourceTree = "<group>"; };
+		CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigModels.swift; sourceTree = "<group>"; };
 		CE07B01C725DCD484B2140BC /* pwctl */ = {isa = PBXFileReference; includeInIndex = 0; path = pwctl; sourceTree = BUILT_PRODUCTS_DIR; };
+		D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Doctor.swift; sourceTree = "<group>"; };
 		E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlArgumentParserTests.swift; sourceTree = "<group>"; };
+		F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +92,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		68D0E0719845983CAEC6CBA0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A083CFBB0B652F6FE250D38B /* TOMLDecoder in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E19BB74F111870B45DA1ABBC /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -91,6 +114,8 @@
 		3EF6F416E609B690C86D5B6D /* ProjectWorkspacesCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */,
+				F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */,
 				3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */,
 				22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */,
 				E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */,
@@ -140,6 +165,11 @@
 		F710D1A554E2179D37B2F186 /* ProjectWorkspacesCore */ = {
 			isa = PBXGroup;
 			children = (
+				CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */,
+				A34BA28935316C4E65502857 /* ConfigParser.swift */,
+				D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */,
+				C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */,
+				0980D9F296FC33846D2EF524 /* DoctorModels.swift */,
 				3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */,
 				9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */,
 				BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */,
@@ -155,6 +185,7 @@
 			buildConfigurationList = 23F1BA1F1A6BE230D1FECFF9 /* Build configuration list for PBXNativeTarget "ProjectWorkspacesCore" */;
 			buildPhases = (
 				4B1FE85AF64F19918AB02DF0 /* Sources */,
+				68D0E0719845983CAEC6CBA0 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -162,6 +193,7 @@
 			);
 			name = ProjectWorkspacesCore;
 			packageProductDependencies = (
+				1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */,
 			);
 			productName = ProjectWorkspacesCore;
 			productReference = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */;
@@ -243,6 +275,9 @@
 			);
 			mainGroup = C215404A7A302D4D6B727B60;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -276,6 +311,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */,
+				BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */,
+				E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */,
+				E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */,
+				A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */,
 				31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */,
 				F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */,
 				2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */,
@@ -286,6 +326,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */,
+				1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */,
 				59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */,
 				DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */,
 				CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */,
@@ -617,6 +659,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dduan/TOMLDecoder";
+			requirement = {
+				kind = exactVersion;
+				version = 0.4.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0F443EF38EEBB3995D2C5B41 /* Project object */;
 }
