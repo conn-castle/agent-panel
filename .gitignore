@@ -1,22 +1,36 @@
-# >>> agent-layer
-.agent-layer/
-
-# Agent Layer launcher
-al
-
-# Agent Layer-generated instruction shims
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-.github/copilot-instructions.md
-
-# Agent Layer-generated client configs + artifacts
-.mcp.json
-.codex/
-.gemini/
-.claude/
-.vscode/mcp.json
-.vscode/prompts/
-# <<< agent-layer
 
 .DS_Store
+
+# >>> agent-layer
+# Template hash: a55fad2a29ee82202e63ad3d3742d72d064c6e00424b3718befec5a0726ab13d
+# Managed by Agent Layer. To customize, edit .agent-layer/gitignore.block
+# and re-run `al init` to apply changes.
+#
+# Agent Layer config (always ignore .env)
+/.agent-layer/.env
+# Optional: keep uncommented to ignore .agent-layer/ config.
+/.agent-layer/
+# Optional: uncomment to ignore docs/agent-layer/ project memory.
+# Edit .agent-layer/gitignore.block (not .gitignore) to change this entry.
+# /docs/agent-layer/
+
+# Agent Layer-generated instruction shims
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/.github/copilot-instructions.md
+
+# Agent Layer-generated client configs + artifacts
+/.agent/
+/.mcp.json
+/.codex/
+/.gemini/
+/.claude/
+/.vscode/mcp.json
+/.vscode/prompts/
+# Optional: keep uncommented to ignore VS Code settings.
+/.vscode/settings.json
+
+# Agent Layer temp runs
+/tmp/agent-layer/
+# <<< agent-layer
