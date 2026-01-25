@@ -12,7 +12,7 @@ if [[ ! -d "ProjectWorkspaces.xcodeproj" ]]; then
   exit 1
 fi
 
-derived_data_path=".agent-layer/tmp/DerivedData"
+derived_data_path="build/DerivedData"
 mkdir -p "$(dirname -- "$derived_data_path")"
 
 echo "Running unit tests (Debug)..."
@@ -26,4 +26,3 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO
 
 echo "test: OK"
-

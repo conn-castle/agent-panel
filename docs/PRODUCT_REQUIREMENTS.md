@@ -305,7 +305,7 @@ Per project, IDE launch priority is:
 - Common build/test/release workflows must be runnable from the command line (Xcode GUI optional day-to-day), using `xcodebuild`-driven scripts.
 - The canonical repo entrypoint is `ProjectWorkspaces.xcodeproj` (no repo-level `.xcworkspace` in v1).
 - Build/test scripts must use `xcodebuild -project ProjectWorkspaces.xcodeproj ...`.
-- Introduce a repo-level `.xcworkspace` only if the repo contains 2+ `.xcodeproj` files that must be built together; if so, update scripts and record the migration in `docs/DECISIONS.md`.
+- Introduce a repo-level `.xcworkspace` only if the repo contains 2+ `.xcodeproj` files that must be built together; if so, update scripts and record the migration in `docs/agent-layer/DECISIONS.md`.
 - Commit `Package.resolved` for reproducible SwiftPM dependency resolution; CI must resolve packages before building (e.g., `xcodebuild -resolvePackageDependencies`).
 - In this repo, the expected SwiftPM lockfile path is `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` (commit this file; do not add duplicate copies).
 - The release artifact is a signed + notarized `.app`, shipped via both a Homebrew cask (recommended) and a direct download (`.zip` or `.dmg`).

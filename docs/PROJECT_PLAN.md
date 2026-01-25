@@ -1,6 +1,6 @@
 # ProjectWorkspaces — Implementation Roadmap
 
-This roadmap is the single source of truth for implementation. It specifies **all major architectural decisions** and removes ambiguity so engineers can implement without design decisions.
+This roadmap captures the implementation plan and major architectural decisions so engineers can implement without design decisions. The agent-layer ROADMAP is the active execution plan; if they diverge, surface the conflict for user guidance.
 
 ## Scope baseline (what we are building)
 
@@ -48,7 +48,7 @@ This roadmap is derived from the requirements spec but intentionally changes the
 14) **Fallback workspace**: `pw-inbox` is hard-coded and reserved; `projectId == "inbox"` is invalid and Doctor performs a connectivity check by switching to `pw-inbox` once.
 15) **Build workflow**: Keep a single `ProjectWorkspaces.xcodeproj` in-repo and drive builds/tests/archives via `xcodebuild -project` scripts so the Xcode GUI is not required day-to-day.
 16) **Toolchain requirement**: End users do not need Xcode; developers and CI runners require the Apple toolchain (practically: full Xcode installed).
-17) **Workspace policy**: Do not add a repo-level `.xcworkspace` in v1; introduce it only if the repo contains 2+ `.xcodeproj` files that must be built together (record the migration in `docs/DECISIONS.md` and update scripts).
+17) **Workspace policy**: Do not add a repo-level `.xcworkspace` in v1; introduce it only if the repo contains 2+ `.xcodeproj` files that must be built together (record the migration in `docs/agent-layer/DECISIONS.md` and update scripts).
 18) **SwiftPM reproducibility**: Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
 
 ## Definitions

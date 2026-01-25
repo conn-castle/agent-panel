@@ -33,13 +33,13 @@ Build the app + CLI (Debug), without code signing:
 scripts/build.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `.agent-layer/tmp`.
+Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -derivedDataPath .agent-layer/tmp/DerivedData -resolvePackageDependencies
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData build CODE_SIGNING_ALLOWED=NO
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -derivedDataPath build/DerivedData -resolvePackageDependencies
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO
 ```
 
 ## Test
@@ -50,10 +50,10 @@ Run unit tests (Debug), without code signing:
 scripts/test.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `.agent-layer/tmp`.
+Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath .agent-layer/tmp/DerivedData test CODE_SIGNING_ALLOWED=NO
+xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData test CODE_SIGNING_ALLOWED=NO
 ```

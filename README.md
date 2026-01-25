@@ -4,10 +4,6 @@ ProjectWorkspaces is a macOS menu bar app that provides **project-first context 
 
 It creates and manages a lightweight "virtual workspace" per project using **AeroSpace workspaces**, so switching projects hides unrelated windows and brings the right ones back with the right layout.
 
-## Status
-
-This repository is currently in **Phase 0 (scaffold)**; `pwctl doctor`, `pwctl list`, and `pwctl logs` are implemented, and other `pwctl` subcommands are still in progress. See `docs/ROADMAP.md` and `docs/COMMANDS.md`.
-
 ## What it does (behavioral contract)
 
 ProjectWorkspaces implements two primary actions:
@@ -370,7 +366,7 @@ Exit codes:
 
 End users do not need Xcode. Developers and CI runners do: building a native Swift/SwiftUI macOS app (and signing/notarization) requires Apple’s toolchain (practically: full Xcode installed).
 
-Opening the Xcode GUI is optional day-to-day; common workflows are driven by `scripts/build.sh` and `scripts/test.sh` (see `docs/COMMANDS.md`).
+Opening the Xcode GUI is optional day-to-day; common workflows are driven by `scripts/build.sh` and `scripts/test.sh` (see `docs/agent-layer/COMMANDS.md`).
 
 Canonical entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` unless the repo contains 2+ `.xcodeproj` files that must be built together).
 
@@ -383,7 +379,7 @@ SwiftPM lockfile path (once dependencies are added): `ProjectWorkspaces.xcodepro
 Recommended (no Xcode UI required):
 
 1) (When changing targets/settings) Run `scripts/regenerate_xcodeproj.sh`.
-2) Build/test using `scripts/build.sh` and `scripts/test.sh` (see `docs/COMMANDS.md`).
+2) Build/test using `scripts/build.sh` and `scripts/test.sh` (see `docs/agent-layer/COMMANDS.md`).
 3) Grant Accessibility permission to the debug build.
 4) Use `pwctl doctor` during iteration. Run `pwctl activate <projectId>` once it is implemented.
 

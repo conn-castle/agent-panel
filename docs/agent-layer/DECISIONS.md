@@ -37,8 +37,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Tradeoffs: Static linking can increase binary size and can duplicate code between the app and CLI; switching to a dynamic framework later would require explicit embedding and runtime search path configuration.
 
 - Decision 2026-01-11 000000: CLI-driven builds without Xcode UI
-    Decision: Keep a single repo-level `ProjectWorkspaces.xcodeproj` (no `.xcworkspace` in v1) and drive build/test/archive/notarization via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`, `scripts/archive.sh`, `scripts/notarize.sh`); commit the SwiftPM lockfile at `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and resolve packages in CI; require the Apple toolchain (full Xcode) for developers/CI while keeping the Xcode GUI optional day-to-day.
-    Reason: Deterministic builds/signing/notarization with minimal IDE friction and fewer “it works on my machine” differences.
+    Decision: Keep a single repo-level `ProjectWorkspaces.xcodeproj` (no `.xcworkspace` in v1) and drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile at `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and resolve packages in CI; require the Apple toolchain (full Xcode) for developers/CI while keeping the Xcode GUI optional day-to-day.
+    Reason: Deterministic builds and tests with minimal IDE friction and fewer “it works on my machine” differences.
     Tradeoffs: Additional script maintenance and occasional need to open Xcode for debugging/provisioning tasks.
 
 - Decision 2026-01-11 000000: Config defaults and doctor severity

@@ -34,3 +34,6 @@
 # Agent Layer temp runs
 /tmp/agent-layer/
 # <<< agent-layer
+
+# Build artifacts
+/build/
