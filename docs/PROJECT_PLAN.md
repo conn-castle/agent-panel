@@ -292,10 +292,14 @@ Notes:
    - Launch priority:
      1) If `ideCommand` non-empty → run via `/bin/zsh -lc`.
      2) Else if `ideUseAgentLayerLauncher=true` and `<repo>/.agent-layer/open-vscode.command` exists → run it.
-     3) Else → `open -a <IDE.appPath> <workspaceFile>`.
+     3) Else open the effective IDE:
+        - VS Code: `open -a <VSCode.appPath> <workspaceFile>`
+        - Antigravity: `open -a <Antigravity.appPath> <projectPath>`
+   - `ideCommand`/launcher always receives: `PW_PROJECT_ID`, `PW_PROJECT_NAME`, `PW_PROJECT_PATH`, `PW_WORKSPACE_FILE`, `PW_REPO_URL`, `PW_COLOR_HEX`, `PW_IDE`, `OPEN_VSCODE_NO_CLOSE=1`.
+   - If `ideCommand`/launcher exits non-zero, log WARN and fall back to the effective IDE open command; if the fallback open fails, activation fails with an actionable error.
 
 3) VS Code “color enforcement” after custom launch:
-   - If step 1 or 2 ran, then ensure workspace file is opened in the IDE by running VS Code CLI with reuse-window against the workspace file.
+   - After any VS Code launch (including fallback), ensure the workspace file is opened in the IDE by running VS Code CLI with reuse-window against the workspace file.
    - Implement a tool-owned `code` shim so VS Code CLI is available without manual setup.
      - Install to: `~/.local/share/project-workspaces/bin/code`
      - The shim invokes the VS Code bundled CLI within the VS Code app bundle.
@@ -303,13 +307,13 @@ Notes:
 
 4) Antigravity support:
    - Uses same workspace file.
-   - If an Antigravity-specific CLI is not available, the fallback is `open -a`.
+   - No Antigravity CLI assumptions; fallback is `open -a <Antigravity.appPath> <projectPath>`.
 
 **Exit criteria**
 
 - Activating a project with no IDE window successfully opens the IDE.
 - IDE color identity is visible and stable when the project is activated.
-- `ideCommand` and agent-layer launcher both work; failures fall back to opening the workspace file directly.
+- `ideCommand` and agent-layer launcher both work; failures fall back to opening the effective IDE and fail if the fallback open fails.
 
 ---
 

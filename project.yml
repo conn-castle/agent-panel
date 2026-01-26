@@ -48,6 +48,8 @@ targets:
     platform: macOS
     sources:
       - path: ProjectWorkspacesCoreTests
+    resources:
+      - path: ProjectWorkspacesCoreTests/Fixtures
     dependencies:
       - target: ProjectWorkspacesCore
     settings:

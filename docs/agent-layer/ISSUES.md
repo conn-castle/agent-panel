@@ -6,7 +6,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 <!-- ENTRIES START -->
 
-- Issue 2026-01-13 832a05f: Replace deprecated name lookup in application discovery
+- Issue 2026-01-26 1dad6f1: Doctor.swift complexity growing
     Priority: Low. Area: Maintainability
-    Description: Application discovery uses a deprecated name lookup method when the bundle identifier is missing.
-    Next step: Replace with a supported Launch Services lookup or documented alternative.
+    Description: Doctor.swift has grown to approximately 1200 lines with mixed check responsibilities (AeroSpace, config, apps, accessibility, hotkey).
+    Next step: Consider extracting focused checker structs (AeroSpaceChecker, AppDiscoveryChecker, ConfigChecker) before Phase 3 adds more checks.

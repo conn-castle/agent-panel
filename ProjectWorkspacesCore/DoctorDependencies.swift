@@ -167,6 +167,10 @@ public protocol EnvironmentProviding {
     /// Returns the environment value for the given key.
     /// - Parameter key: Environment variable name.
     func value(forKey key: String) -> String?
+
+    /// Returns a snapshot of the full environment.
+    /// - Returns: Environment variables keyed by name.
+    func allValues() -> [String: String]
 }
 
 /// Default environment provider backed by the current process environment.
@@ -179,6 +183,12 @@ public struct ProcessEnvironment: EnvironmentProviding {
     /// - Returns: Environment variable value if present.
     public func value(forKey key: String) -> String? {
         ProcessInfo.processInfo.environment[key]
+    }
+
+    /// Returns a snapshot of the current process environment.
+    /// - Returns: Environment variables keyed by name.
+    public func allValues() -> [String: String] {
+        ProcessInfo.processInfo.environment
     }
 }
 
@@ -215,6 +225,22 @@ public struct CommandResult: Equatable, Sendable {
         self.stdout = stdout
         self.stderr = stderr
     }
+
+    /// Formats command failure details from stdout/stderr and exit status.
+    /// - Parameter prefix: Prefix string to lead the detail text.
+    /// - Returns: Formatted failure detail string.
+    public func failureDetail(prefix: String) -> String {
+        var components: [String] = ["\(prefix). Exit code: \(exitCode)"]
+        let trimmedStdout = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedStderr = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedStdout.isEmpty {
+            components.append("Stdout: \(trimmedStdout)")
+        }
+        if !trimmedStderr.isEmpty {
+            components.append("Stderr: \(trimmedStderr)")
+        }
+        return components.joined(separator: " | ")
+    }
 }
 
 /// Command runner used by Doctor to invoke external CLIs.
@@ -224,9 +250,15 @@ public protocol CommandRunning {
     ///   - command: Executable file URL.
     ///   - arguments: Arguments passed to the command.
     ///   - environment: Environment variables to override; when nil, inherits current environment.
+    ///   - workingDirectory: Optional working directory for the process.
     /// - Returns: Command execution result.
     /// - Throws: Error when the process fails to launch.
-    func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult
+    func run(
+        command: URL,
+        arguments: [String],
+        environment: [String: String]?,
+        workingDirectory: URL?
+    ) throws -> CommandResult
 }
 
 /// Default command runner backed by `Process`.
@@ -241,10 +273,18 @@ public struct DefaultCommandRunner: CommandRunning {
     ///   - environment: Environment variables to override; when nil, inherits current environment.
     /// - Returns: Command execution result.
     /// - Throws: Error when the process fails to launch.
-    public func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult {
+    public func run(
+        command: URL,
+        arguments: [String],
+        environment: [String: String]?,
+        workingDirectory: URL?
+    ) throws -> CommandResult {
         let process = Process()
         process.executableURL = command
         process.arguments = arguments
+        if let workingDirectory {
+            process.currentDirectoryURL = workingDirectory
+        }
         if let environment {
             process.environment = environment
         } else {
@@ -299,13 +339,28 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
     }
 
     /// Resolves an application URL for a human-readable app name.
-    /// - Parameter appName: Application display name.
+    ///
+    /// Searches common application directories for an app bundle matching the name.
+    /// This replaces the deprecated `NSWorkspace.fullPath(forApplication:)` API without
+    /// relying on the `mdfind` CLI or deep filesystem scans.
+    ///
+    /// - Parameter appName: Application display name (without `.app` extension).
     /// - Returns: Application URL if found.
     public func applicationURL(named appName: String) -> URL? {
-        guard let path = NSWorkspace.shared.fullPath(forApplication: appName) else {
-            return nil
+        let bundleName = appName.hasSuffix(".app") ? appName : "\(appName).app"
+        let fileManager = FileManager.default
+        let searchRoots = applicationSearchRoots(fileManager: fileManager)
+
+        for directory in searchRoots {
+            if let directMatch = directMatch(bundleName: bundleName, in: directory, fileManager: fileManager) {
+                return directMatch
+            }
+            if let found = shallowSearch(bundleName: bundleName, in: directory, fileManager: fileManager, maxDepth: 2) {
+                return found
+            }
         }
-        return URL(fileURLWithPath: path, isDirectory: true)
+
+        return nil
     }
 
     /// Retrieves the bundle identifier for an application URL.
@@ -313,6 +368,78 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
     /// - Returns: Bundle identifier if available.
     public func bundleIdentifier(forApplicationAt url: URL) -> String? {
         Bundle(url: url)?.bundleIdentifier
+    }
+
+    private func applicationSearchRoots(fileManager: FileManager) -> [URL] {
+        var roots = fileManager.urls(for: .applicationDirectory, in: .allDomainsMask)
+        let fallbackRoots = [
+            URL(fileURLWithPath: "/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/System/Applications", isDirectory: true),
+            URL(fileURLWithPath: "/Network/Applications", isDirectory: true),
+            fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications", isDirectory: true)
+        ]
+        for root in fallbackRoots {
+            if !roots.contains(where: { $0.standardizedFileURL.path == root.standardizedFileURL.path }) {
+                roots.append(root)
+            }
+        }
+        return roots
+    }
+
+    private func directMatch(bundleName: String, in directory: URL, fileManager: FileManager) -> URL? {
+        let candidates = [
+            directory.appendingPathComponent(bundleName, isDirectory: true),
+            directory.appendingPathComponent("Utilities", isDirectory: true).appendingPathComponent(bundleName, isDirectory: true)
+        ]
+        for candidate in candidates {
+            if isDirectory(candidate, fileManager: fileManager) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private func shallowSearch(
+        bundleName: String,
+        in root: URL,
+        fileManager: FileManager,
+        maxDepth: Int
+    ) -> URL? {
+        var queue: [(url: URL, depth: Int)] = [(root, 0)]
+        let resourceKeys: Set<URLResourceKey> = [.isDirectoryKey, .isPackageKey]
+
+        while let next = queue.first {
+            queue.removeFirst()
+            if next.depth > maxDepth {
+                continue
+            }
+            guard let entries = try? fileManager.contentsOfDirectory(
+                at: next.url,
+                includingPropertiesForKeys: Array(resourceKeys),
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+            for entry in entries {
+                let values = try? entry.resourceValues(forKeys: resourceKeys)
+                let isDirectory = values?.isDirectory ?? false
+                let isPackage = values?.isPackage ?? false
+                if isDirectory,
+                   entry.lastPathComponent.compare(bundleName, options: [.caseInsensitive]) == .orderedSame {
+                    return entry
+                }
+                if isDirectory, !isPackage, next.depth < maxDepth {
+                    queue.append((entry, next.depth + 1))
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func isDirectory(_ url: URL, fileManager: FileManager) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 }
 

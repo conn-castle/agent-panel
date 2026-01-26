@@ -74,7 +74,8 @@ public struct DefaultAeroSpaceBinaryResolver: AeroSpaceBinaryResolving {
             result = try commandRunner.run(
                 command: whichURL,
                 arguments: ["aerospace"],
-                environment: ["PATH": controlledPath]
+                environment: ["PATH": controlledPath],
+                workingDirectory: nil
             )
         } catch {
             return .failure(
@@ -87,12 +88,7 @@ public struct DefaultAeroSpaceBinaryResolver: AeroSpaceBinaryResolving {
         if result.exitCode != 0 {
             return .failure(
                 AeroSpaceBinaryResolutionError(
-                    detail: commandFailureDetail(
-                        exitCode: result.exitCode,
-                        stdout: result.stdout,
-                        stderr: result.stderr,
-                        prefix: "which aerospace failed"
-                    ) + " " + searchContext
+                    detail: result.failureDetail(prefix: "which aerospace failed") + " " + searchContext
                 )
             )
         }
@@ -116,30 +112,5 @@ public struct DefaultAeroSpaceBinaryResolver: AeroSpaceBinaryResolving {
         }
 
         return .success(resolvedURL)
-    }
-
-    /// Formats command failure details from stdout/stderr and exit status.
-    /// - Parameters:
-    ///   - exitCode: Process exit status.
-    ///   - stdout: Captured standard output.
-    ///   - stderr: Captured standard error.
-    ///   - prefix: Prefix string to lead the detail text.
-    /// - Returns: Formatted failure detail string.
-    private func commandFailureDetail(
-        exitCode: Int32,
-        stdout: String,
-        stderr: String,
-        prefix: String
-    ) -> String {
-        var components: [String] = ["\(prefix). Exit code: \(exitCode)"]
-        let trimmedStdout = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedStderr = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedStdout.isEmpty {
-            components.append("Stdout: \(trimmedStdout)")
-        }
-        if !trimmedStderr.isEmpty {
-            components.append("Stderr: \(trimmedStderr)")
-        }
-        return components.joined(separator: " | ")
     }
 }

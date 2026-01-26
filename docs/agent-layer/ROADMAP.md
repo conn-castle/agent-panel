@@ -28,22 +28,11 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added opt-in AeroSpace integration tests gated behind `RUN_AEROSPACE_IT=1` (local-only).
 
 
-## Phase 2 — VS Code workspace generation + IDE launch pipeline
+## Phase 2 ✅ — VS Code workspace generation + IDE launch pipeline
 
-### Goal
-- Make IDE window creation deterministic and ensure stable project identity via VS Code workspace colors.
-
-### Tasks
-- [ ] Generate `~/.config/project-workspaces/vscode/<projectId>.code-workspace` with folder + `workbench.colorCustomizations` derived from `project.colorHex`.
-- [ ] Implement IDE launch priority: `ideCommand` → agent-layer launcher → `open -a <IDE.appPath> <workspaceFile>`.
-- [ ] Install and use a tool-owned `code` shim at `~/.local/share/project-workspaces/bin/code` (avoid requiring `code` in PATH).
-- [ ] After custom launches, enforce workspace identity by opening the generated workspace file in reuse-window mode via the VS Code CLI.
-- [ ] Add Antigravity support using the same workspace file (CLI optional; fallback to `open -a`).
-- [ ] Add unit tests for workspace file contents, `colorHex` validation, and launch selection rules.
-
-### Exit criteria
-- Activating a project with no IDE window opens the IDE and applies project color identity.
-- `ideCommand` and agent-layer launcher paths work; failures fall back to opening the workspace file directly.
+- Generated `.code-workspace` files with `workbench.colorCustomizations` derived from `project.colorHex`.
+- Implemented IDE launch pipeline (ideCommand/launcher/open fallback), VS Code CLI enforcement via shim, and Antigravity open fallback.
+- Added unit tests for workspace generation, color palette validation, environment building, and launch selection rules.
 
 
 ## Phase 3 — Chrome window creation + tab seeding

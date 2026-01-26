@@ -213,7 +213,14 @@ Per project, IDE launch priority is:
 
 1) If `ideCommand` is non-empty: execute it in project root.
 2) Else if `ideUseAgentLayerLauncher=true` and `./.agent-layer/open-vscode.command` exists: execute it in project root.
-3) Else: open the generated `.code-workspace` with the configured IDE app.
+3) Else: open the effective IDE:
+   - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
+   - Antigravity: `open -a <Antigravity.appPath> <projectPath>`
+
+**MUST (fallback behavior)**
+
+- If `ideCommand`/launcher exits non-zero, log WARN and fall back to the effective IDE open command.
+- If the fallback open fails, activation must FAIL with an actionable error.
 
 **MUST (deterministic project identity in IDE)**
 

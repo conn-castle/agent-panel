@@ -748,46 +748,19 @@ public struct Doctor {
     /// - Returns: Command result or a failure detail string.
     private func runCommand(executable: URL, arguments: [String]) -> CommandOutcome {
         do {
-            let result = try commandRunner.run(command: executable, arguments: arguments, environment: nil)
+            let result = try commandRunner.run(
+                command: executable,
+                arguments: arguments,
+                environment: nil,
+                workingDirectory: nil
+            )
             if result.exitCode == 0 {
                 return .success(result)
             }
-            return .failure(
-                commandFailureDetail(
-                    exitCode: result.exitCode,
-                    stdout: result.stdout,
-                    stderr: result.stderr,
-                    prefix: "Command failed"
-                )
-            )
+            return .failure(result.failureDetail(prefix: "Command failed"))
         } catch {
             return .failure("Command failed to launch: \(error)")
         }
-    }
-
-    /// Formats command failure details from stdout/stderr and exit status.
-    /// - Parameters:
-    ///   - exitCode: Process exit status.
-    ///   - stdout: Captured standard output.
-    ///   - stderr: Captured standard error.
-    ///   - prefix: Prefix string to lead the detail text.
-    /// - Returns: Formatted failure detail string.
-    private func commandFailureDetail(
-        exitCode: Int32,
-        stdout: String,
-        stderr: String,
-        prefix: String
-    ) -> String {
-        var components: [String] = ["\(prefix). Exit code: \(exitCode)"]
-        let trimmedStdout = stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedStderr = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedStdout.isEmpty {
-            components.append("Stdout: \(trimmedStdout)")
-        }
-        if !trimmedStderr.isEmpty {
-            components.append("Stderr: \(trimmedStderr)")
-        }
-        return components.joined(separator: " | ")
     }
 
     /// Runs an AeroSpace CLI action and returns a single finding.

@@ -1,5 +1,22 @@
 import Foundation
 
+/// Logging interface for ProjectWorkspaces components.
+public protocol ProjectWorkspacesLogging {
+    /// Writes a structured log entry with a fresh timestamp.
+    /// - Parameters:
+    ///   - event: Event name to categorize the entry.
+    ///   - level: Severity level for the entry.
+    ///   - message: Optional human-readable message.
+    ///   - context: Optional structured context values.
+    /// - Returns: Success or a log write error.
+    func log(
+        event: String,
+        level: LogLevel,
+        message: String?,
+        context: [String: String]?
+    ) -> Result<Void, LogWriteError>
+}
+
 /// Log severity levels for ProjectWorkspaces.
 public enum LogLevel: String, Codable, Sendable {
     case info
@@ -250,3 +267,5 @@ public struct ProjectWorkspacesLogger {
         paths.logsDirectory.appendingPathComponent("workspaces.log.\(index)", isDirectory: false)
     }
 }
+
+extension ProjectWorkspacesLogger: ProjectWorkspacesLogging {}

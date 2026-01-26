@@ -814,10 +814,17 @@ private final class TestCommandRunner: CommandRunning {
     ///   - command: Executable URL to run.
     ///   - arguments: Arguments passed to the command.
     ///   - environment: Environment variables (unused in this stub).
+    ///   - workingDirectory: Working directory (unused in this stub).
     /// - Returns: The queued command result.
     /// - Throws: Error when no stubbed result exists for the command.
-    func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult {
+    func run(
+        command: URL,
+        arguments: [String],
+        environment: [String: String]?,
+        workingDirectory: URL?
+    ) throws -> CommandResult {
         let _ = environment
+        let _ = workingDirectory
         let signature = CommandSignature(path: command.path, arguments: arguments)
         guard var queue = results[signature], !queue.isEmpty else {
             throw NSError(domain: "TestCommandRunner", code: 1)
@@ -936,6 +943,10 @@ private struct TestEnvironment: EnvironmentProviding {
 
     func value(forKey key: String) -> String? {
         values[key]
+    }
+
+    func allValues() -> [String: String] {
+        values
     }
 }
 

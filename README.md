@@ -260,11 +260,26 @@ Launch priority (no ambiguity):
 
 1) If `project.ideCommand` is non-empty: run it in the project root via `/bin/zsh -lc`.
 2) Else if `project.ideUseAgentLayerLauncher=true` and `<repo>/.agent-layer/open-vscode.command` exists: run that script.
-3) Else: `open -a <IDE.appPath> <generatedWorkspaceFile>`.
+3) Else open the effective IDE:
+   - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
+   - Antigravity: `open -a <Antigravity.appPath> <projectPath>`
+
+If step 1 or 2 exits non-zero, the app logs WARN and falls back to the same “open” command for the effective IDE. If the fallback open fails, activation fails with an actionable error.
+
+`ideCommand`/launcher environment (always exported):
+
+- `PW_PROJECT_ID`
+- `PW_PROJECT_NAME`
+- `PW_PROJECT_PATH`
+- `PW_WORKSPACE_FILE`
+- `PW_REPO_URL`
+- `PW_COLOR_HEX`
+- `PW_IDE` (`vscode` or `antigravity`)
+- `OPEN_VSCODE_NO_CLOSE=1`
 
 #### Ensuring the workspace file (and colors) take effect
 
-Custom launch scripts may open VS Code with the folder path, not the `.code-workspace`. To make project colors deterministic, after the IDE window is detected the app runs VS Code CLI in reuse mode against the generated workspace file.
+Custom launch scripts may open VS Code with the folder path, not the `.code-workspace`. To make project colors deterministic, after any VS Code launch the app runs VS Code CLI in reuse mode against the generated workspace file.
 
 To avoid relying on the user having installed `code` into PATH, the app installs and uses a tool-owned `code` shim:
 

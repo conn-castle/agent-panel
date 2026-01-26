@@ -158,7 +158,12 @@ private final class TestCommandRunner: CommandRunning {
         self.results = results
     }
 
-    func run(command: URL, arguments: [String], environment: [String: String]?) throws -> CommandResult {
+    func run(
+        command: URL,
+        arguments: [String],
+        environment: [String: String]?,
+        workingDirectory: URL?
+    ) throws -> CommandResult {
         invocations.append(
             CommandInvocation(
                 path: command.path,
