@@ -250,8 +250,8 @@ Notes:
 
 1) `AeroSpaceClient` that runs these commands:
    - `aerospace workspace <name>`
-   - `aerospace list-windows --workspace <name> --json`
-   - `aerospace list-windows --all --json`
+   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
+   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
    - `aerospace focus --window-id <id>`
    - `aerospace move-node-to-workspace --window-id <id> <workspace>`
    - `aerospace layout floating --window-id <id>`
@@ -262,7 +262,7 @@ Notes:
 3) Robust execution:
    - Timeouts
    - Structured error output including stdout/stderr
-   - Retry policy for “AeroSpace not ready” failures (max 3 retries, 200ms backoff)
+   - Retry policy for “AeroSpace not ready” failures (max 20 attempts, 50ms initial, 1.5x backoff, 750ms cap, 5s total, +/-20% jitter)
 
 **Exit criteria**
 
@@ -328,7 +328,7 @@ Notes:
    - No tab enforcement after creation.
 
 2) Window identification:
-   - Detect new Chrome window by diffing `list-windows --all --json` before/after Chrome launch.
+   - Detect new Chrome window by diffing `list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after Chrome launch.
 
 3) Focus rule:
    - Always end activation by focusing IDE window (Chrome must not steal focus).

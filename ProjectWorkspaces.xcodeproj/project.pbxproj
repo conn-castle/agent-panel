@@ -8,20 +8,26 @@
 
 /* Begin PBXBuildFile section */
 		014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */; };
+		081F29CEF4BA3B0F0CE53990 /* AeroSpaceRetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */; };
+		0AC6B135F1C7632E9DF09D41 /* AeroSpaceIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */; };
 		0DD8CBC286019767A354067E /* PwctlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6873A9C5B58A71CC29798F0C /* PwctlService.swift */; };
 		105AB02CFAC501E3DCB64126 /* AeroSpaceClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24341DAD7A3A95E43E760685 /* AeroSpaceClientTests.swift */; };
 		1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */; };
 		27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */; };
+		31178CF9DB741EBFEB634657 /* AeroSpaceErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */; };
 		31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */; };
 		345AC9F26EE8EA40DDA6D1C5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E82A0992420A094C6BC1789 /* main.swift */; };
 		388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */; };
+		3972E6F128A30168790962CE /* AeroSpaceWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB43B61F43F39612081E63F /* AeroSpaceWindow.swift */; };
 		4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */; };
 		59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */; };
 		62FED868FA129C98FED3D0AC /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
+		6C8266EFFB37AE56ED9BA648 /* AeroSpaceWindowDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */; };
 		6D7CC26AF8BC1151C65D7575 /* ProjectWorkspacesLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */; };
 		78FBDEC9CB3E26F90E643D45 /* AeroSpaceBinaryResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5483801F8DC406E0499CE10B /* AeroSpaceBinaryResolver.swift */; };
 		7E5C8BB2DF6B0A2ED0E69253 /* AeroSpaceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BB4470C6E24287C582C34B /* AeroSpaceClient.swift */; };
+		831F38D95C6E471BA6874C7B /* AeroSpaceRetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */; };
 		90F079F8156706BEF99CACD6 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		A083CFBB0B652F6FE250D38B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */; };
 		A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0980D9F296FC33846D2EF524 /* DoctorModels.swift */; };
@@ -61,19 +67,24 @@
 
 /* Begin PBXFileReference section */
 		0980D9F296FC33846D2EF524 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
+		0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceRetry.swift; sourceTree = "<group>"; };
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
 		1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlServiceTests.swift; sourceTree = "<group>"; };
 		22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectWorkspacesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPathsTests.swift; sourceTree = "<group>"; };
 		24341DAD7A3A95E43E760685 /* AeroSpaceClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceClientTests.swift; sourceTree = "<group>"; };
+		2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceRetryTests.swift; sourceTree = "<group>"; };
 		3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesCoreTests.swift; sourceTree = "<group>"; };
 		3DE2FA81C4BD12C763EA0DF7 /* ProjectWorkspacesCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectWorkspacesCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesCore.swift; sourceTree = "<group>"; };
 		4C4A4F3F4BE0D94FAE368FD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceIntegrationTests.swift; sourceTree = "<group>"; };
 		5483801F8DC406E0499CE10B /* AeroSpaceBinaryResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceBinaryResolver.swift; sourceTree = "<group>"; };
 		5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesLoggerTests.swift; sourceTree = "<group>"; };
 		6873A9C5B58A71CC29798F0C /* PwctlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlService.swift; sourceTree = "<group>"; };
 		7E82A0992420A094C6BC1789 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceWindowDecoderTests.swift; sourceTree = "<group>"; };
+		9AB43B61F43F39612081E63F /* AeroSpaceWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceWindow.swift; sourceTree = "<group>"; };
 		9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPaths.swift; sourceTree = "<group>"; };
 		9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesLogger.swift; sourceTree = "<group>"; };
 		A34BA28935316C4E65502857 /* ConfigParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParser.swift; sourceTree = "<group>"; };
@@ -84,6 +95,7 @@
 		CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigModels.swift; sourceTree = "<group>"; };
 		CE07B01C725DCD484B2140BC /* pwctl */ = {isa = PBXFileReference; includeInIndex = 0; path = pwctl; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0BB4470C6E24287C582C34B /* AeroSpaceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceClient.swift; sourceTree = "<group>"; };
+		D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceErrors.swift; sourceTree = "<group>"; };
 		D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Doctor.swift; sourceTree = "<group>"; };
 		E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlArgumentParserTests.swift; sourceTree = "<group>"; };
 		F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorTests.swift; sourceTree = "<group>"; };
@@ -129,6 +141,9 @@
 			isa = PBXGroup;
 			children = (
 				24341DAD7A3A95E43E760685 /* AeroSpaceClientTests.swift */,
+				4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */,
+				2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */,
+				89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */,
 				A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */,
 				F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */,
 				3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */,
@@ -184,6 +199,9 @@
 			children = (
 				5483801F8DC406E0499CE10B /* AeroSpaceBinaryResolver.swift */,
 				D0BB4470C6E24287C582C34B /* AeroSpaceClient.swift */,
+				D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */,
+				0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */,
+				9AB43B61F43F39612081E63F /* AeroSpaceWindow.swift */,
 				CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */,
 				A34BA28935316C4E65502857 /* ConfigParser.swift */,
 				D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */,
@@ -334,6 +352,9 @@
 			files = (
 				78FBDEC9CB3E26F90E643D45 /* AeroSpaceBinaryResolver.swift in Sources */,
 				7E5C8BB2DF6B0A2ED0E69253 /* AeroSpaceClient.swift in Sources */,
+				31178CF9DB741EBFEB634657 /* AeroSpaceErrors.swift in Sources */,
+				831F38D95C6E471BA6874C7B /* AeroSpaceRetry.swift in Sources */,
+				3972E6F128A30168790962CE /* AeroSpaceWindow.swift in Sources */,
 				388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */,
 				BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */,
 				E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */,
@@ -352,6 +373,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				105AB02CFAC501E3DCB64126 /* AeroSpaceClientTests.swift in Sources */,
+				0AC6B135F1C7632E9DF09D41 /* AeroSpaceIntegrationTests.swift in Sources */,
+				081F29CEF4BA3B0F0CE53990 /* AeroSpaceRetryTests.swift in Sources */,
+				6C8266EFFB37AE56ED9BA648 /* AeroSpaceWindowDecoderTests.swift in Sources */,
 				014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */,
 				1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */,
 				59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */,

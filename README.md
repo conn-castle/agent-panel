@@ -435,5 +435,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --all --json` before/after launch.
+- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
 - No silent failures: show user-facing errors + write structured logs.

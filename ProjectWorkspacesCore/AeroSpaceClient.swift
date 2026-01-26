@@ -1,12 +1,5 @@
 import Foundation
 
-/// Errors surfaced when executing AeroSpace CLI commands.
-public enum AeroSpaceCommandError: Error, Equatable, Sendable {
-    case launchFailed(command: String, underlyingError: String)
-    case nonZeroExit(command: String, result: CommandResult)
-    case timedOut(command: String, timeoutSeconds: TimeInterval, result: CommandResult)
-}
-
 /// Executes AeroSpace CLI commands with a timeout.
 public protocol AeroSpaceCommandRunning {
     /// Executes a command and captures stdout/stderr.
@@ -169,9 +162,19 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
 
 /// Typed wrapper around AeroSpace CLI command execution.
 public struct AeroSpaceClient {
+    private static let listWindowsFormat =
+        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+
+    private static let readinessProbeArguments = ["list-workspaces", "--focused", "--count"]
+
     public let executableURL: URL
     private let commandRunner: AeroSpaceCommandRunning
     private let timeoutSeconds: TimeInterval
+    private let clock: DateProviding
+    private let sleeper: AeroSpaceSleeping
+    private let jitterProvider: AeroSpaceJitterProviding
+    private let retryPolicy: AeroSpaceRetryPolicy
+    private let windowDecoder: AeroSpaceWindowDecoder
 
     /// Creates a client using a resolved AeroSpace executable.
     /// - Parameters:
@@ -183,10 +186,47 @@ public struct AeroSpaceClient {
         commandRunner: AeroSpaceCommandRunning = DefaultAeroSpaceCommandRunner(),
         timeoutSeconds: TimeInterval
     ) {
+        self.init(
+            executableURL: executableURL,
+            commandRunner: commandRunner,
+            timeoutSeconds: timeoutSeconds,
+            clock: SystemDateProvider(),
+            sleeper: SystemAeroSpaceSleeper(),
+            jitterProvider: SystemAeroSpaceJitterProvider(),
+            retryPolicy: .standard,
+            windowDecoder: AeroSpaceWindowDecoder()
+        )
+    }
+
+    /// Internal initializer with injectable dependencies (testing).
+    /// - Parameters:
+    ///   - executableURL: Resolved AeroSpace CLI path.
+    ///   - commandRunner: Command runner used for CLI execution.
+    ///   - timeoutSeconds: Maximum time allowed for each command.
+    ///   - clock: Clock used for retry budget tracking.
+    ///   - sleeper: Sleeper used to delay between retries.
+    ///   - jitterProvider: Provider for retry jitter.
+    ///   - retryPolicy: Retry policy settings.
+    ///   - windowDecoder: Decoder used for list-windows JSON.
+    init(
+        executableURL: URL,
+        commandRunner: AeroSpaceCommandRunning,
+        timeoutSeconds: TimeInterval,
+        clock: DateProviding,
+        sleeper: AeroSpaceSleeping,
+        jitterProvider: AeroSpaceJitterProviding,
+        retryPolicy: AeroSpaceRetryPolicy,
+        windowDecoder: AeroSpaceWindowDecoder
+    ) {
         precondition(timeoutSeconds > 0, "timeoutSeconds must be positive")
         self.executableURL = executableURL
         self.commandRunner = commandRunner
         self.timeoutSeconds = timeoutSeconds
+        self.clock = clock
+        self.sleeper = sleeper
+        self.jitterProvider = jitterProvider
+        self.retryPolicy = retryPolicy
+        self.windowDecoder = windowDecoder
     }
 
     /// Creates a client by resolving the AeroSpace CLI once at startup.
@@ -224,13 +264,53 @@ public struct AeroSpaceClient {
     /// - Parameter workspace: Workspace name to query.
     /// - Returns: Command result containing JSON output or a structured error.
     public func listWindows(workspace: String) -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(arguments: ["list-windows", "--workspace", workspace, "--json"])
+        runCommand(
+            arguments: [
+                "list-windows",
+                "--workspace",
+                workspace,
+                "--json",
+                "--format",
+                Self.listWindowsFormat
+            ]
+        )
     }
 
     /// Lists windows across all workspaces as JSON.
     /// - Returns: Command result containing JSON output or a structured error.
     public func listWindowsAll() -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(arguments: ["list-windows", "--all", "--json"])
+        runCommand(
+            arguments: [
+                "list-windows",
+                "--all",
+                "--json",
+                "--format",
+                Self.listWindowsFormat
+            ]
+        )
+    }
+
+    /// Lists windows for a specific workspace as decoded models.
+    /// - Parameter workspace: Workspace name to query.
+    /// - Returns: Decoded windows or a structured error.
+    public func listWindowsDecoded(workspace: String) -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindows(workspace: workspace) {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    /// Lists windows across all workspaces as decoded models.
+    /// - Returns: Decoded windows or a structured error.
+    public func listWindowsAllDecoded() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindowsAll() {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     /// Focuses a window by id.
@@ -267,10 +347,124 @@ public struct AeroSpaceClient {
     /// - Parameter arguments: Arguments passed to the AeroSpace CLI.
     /// - Returns: Command result or a structured error.
     private func runCommand(arguments: [String]) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommandWithRetry(arguments: arguments)
+    }
+
+    private func runCommandWithRetry(arguments: [String]) -> Result<CommandResult, AeroSpaceCommandError> {
+        var context = RetryContext(
+            commandDescription: describeCommand(arguments: arguments),
+            probeDescription: describeCommand(arguments: Self.readinessProbeArguments),
+            startTime: clock.now(),
+            delaySeconds: retryPolicy.initialDelaySeconds
+        )
+
+        while true {
+            let outcome = commandRunner.run(
+                executable: executableURL,
+                arguments: arguments,
+                timeoutSeconds: timeoutSeconds
+            )
+
+            switch outcome {
+            case .success:
+                return outcome
+            case .failure(let error):
+                switch error {
+                case .launchFailed, .timedOut:
+                    return .failure(error)
+                case .nonZeroExit(_, let result):
+                    context.lastCommandResult = result
+                    let probeOutcome = runReadinessProbe()
+                    switch probeOutcome {
+                    case .success:
+                        return .failure(error)
+                    case .failure(let probeError):
+                        guard case .nonZeroExit(_, let probeResult) = probeError else {
+                            return .failure(probeError)
+                        }
+                        context.lastProbeResult = probeResult
+
+                        if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
+                            return .failure(budgetExceededError)
+                        }
+
+                        let remainingBudget = retryPolicy.totalCapSeconds - clock.now().timeIntervalSince(context.startTime)
+                        let sleepSeconds = min(jitteredDelay(baseDelay: context.delaySeconds), remainingBudget)
+                        sleeper.sleep(seconds: sleepSeconds)
+
+                        if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
+                            return .failure(budgetExceededError)
+                        }
+
+                        context.delaySeconds = min(context.delaySeconds * retryPolicy.backoffMultiplier, retryPolicy.maxDelaySeconds)
+                        context.attempt += 1
+                    }
+                case .decodingFailed, .notReady:
+                    return .failure(error)
+                }
+            }
+        }
+    }
+
+    /// Checks if the retry budget is exceeded and returns the appropriate error if so.
+    private func checkBudgetExceeded(
+        context: RetryContext,
+        fallbackError: AeroSpaceCommandError
+    ) -> AeroSpaceCommandError? {
+        let elapsed = clock.now().timeIntervalSince(context.startTime)
+        let budgetExceeded = context.attempt >= retryPolicy.maxAttempts || elapsed >= retryPolicy.totalCapSeconds
+
+        guard budgetExceeded else {
+            return nil
+        }
+
+        return buildNotReadyError(
+            timeoutSeconds: retryPolicy.totalCapSeconds,
+            commandDescription: context.commandDescription,
+            probeDescription: context.probeDescription,
+            lastCommandResult: context.lastCommandResult,
+            lastProbeResult: context.lastProbeResult,
+            fallbackError: fallbackError
+        )
+    }
+
+    private func runReadinessProbe() -> Result<CommandResult, AeroSpaceCommandError> {
         commandRunner.run(
             executable: executableURL,
-            arguments: arguments,
+            arguments: Self.readinessProbeArguments,
             timeoutSeconds: timeoutSeconds
         )
+    }
+
+    private func describeCommand(arguments: [String]) -> String {
+        ([executableURL.path] + arguments).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    }
+
+    private func jitteredDelay(baseDelay: TimeInterval) -> TimeInterval {
+        let jitterRange = baseDelay * retryPolicy.jitterFraction
+        let jitterUnit = (jitterProvider.nextUnit() * 2.0) - 1.0
+        let jittered = baseDelay + (jitterRange * jitterUnit)
+        return max(0, jittered)
+    }
+
+    private func buildNotReadyError(
+        timeoutSeconds: TimeInterval,
+        commandDescription: String,
+        probeDescription: String,
+        lastCommandResult: CommandResult?,
+        lastProbeResult: CommandResult?,
+        fallbackError: AeroSpaceCommandError
+    ) -> AeroSpaceCommandError {
+        guard let lastCommandResult, let lastProbeResult else {
+            return fallbackError
+        }
+        let notReady = AeroSpaceNotReady(
+            timeoutSeconds: timeoutSeconds,
+            lastCommandDescription: commandDescription,
+            lastCommand: lastCommandResult,
+            lastProbeDescription: probeDescription,
+            lastProbe: lastProbeResult
+        )
+        return .notReady(notReady)
     }
 }

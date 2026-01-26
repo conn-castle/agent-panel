@@ -26,10 +26,10 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 ### Tasks
 - [x] Resolve the `aerospace` binary path once at startup (no hardcoded PATH assumptions).
 - [x] Implement `AeroSpaceClient` command execution with timeouts and structured stdout/stderr capture.
-- [ ] Decode `aerospace list-windows ... --json` output into typed models.
-- [ ] Add retry policy for “AeroSpace not ready” failures (max 3 retries, 200ms backoff).
-- [ ] Add unit tests for AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks (CI-required).
-- [ ] Add opt-in AeroSpace integration tests gated behind `RUN_AEROSPACE_IT=1` (local-only).
+- [x] Decode `aerospace list-windows ... --json` output into typed models.
+- [x] Add retry policy for “AeroSpace not ready” failures (max 20 attempts, 50ms initial, 1.5x backoff, 750ms cap, 5s total, +/-20% jitter).
+- [x] Add unit tests for AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks (CI-required).
+- [x] Add opt-in AeroSpace integration tests gated behind `RUN_AEROSPACE_IT=1` (local-only).
 
 ### Exit criteria
 - When `RUN_AEROSPACE_IT=1`, integration tests can switch workspace, enumerate windows, and focus a window by id.
@@ -61,7 +61,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 ### Tasks
 - [ ] When Chrome window is missing, create it with `--new-window` and URLs in this order: `global.globalChromeUrls` → `project.repoUrl` (if set) → `project.chromeUrls`.
-- [ ] Detect the newly created Chrome window by diffing `aerospace list-windows --all --json` before/after launch.
+- [ ] Detect the newly created Chrome window by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
 - [ ] Ensure existing Chrome windows are never mutated (no tab enforcement after creation).
 - [ ] Enforce the focus rule: activation ends with the IDE focused (Chrome must not steal focus).
 - [ ] Add an automated (or manual, documented) check that Chrome recreation produces the expected tabs.
