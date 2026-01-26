@@ -60,3 +60,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Install a ProjectWorkspaces-safe AeroSpace config at `~/.aerospace.toml` only when no config exists; never modify existing configs; Doctor handles config state checks, safe installs, and emergency `aerospace enable off` action.
     Reason: Prevent tiling shock while preserving existing AeroSpace setups.
     Tradeoffs: Users with existing configs must opt into changes themselves.
+
+- Decision 2026-01-26 24a9013: Extract Doctor checker structs
+    Decision: Extract focused checker structs from Doctor.swift: PermissionsChecker (accessibility, hotkey), AppDiscoveryChecker (Chrome, IDEs), AeroSpaceChecker (all AeroSpace functionality). Doctor orchestrates checkers via composition.
+    Reason: Doctor.swift grew to ~1165 lines with mixed responsibilities; extraction improves maintainability before Phase 3 adds more checks.
+    Tradeoffs: More files to navigate; slight indirection in code flow.
