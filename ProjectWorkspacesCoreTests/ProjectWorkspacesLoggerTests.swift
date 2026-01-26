@@ -207,4 +207,14 @@ private final class TestFileSystem: FileSystem {
             files[url.path] = data
         }
     }
+
+    func writeFile(at url: URL, data: Data) throws {
+        files[url.path] = data
+    }
+
+    func syncFile(at url: URL) throws {
+        if files[url.path] == nil {
+            throw NSError(domain: "TestFileSystem", code: 6)
+        }
+    }
 }

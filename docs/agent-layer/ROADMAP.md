@@ -6,45 +6,16 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 <!-- PHASES START -->
 
-## Phase 0 — Project scaffold + contracts + doctor skeleton
+## Phase 0 ✅ — Project scaffold + contracts + doctor skeleton
 
-### Goal
-- Create a runnable menu bar agent + CLI scaffold with shared core logic.
-- Lock file paths + config/state contracts and validate them via `doctor`.
-
-### Tasks
-- [x] Create Xcode targets: `ProjectWorkspacesApp` (SwiftUI menu bar agent, LSUIElement), `ProjectWorkspacesCore` (pure Swift module), `pwctl` (CLI tool).
-- [x] Canonical Xcode entrypoint (locked): `ProjectWorkspaces.xcodeproj` (do not add a repo-level `.xcworkspace` in v1).
-- [x] Ensure the repo builds from the CLI via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` (Xcode GUI is optional for day-to-day development).
-- [x] Add repo scripts for deterministic builds/tests (no Xcode UI required): `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`.
-- [x] In `scripts/dev_bootstrap.sh`, validate the Xcode toolchain is installed and selected; fail loudly with copy/paste fix instructions when missing/misconfigured.
-- [x] Add CI workflow that runs `scripts/build.sh` and `scripts/test.sh` (and resolves SwiftPM packages before building).
-- [x] In `scripts/build.sh`, build `ProjectWorkspaces.app` and `pwctl` via `xcodebuild -project ProjectWorkspaces.xcodeproj ...` with pinned scheme/configuration.
-- [x] In `scripts/test.sh`, run unit tests via `xcodebuild -project ProjectWorkspaces.xcodeproj test ...` (CI uses this path).
-- [x] Implement the `pwctl` command surface with locked subcommands: `doctor`, `list`, `activate`, `close`, `logs`.
-- [x] Define and centralize filesystem paths (config, generated VS Code workspaces, state, logs, tool-owned `code` shim).
-- [x] Select and pin a SwiftPM TOML parsing dependency (the only third-party runtime dependency allowed in v1).
-- [x] Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` after adding the SwiftPM TOML dependency.
-- [x] Implement TOML parsing into typed models with strict validation, explicit documented defaults, and tolerant unknown-key handling (unknown keys must not cause a parse failure).
-- [x] Implement `pwctl doctor` with PASS/FAIL/WARN checks, actionable "Fix:" guidance, and copy/paste config snippets for discovered values.
-- [x] In `doctor`, enforce FAIL vs WARN rules for missing config keys and invalid values (defaults applied exactly as documented).
-- [x] In `doctor`, WARN if `global.switcherHotkey` is present (ignored; hotkey is fixed to ⌘⇧Space).
-- [x] In `doctor`, FAIL if the ⌘⇧Space hotkey cannot be registered (conflict / OS denial) and print actionable fix guidance (hotkey is not configurable).
-- [x] In `doctor`, implement Launch Services app discovery when `ide.*.appPath` / `bundleId` are omitted; FAIL only when an undiscoverable app is required by any project's effective IDE selection(s) or Chrome.
-- [x] In `doctor`, enforce reserved IDs: FAIL if any `project.id == "inbox"` (reserved for `pw-inbox` fallback behavior).
-- [x] In `doctor`, perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
-- [x] Implement `pwctl list` to print configured projects from `config.toml`.
-- [x] Implement `pwctl logs --tail <n>` to print the last N lines of the primary log.
-- [x] Implement logging to `~/.local/state/project-workspaces/logs/workspaces.log` with deterministic rotation (rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5`) and structured output.
-- [x] Add an in-app "Run Doctor" action that runs doctor and shows results in the menu bar app UI.
-- [x] Keep `pwctl doctor` permanently; ensure in-app “Run Doctor” calls the same core engine and produces identical report content/severity.
-- [x] Add unit tests for config defaults/validation, doctor severity rules, and log rotation behavior.
-
-### Exit criteria
-- `ProjectWorkspaces.app` runs as a menu bar agent (LSUIElement) in debug.
-- `scripts/build.sh` and `scripts/test.sh` work end-to-end without requiring the Xcode GUI.
-- `pwctl doctor` returns non-zero when any FAIL exists and prints actionable fixes.
-- Structural config errors fail fast; non-critical omissions use documented defaults and are surfaced as Doctor WARN/OK (per spec).
+- Created Xcode targets: `ProjectWorkspacesApp` (SwiftUI menu bar agent), `ProjectWorkspacesCore` (pure Swift module), `pwctl` (CLI tool).
+- Established CLI-driven build workflow via `scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh` (Xcode GUI optional).
+- Implemented TOML config parsing with strict validation, explicit defaults, and tolerant unknown-key handling.
+- Implemented `pwctl` command surface: `doctor`, `list`, `activate` (stub), `close` (stub), `logs`.
+- Implemented `pwctl doctor` with PASS/FAIL/WARN checks, actionable guidance, and AeroSpace config state handling.
+- Added in-app "Run Doctor" action using the same core engine as `pwctl doctor`.
+- Implemented structured logging with rotation (10 MiB, 5 archives).
+- Added CI workflow and unit tests for config validation, doctor severity, and log rotation.
 
 
 ## Phase 1 — AeroSpace client wrapper + window enumeration primitives

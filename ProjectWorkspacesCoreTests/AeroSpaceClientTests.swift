@@ -217,6 +217,14 @@ private final class TestFileSystem: FileSystem {
     func appendFile(at url: URL, data: Data) throws {
         throw NSError(domain: "TestFileSystem", code: 6)
     }
+
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "TestFileSystem", code: 7)
+    }
+
+    func syncFile(at url: URL) throws {
+        throw NSError(domain: "TestFileSystem", code: 8)
+    }
 }
 
 private struct AeroSpaceCommandCall: Equatable {

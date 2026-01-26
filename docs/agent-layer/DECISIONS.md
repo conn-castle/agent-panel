@@ -6,67 +6,57 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 <!-- ENTRIES START -->
 
-- Decision 2026-01-14 02e7dee: Keep pwctl doctor and skip hotkey check when agent runs
-    Decision: Keep both `pwctl doctor` and the in-app “Run Doctor,” and skip the hotkey registration check when the agent is running.
-    Reason: This matches the locked deliverables while preventing false FAIL results during normal use.
-    Tradeoffs: The CLI surface remains supported and the hotkey check relies on agent detection.
-
-- Decision 2026-01-14 02e7dee: Log format is JSON Lines
-    Decision: Write log entries as JSON Lines with UTC ISO-8601 timestamps.
-    Reason: Structured logs are easy to parse and filter while remaining append-only.
-    Tradeoffs: Logs are less human-readable without tooling, and the schema must be kept stable.
-
-- Decision 2026-01-13 c8c343a: Select TOMLDecoder for TOML parsing
-    Decision: Use the Swift package `TOMLDecoder` pinned to version `0.4.3` as the single third-party runtime dependency.
-    Reason: It is a maintained Swift Package Manager library with a dedicated library product and aligns with the dependency policy.
-    Tradeoffs: The project now depends on an external library that must be kept compatible with the supported macOS toolchain.
-
-- Decision 2026-01-12 9fd499c: Minimum supported macOS version
-    Decision: Set the minimum supported macOS version to 15.7.
-    Reason: This is the product requirement for the initial release.
-    Tradeoffs: Older macOS versions are unsupported, which may exclude some users and reduces compatibility testing scope.
-
-- Decision 2026-01-12 9fd499c: Generate Xcode project via XcodeGen
-    Decision: Track `project.yml` and regenerate `ProjectWorkspaces.xcodeproj` via `scripts/regenerate_xcodeproj.sh` (XcodeGen) instead of editing `.pbxproj` by hand.
-    Reason: Keep the Xcode project definition reviewable and avoid brittle manual edits and merge conflicts in the generated project file.
-    Tradeoffs: Contributors must install `xcodegen` to change targets/settings; generated diffs can be large and require regeneration discipline.
+- Decision 2026-01-11 9fd499c: Build workflow and Xcode project management
+    Decision: Track `project.yml` and regenerate `ProjectWorkspaces.xcodeproj` via XcodeGen; keep a single repo-level `.xcodeproj` (no `.xcworkspace` in v1); drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile and resolve packages in CI; require Apple toolchain for developers/CI while keeping Xcode GUI optional.
+    Reason: Deterministic, reviewable builds with minimal IDE friction and no brittle `.pbxproj` manual edits.
+    Tradeoffs: Contributors must install `xcodegen`; additional script maintenance; occasional need to open Xcode for debugging/provisioning.
 
 - Decision 2026-01-11 9fd499c: Core target is a static framework
     Decision: Build `ProjectWorkspacesCore` as a static framework so `pwctl` can link it without requiring embedded runtime frameworks.
     Reason: A command-line tool does not embed dependent dynamic frameworks by default, which causes runtime loader failures during development.
-    Tradeoffs: Static linking can increase binary size and can duplicate code between the app and CLI; switching to a dynamic framework later would require explicit embedding and runtime search path configuration.
+    Tradeoffs: Static linking can increase binary size; switching to dynamic later would require explicit embedding and runtime search path configuration.
 
-- Decision 2026-01-11 000000: CLI-driven builds without Xcode UI
-    Decision: Keep a single repo-level `ProjectWorkspaces.xcodeproj` (no `.xcworkspace` in v1) and drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile at `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and resolve packages in CI; require the Apple toolchain (full Xcode) for developers/CI while keeping the Xcode GUI optional day-to-day.
-    Reason: Deterministic builds and tests with minimal IDE friction and fewer “it works on my machine” differences.
-    Tradeoffs: Additional script maintenance and occasional need to open Xcode for debugging/provisioning tasks.
+- Decision 2026-01-11 9fd499c: Dependencies and hotkey policy
+    Decision: Allow third-party Swift dependencies only for TOML parsing (`TOMLDecoder` pinned to 0.4.3 via SwiftPM); hotkey is fixed to ⌘⇧Space and not configurable; implement hotkey via Carbon `RegisterEventHotKey` with no third-party hotkey libraries.
+    Reason: Minimize runtime dependencies while keeping parsing reliable and hotkey implementation stable.
+    Tradeoffs: TOML dependency must be maintained; more custom code in-house for hotkey.
 
-- Decision 2026-01-11 000000: Config defaults and doctor severity
-    Decision: Apply deterministic defaults for non-structural config omissions; Doctor FAIL only for structural/safety-critical issues and otherwise emit WARN/OK per spec, using Launch Services discovery for omitted IDE app fields; config parsing tolerates unknown keys so unsupported keys can be WARNed (not parse-failed).
+- Decision 2026-01-11 9fd499c: Logging contract
+    Decision: Write JSON Lines log entries with UTC ISO-8601 timestamps to `workspaces.log`; rotate at 10 MiB with up to 5 archives (`workspaces.log.1`…`workspaces.log.5`).
+    Reason: Structured logs are easy to parse/filter; stable "tail this file" contract; prevents unbounded growth.
+    Tradeoffs: Less human-readable without tooling; schema must stay stable; older history rotates out.
+
+- Decision 2026-01-11 9fd499c: Config defaults and doctor severity
+    Decision: Apply deterministic defaults for non-structural config omissions; Doctor FAIL only for structural/safety-critical issues and otherwise emit WARN/OK; config parsing tolerates unknown keys so unsupported keys can be WARNed.
     Reason: Keep the tool easy to configure and robust on a fresh machine without silent behavior.
     Tradeoffs: More defaulting behavior to document and test; warnings may be noisy.
 
-- Decision 2026-01-11 000000: Log file contract and rotation
-    Decision: Write to a single active log `workspaces.log` and rotate at 10 MiB with up to 5 archives (`workspaces.log.1`…`workspaces.log.5`).
-    Reason: Preserve a stable “tail this file” contract while preventing unbounded growth.
-    Tradeoffs: Older history rotates out; tooling may need to scan multiple files when diagnosing issues.
-
-- Decision 2026-01-11 000000: Reserved fallback workspace pw-inbox
-    Decision: Hard-code `pw-inbox` as the fallback workspace, forbid `project.id == "inbox"`, and have Doctor perform an AeroSpace connectivity check by switching to `pw-inbox` once.
+- Decision 2026-01-11 9fd499c: Reserved fallback workspace pw-inbox
+    Decision: Hard-code `pw-inbox` as the fallback workspace; forbid `project.id == "inbox"`; Doctor performs connectivity check by switching to `pw-inbox` once.
     Reason: Make Close(Project) deterministic and ensure there is always a safe workspace to land on.
-    Tradeoffs: Users cannot use `inbox` as a project id; Doctor performs a small workspace switch as part of validation.
+    Tradeoffs: Users cannot use `inbox` as a project id.
 
-- Decision 2026-01-11 000000: Dependency and hotkey policy
-    Decision: Allow third-party Swift dependencies only for TOML parsing (SwiftPM, version pinned); hotkey is fixed to ⌘⇧Space and not configurable; if `global.switcherHotkey` is present it is ignored and Doctor emits WARN; if ⌘⇧Space cannot be registered, Doctor FAILs; implement the hotkey via Carbon `RegisterEventHotKey` with no third-party hotkey libraries.
-    Reason: Minimize runtime dependencies while keeping parsing reliable and the hotkey implementation stable.
-    Tradeoffs: More custom code in-house; the TOML dependency must be maintained and upgraded intentionally.
-
-- Decision 2026-01-11 000000: CI test scope and opt-in integration tests
-    Decision: Require unit tests in CI and gate real AeroSpace integration tests behind `RUN_AEROSPACE_IT=1` for local runs only.
+- Decision 2026-01-11 9fd499c: CI test scope and opt-in integration tests
+    Decision: Require unit tests in CI; gate real AeroSpace integration tests behind `RUN_AEROSPACE_IT=1` for local runs only.
     Reason: Real window manipulation and permissions are not reliably runnable in CI environments.
-    Tradeoffs: Less end-to-end coverage in CI; engineers must run opt-in integration tests locally when changing AeroSpace/window behavior.
+    Tradeoffs: Less end-to-end coverage in CI; engineers must run opt-in integration tests locally.
 
-- Decision 2026-01-11 000000: Distribution channels
-    Decision: Ship both a Homebrew cask (recommended) and a signed+notarized direct download artifact (`.zip` or `.dmg`) from a single canonical pipeline.
+- Decision 2026-01-11 9fd499c: Distribution channels
+    Decision: Ship both a Homebrew cask (recommended) and a signed+notarized direct download artifact from a single canonical pipeline.
     Reason: Provide a smooth install/update path with a fallback for machines without Homebrew.
-    Tradeoffs: More packaging complexity; the release process must keep the artifacts in sync.
+    Tradeoffs: More packaging complexity; release process must keep artifacts in sync.
+
+- Decision 2026-01-12 9fd499c: Minimum supported macOS version
+    Decision: Set minimum supported macOS version to 15.7.
+    Reason: Product requirement for initial release.
+    Tradeoffs: Older macOS versions unsupported.
+
+- Decision 2026-01-14 02e7dee: Skip hotkey check when agent runs
+    Decision: Keep both `pwctl doctor` and in-app "Run Doctor"; skip hotkey registration check when the agent app is already running.
+    Reason: Prevents false FAIL results during normal use when the agent already holds the hotkey.
+    Tradeoffs: Hotkey check relies on agent detection.
+
+- Decision 2026-01-25 f311f35: AeroSpace onboarding safe config
+    Decision: Install a ProjectWorkspaces-safe AeroSpace config at `~/.aerospace.toml` only when no config exists; never modify existing configs; Doctor handles config state checks, safe installs, and emergency `aerospace enable off` action.
+    Reason: Prevent tiling shock while preserving existing AeroSpace setups.
+    Tradeoffs: Users with existing configs must opt into changes themselves.

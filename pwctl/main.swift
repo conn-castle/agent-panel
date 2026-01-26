@@ -138,12 +138,15 @@ private func renderFindings(_ findings: [DoctorFinding]) -> String {
     var lines: [String] = []
 
     for finding in sortedFindings {
-        lines.append("\(finding.severity.rawValue): \(finding.title)")
-        if let detail = finding.detail, !detail.isEmpty {
-            lines.append("  Detail: \(detail)")
+        if finding.title.isEmpty {
+            for line in finding.bodyLines {
+                lines.append(line)
+            }
+            continue
         }
-        if let fix = finding.fix, !fix.isEmpty {
-            lines.append("  Fix: \(fix)")
+        lines.append("\(finding.severity.rawValue)  \(finding.title)")
+        for line in finding.bodyLines {
+            lines.append(line)
         }
         if let snippet = finding.snippet, !snippet.isEmpty {
             lines.append("  Snippet:")

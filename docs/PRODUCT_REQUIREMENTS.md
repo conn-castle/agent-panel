@@ -41,6 +41,9 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
    - explicit macOS permission requirements
    - a `doctor` command
    - clear logs
+7) **No first-run panic**: starting AeroSpace must not immediately tile/resize the user's entire system.
+8) **No config clobbering**: existing AeroSpace configs must remain unchanged.
+9) **No global takeover**: AeroSpace should only matter for windows managed by ProjectWorkspaces.
 
 ### 2.2 Secondary goals (SHOULD)
 
@@ -67,6 +70,8 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 - **Workspace**: an **AeroSpace workspace** named `pw-<projectId>`.
 - **Activate(Project)**: switch to the project workspace and ensure its core windows exist.
 - **Close(Project)**: close every window in the project workspace.
+- **AeroSpace config locations**: `~/.aerospace.toml` and `${XDG_CONFIG_HOME:-~/.config}/aerospace/aerospace.toml`.
+- **Safe AeroSpace config**: a ProjectWorkspaces-managed config that floats all windows and defines no keybindings.
 - **Display mode**:
   - `laptop`: any main display width < `ultrawideMinWidthPx`
   - `ultrawide`: any main display width ≥ `ultrawideMinWidthPx`
@@ -248,7 +253,7 @@ Per project, IDE launch priority is:
 
 - Provide `pwctl doctor` and an in-app “Run Doctor.”
 - Doctor must validate:
-  - AeroSpace installed/running and CLI resolvable
+  - AeroSpace installed and CLI resolvable (server reachable once safe config is in place)
   - Accessibility permission granted to ProjectWorkspaces
   - Chrome installed
   - VS Code installed (and Antigravity if configured)
@@ -259,6 +264,142 @@ Per project, IDE launch priority is:
   - required directories are writable
 - Doctor must perform an AeroSpace connectivity check by switching to `pw-inbox` once (and switching back best-effort).
 - Failures must be actionable (explicit “Fix:” text).
+
+### PR-085 — AeroSpace onboarding and Doctor (safe config)
+
+**MUST**
+
+- Keep both Doctor entry points:
+  - `pwctl doctor`
+  - in-app **Run Doctor** (same core engine and identical report output)
+- Doctor severity levels are **PASS**, **WARN**, **FAIL**.
+- AeroSpace config locations (Doctor checks both, pre-server-start):
+  1) `~/.aerospace.toml`
+  2) `${XDG_CONFIG_HOME}/aerospace/aerospace.toml` where `XDG_CONFIG_HOME` defaults to `~/.config` if unset
+- Reserved workspace: `pw-inbox` is hard-coded and always safe to switch to.
+
+**Safe config (ProjectWorkspaces-safe)**
+
+- Floats all windows by default.
+- Defines **no AeroSpace keybindings**.
+- Contains **no move-node-to-workspace** rules.
+
+Template (installed only when no config exists):
+
+```toml
+# Managed by ProjectWorkspaces.
+# Purpose: prevent AeroSpace default tiling from affecting all windows.
+# This config intentionally defines no AeroSpace keybindings.
+config-version = 2
+
+[mode.main.binding]
+# Intentionally empty. ProjectWorkspaces provides the global UX.
+
+[[on-window-detected]]
+check-further-callbacks = true
+run = 'layout floating'
+```
+
+**Hard-locked policies**
+
+- Switcher hotkey is fixed to **Cmd+Shift+Space**; any attempt to set it in config is ignored and must produce a Doctor WARN.
+- If **no AeroSpace config exists**, ProjectWorkspaces installs the safe config at `~/.aerospace.toml`.
+- If **any AeroSpace config exists**, ProjectWorkspaces must **not** write or modify config files and must run in compatibility mode.
+- ProjectWorkspaces must never install `on-window-detected` rules that move windows to workspaces by `app-id`.
+
+**Doctor report header (exact)**
+
+```
+ProjectWorkspaces Doctor Report
+Timestamp: <ISO-8601>
+ProjectWorkspaces version: <semver or git sha>
+macOS version: <string>
+AeroSpace app: <detected path or NOT FOUND>
+aerospace CLI: <resolved absolute path or NOT FOUND>
+```
+
+**Doctor decision tree (exact text)**
+
+Doctor entry UI strings (exact)
+
+- In-app menu item: `Run Doctor...`
+- Doctor window title: `Doctor`
+- Primary buttons:
+  - `Run Doctor`
+  - `Copy Report`
+  - `Install Safe AeroSpace Config`
+  - `Start AeroSpace`
+  - `Reload AeroSpace Config`
+  - `Emergency: Disable AeroSpace`
+  - `Close`
+
+Step 1 — Detect AeroSpace installation
+
+- PASS: `PASS  AeroSpace.app found at: /Applications/AeroSpace.app`
+- FAIL: `FAIL  AeroSpace.app not found in /Applications`
+  - `Fix: Install AeroSpace (recommended: Homebrew cask). Then re-run Doctor.`
+- PASS: `PASS  aerospace CLI found at: <absolute path>`
+- FAIL: `FAIL  aerospace CLI not found`
+  - `Fix: Ensure AeroSpace CLI is installed and available. Re-run Doctor.`
+
+Step 2 — Detect AeroSpace config state
+
+- Ambiguous (both exist):
+  - `FAIL  AeroSpace config is ambiguous (found in more than one location).`
+  - `Detected:`
+    - `- ~/.aerospace.toml`
+    - `- <resolved XDG path>`
+  - `Fix: Remove or rename one of the files, then re-run Doctor. ProjectWorkspaces will not pick one automatically.`
+- Existing (exactly one exists):
+  - `PASS  Existing AeroSpace config detected. ProjectWorkspaces will not modify it.`
+  - `Config location: <path>`
+  - `Note: Your AeroSpace config may tile/resize windows. If you don't want that, update your AeroSpace config yourself. ProjectWorkspaces does not change it automatically.`
+- Missing (none exist):
+  - `FAIL  No AeroSpace config found. Starting AeroSpace will load the default tiling config and may resize/tile all windows.`
+  - `Recommended fix: Install the ProjectWorkspaces-safe config which floats all windows by default.`
+
+Step 3 — Install safe config (single click)
+
+- Re-check both config locations; abort if any exist.
+- Write atomically to `~/.aerospace.toml` via temp file + fsync + rename.
+- Verify marker line `# Managed by ProjectWorkspaces.`.
+- Report:
+  - `PASS  Installed safe AeroSpace config at: ~/.aerospace.toml`
+  - `Next: Start AeroSpace`
+
+Step 4 — Start AeroSpace
+
+- Query: `aerospace config --config-path`; if that fails, try `aerospace list-workspaces --focused`.
+- If both fail, run `open -a /Applications/AeroSpace.app` and retry up to 20 times with 250ms delay.
+- PASS: `PASS  AeroSpace server is running`
+- FAIL: `FAIL  Unable to connect to AeroSpace server`
+  - `Fix: Launch AeroSpace manually and ensure required permissions are granted. Re-run Doctor.`
+- Once connected: `PASS  AeroSpace loaded config: <path>`
+
+Step 5 — Connectivity / disruption check (pw-inbox switch)
+
+- Always show: `INFO  Current workspace before test: <prev>`
+- PASS: `PASS  AeroSpace workspace switch succeeded (pw-inbox)`
+- PASS: `PASS  Restored previous workspace: <prev>`
+- WARN: `WARN  Could not restore previous workspace automatically.`
+  - `Fix: Run: aerospace workspace <prev>`
+- FAIL: `FAIL  AeroSpace workspace switching failed. ProjectWorkspaces cannot operate safely.`
+
+Step 6 — Emergency action (panic button)
+
+- Action: `aerospace enable off`
+- Output: `PASS  Disabled AeroSpace window management (all hidden workspaces made visible).`
+
+**Restore / uninstall (safe config only)**
+
+- If `~/.aerospace.toml` contains the marker as the first non-empty line, Doctor may offer **Uninstall Safe AeroSpace Config**:
+  1) Rename `~/.aerospace.toml` to `~/.aerospace.toml.projectworkspaces.bak.<YYYYMMDD-HHMMSS>`
+  2) If AeroSpace is running, run `aerospace reload-config --no-gui` (WARN on failure)
+- Output:
+  - `PASS  Backed up ~/.aerospace.toml to: <backup path>`
+  - `INFO  AeroSpace will now use default config unless you provide your own config.`
+- If marker is missing: show
+  - `INFO  AeroSpace config appears user-managed; ProjectWorkspaces will not modify it.`
 
 ### PR-090 — Logging
 

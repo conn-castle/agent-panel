@@ -46,10 +46,11 @@ This roadmap is derived from the requirements spec but intentionally changes the
 12) **Test policy**: CI runs unit tests only; AeroSpace integration tests are local-only behind `RUN_AEROSPACE_IT=1`.
 13) **Logs contract**: Single active log file with deterministic rotation (rotate at 10 MiB, keep 5 archives).
 14) **Fallback workspace**: `pw-inbox` is hard-coded and reserved; `projectId == "inbox"` is invalid and Doctor performs a connectivity check by switching to `pw-inbox` once.
-15) **Build workflow**: Keep a single `ProjectWorkspaces.xcodeproj` in-repo and drive builds/tests/archives via `xcodebuild -project` scripts so the Xcode GUI is not required day-to-day.
-16) **Toolchain requirement**: End users do not need Xcode; developers and CI runners require the Apple toolchain (practically: full Xcode installed).
-17) **Workspace policy**: Do not add a repo-level `.xcworkspace` in v1; introduce it only if the repo contains 2+ `.xcodeproj` files that must be built together (record the migration in `docs/agent-layer/DECISIONS.md` and update scripts).
-18) **SwiftPM reproducibility**: Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
+15) **AeroSpace onboarding**: Install a ProjectWorkspaces-safe config at `~/.aerospace.toml` only when no config exists; never modify existing configs; do not use config-based window moving; provide an emergency `aerospace enable off` action.
+16) **Build workflow**: Keep a single `ProjectWorkspaces.xcodeproj` in-repo and drive builds/tests/archives via `xcodebuild -project` scripts so the Xcode GUI is not required day-to-day.
+17) **Toolchain requirement**: End users do not need Xcode; developers and CI runners require the Apple toolchain (practically: full Xcode installed).
+18) **Workspace policy**: Do not add a repo-level `.xcworkspace` in v1; introduce it only if the repo contains 2+ `.xcodeproj` files that must be built together (record the migration in `docs/agent-layer/DECISIONS.md` and update scripts).
+19) **SwiftPM reproducibility**: Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
 
 ## Definitions
 
@@ -217,6 +218,9 @@ Notes:
      - At least one `[[project]]` exists
      - AeroSpace installed (binary exists)
      - `aerospace` CLI callable (resolve absolute path)
+     - AeroSpace config state (missing / existing / ambiguous) checked before server start
+     - Safe config install at `~/.aerospace.toml` when no config exists (marker required, atomic write)
+     - Never modify an existing AeroSpace config; fail if configs are ambiguous
      - Accessibility permission status (for the agent app)
      - Chrome installed
      - VS Code installed (Antigravity optional)
@@ -225,8 +229,10 @@ Notes:
      - Required apps are discoverable for the effective IDE selection(s) and Chrome (use Launch Services discovery if config values are omitted)
      - Reserved ID validation: FAIL if any `project.id == "inbox"`
      - AeroSpace connectivity check by switching to `pw-inbox` once (switch back best-effort)
+     - Report the loaded AeroSpace config path via `aerospace config --config-path`
+     - Emergency action: `aerospace enable off`
      - Workspace directory write access
-   - Output format: list of PASS/FAIL/WARN with a “Fix” line.
+   - Output format: list of PASS/FAIL/WARN with a “Fix” line and a report header (timestamp, version, macOS, AeroSpace app/CLI paths).
 
 **Exit criteria**
 
@@ -452,7 +458,7 @@ Notes:
 **Deliverables**
 
 - Signed + notarized `ProjectWorkspaces.app`, distributed via both Homebrew cask (recommended) and direct download (`.zip` or `.dmg`).
-- Release scripts: `scripts/archive.sh` and `scripts/notarize.sh` drive `xcodebuild archive/export`, notarization, and stapling (no Xcode UI required).
+- Release scripts (not yet implemented): `scripts/archive.sh` and `scripts/notarize.sh` will drive `xcodebuild archive/export`, notarization, and stapling (no Xcode UI required).
 - `pwctl` shipped alongside.
 - README finalized (install/config/usage/troubleshooting).
 - Doctor covers the complete setup, including Accessibility.

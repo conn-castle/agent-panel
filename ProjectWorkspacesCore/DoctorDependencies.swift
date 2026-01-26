@@ -46,6 +46,16 @@ public protocol FileSystem {
     ///   - url: File URL to append to.
     ///   - data: Data to append.
     func appendFile(at url: URL, data: Data) throws
+
+    /// Writes data to a file at the given URL, replacing any existing contents.
+    /// - Parameters:
+    ///   - url: File URL to write.
+    ///   - data: Data to write.
+    func writeFile(at url: URL, data: Data) throws
+
+    /// Flushes file contents to disk.
+    /// - Parameter url: File URL to synchronize.
+    func syncFile(at url: URL) throws
 }
 
 /// Default file system implementation backed by `FileManager`.
@@ -133,6 +143,59 @@ public struct DefaultFileSystem: FileSystem {
         } else {
             try data.write(to: url, options: .atomic)
         }
+    }
+
+    /// Writes data to a file at the given URL, replacing any existing contents.
+    /// - Parameters:
+    ///   - url: File URL to write.
+    ///   - data: Data to write.
+    public func writeFile(at url: URL, data: Data) throws {
+        try data.write(to: url, options: .atomic)
+    }
+
+    /// Flushes file contents to disk.
+    /// - Parameter url: File URL to synchronize.
+    public func syncFile(at url: URL) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.synchronize()
+    }
+}
+
+/// Environment accessor used by Doctor.
+public protocol EnvironmentProviding {
+    /// Returns the environment value for the given key.
+    /// - Parameter key: Environment variable name.
+    func value(forKey key: String) -> String?
+}
+
+/// Default environment provider backed by the current process environment.
+public struct ProcessEnvironment: EnvironmentProviding {
+    /// Creates a process environment provider.
+    public init() {}
+
+    /// Returns the environment value for the given key.
+    /// - Parameter key: Environment variable name.
+    /// - Returns: Environment variable value if present.
+    public func value(forKey key: String) -> String? {
+        ProcessInfo.processInfo.environment[key]
+    }
+}
+
+/// Date provider used by Doctor for timestamps.
+public protocol DateProviding {
+    /// Returns the current date.
+    func now() -> Date
+}
+
+/// Default date provider backed by `Date()`.
+public struct SystemDateProvider: DateProviding {
+    /// Creates a system date provider.
+    public init() {}
+
+    /// Returns the current system date.
+    public func now() -> Date {
+        Date()
     }
 }
 

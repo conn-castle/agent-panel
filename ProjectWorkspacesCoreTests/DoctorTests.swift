@@ -8,9 +8,11 @@ final class DoctorTests: XCTestCase {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -39,7 +41,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: false),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -53,9 +56,11 @@ final class DoctorTests: XCTestCase {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -82,7 +87,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -96,9 +102,11 @@ final class DoctorTests: XCTestCase {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -127,7 +135,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: false),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -141,9 +150,11 @@ final class DoctorTests: XCTestCase {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -172,7 +183,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: false),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: true),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -186,9 +198,11 @@ final class DoctorTests: XCTestCase {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -217,7 +231,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -225,9 +240,286 @@ final class DoctorTests: XCTestCase {
         XCTAssertTrue(report.findings.contains { $0.title == "global.switcherHotkey is ignored" })
     }
 
+    func testDoctorFailsWhenAeroSpaceConfigMissing() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "No AeroSpace config found. Starting AeroSpace will load the default tiling config and may resize/tile all windows."
+        })
+        XCTAssertTrue(report.actions.canInstallSafeAeroSpaceConfig)
+        XCTAssertFalse(report.actions.canStartAeroSpace)
+        XCTAssertFalse(report.actions.canReloadAeroSpaceConfig)
+    }
+
+    func testDoctorFailsWhenAeroSpaceConfigAmbiguous() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData(),
+            "/Users/tester/.config/aerospace/aerospace.toml": Data("user-config".utf8)
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "AeroSpace config is ambiguous (found in more than one location)."
+        })
+        XCTAssertFalse(report.actions.canInstallSafeAeroSpaceConfig)
+        XCTAssertFalse(report.actions.canStartAeroSpace)
+        XCTAssertFalse(report.actions.canReloadAeroSpaceConfig)
+        XCTAssertFalse(report.actions.canUninstallSafeAeroSpaceConfig)
+    }
+
+    func testDoctorInstallsSafeAeroSpaceConfig() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.installSafeAeroSpaceConfig()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Installed safe AeroSpace config at: ~/.aerospace.toml"
+        })
+        XCTAssertNotNil(fileSystem.fileData(atPath: "/Users/tester/.aerospace.toml"))
+    }
+
+    func testDoctorUninstallsSafeAeroSpaceConfig() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+        let fixedDate = Date(timeIntervalSince1970: 0)
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: aerospacePath, arguments: ["reload-config", "--no-gui"]): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+                CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ],
+            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:]),
+            dateProvider: TestDateProvider(date: fixedDate)
+        )
+
+        let report = doctor.uninstallSafeAeroSpaceConfig()
+        let backupPath = "/Users/tester/.aerospace.toml.projectworkspaces.bak.19700101-000000"
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Backed up ~/.aerospace.toml to: \(backupPath)"
+        })
+        XCTAssertNil(fileSystem.fileData(atPath: "/Users/tester/.aerospace.toml"))
+        XCTAssertNotNil(fileSystem.fileData(atPath: backupPath))
+    }
+
+    func testDoctorUninstallSkipsUserManagedConfig() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": Data("user-config".utf8)
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath
+        ])
+
+        let appDiscovery = TestAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.uninstallSafeAeroSpaceConfig()
+
+        XCTAssertNotNil(fileSystem.fileData(atPath: "/Users/tester/.aerospace.toml"))
+        XCTAssertTrue(report.rendered().contains(
+            "INFO  AeroSpace config appears user-managed; ProjectWorkspaces will not modify it."
+        ))
+    }
+
     func testDoctorFailsWhenConfigMissing() {
         let aerospacePath = "/opt/homebrew/bin/aerospace"
-        let fileSystem = TestFileSystem(files: [:], directories: [], executableFiles: [
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
+        ], directories: [
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
             aerospacePath
         ])
         let commandRunner = makePassingCommandRunner(
@@ -245,7 +537,8 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
@@ -257,9 +550,11 @@ final class DoctorTests: XCTestCase {
     func testDoctorFailsWhenAerospaceCliMissing() {
         let config = makeValidConfig()
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             "/usr/bin/which"
         ])
@@ -289,22 +584,25 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
 
         XCTAssertTrue(report.hasFailures)
-        XCTAssertTrue(report.findings.contains { $0.title == "AeroSpace CLI not found" })
+        XCTAssertTrue(report.findings.contains { $0.title == "aerospace CLI not found" })
     }
 
     func testDoctorWarnsWhenAerospaceRestoreFails() {
         let config = makeValidConfig()
         let aerospacePath = "/opt/homebrew/bin/aerospace"
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -322,6 +620,9 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+                CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
+            ],
             CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: "")
@@ -341,14 +642,15 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
 
         XCTAssertFalse(report.hasFailures)
         XCTAssertTrue(report.findings.contains {
-            $0.title == "Doctor changed your AeroSpace workspace to pw-inbox but could not restore the previous workspace."
+            $0.title == "Could not restore previous workspace automatically."
         })
     }
 
@@ -356,9 +658,11 @@ final class DoctorTests: XCTestCase {
         let config = makeValidConfig()
         let aerospacePath = "/opt/homebrew/bin/aerospace"
         let fileSystem = TestFileSystem(files: [
-            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
         ], directories: [
-            "/Users/tester/src/codex"
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
         ])
@@ -376,6 +680,9 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
+            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+                CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
+            ],
             CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: "")
@@ -392,13 +699,16 @@ final class DoctorTests: XCTestCase {
             hotkeyChecker: TestHotkeyChecker(isAvailable: true),
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
-            commandRunner: commandRunner
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
         )
 
         let report = doctor.run()
 
         XCTAssertTrue(report.hasFailures)
-        XCTAssertTrue(report.findings.contains { $0.title == "AeroSpace did not switch to pw-inbox" })
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "AeroSpace workspace switching failed. ProjectWorkspaces cannot operate safely."
+        })
     }
 }
 
@@ -471,6 +781,20 @@ private final class TestFileSystem: FileSystem {
             files[url.path] = data
         }
     }
+
+    func writeFile(at url: URL, data: Data) throws {
+        files[url.path] = data
+    }
+
+    func syncFile(at url: URL) throws {
+        if files[url.path] == nil {
+            throw NSError(domain: "TestFileSystem", code: 6)
+        }
+    }
+
+    func fileData(atPath path: String) -> Data? {
+        files[path]
+    }
 }
 
 private struct CommandSignature: Hashable {
@@ -532,6 +856,10 @@ private func makeValidConfig(includeSwitcherHotkey: Bool = false) -> String {
 /// - Returns: A command runner stub with success results.
 private func makePassingCommandRunner(executablePath: String, previousWorkspace: String) -> TestCommandRunner {
     var results: [CommandSignature: [CommandResult]] = [:]
+    let configKey = CommandSignature(path: executablePath, arguments: ["config", "--config-path"])
+    results[configKey] = [
+        CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
+    ]
     let focusedKey = CommandSignature(path: executablePath, arguments: ["list-workspaces", "--focused"])
     results[focusedKey] = [
         CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: ""),
@@ -548,6 +876,10 @@ private func makePassingCommandRunner(executablePath: String, previousWorkspace:
     }
 
     return TestCommandRunner(results: results)
+}
+
+private func makeSafeAeroSpaceConfigData() -> Data {
+    Data("# Managed by ProjectWorkspaces.\n".utf8)
 }
 
 private struct TestAppDiscovery: AppDiscovering {
@@ -596,5 +928,21 @@ private struct TestRunningApplicationChecker: RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool {
         let _ = bundleIdentifier
         return isRunning
+    }
+}
+
+private struct TestEnvironment: EnvironmentProviding {
+    let values: [String: String]
+
+    func value(forKey key: String) -> String? {
+        values[key]
+    }
+}
+
+private struct TestDateProvider: DateProviding {
+    let date: Date
+
+    func now() -> Date {
+        date
     }
 }

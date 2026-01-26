@@ -58,8 +58,9 @@ final class ConfigParserTests: XCTestCase {
 
         let unknownFinding = outcome.findings.first { $0.title == "Unknown config keys" }
         XCTAssertNotNil(unknownFinding)
-        XCTAssertTrue(unknownFinding?.detail?.contains("global.extra") ?? false)
-        XCTAssertTrue(unknownFinding?.detail?.contains("project[0].mystery") ?? false)
+        let body = unknownFinding?.bodyLines.joined(separator: "\n") ?? ""
+        XCTAssertTrue(body.contains("global.extra"))
+        XCTAssertTrue(body.contains("project[0].mystery"))
     }
 
     func testInvalidProjectIdFails() {

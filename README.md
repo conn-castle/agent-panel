@@ -74,7 +74,7 @@ Layouts are persisted **per project per display mode**.
 ### Prerequisites
 
 1) macOS 15.7+
-2) **AeroSpace installed and running**
+2) **AeroSpace installed** (Doctor will start it once a safe config is in place)
 3) Accessibility permission for `ProjectWorkspaces.app`
 4) Google Chrome
 5) VS Code and/or Antigravity
@@ -89,7 +89,12 @@ brew install --cask nikitabobko/tap/aerospace
 
 ### Install ProjectWorkspaces
 
-TBD (signed + notarized `.app`, distributed via both a Homebrew cask (recommended) and a direct download (`.zip` or `.dmg`)).
+ProjectWorkspaces will be distributed as a signed + notarized `.app` via:
+
+- Homebrew cask (recommended) — planned
+- Direct download (`.zip` or `.dmg`) — planned
+
+**Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` Phase 8 for status.
 
 ### Grant Accessibility permission
 
@@ -99,7 +104,7 @@ System Settings → Privacy & Security → Accessibility:
 
 ### Run doctor
 
-Once available (via installation or local build), run:
+Run:
 
 ```bash
 pwctl doctor
@@ -108,6 +113,8 @@ pwctl doctor
 Doctor must show PASS for:
 
 - AeroSpace installed + CLI resolvable
+- AeroSpace config is non-ambiguous (or intentionally user-managed)
+- AeroSpace server running and loaded config path
 - Accessibility permission granted
 - Chrome installed
 - Global hotkey ⌘⇧Space can be registered
@@ -115,6 +122,28 @@ Doctor must show PASS for:
 - Project paths exist
 
 Warnings are expected when optional config keys are omitted and defaults are applied.
+
+### AeroSpace onboarding (safe config)
+
+Doctor checks both AeroSpace config locations:
+
+- `~/.aerospace.toml`
+- `${XDG_CONFIG_HOME:-~/.config}/aerospace/aerospace.toml`
+
+If **no config exists**, Doctor FAILs to prevent “tiling shock” and offers **Install Safe AeroSpace Config** (in-app). The safe config:
+
+- Floats all windows by default
+- Defines no AeroSpace keybindings
+- Contains no config-based window moving rules
+- Writes to `~/.aerospace.toml` only when no config exists
+
+If **both configs exist**, Doctor FAILs with an ambiguity message. You must remove or rename one; ProjectWorkspaces does not choose for you.
+
+If **exactly one config exists**, Doctor will not modify it.
+
+Emergency: **Disable AeroSpace** is available in the app menu and Doctor window. It runs `aerospace enable off` to immediately disable window management.
+
+If the safe config was installed by ProjectWorkspaces, Doctor offers **Uninstall Safe AeroSpace Config**, which renames `~/.aerospace.toml` to a timestamped `.projectworkspaces.bak` file.
 
 ## Configuration
 
@@ -181,6 +210,9 @@ Doctor FAIL if missing/invalid:
 - Config file missing or TOML parse error
 - No `[[project]]` entries
 - Any project missing/invalid: `id` (regex + unique + not `inbox`), `name` (non-empty), `path` (exists), `colorHex` (`#RRGGBB`)
+- AeroSpace app or CLI missing
+- AeroSpace config missing (no config in either supported location)
+- AeroSpace config is ambiguous (found in more than one location)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
 - Accessibility permission not granted (required for layout)
 - Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor skips this check and reports PASS with a note.
@@ -279,7 +311,7 @@ Important note: if you keep a window “show on all desktops” (e.g., Messages)
 
 `pwctl` exists for debugging, CI-style checks, and as a fallback interface if the UI is unavailable.
 
-Commands (locked surface; `doctor`, `list`, and `logs` implemented; others planned):
+Commands (locked surface):
 
 ```bash
 pwctl doctor
@@ -381,7 +413,7 @@ Recommended (no Xcode UI required):
 1) (When changing targets/settings) Run `scripts/regenerate_xcodeproj.sh`.
 2) Build/test using `scripts/build.sh` and `scripts/test.sh` (see `docs/agent-layer/COMMANDS.md`).
 3) Grant Accessibility permission to the debug build.
-4) Use `pwctl doctor` during iteration. Run `pwctl activate <projectId>` once it is implemented.
+4) Use `pwctl doctor` during iteration. Run `pwctl activate <projectId>` to test activation behavior.
 
 Optional:
 - Open the project in Xcode for occasional debugging/provisioning tasks.
