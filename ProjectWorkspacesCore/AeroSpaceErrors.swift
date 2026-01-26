@@ -6,6 +6,7 @@ public enum AeroSpaceCommandError: Error, Equatable, Sendable {
     case nonZeroExit(command: String, result: CommandResult)
     case timedOut(command: String, timeoutSeconds: TimeInterval, result: CommandResult)
     case decodingFailed(payload: String, underlyingError: String)
+    case unexpectedOutput(command: String, detail: String)
     case notReady(AeroSpaceNotReady)
 }
 

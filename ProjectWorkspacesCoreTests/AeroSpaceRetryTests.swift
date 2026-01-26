@@ -3,6 +3,7 @@ import XCTest
 @testable import ProjectWorkspacesCore
 
 final class AeroSpaceRetryTests: XCTestCase {
+    private let aerospacePath = "/opt/homebrew/bin/aerospace"
     func testStandardRetryPolicyMatchesSpecification() {
         let policy = AeroSpaceRetryPolicy.standard
         XCTAssertEqual(policy.maxAttempts, 20)
@@ -20,10 +21,10 @@ final class AeroSpaceRetryTests: XCTestCase {
         let probeResult = CommandResult(exitCode: 0, stdout: "1", stderr: "")
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
-                CommandSignature(arguments: commandArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
                     .failure(.nonZeroExit(command: "cmd", result: commandResult))
                 ],
-                CommandSignature(arguments: probeArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
                     .success(probeResult)
                 ]
             ]
@@ -69,11 +70,11 @@ final class AeroSpaceRetryTests: XCTestCase {
         let successCommand = CommandResult(exitCode: 0, stdout: "", stderr: "")
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
-                CommandSignature(arguments: commandArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
                     .failure(.nonZeroExit(command: "cmd", result: failedCommand)),
                     .success(successCommand)
                 ],
-                CommandSignature(arguments: probeArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
                     .failure(.nonZeroExit(command: "probe", result: failedProbe))
                 ]
             ]
@@ -121,11 +122,11 @@ final class AeroSpaceRetryTests: XCTestCase {
         let failedProbe = CommandResult(exitCode: 1, stdout: "", stderr: "err")
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
-                CommandSignature(arguments: commandArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
                     .failure(.nonZeroExit(command: "cmd", result: failedCommand)),
                     .failure(.nonZeroExit(command: "cmd", result: failedCommand))
                 ],
-                CommandSignature(arguments: probeArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
                     .failure(.nonZeroExit(command: "probe", result: failedProbe)),
                     .failure(.nonZeroExit(command: "probe", result: failedProbe))
                 ]
@@ -177,10 +178,10 @@ final class AeroSpaceRetryTests: XCTestCase {
         )
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
-                CommandSignature(arguments: commandArgs): [
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
                     .failure(error)
                 ],
-                CommandSignature(arguments: probeArgs): []
+                AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): []
             ]
         )
         let clock = TestClock()
@@ -203,34 +204,6 @@ final class AeroSpaceRetryTests: XCTestCase {
             XCTAssertEqual(received, error)
         }
         XCTAssertEqual(runner.invocations.map(\.arguments), [commandArgs])
-    }
-}
-
-private struct CommandSignature: Hashable {
-    let arguments: [String]
-}
-
-private final class SequencedAeroSpaceCommandRunner: AeroSpaceCommandRunning {
-    private var responses: [CommandSignature: [Result<CommandResult, AeroSpaceCommandError>]]
-    private(set) var invocations: [CommandSignature] = []
-
-    init(responses: [CommandSignature: [Result<CommandResult, AeroSpaceCommandError>]]) {
-        self.responses = responses
-    }
-
-    func run(
-        executable: URL,
-        arguments: [String],
-        timeoutSeconds: TimeInterval
-    ) -> Result<CommandResult, AeroSpaceCommandError> {
-        let signature = CommandSignature(arguments: arguments)
-        invocations.append(signature)
-        guard var queue = responses[signature], !queue.isEmpty else {
-            preconditionFailure("Missing stub for arguments: \(arguments)")
-        }
-        let result = queue.removeFirst()
-        responses[signature] = queue
-        return result
     }
 }
 
@@ -273,6 +246,7 @@ private struct TestJitterProvider: AeroSpaceJitterProviding {
 }
 
 private func makeClient(
+    executablePath: String = "/opt/homebrew/bin/aerospace",
     runner: AeroSpaceCommandRunning,
     clock: DateProviding,
     sleeper: AeroSpaceSleeping,
@@ -280,7 +254,7 @@ private func makeClient(
     retryPolicy: AeroSpaceRetryPolicy
 ) -> AeroSpaceClient {
     AeroSpaceClient(
-        executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/aerospace"),
+        executableURL: URL(fileURLWithPath: executablePath),
         commandRunner: runner,
         timeoutSeconds: 1,
         clock: clock,

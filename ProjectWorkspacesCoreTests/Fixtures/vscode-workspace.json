@@ -1,0 +1,23 @@
+{
+  "folders" : [
+    {
+      "path" : "/Users/tester/src/codex"
+    }
+  ],
+  "settings" : {
+    "workbench.colorCustomizations" : {
+      "activityBar.background" : "#6931C9",
+      "activityBar.foreground" : "#FFFFFF",
+      "activityBar.inactiveForeground" : "#CCCCCC",
+      "activityBarBadge.background" : "#9D6BF2",
+      "activityBarBadge.foreground" : "#FFFFFF",
+      "statusBar.background" : "#632EBE",
+      "statusBar.foreground" : "#FFFFFF",
+      "statusBarItem.hoverBackground" : "#703FC3",
+      "titleBar.activeBackground" : "#7C3AED",
+      "titleBar.activeForeground" : "#FFFFFF",
+      "titleBar.inactiveBackground" : "#51269A",
+      "titleBar.inactiveForeground" : "#CCCCCC"
+    }
+  }
+}

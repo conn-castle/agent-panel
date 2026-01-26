@@ -61,37 +61,37 @@ final class AeroSpaceClientTests: XCTestCase {
         _ = client.closeWindow(windowId: 42)
 
         let expected = [
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["workspace", "pw-codex"],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["list-windows", "--workspace", "pw-codex", "--json", "--format", format],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["list-windows", "--all", "--json", "--format", format],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["focus", "--window-id", "42"],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["move-node-to-workspace", "--window-id", "42", "pw-codex"],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["layout", "floating", "--window-id", "42"],
                 timeoutSeconds: 2
             ),
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["close", "--window-id", "42"],
                 timeoutSeconds: 2
@@ -233,14 +233,14 @@ private final class TestFileSystem: FileSystem {
     }
 }
 
-private struct AeroSpaceCommandCall: Equatable {
+private struct AeroSpaceClientCommandCall: Equatable {
     let path: String
     let arguments: [String]
     let timeoutSeconds: TimeInterval
 }
 
 private final class RecordingAeroSpaceCommandRunner: AeroSpaceCommandRunning {
-    private(set) var calls: [AeroSpaceCommandCall] = []
+    private(set) var calls: [AeroSpaceClientCommandCall] = []
     private let result: Result<CommandResult, AeroSpaceCommandError>
 
     init(result: Result<CommandResult, AeroSpaceCommandError>) {
@@ -253,7 +253,7 @@ private final class RecordingAeroSpaceCommandRunner: AeroSpaceCommandRunning {
         timeoutSeconds: TimeInterval
     ) -> Result<CommandResult, AeroSpaceCommandError> {
         calls.append(
-            AeroSpaceCommandCall(
+            AeroSpaceClientCommandCall(
                 path: executable.path,
                 arguments: arguments,
                 timeoutSeconds: timeoutSeconds

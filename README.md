@@ -302,6 +302,10 @@ Tabs are opened **only when the project Chrome window is created/recreated**:
 2) `project.repoUrl` (if set)
 3) `project.chromeUrls`
 
+Duplicate URLs are deduped by exact string match, preserving first occurrence order.
+
+If the computed URL list is empty, ProjectWorkspaces opens a single `about:blank` tab to make window creation deterministic.
+
 If the Chrome window already exists, the app does not modify tabs.
 
 ### Focus behavior
@@ -439,7 +443,7 @@ Optional:
 - Integration tests (local-only): gated behind `RUN_AEROSPACE_IT=1` (real AeroSpace + window/session constraints are not CI-friendly)
 - Manual integration checks:
   - activation idempotence (no duplicate IDE/Chrome windows)
-  - Chrome recreation after manual close
+  - Chrome recreation after manual close (verify tabs open in order: global -> repoUrl -> project)
   - layout persistence per display mode
 
 ### Engineering implementation notes (locked)

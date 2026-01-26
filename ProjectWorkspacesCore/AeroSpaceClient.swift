@@ -260,6 +260,26 @@ public struct AeroSpaceClient {
         runCommand(arguments: ["workspace", name])
     }
 
+    /// Returns the currently focused workspace name.
+    /// - Returns: Focused workspace name or a structured error.
+    public func focusedWorkspace() -> Result<String, AeroSpaceCommandError> {
+        switch runCommand(arguments: ["list-workspaces", "--focused"]) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            let workspace = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !workspace.isEmpty else {
+                return .failure(
+                    .unexpectedOutput(
+                        command: describeCommand(arguments: ["list-workspaces", "--focused"]),
+                        detail: "Focused workspace output was empty."
+                    )
+                )
+            }
+            return .success(workspace)
+        }
+    }
+
     /// Lists windows for a specific workspace as JSON.
     /// - Parameter workspace: Workspace name to query.
     /// - Returns: Command result containing JSON output or a structured error.
@@ -399,7 +419,7 @@ public struct AeroSpaceClient {
                         context.delaySeconds = min(context.delaySeconds * retryPolicy.backoffMultiplier, retryPolicy.maxDelaySeconds)
                         context.attempt += 1
                     }
-                case .decodingFailed, .notReady:
+                case .decodingFailed, .notReady, .unexpectedOutput:
                     return .failure(error)
                 }
             }

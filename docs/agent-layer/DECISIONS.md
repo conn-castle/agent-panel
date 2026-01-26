@@ -65,3 +65,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Extract focused checker structs from Doctor.swift: PermissionsChecker (accessibility, hotkey), AppDiscoveryChecker (Chrome, IDEs), AeroSpaceChecker (all AeroSpace functionality). Doctor orchestrates checkers via composition.
     Reason: Doctor.swift grew to ~1165 lines with mixed responsibilities; extraction improves maintainability before Phase 3 adds more checks.
     Tradeoffs: More files to navigate; slight indirection in code flow.
+
+- Decision 2026-01-26 c1a9e7f: Chrome launcher precondition and detection policy
+    Decision: Require the expected AeroSpace workspace to be focused before creating Chrome, and use fixed polling constants with Chrome-only ID diffing plus explicit error outcomes.
+    Reason: Keeps activation responsible for workspace switching and avoids flaky, non-deterministic window detection.
+    Tradeoffs: Callers must ensure focus before launching; more error handling in activation code.

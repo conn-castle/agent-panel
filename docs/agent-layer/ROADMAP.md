@@ -35,21 +35,16 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added unit tests for workspace generation, color palette validation, environment building, and launch selection rules.
 
 
-## Phase 3 — Chrome window creation + tab seeding
+## Phase 3 ✅ — Chrome window creation + tab seeding
 
-### Goal
-- Ensure exactly one Chrome window exists per project workspace and seed tabs only on creation.
-
-### Tasks
-- [ ] When Chrome window is missing, create it with `--new-window` and URLs in this order: `global.globalChromeUrls` → `project.repoUrl` (if set) → `project.chromeUrls`.
-- [ ] Detect the newly created Chrome window by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
-- [ ] Ensure existing Chrome windows are never mutated (no tab enforcement after creation).
-- [ ] Enforce the focus rule: activation ends with the IDE focused (Chrome must not steal focus).
-- [ ] Add an automated (or manual, documented) check that Chrome recreation produces the expected tabs.
-
-### Exit criteria
-- If the Chrome window is closed, activation recreates it with the expected tabs and ends focused on the IDE.
-- If the Chrome window already exists, activation does not modify tabs.
+- Implemented `ChromeLauncher` with workspace precondition enforcement and deterministic window detection.
+- Created Chrome windows with `--new-window` and ordered, deduplicated URLs (`globalChromeUrls` → `repoUrl` → `chromeUrls`).
+- Detected newly created Chrome windows by diffing AeroSpace window IDs before/after launch with fixed polling.
+- Handled edge cases: existing windows (single/multiple), window launched elsewhere, ambiguous detection, timeout fallback.
+- Enforced IDE refocus after Chrome creation via `refocusIdeWindow` helper.
+- Added `.unexpectedOutput` error case to `AeroSpaceCommandError` for semantic precision.
+- Extracted shared test helpers (`AeroSpaceCommandSignature`, `SequencedAeroSpaceCommandRunner`) to reduce duplication.
+- Added 11 unit tests covering all Chrome launcher scenarios.
 
 
 ## Phase 4 — Activation engine (Activate(Project))
