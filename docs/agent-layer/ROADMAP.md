@@ -18,22 +18,14 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added CI workflow and unit tests for config validation, doctor severity, and log rotation.
 
 
-## Phase 1 — AeroSpace client wrapper + window enumeration primitives
+## Phase 1 ✅ — AeroSpace client wrapper + window enumeration primitives
 
-### Goal
-- Provide a reliable, testable wrapper around the `aerospace` CLI and window enumeration.
-
-### Tasks
-- [x] Resolve the `aerospace` binary path once at startup (no hardcoded PATH assumptions).
-- [x] Implement `AeroSpaceClient` command execution with timeouts and structured stdout/stderr capture.
-- [x] Decode `aerospace list-windows ... --json` output into typed models.
-- [x] Add retry policy for “AeroSpace not ready” failures (max 20 attempts, 50ms initial, 1.5x backoff, 750ms cap, 5s total, +/-20% jitter).
-- [x] Add unit tests for AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks (CI-required).
-- [x] Add opt-in AeroSpace integration tests gated behind `RUN_AEROSPACE_IT=1` (local-only).
-
-### Exit criteria
-- When `RUN_AEROSPACE_IT=1`, integration tests can switch workspace, enumerate windows, and focus a window by id.
-- AeroSpace command failures produce structured, actionable errors (not silent).
+- Implemented `AeroSpaceClient` with command execution, timeouts, and structured stdout/stderr capture.
+- Resolved `aerospace` binary path once at startup (no hardcoded PATH assumptions).
+- Decoded `aerospace list-windows --json` output into typed `AeroSpaceWindow` models.
+- Added retry policy for "AeroSpace not ready" failures (max 20 attempts, 50ms initial, 1.5x backoff, 750ms cap, 5s total, ±20% jitter).
+- Added unit tests for JSON decoding and CLI wrapper behavior using fixtures/mocks (CI-required).
+- Added opt-in AeroSpace integration tests gated behind `RUN_AEROSPACE_IT=1` (local-only).
 
 
 ## Phase 2 — VS Code workspace generation + IDE launch pipeline

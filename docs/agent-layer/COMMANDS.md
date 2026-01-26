@@ -52,6 +52,7 @@ scripts/test.sh
 ```
 
 Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
+Notes: Set `RUN_AEROSPACE_IT=1` to include local AeroSpace integration tests (requires AeroSpace + windows present).
 
 Reference (underlying `xcodebuild`):
 
