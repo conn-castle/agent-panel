@@ -75,3 +75,13 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Activation only considers windows already in `pw-<projectId>` and never moves or adopts windows from other workspaces; missing windows are created in the focused workspace.
     Reason: Prevents hijacking user windows and keeps activation deterministic.
     Tradeoffs: If AeroSpace rules move new windows elsewhere, activation fails and requires user configuration fixes.
+
+- Decision 2026-01-27 e7c3a1b: Workspace-only window enumeration
+    Decision: Never scan or use windows outside `pw-<projectId>` (no `list-windows --all` in activation or Chrome detection); only enumerate the focused project workspace.
+    Reason: Eliminates any chance of hijacking user windows and keeps behavior predictable.
+    Tradeoffs: Less recovery when windows spawn outside the workspace; errors surface as timeouts and require user configuration fixes.
+
+- Decision 2026-01-27 b1f4c2d: Homebrew required for AeroSpace install
+    Decision: Require Homebrew and only support AeroSpace installation via Homebrew for now; manual installs are deferred.
+    Reason: Deterministic, scriptable install path for onboarding and Doctor automation.
+    Tradeoffs: Users without Homebrew cannot onboard until a manual install path is added.

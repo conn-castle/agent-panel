@@ -414,7 +414,7 @@ public struct ActivationService {
             globalChromeUrls: globalChromeUrls,
             project: project,
             ideWindowIdToRefocus: ideWindowId,
-            allowFallbackDetection: false
+            allowExistingWindows: true
         )
 
         switch chromeResult {

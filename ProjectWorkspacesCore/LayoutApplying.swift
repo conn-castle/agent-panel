@@ -9,6 +9,13 @@ public enum LayoutApplyOutcome: Equatable, Sendable {
 /// Reasons a layout was skipped.
 public enum LayoutSkipReason: Equatable, Sendable {
     case notImplemented
+    case screenUnavailable
+    case focusNotVerified(
+        expectedWindowId: Int,
+        expectedWorkspace: String,
+        actualWindowId: Int?,
+        actualWorkspace: String?
+    )
 }
 
 /// Applies layout geometry to IDE and Chrome windows.

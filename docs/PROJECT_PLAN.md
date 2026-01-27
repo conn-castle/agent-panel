@@ -216,6 +216,7 @@ Notes:
    - Checks:
      - Config file exists and parses
      - At least one `[[project]]` exists
+     - Homebrew installed (required for AeroSpace install; manual installs deferred)
      - AeroSpace installed (binary exists)
      - `aerospace` CLI callable (resolve absolute path)
      - AeroSpace config state (missing / existing / ambiguous) checked before server start
@@ -251,7 +252,6 @@ Notes:
 1) `AeroSpaceClient` that runs these commands:
    - `aerospace workspace <name>`
    - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
-   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
    - `aerospace focus --window-id <id>`
    - `aerospace move-node-to-workspace --window-id <id> <workspace>`
    - `aerospace layout floating --window-id <id>`
@@ -351,7 +351,7 @@ Notes:
 **Algorithm (must match exactly)**
 
 1) Switch to workspace `pw-<projectId>`.
-2) Enumerate windows in that workspace.
+2) Enumerate windows in that workspace only (no cross-workspace scanning).
 3) Before launching IDE/Chrome, confirm the workspace is still focused; fail if focus changed.
 4) Ensure IDE window exists (Phase 2).
 5) Ensure Chrome window exists (Phase 3).

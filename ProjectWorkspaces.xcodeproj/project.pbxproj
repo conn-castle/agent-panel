@@ -8,6 +8,15 @@
 
 /* Begin PBXBuildFile section */
 		014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */; };
+		02B3C4D5E6F7081929A3B4C5 /* DisplayLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7F8091A2B3C4D5E6F70819 /* DisplayLayout.swift */; };
+		03C4D5E6F708192A3B4C5D6E /* ProjectWorkspacesState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F8091A2B3C4D5E6F7081929 /* ProjectWorkspacesState.swift */; };
+		04D5E6F708192A3B4C5D6E7F /* WindowGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8091A2B3C4D5E6F708192A3B /* WindowGeometry.swift */; };
+		05E6F708192A3B4C5D6E7F80 /* WindowResolutionHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A2B3C4D5E6F708192A3B4C /* WindowResolutionHelper.swift */; };
+		06F708192A3B4C5D6E7F8091 /* AeroSpaceFocusVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F708192A3B4C5D /* AeroSpaceFocusVerifierTests.swift */; };
+		08192A3B4C5D6E7F8091A2B3 /* ProjectWorkspacesStateStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F708192A3B4C5D6E7F /* ProjectWorkspacesStateStoreTests.swift */; };
+		0929A3B4C5D6E7F8091A2B3C /* SharedTestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F708192A3B4C5D6E7F80 /* SharedTestDoubles.swift */; };
+		0A3A4B5C6D7E8F9001122334 /* TestFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F708192A3B4C5D6E7F8091 /* TestFileSystem.swift */; };
+		0B4B5C6D7E8F90011223344A /* WindowGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F708192A3B4C5D6E7F8091A2 /* WindowGeometryTests.swift */; };
 		081F29CEF4BA3B0F0CE53990 /* AeroSpaceRetryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */; };
 		0AC6B135F1C7632E9DF09D41 /* AeroSpaceIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */; };
 		0DD8CBC286019767A354067E /* PwctlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6873A9C5B58A71CC29798F0C /* PwctlService.swift */; };
@@ -96,6 +105,15 @@
 /* Begin PBXFileReference section */
 		09205C65723670593B3E7109 /* AeroSpaceCommandTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCommandTracer.swift; sourceTree = "<group>"; };
 		0980D9F296FC33846D2EF524 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
+		6E7F8091A2B3C4D5E6F70819 /* DisplayLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayLayout.swift; sourceTree = "<group>"; };
+		7F8091A2B3C4D5E6F7081929 /* ProjectWorkspacesState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesState.swift; sourceTree = "<group>"; };
+		8091A2B3C4D5E6F708192A3B /* WindowGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometry.swift; sourceTree = "<group>"; };
+		91A2B3C4D5E6F708192A3B4C /* WindowResolutionHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowResolutionHelper.swift; sourceTree = "<group>"; };
+		A2B3C4D5E6F708192A3B4C5D /* AeroSpaceFocusVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFocusVerifierTests.swift; sourceTree = "<group>"; };
+		C4D5E6F708192A3B4C5D6E7F /* ProjectWorkspacesStateStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesStateStoreTests.swift; sourceTree = "<group>"; };
+		D5E6F708192A3B4C5D6E7F80 /* SharedTestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedTestDoubles.swift; sourceTree = "<group>"; };
+		E6F708192A3B4C5D6E7F8091 /* TestFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFileSystem.swift; sourceTree = "<group>"; };
+		F708192A3B4C5D6E7F8091A2 /* WindowGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowGeometryTests.swift; sourceTree = "<group>"; };
 		0C318C9A696DFEA90EC79F3B /* LayoutApplying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutApplying.swift; sourceTree = "<group>"; };
 		0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceRetry.swift; sourceTree = "<group>"; };
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
@@ -198,6 +216,7 @@
 			children = (
 				3B444D0192C002004F200FE6 /* ActivationServiceTests.swift */,
 				24341DAD7A3A95E43E760685 /* AeroSpaceClientTests.swift */,
+				A2B3C4D5E6F708192A3B4C5D /* AeroSpaceFocusVerifierTests.swift */,
 				4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */,
 				2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */,
 				89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */,
@@ -209,14 +228,26 @@
 				3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */,
 				5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */,
 				22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */,
+				C4D5E6F708192A3B4C5D6E7F /* ProjectWorkspacesStateStoreTests.swift */,
 				E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */,
 				1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */,
 				ABCD123456789ABCDEF01234 /* TestSupport.swift */,
 				C619E1497F90654F355A5ABA /* VSCodeColorPaletteTests.swift */,
 				ABEA937320C5A2ACA07F0A03 /* VSCodeWorkspaceGeneratorTests.swift */,
+				F708192A3B4C5D6E7F8091A2 /* WindowGeometryTests.swift */,
 				CC938F8D8600CA6779A1040B /* Fixtures */,
+				1A2B3C4D5E6F7081A2B3C4D5 /* TestHelpers */,
 			);
 			path = ProjectWorkspacesCoreTests;
+			sourceTree = "<group>";
+		};
+		1A2B3C4D5E6F7081A2B3C4D5 /* TestHelpers */ = {
+			isa = PBXGroup;
+			children = (
+				D5E6F708192A3B4C5D6E7F80 /* SharedTestDoubles.swift */,
+				E6F708192A3B4C5D6E7F8091 /* TestFileSystem.swift */,
+			);
+			path = TestHelpers;
 			sourceTree = "<group>";
 		};
 		9BD450460A73A349743786D3 /* Products */ = {
@@ -285,6 +316,7 @@
 				8C61D12DEBA4F9356A19E517 /* ConfigLoader.swift */,
 				CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */,
 				A34BA28935316C4E65502857 /* ConfigParser.swift */,
+				6E7F8091A2B3C4D5E6F70819 /* DisplayLayout.swift */,
 				D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */,
 				C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */,
 				0980D9F296FC33846D2EF524 /* DoctorModels.swift */,
@@ -298,12 +330,15 @@
 				3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */,
 				9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */,
 				9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */,
+				7F8091A2B3C4D5E6F7081929 /* ProjectWorkspacesState.swift */,
 				BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */,
 				6873A9C5B58A71CC29798F0C /* PwctlService.swift */,
 				59BE2D0548045724A9158A2B /* VSCodeCLIResolver.swift */,
 				608E9027CC40A582D60DAF4E /* VSCodeColorPalette.swift */,
 				E8A1A256234FBAA14603A921 /* VSCodeShimInstaller.swift */,
 				BE9794BA9E17729BAEB9065A /* VSCodeWorkspaceGenerator.swift */,
+				8091A2B3C4D5E6F708192A3B /* WindowGeometry.swift */,
+				91A2B3C4D5E6F708192A3B4C /* WindowResolutionHelper.swift */,
 			);
 			path = ProjectWorkspacesCore;
 			sourceTree = "<group>";
@@ -470,6 +505,7 @@
 				FDDCEA4BC0E904AFE9D9F1D9 /* ConfigLoader.swift in Sources */,
 				388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */,
 				BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */,
+				02B3C4D5E6F7081929A3B4C5 /* DisplayLayout.swift in Sources */,
 				E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */,
 				E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */,
 				A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */,
@@ -483,12 +519,15 @@
 				31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */,
 				A473E2FD8F478AC72BE0DA7F /* ProjectWorkspacesLogger.swift in Sources */,
 				F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */,
+				03C4D5E6F708192A3B4C5D6E /* ProjectWorkspacesState.swift in Sources */,
 				2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */,
 				0DD8CBC286019767A354067E /* PwctlService.swift in Sources */,
 				287956BD40E6B8E89E36BBAA /* VSCodeCLIResolver.swift in Sources */,
 				A99847C3783DF6439C540400 /* VSCodeColorPalette.swift in Sources */,
 				9D244F9BC75D765342C35AC9 /* VSCodeShimInstaller.swift in Sources */,
 				6AD43DB21D17C3914807B6CB /* VSCodeWorkspaceGenerator.swift in Sources */,
+				04D5E6F708192A3B4C5D6E7F /* WindowGeometry.swift in Sources */,
+				05E6F708192A3B4C5D6E7F80 /* WindowResolutionHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -498,6 +537,7 @@
 			files = (
 				13BA1FB60F27ECF0809049EE /* ActivationServiceTests.swift in Sources */,
 				105AB02CFAC501E3DCB64126 /* AeroSpaceClientTests.swift in Sources */,
+				06F708192A3B4C5D6E7F8091 /* AeroSpaceFocusVerifierTests.swift in Sources */,
 				0AC6B135F1C7632E9DF09D41 /* AeroSpaceIntegrationTests.swift in Sources */,
 				081F29CEF4BA3B0F0CE53990 /* AeroSpaceRetryTests.swift in Sources */,
 				6C8266EFFB37AE56ED9BA648 /* AeroSpaceWindowDecoderTests.swift in Sources */,
@@ -509,11 +549,15 @@
 				59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */,
 				6D7CC26AF8BC1151C65D7575 /* ProjectWorkspacesLoggerTests.swift in Sources */,
 				DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */,
+				08192A3B4C5D6E7F8091A2B3 /* ProjectWorkspacesStateStoreTests.swift in Sources */,
 				CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */,
 				C0CBA68748D54CE946A0EF80 /* PwctlServiceTests.swift in Sources */,
+				0929A3B4C5D6E7F8091A2B3C /* SharedTestDoubles.swift in Sources */,
+				0A3A4B5C6D7E8F9001122334 /* TestFileSystem.swift in Sources */,
 				DCBA987654321ABCDEF12345 /* TestSupport.swift in Sources */,
 				F092788D2B7A3B8E0912160B /* VSCodeColorPaletteTests.swift in Sources */,
 				C56577537F84FA9CAF77E221 /* VSCodeWorkspaceGeneratorTests.swift in Sources */,
+				0B4B5C6D7E8F90011223344A /* WindowGeometryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

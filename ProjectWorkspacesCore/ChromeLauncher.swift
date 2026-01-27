@@ -60,6 +60,7 @@ public struct ChromeLauncher {
     }
 
     /// Ensures a Chrome window exists for the currently focused workspace.
+    /// Never scans or adopts windows from other workspaces.
     ///
     /// In Phase 3, refocus only occurs when `ideWindowIdToRefocus` is provided; activation is expected
     /// to supply it when Chrome is created.
@@ -68,14 +69,14 @@ public struct ChromeLauncher {
     ///   - globalChromeUrls: Global URLs to open when creating Chrome.
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
-    ///   - allowFallbackDetection: Whether cross-workspace detection is allowed.
+    ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
     /// - Returns: Launch outcome or a structured error.
     public func ensureWindow(
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowFallbackDetection: Bool = true
+        allowExistingWindows: Bool = true
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         switch focusedWorkspace() {
         case .failure(let error):
@@ -100,23 +101,13 @@ public struct ChromeLauncher {
         }
 
         let chromeWindowIdsBefore = chromeWindowIds(from: workspaceWindowsBefore)
-        if chromeWindowIdsBefore.count == 1, let existing = chromeWindowIdsBefore.first {
-            return .success(.existing(windowId: existing))
-        }
-        if chromeWindowIdsBefore.count > 1 {
-            return .success(.existingMultiple(windowIds: chromeWindowIdsBefore.sorted()))
-        }
-
-        let allChromeIdsBefore: Set<Int>?
-        if allowFallbackDetection {
-            switch aeroSpaceClient.listWindowsAllDecoded() {
-            case .failure(let error):
-                return .failure(.aeroSpaceFailed(error))
-            case .success(let windows):
-                allChromeIdsBefore = Set(chromeWindowIds(from: windows))
+        if allowExistingWindows {
+            if chromeWindowIdsBefore.count == 1, let existing = chromeWindowIdsBefore.first {
+                return .success(.existing(windowId: existing))
             }
-        } else {
-            allChromeIdsBefore = nil
+            if chromeWindowIdsBefore.count > 1 {
+                return .success(.existingMultiple(windowIds: chromeWindowIdsBefore.sorted()))
+            }
         }
 
         guard let chromeAppURL = resolveChromeAppURL() else {
@@ -150,28 +141,6 @@ public struct ChromeLauncher {
             }
             return .success(.created(windowId: newWindowId))
         case .failure(let error):
-            if case .chromeWindowNotDetected = error, allowFallbackDetection, let allChromeIdsBefore {
-                let fallbackResult = fallbackDetection(
-                    expectedWorkspaceName: expectedWorkspaceName,
-                    beforeAllChromeIds: allChromeIdsBefore
-                )
-                switch fallbackResult {
-                case .failure(let fallbackError):
-                    return .failure(fallbackError)
-                case .success(let outcome):
-                    switch outcome {
-                    case .created(let windowId):
-                        if case .failure(let focusError) = refocusIdeWindow(ideWindowIdToRefocus) {
-                            return .failure(focusError)
-                        }
-                        return .success(.created(windowId: windowId))
-                    case .existing(let windowId):
-                        return .success(.existing(windowId: windowId))
-                    case .existingMultiple(let windowIds):
-                        return .success(.existingMultiple(windowIds: windowIds))
-                    }
-                }
-            }
             return .failure(error)
         }
     }
@@ -276,50 +245,6 @@ public struct ChromeLauncher {
         }
 
         return .failure(.chromeWindowNotDetected(expectedWorkspace: expectedWorkspaceName))
-    }
-
-    /// Performs a one-time fallback detection across all workspaces after polling timeout.
-    private func fallbackDetection(
-        expectedWorkspaceName: String,
-        beforeAllChromeIds: Set<Int>
-    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
-        let windowsResult = aeroSpaceClient.listWindowsAllDecoded()
-        let windows: [AeroSpaceWindow]
-        switch windowsResult {
-        case .failure(let error):
-            return .failure(.aeroSpaceFailed(error))
-        case .success(let decoded):
-            windows = decoded
-        }
-
-        let chromeWindows = windows.filter { $0.appBundleId == Self.chromeBundleId }
-        let afterIds = Set(chromeWindows.map { $0.windowId })
-        let newIds = afterIds.subtracting(beforeAllChromeIds)
-
-        if newIds.isEmpty {
-            return .failure(.chromeWindowNotDetected(expectedWorkspace: expectedWorkspaceName))
-        }
-
-        if newIds.count > 1 {
-            return .failure(.chromeWindowAmbiguous(newWindowIds: newIds.sorted()))
-        }
-
-        guard let newId = newIds.first,
-              let newWindow = chromeWindows.first(where: { $0.windowId == newId }) else {
-            return .failure(.chromeWindowNotDetected(expectedWorkspace: expectedWorkspaceName))
-        }
-
-        if newWindow.workspace == expectedWorkspaceName {
-            return .success(.created(windowId: newId))
-        }
-
-        return .failure(
-            .chromeLaunchedElsewhere(
-                expectedWorkspace: expectedWorkspaceName,
-                actualWorkspace: newWindow.workspace,
-                newWindowId: newId
-            )
-        )
     }
 
     /// Runs a command and converts non-zero exits into `ProcessCommandError`.

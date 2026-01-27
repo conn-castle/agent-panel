@@ -174,7 +174,7 @@ Given `projectId`:
 
 **MUST**
 
-- Activation must never move or adopt windows from other workspaces. It only uses windows already in `pw-<projectId>` and creates new ones in that workspace if missing.
+- Activation must never scan, move, or adopt windows from other workspaces. It only enumerates windows already in `pw-<projectId>` and creates new ones in that workspace if missing.
 
 **MUST**
 
@@ -264,6 +264,7 @@ Per project, IDE launch priority is:
 
 - Provide `pwctl doctor` and an in-app “Run Doctor.”
 - Doctor must validate:
+  - Homebrew installed (required for AeroSpace install; manual installs deferred)
   - AeroSpace installed and CLI resolvable (server reachable once safe config is in place)
   - Accessibility permission granted to ProjectWorkspaces
   - Chrome installed
@@ -348,7 +349,7 @@ Step 1 — Detect AeroSpace installation
 
 - PASS: `PASS  AeroSpace.app found at: /Applications/AeroSpace.app`
 - FAIL: `FAIL  AeroSpace.app not found in /Applications`
-  - `Fix: Install AeroSpace (recommended: Homebrew cask). Then re-run Doctor.`
+  - `Fix: Install AeroSpace via Homebrew (required for now). Then re-run Doctor.`
 - PASS: `PASS  aerospace CLI found at: <absolute path>`
 - FAIL: `FAIL  aerospace CLI not found`
   - `Fix: Ensure AeroSpace CLI is installed and available. Re-run Doctor.`

@@ -40,7 +40,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Implemented `ChromeLauncher` with workspace precondition enforcement and deterministic window detection.
 - Created Chrome windows with `--new-window` and ordered, deduplicated URLs (`globalChromeUrls` → `repoUrl` → `chromeUrls`).
 - Detected newly created Chrome windows by diffing AeroSpace window IDs before/after launch with fixed polling.
-- Handled edge cases: existing windows (single/multiple), window launched elsewhere, ambiguous detection, timeout fallback.
+- Handled edge cases: existing windows (single/multiple), ambiguous detection within the workspace, and timeout errors without cross-workspace scanning.
 - Enforced IDE refocus after Chrome creation via `refocusIdeWindow` helper.
 - Added `.unexpectedOutput` error case to `AeroSpaceCommandError` for semantic precision.
 - Extracted shared test helpers (`AeroSpaceCommandSignature`, `SequencedAeroSpaceCommandRunner`) to reduce duplication.
@@ -74,6 +74,16 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Apply locked default layouts and persist per-project per-display-mode geometry.
 
 ### Tasks
+- [ ] Audit Phase 6 layout/state dead code for suitability vs rewrite before integrating.
+    - `ProjectWorkspacesCore/DisplayLayout.swift`
+    - `ProjectWorkspacesCore/ProjectWorkspacesState.swift`
+    - `ProjectWorkspacesCore/WindowGeometry.swift`
+    - `ProjectWorkspacesCore/WindowResolutionHelper.swift`
+    - `ProjectWorkspacesCoreTests/AeroSpaceFocusVerifierTests.swift`
+    - `ProjectWorkspacesCoreTests/ProjectWorkspacesStateStoreTests.swift`
+    - `ProjectWorkspacesCoreTests/WindowGeometryTests.swift`
+    - `ProjectWorkspacesCoreTests/TestHelpers/SharedTestDoubles.swift`
+    - `ProjectWorkspacesCoreTests/TestHelpers/TestFileSystem.swift`
 - [ ] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
 - [ ] Implement locked default layouts for laptop and ultrawide (8-segment split).
 - [ ] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.

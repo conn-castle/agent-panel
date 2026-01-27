@@ -413,7 +413,7 @@ final class TestChromeLauncher: ChromeLaunching {
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowFallbackDetection: Bool
+        allowExistingWindows: Bool
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         callCount += 1
         lastWorkspaceName = expectedWorkspaceName

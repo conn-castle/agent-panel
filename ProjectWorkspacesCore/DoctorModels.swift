@@ -88,6 +88,7 @@ public struct DoctorMetadata: Equatable, Sendable {
 
 /// Action availability for Doctor UI buttons.
 public struct DoctorActionAvailability: Equatable, Sendable {
+    public let canInstallAeroSpace: Bool
     public let canInstallSafeAeroSpaceConfig: Bool
     public let canStartAeroSpace: Bool
     public let canReloadAeroSpaceConfig: Bool
@@ -96,18 +97,21 @@ public struct DoctorActionAvailability: Equatable, Sendable {
 
     /// Creates an action availability payload.
     /// - Parameters:
+    ///   - canInstallAeroSpace: True when installing AeroSpace via Homebrew is allowed.
     ///   - canInstallSafeAeroSpaceConfig: True when the safe config installer should be enabled.
     ///   - canStartAeroSpace: True when starting AeroSpace is allowed.
     ///   - canReloadAeroSpaceConfig: True when reload should be enabled.
     ///   - canDisableAeroSpace: True when the panic button should be enabled.
     ///   - canUninstallSafeAeroSpaceConfig: True when uninstall should be enabled.
     public init(
+        canInstallAeroSpace: Bool,
         canInstallSafeAeroSpaceConfig: Bool,
         canStartAeroSpace: Bool,
         canReloadAeroSpaceConfig: Bool,
         canDisableAeroSpace: Bool,
         canUninstallSafeAeroSpaceConfig: Bool
     ) {
+        self.canInstallAeroSpace = canInstallAeroSpace
         self.canInstallSafeAeroSpaceConfig = canInstallSafeAeroSpaceConfig
         self.canStartAeroSpace = canStartAeroSpace
         self.canReloadAeroSpaceConfig = canReloadAeroSpaceConfig
@@ -117,6 +121,7 @@ public struct DoctorActionAvailability: Equatable, Sendable {
 
     /// Returns a disabled action set.
     public static let none = DoctorActionAvailability(
+        canInstallAeroSpace: false,
         canInstallSafeAeroSpaceConfig: false,
         canStartAeroSpace: false,
         canReloadAeroSpaceConfig: false,

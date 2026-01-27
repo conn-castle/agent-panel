@@ -297,6 +297,7 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows across all workspaces as JSON.
+    /// Note: Activation and Chrome detection must not use this (no cross-workspace scanning).
     /// - Returns: Command result containing JSON output or a structured error.
     public func listWindowsAll() -> Result<CommandResult, AeroSpaceCommandError> {
         runCommand(
@@ -323,9 +324,35 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows across all workspaces as decoded models.
+    /// Note: Activation and Chrome detection must not use this (no cross-workspace scanning).
     /// - Returns: Decoded windows or a structured error.
     public func listWindowsAllDecoded() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
         switch listWindowsAll() {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    /// Lists the currently focused window as JSON.
+    /// - Returns: Command result containing JSON output (typically one window) or a structured error.
+    public func listWindowsFocused() -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(
+            arguments: [
+                "list-windows",
+                "--focused",
+                "--json",
+                "--format",
+                Self.listWindowsFormat
+            ]
+        )
+    }
+
+    /// Lists the currently focused window as decoded models.
+    /// - Returns: Decoded windows (typically one) or a structured error.
+    public func listWindowsFocusedDecoded() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindowsFocused() {
         case .success(let result):
             return windowDecoder.decodeWindows(from: result.stdout)
         case .failure(let error):

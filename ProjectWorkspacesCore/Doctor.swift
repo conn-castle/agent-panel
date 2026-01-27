@@ -83,6 +83,39 @@ public struct Doctor {
         buildReport(prependingFindings: [])
     }
 
+    /// Installs AeroSpace via Homebrew and refreshes the report.
+    /// - Returns: An updated Doctor report.
+    public func installAeroSpace() -> DoctorReport {
+        var findings: [DoctorFinding] = []
+
+        let configPaths = aeroSpaceChecker.resolveAeroSpaceConfigPaths()
+        let configState = aeroSpaceChecker.resolveAeroSpaceConfigState(paths: configPaths)
+        if case .missing = configState {
+            if let failureFinding = aeroSpaceChecker.installSafeConfig(configPaths: configPaths) {
+                findings.append(failureFinding)
+                findings.append(
+                    DoctorFinding(
+                        severity: .warn,
+                        title: "Skipped AeroSpace install because the safe config could not be created",
+                        fix: "Resolve the safe config error and retry Install AeroSpace."
+                    )
+                )
+                return buildReport(prependingFindings: findings)
+            }
+
+            findings.append(
+                DoctorFinding(
+                    severity: .pass,
+                    title: "Installed safe AeroSpace config at: ~/.aerospace.toml"
+                )
+            )
+        }
+
+        let installFinding = aeroSpaceChecker.installAeroSpaceViaHomebrew()
+        findings.append(installFinding)
+        return buildReport(prependingFindings: findings)
+    }
+
     /// Attempts to install the safe AeroSpace config when no config exists.
     /// - Returns: An updated Doctor report.
     public func installSafeAeroSpaceConfig() -> DoctorReport {
@@ -146,6 +179,7 @@ public struct Doctor {
     }
 
     private func buildReport(prependingFindings: [DoctorFinding]) -> DoctorReport {
+        let homebrewURL = aeroSpaceChecker.resolveHomebrew()
         let appExists = aeroSpaceChecker.appExists()
         let cliResolution = aeroSpaceChecker.resolveCLI()
         let cliURL = try? cliResolution.get()
@@ -164,6 +198,7 @@ public struct Doctor {
 
         var findings: [DoctorFinding] = []
         findings.append(contentsOf: prependingFindings)
+        findings.append(aeroSpaceChecker.homebrewFinding(homebrewURL: homebrewURL))
         findings.append(contentsOf: aeroSpaceChecker.aerospaceAppFinding(appExists: appExists))
         findings.append(contentsOf: aeroSpaceChecker.aerospaceCliFinding(resolution: cliResolution))
         findings.append(contentsOf: aeroSpaceChecker.aerospaceConfigFinding(state: configState, paths: configPaths))
@@ -190,7 +225,9 @@ public struct Doctor {
             isAmbiguous = false
         }
 
+        let canInstallAeroSpace = homebrewURL != nil && (!appExists || cliURL == nil)
         let actionAvailability = DoctorActionAvailability(
+            canInstallAeroSpace: canInstallAeroSpace,
             canInstallSafeAeroSpaceConfig: canInstallSafe,
             canStartAeroSpace: canStart,
             canReloadAeroSpaceConfig: canReload,

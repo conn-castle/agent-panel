@@ -18,16 +18,17 @@ public protocol ChromeLaunching {
     ///   - globalChromeUrls: Global URLs to open when creating Chrome.
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
-    ///   - allowFallbackDetection: Whether cross-workspace detection is allowed.
+    ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
     /// - Returns: Launch outcome or a structured error.
     func ensureWindow(
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowFallbackDetection: Bool
+        allowExistingWindows: Bool
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError>
 }
 
 extension IdeLauncher: IdeLaunching {}
+
 extension ChromeLauncher: ChromeLaunching {}

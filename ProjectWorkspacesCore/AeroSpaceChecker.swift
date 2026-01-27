@@ -25,6 +25,10 @@ struct AeroSpaceServerStatus {
 /// Checks AeroSpace-related requirements for Doctor.
 struct AeroSpaceChecker {
     static let aerospaceAppPath = "/Applications/AeroSpace.app"
+    static let homebrewPaths = [
+        "/opt/homebrew/bin/brew",
+        "/usr/local/bin/brew"
+    ]
     static let safeConfigMarker = "# Managed by ProjectWorkspaces."
     static let safeConfigContents = """
     # Managed by ProjectWorkspaces.
@@ -78,6 +82,82 @@ struct AeroSpaceChecker {
     func appExists() -> Bool {
         let appURL = URL(fileURLWithPath: Self.aerospaceAppPath, isDirectory: true)
         return fileSystem.directoryExists(at: appURL)
+    }
+
+    /// Resolves Homebrew's executable path.
+    /// - Returns: Homebrew URL if found.
+    func resolveHomebrew() -> URL? {
+        for path in Self.homebrewPaths {
+            let url = URL(fileURLWithPath: path, isDirectory: false)
+            if fileSystem.isExecutableFile(at: url) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// Builds the Homebrew finding.
+    /// - Parameter homebrewURL: Resolved Homebrew path.
+    /// - Returns: Finding for Homebrew availability.
+    func homebrewFinding(homebrewURL: URL?) -> DoctorFinding {
+        guard let homebrewURL else {
+            return DoctorFinding(
+                severity: .fail,
+                title: "Homebrew not found",
+                bodyLines: [
+                    "Fix: Install Homebrew (required for ProjectWorkspaces) and re-run Doctor."
+                ]
+            )
+        }
+        return DoctorFinding(
+            severity: .pass,
+            title: "Homebrew found at: \(homebrewURL.path)"
+        )
+    }
+
+    /// Installs AeroSpace via Homebrew.
+    /// - Returns: Finding for install result.
+    func installAeroSpaceViaHomebrew() -> DoctorFinding {
+        guard let homebrewURL = resolveHomebrew() else {
+            return homebrewFinding(homebrewURL: nil)
+        }
+
+        let cliResolution = resolveCLI()
+        if appExists(), (try? cliResolution.get()) != nil {
+            return DoctorFinding(
+                severity: .pass,
+                title: "AeroSpace already installed"
+            )
+        }
+
+        do {
+            let result = try commandRunner.run(
+                command: homebrewURL,
+                arguments: ["install", "--cask", "nikitabobko/tap/aerospace"],
+                environment: nil,
+                workingDirectory: nil
+            )
+            if result.exitCode == 0 {
+                return DoctorFinding(
+                    severity: .pass,
+                    title: "Installed AeroSpace via Homebrew",
+                    bodyLines: ["Next: Run Doctor again to verify."]
+                )
+            }
+            return DoctorFinding(
+                severity: .fail,
+                title: "Homebrew install failed",
+                detail: result.stderr.isEmpty ? result.stdout : result.stderr,
+                fix: "Fix the Homebrew error above and re-run Doctor."
+            )
+        } catch {
+            return DoctorFinding(
+                severity: .fail,
+                title: "Homebrew install failed",
+                detail: String(describing: error),
+                fix: "Fix the Homebrew error above and re-run Doctor."
+            )
+        }
     }
 
     /// Resolves the AeroSpace CLI executable.

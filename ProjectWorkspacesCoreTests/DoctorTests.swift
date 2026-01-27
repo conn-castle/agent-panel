@@ -14,7 +14,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            "/opt/homebrew/bin/brew"
         ])
 
         let appDiscovery = TestAppDiscovery(
@@ -156,7 +157,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            "/opt/homebrew/bin/brew"
         ])
 
         let appDiscovery = TestAppDiscovery(
@@ -604,7 +606,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            "/opt/homebrew/bin/brew"
         ])
 
         let appDiscovery = TestAppDiscovery(

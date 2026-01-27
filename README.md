@@ -12,7 +12,7 @@ ProjectWorkspaces implements two primary actions:
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
    - Ensure a project IDE window exists (create if missing)
    - Ensure a project Chrome window exists (create if missing)
-   - Never move or adopt windows from other workspaces; only use windows already in `pw-<projectId>`
+   - Never scan, move, or adopt windows outside `pw-<projectId>`; only enumerate/use windows already in the workspace
    - Apply the project’s saved layout for the current display mode
    - End with the IDE focused (Chrome must not steal focus)
 
@@ -75,18 +75,21 @@ Layouts are persisted **per project per display mode**.
 ### Prerequisites
 
 1) macOS 15.7+
-2) **AeroSpace installed** (Doctor will start it once a safe config is in place)
-3) Accessibility permission for `ProjectWorkspaces.app`
-4) Google Chrome
-5) VS Code and/or Antigravity
+2) **Homebrew** (required for AeroSpace install; manual installs not supported yet)
+3) **AeroSpace installed** (Doctor will start it once a safe config is in place)
+4) Accessibility permission for `ProjectWorkspaces.app`
+5) Google Chrome
+6) VS Code and/or Antigravity
 
 ### Install AeroSpace
 
-Install via Homebrew (preferred):
+Install via Homebrew (required):
 
 ```bash
 brew install --cask nikitabobko/tap/aerospace
 ```
+
+Manual AeroSpace installs are not supported yet.
 
 ### Install ProjectWorkspaces
 
@@ -113,6 +116,7 @@ pwctl doctor
 
 Doctor must show PASS for:
 
+- Homebrew available
 - AeroSpace installed + CLI resolvable
 - AeroSpace config is non-ambiguous (or intentionally user-managed)
 - AeroSpace server running and loaded config path
@@ -294,6 +298,7 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 ### One Chrome window per project (enforced by workspace membership)
 
 The “project Chrome window” is defined as the Chrome window currently assigned to the project’s AeroSpace workspace. The app does not use Chrome profiles and does not pin tabs.
+ProjectWorkspaces never enumerates or adopts Chrome windows outside the project workspace.
 
 ### Tab seeding (creation-only)
 
