@@ -174,6 +174,10 @@ Given `projectId`:
 
 **MUST**
 
+- Activation must never move or adopt windows from other workspaces. It only uses windows already in `pw-<projectId>` and creates new ones in that workspace if missing.
+
+**MUST**
+
 - Activation is **idempotent**:
   - running it repeatedly must not create additional IDE/Chrome windows when the expected windows already exist.
 

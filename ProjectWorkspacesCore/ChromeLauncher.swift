@@ -68,12 +68,14 @@ public struct ChromeLauncher {
     ///   - globalChromeUrls: Global URLs to open when creating Chrome.
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
+    ///   - allowFallbackDetection: Whether cross-workspace detection is allowed.
     /// - Returns: Launch outcome or a structured error.
     public func ensureWindow(
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
-        ideWindowIdToRefocus: Int?
+        ideWindowIdToRefocus: Int?,
+        allowFallbackDetection: Bool = true
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         switch focusedWorkspace() {
         case .failure(let error):
@@ -105,12 +107,16 @@ public struct ChromeLauncher {
             return .success(.existingMultiple(windowIds: chromeWindowIdsBefore.sorted()))
         }
 
-        let allChromeIdsBefore: Set<Int>
-        switch aeroSpaceClient.listWindowsAllDecoded() {
-        case .failure(let error):
-            return .failure(.aeroSpaceFailed(error))
-        case .success(let windows):
-            allChromeIdsBefore = Set(chromeWindowIds(from: windows))
+        let allChromeIdsBefore: Set<Int>?
+        if allowFallbackDetection {
+            switch aeroSpaceClient.listWindowsAllDecoded() {
+            case .failure(let error):
+                return .failure(.aeroSpaceFailed(error))
+            case .success(let windows):
+                allChromeIdsBefore = Set(chromeWindowIds(from: windows))
+            }
+        } else {
+            allChromeIdsBefore = nil
         }
 
         guard let chromeAppURL = resolveChromeAppURL() else {
@@ -144,7 +150,7 @@ public struct ChromeLauncher {
             }
             return .success(.created(windowId: newWindowId))
         case .failure(let error):
-            if case .chromeWindowNotDetected = error {
+            if case .chromeWindowNotDetected = error, allowFallbackDetection, let allChromeIdsBefore {
                 let fallbackResult = fallbackDetection(
                     expectedWorkspaceName: expectedWorkspaceName,
                     beforeAllChromeIds: allChromeIdsBefore

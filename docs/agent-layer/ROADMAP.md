@@ -47,21 +47,10 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added 11 unit tests covering all Chrome launcher scenarios.
 
 
-## Phase 4 — Activation engine (Activate(Project))
-
-### Goal
-- Implement `Activate(projectId)` end-to-end with idempotence and deterministic window placement.
-
-### Tasks
-- [ ] Implement `Activate(projectId)` algorithm: switch to `pw-<projectId>` workspace → enumerate windows → ensure IDE → ensure Chrome → move windows into workspace → float → apply layout → focus IDE.
-- [ ] Define and enforce how the "project IDE window" and "project Chrome window" are identified (bundle id / app identity + workspace membership).
-- [ ] Ensure activation is idempotent (no duplicate IDE/Chrome windows on repeated runs).
-- [ ] Log every activation with timestamp, projectId, workspaceName, AeroSpace command stdout/stderr, and final outcome (success/warn/fail).
-- [ ] Add automated coverage for idempotence and missing-window recovery (integration test where feasible).
-
-### Exit criteria
-- `pwctl activate <projectId>` is idempotent and always ends with IDE focused.
-- Unrecoverable failures (missing project path, missing permissions) fail loudly with actionable errors.
+## Phase 4 ✅ — Activation engine (Activate(Project))
+- Implemented no-hijack activation that is idempotent, deterministic, and leaves the IDE focused.
+- Added structured activation logging with AeroSpace command capture and explicit warning/error outcomes.
+- Added unit coverage for idempotence, missing-window recovery, and edge cases in activation orchestration.
 
 
 ## Phase 5 — Switcher UI + global hotkey

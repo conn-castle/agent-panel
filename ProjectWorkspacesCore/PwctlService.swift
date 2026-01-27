@@ -28,7 +28,8 @@ public enum PwctlOutcome<Output> {
 public struct PwctlService {
     private let paths: ProjectWorkspacesPaths
     private let fileSystem: FileSystem
-    private let configParser: ConfigParser
+    private let configLoader: ConfigLoader
+    private let activationService: ActivationService
 
     /// Creates a pwctl service instance.
     /// - Parameters:
@@ -36,17 +37,23 @@ public struct PwctlService {
     ///   - fileSystem: File system accessor.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
-        fileSystem: FileSystem = DefaultFileSystem()
+        fileSystem: FileSystem = DefaultFileSystem(),
+        activationService: ActivationService? = nil
     ) {
         self.paths = paths
         self.fileSystem = fileSystem
-        self.configParser = ConfigParser()
+        self.configLoader = ConfigLoader(paths: paths, fileSystem: fileSystem)
+        if let activationService {
+            self.activationService = activationService
+        } else {
+            self.activationService = ActivationService(paths: paths, fileSystem: fileSystem)
+        }
     }
 
     /// Returns the list of configured projects for `pwctl list`.
     /// - Returns: CLI output entries or failure findings when config cannot be read.
     public func listProjects() -> PwctlOutcome<[PwctlListEntry]> {
-        switch loadConfigOutcome() {
+        switch configLoader.load() {
         case .failure(let findings):
             return .failure(findings: findings)
         case .success(let outcome, let warnings):
@@ -116,53 +123,11 @@ public struct PwctlService {
         return .success(output: tail, warnings: [])
     }
 
-    /// Loads and parses the TOML config file into a parse outcome.
-    /// - Returns: Parsed outcome with warnings or failure findings.
-    private func loadConfigOutcome() -> PwctlOutcome<ConfigParseOutcome> {
-        let configURL = paths.configFile
-        guard fileSystem.fileExists(at: configURL) else {
-            return .failure(findings: [
-                DoctorFinding(
-                    severity: .fail,
-                    title: "Config file missing",
-                    detail: configURL.path,
-                    fix: "Create config.toml at the expected path (see README for the schema)."
-                )
-            ])
-        }
-
-        let data: Data
-        do {
-            data = try fileSystem.readFile(at: configURL)
-        } catch {
-            return .failure(findings: [
-                DoctorFinding(
-                    severity: .fail,
-                    title: "Config file could not be read",
-                    detail: "\(configURL.path): \(error)",
-                    fix: "Ensure config.toml is readable and retry."
-                )
-            ])
-        }
-
-        guard let toml = String(data: data, encoding: .utf8) else {
-            return .failure(findings: [
-                DoctorFinding(
-                    severity: .fail,
-                    title: "Config file is not valid UTF-8",
-                    detail: configURL.path,
-                    fix: "Ensure config.toml is saved as UTF-8 text."
-                )
-            ])
-        }
-
-        let outcome = configParser.parse(toml: toml)
-        guard outcome.config != nil else {
-            return .failure(findings: outcome.findings)
-        }
-
-        let warnings = outcome.findings.filter { $0.severity == .warn }
-        return .success(output: outcome, warnings: warnings)
+    /// Activates the project workspace for the provided project id.
+    /// - Parameter projectId: Project identifier.
+    /// - Returns: Activation outcome with warnings or failure.
+    public func activate(projectId: String) -> ActivationOutcome {
+        activationService.activate(projectId: projectId)
     }
 
     /// Returns the last N lines from a log string.

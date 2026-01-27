@@ -70,3 +70,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Require the expected AeroSpace workspace to be focused before creating Chrome, and use fixed polling constants with Chrome-only ID diffing plus explicit error outcomes.
     Reason: Keeps activation responsible for workspace switching and avoids flaky, non-deterministic window detection.
     Tradeoffs: Callers must ensure focus before launching; more error handling in activation code.
+
+- Decision 2026-01-27 a6d2f1b: Activation ignores windows outside the workspace
+    Decision: Activation only considers windows already in `pw-<projectId>` and never moves or adopts windows from other workspaces; missing windows are created in the focused workspace.
+    Reason: Prevents hijacking user windows and keeps activation deterministic.
+    Tradeoffs: If AeroSpace rules move new windows elsewhere, activation fails and requires user configuration fixes.

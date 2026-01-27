@@ -332,7 +332,7 @@ Notes:
    - No tab enforcement after creation.
 
 2) Window identification:
-   - Detect new Chrome window by diffing `list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after Chrome launch.
+   - Detect new Chrome window by diffing `list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after Chrome launch (workspace-only; no cross-workspace adoption).
 
 3) Focus rule:
    - Always end activation by focusing IDE window (Chrome must not steal focus).
@@ -352,12 +352,13 @@ Notes:
 
 1) Switch to workspace `pw-<projectId>`.
 2) Enumerate windows in that workspace.
-3) Ensure IDE window exists (Phase 2).
-4) Ensure Chrome window exists (Phase 3).
-5) Move any found IDE/Chrome windows into the workspace if they are elsewhere.
-6) Force both windows to floating.
-7) Apply layout (Phase 5).
-8) Focus IDE.
+3) Before launching IDE/Chrome, confirm the workspace is still focused; fail if focus changed.
+4) Ensure IDE window exists (Phase 2).
+5) Ensure Chrome window exists (Phase 3).
+6) Do not move windows from other workspaces; only use windows already in `pw-<projectId>` or create new ones in that workspace.
+7) Force both windows to floating.
+8) Apply layout (Phase 5).
+9) Focus IDE.
 
 **Exit criteria**
 

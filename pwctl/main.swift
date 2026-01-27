@@ -89,6 +89,7 @@ private func printStdout(_ text: String) {
 /// Result statuses recorded in pwctl logs.
 private enum PwctlLogResult: String {
     case ok = "ok"
+    case warn = "warn"
     case fail = "fail"
     case usage = "usage"
     case notImplemented = "not_implemented"
@@ -98,6 +99,8 @@ private enum PwctlLogResult: String {
         switch self {
         case .ok:
             return .info
+        case .warn:
+            return .warn
         case .fail:
             return .error
         case .usage, .notImplemented:
@@ -193,9 +196,22 @@ case .success(let command):
             exit(PwctlExitCode.ok.rawValue)
         }
     case .activate(let projectId):
-        logCommand("activate", result: .notImplemented)
-        printStderr("error: `pwctl activate \(projectId)` is not implemented yet")
-        exit(PwctlExitCode.failure.rawValue)
+        let outcome = pwctlService.activate(projectId: projectId)
+        switch outcome {
+        case .failure(let error):
+            logCommand("activate", result: .fail)
+            printStderr(renderFindings(error.asFindings()))
+            exit(PwctlExitCode.failure.rawValue)
+        case .success(let report, let warnings):
+            if !warnings.isEmpty {
+                let findings = warnings.map { $0.asFinding() }
+                printStderr(renderFindings(findings))
+            }
+            let resultLog: PwctlLogResult = warnings.isEmpty ? .ok : .warn
+            logCommand("activate", result: resultLog)
+            print("Activated \(report.projectId) (IDE: \(report.ideWindowId), Chrome: \(report.chromeWindowId))")
+            exit(PwctlExitCode.ok.rawValue)
+        }
     case .close(let projectId):
         logCommand("close", result: .notImplemented)
         printStderr("error: `pwctl close \(projectId)` is not implemented yet")

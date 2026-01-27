@@ -4,8 +4,8 @@ import XCTest
 
 final class AeroSpaceClientTests: XCTestCase {
     func testResolverUsesCandidatePathWhenExecutableExists() {
-        let fileSystem = TestFileSystem(executableFiles: ["/opt/homebrew/bin/aerospace"])
-        let commandRunner = TestCommandRunner(results: [:])
+        let fileSystem = ExecutableOnlyFileSystem(executableFiles: ["/opt/homebrew/bin/aerospace"])
+        let commandRunner = ClientTestCommandRunner(results: [:])
         let resolver = DefaultAeroSpaceBinaryResolver(fileSystem: fileSystem, commandRunner: commandRunner)
 
         let result = resolver.resolve()
@@ -21,9 +21,9 @@ final class AeroSpaceClientTests: XCTestCase {
 
     func testResolverUsesWhichWhenCandidatesMissing() {
         let resolvedPath = "/custom/bin/aerospace"
-        let fileSystem = TestFileSystem(executableFiles: ["/usr/bin/which", resolvedPath])
-        let commandRunner = TestCommandRunner(results: [
-            CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
+        let fileSystem = ExecutableOnlyFileSystem(executableFiles: ["/usr/bin/which", resolvedPath])
+        let commandRunner = ClientTestCommandRunner(results: [
+            ClientCommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
                 CommandResult(exitCode: 0, stdout: "\(resolvedPath)\n", stderr: "")
             ]
         ])
@@ -139,22 +139,22 @@ final class AeroSpaceClientTests: XCTestCase {
     }
 }
 
-private struct CommandSignature: Hashable {
+private struct ClientCommandSignature: Hashable {
     let path: String
     let arguments: [String]
 }
 
-private struct CommandInvocation: Equatable {
+private struct ClientCommandInvocation: Equatable {
     let path: String
     let arguments: [String]
     let environment: [String: String]?
 }
 
-private final class TestCommandRunner: CommandRunning {
-    private(set) var invocations: [CommandInvocation] = []
-    private var results: [CommandSignature: [CommandResult]]
+private final class ClientTestCommandRunner: CommandRunning {
+    private(set) var invocations: [ClientCommandInvocation] = []
+    private var results: [ClientCommandSignature: [CommandResult]]
 
-    init(results: [CommandSignature: [CommandResult]]) {
+    init(results: [ClientCommandSignature: [CommandResult]]) {
         self.results = results
     }
 
@@ -165,15 +165,15 @@ private final class TestCommandRunner: CommandRunning {
         workingDirectory: URL?
     ) throws -> CommandResult {
         invocations.append(
-            CommandInvocation(
+            ClientCommandInvocation(
                 path: command.path,
                 arguments: arguments,
                 environment: environment
             )
         )
-        let signature = CommandSignature(path: command.path, arguments: arguments)
+        let signature = ClientCommandSignature(path: command.path, arguments: arguments)
         guard var queue = results[signature], !queue.isEmpty else {
-            throw NSError(domain: "TestCommandRunner", code: 1)
+            throw NSError(domain: "ClientTestCommandRunner", code: 1)
         }
         let result = queue.removeFirst()
         results[signature] = queue
@@ -181,7 +181,7 @@ private final class TestCommandRunner: CommandRunning {
     }
 }
 
-private final class TestFileSystem: FileSystem {
+private final class ExecutableOnlyFileSystem: FileSystem {
     private let executableFiles: Set<String>
 
     init(executableFiles: Set<String> = []) {
@@ -201,35 +201,35 @@ private final class TestFileSystem: FileSystem {
     }
 
     func readFile(at url: URL) throws -> Data {
-        throw NSError(domain: "TestFileSystem", code: 1)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 1)
     }
 
     func createDirectory(at url: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 2)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 2)
     }
 
     func fileSize(at url: URL) throws -> UInt64 {
-        throw NSError(domain: "TestFileSystem", code: 3)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 3)
     }
 
     func removeItem(at url: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 4)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 4)
     }
 
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 5)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 5)
     }
 
     func appendFile(at url: URL, data: Data) throws {
-        throw NSError(domain: "TestFileSystem", code: 6)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 6)
     }
 
     func writeFile(at url: URL, data: Data) throws {
-        throw NSError(domain: "TestFileSystem", code: 7)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 7)
     }
 
     func syncFile(at url: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 8)
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 8)
     }
 }
 

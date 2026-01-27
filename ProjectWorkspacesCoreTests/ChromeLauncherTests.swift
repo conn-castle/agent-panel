@@ -3,19 +3,18 @@ import XCTest
 @testable import ProjectWorkspacesCore
 
 final class ChromeLauncherTests: XCTestCase {
-    private let aeroSpacePath = "/opt/homebrew/bin/aerospace"
-    private let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)
-    private let listWindowsFormat =
-        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+    private let aeroSpacePath = TestConstants.aerospacePath
+    private let chromeAppURL = TestConstants.chromeAppURL
+    private let listWindowsFormat = TestConstants.listWindowsFormat
 
     func testWorkspaceNotFocusedReturnsError() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: ""))
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
-        let commandRunner = RecordingCommandRunner(results: [:])
+        let commandRunner = RecordingCommandRunner()
         let sleeper = TestSleeper()
         let launcher = makeLauncher(
             runner: runner,
@@ -44,8 +43,8 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testExistingChromeReturnsExistingOutcome() {
-        let chromeWindow = windowPayload(id: 10, workspace: "pw-codex")
-        let responses = [
+        let chromeWindow = chromeWindowPayload(id: 10, workspace: "pw-codex")
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -54,7 +53,7 @@ final class ChromeLauncherTests: XCTestCase {
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
-        let commandRunner = RecordingCommandRunner(results: [:])
+        let commandRunner = RecordingCommandRunner()
         let sleeper = TestSleeper()
         let launcher = makeLauncher(
             runner: runner,
@@ -80,9 +79,9 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testExistingMultipleChromeReturnsSortedOutcome() {
-        let chromeWindowOne = windowPayload(id: 42, workspace: "pw-codex")
-        let chromeWindowTwo = windowPayload(id: 7, workspace: "pw-codex")
-        let responses = [
+        let chromeWindowOne = chromeWindowPayload(id: 42, workspace: "pw-codex")
+        let chromeWindowTwo = chromeWindowPayload(id: 7, workspace: "pw-codex")
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -91,7 +90,7 @@ final class ChromeLauncherTests: XCTestCase {
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
-        let commandRunner = RecordingCommandRunner(results: [:])
+        let commandRunner = RecordingCommandRunner()
         let sleeper = TestSleeper()
         let launcher = makeLauncher(
             runner: runner,
@@ -115,13 +114,13 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testLaunchArgumentsOrderedAndDeduped() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([windowPayload(id: 55, workspace: "pw-codex")]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowPayload(id: 55, workspace: "pw-codex")]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
@@ -174,13 +173,13 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testLaunchUsesAboutBlankWhenUrlsEmpty() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([windowPayload(id: 88, workspace: "pw-codex")]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowPayload(id: 88, workspace: "pw-codex")]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
@@ -228,10 +227,10 @@ final class ChromeLauncherTests: XCTestCase {
 
     func testPollingMultipleNewWindowsReturnsAmbiguousSorted() {
         let newWindows = [
-            windowPayload(id: 12, workspace: "pw-codex"),
-            windowPayload(id: 3, workspace: "pw-codex")
+            chromeWindowPayload(id: 12, workspace: "pw-codex"),
+            chromeWindowPayload(id: 3, workspace: "pw-codex")
         ]
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -281,8 +280,60 @@ final class ChromeLauncherTests: XCTestCase {
         }
     }
 
+    func testNoFallbackDetectionSkipsListWindowsAll() {
+        let responses: AeroSpaceCommandResponses = [
+            signature(["list-workspaces", "--focused"]): [
+                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
+            ],
+            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ]
+        ]
+        let runner = SequencedAeroSpaceCommandRunner(responses: responses)
+        let openArgs = [
+            "-g",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "about:blank"
+        ]
+        let commandRunner = RecordingCommandRunner(results: [
+            OpenCommandSignature(path: "/usr/bin/open", arguments: openArgs): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+        let sleeper = TestSleeper()
+        let launcher = makeLauncher(
+            runner: runner,
+            commandRunner: commandRunner,
+            sleeper: sleeper,
+            pollIntervalMs: 10,
+            pollTimeoutMs: 10
+        )
+
+        let result = launcher.ensureWindow(
+            expectedWorkspaceName: "pw-codex",
+            globalChromeUrls: [],
+            project: makeProject(repoUrl: nil, chromeUrls: []),
+            ideWindowIdToRefocus: nil,
+            allowFallbackDetection: false
+        )
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure when no Chrome window is detected.")
+        case .failure(let error):
+            XCTAssertEqual(error, .chromeWindowNotDetected(expectedWorkspace: "pw-codex"))
+        }
+
+        XCTAssertEqual(commandRunner.invocations.count, 1)
+    }
+
     func testTimeoutFallbackFindsElsewhere() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -293,7 +344,7 @@ final class ChromeLauncherTests: XCTestCase {
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([windowPayload(id: 77, workspace: "pw-other")]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowPayload(id: 77, workspace: "pw-other")]), stderr: ""))
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
@@ -343,7 +394,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testTimeoutFallbackNotDetected() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -397,7 +448,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testTimeoutFallbackDetectsCreatedInExpectedWorkspaceAndRefocuses() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -408,7 +459,7 @@ final class ChromeLauncherTests: XCTestCase {
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([windowPayload(id: 5, workspace: "pw-codex")]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowPayload(id: 5, workspace: "pw-codex")]), stderr: ""))
             ],
             signature(["focus", "--window-id", "222"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
@@ -458,13 +509,13 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testRefocusAfterCreationWhenProvided() {
-        let responses = [
+        let responses: AeroSpaceCommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([windowPayload(id: 99, workspace: "pw-codex")]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowPayload(id: 99, workspace: "pw-codex")]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
@@ -553,108 +604,5 @@ final class ChromeLauncherTests: XCTestCase {
 
     private func signature(_ arguments: [String]) -> AeroSpaceCommandSignature {
         AeroSpaceCommandSignature(path: aeroSpacePath, arguments: arguments)
-    }
-}
-
-private struct WindowPayload: Encodable {
-    let windowId: Int
-    let workspace: String
-    let appBundleId: String
-    let appName: String
-    let windowTitle: String
-
-    enum CodingKeys: String, CodingKey {
-        case windowId = "window-id"
-        case workspace
-        case appBundleId = "app-bundle-id"
-        case appName = "app-name"
-        case windowTitle = "window-title"
-    }
-}
-
-private func windowPayload(id: Int, workspace: String) -> WindowPayload {
-    WindowPayload(
-        windowId: id,
-        workspace: workspace,
-        appBundleId: ChromeLauncher.chromeBundleId,
-        appName: "Google Chrome",
-        windowTitle: "Chrome"
-    )
-}
-
-private func windowsJSON(_ windows: [WindowPayload]) -> String {
-    guard let data = try? JSONEncoder().encode(windows),
-          let json = String(data: data, encoding: .utf8) else {
-        return "[]"
-    }
-    return json
-}
-
-private struct OpenCommandSignature: Hashable {
-    let path: String
-    let arguments: [String]
-}
-
-private struct CommandInvocation: Equatable {
-    let path: String
-    let arguments: [String]
-}
-
-private final class RecordingCommandRunner: CommandRunning {
-    private(set) var invocations: [CommandInvocation] = []
-    private var results: [OpenCommandSignature: [CommandResult]]
-
-    init(results: [OpenCommandSignature: [CommandResult]]) {
-        self.results = results
-    }
-
-    func run(
-        command: URL,
-        arguments: [String],
-        environment: [String: String]?,
-        workingDirectory: URL?
-    ) throws -> CommandResult {
-        let _ = environment
-        let _ = workingDirectory
-        invocations.append(CommandInvocation(path: command.path, arguments: arguments))
-        let signature = OpenCommandSignature(path: command.path, arguments: arguments)
-        guard var queue = results[signature], !queue.isEmpty else {
-            throw NSError(domain: "RecordingCommandRunner", code: 1)
-        }
-        let result = queue.removeFirst()
-        results[signature] = queue
-        return result
-    }
-}
-
-private struct TestAppDiscovery: AppDiscovering {
-    let bundleIds: [String: URL]
-
-    init(bundleIds: [String: URL] = [:]) {
-        self.bundleIds = bundleIds
-    }
-
-    func applicationURL(bundleIdentifier: String) -> URL? {
-        bundleIds[bundleIdentifier]
-    }
-
-    func applicationURL(named appName: String) -> URL? {
-        let _ = appName
-        return nil
-    }
-
-    func bundleIdentifier(forApplicationAt url: URL) -> String? {
-        for (bundleId, bundleURL) in bundleIds where bundleURL == url {
-            return bundleId
-        }
-        return nil
-    }
-}
-
-private final class TestSleeper: AeroSpaceSleeping {
-    private(set) var sleepCalls: [TimeInterval] = []
-
-    func sleep(seconds: TimeInterval) {
-        sleepCalls.append(seconds)
     }
 }

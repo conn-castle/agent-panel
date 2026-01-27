@@ -12,6 +12,7 @@ ProjectWorkspaces implements two primary actions:
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
    - Ensure a project IDE window exists (create if missing)
    - Ensure a project Chrome window exists (create if missing)
+   - Never move or adopt windows from other workspaces; only use windows already in `pw-<projectId>`
    - Apply the project’s saved layout for the current display mode
    - End with the IDE focused (Chrome must not steal focus)
 
@@ -373,6 +374,7 @@ Exit codes:
 - Logs directory: `~/.local/state/project-workspaces/logs/`
 - Active log: `~/.local/state/project-workspaces/logs/workspaces.log`
 - Rotation: rotate at 10 MiB, keep `workspaces.log.1`…`workspaces.log.5` (max 5 archives)
+- `list-windows` outputs are sanitized in logs (window IDs + bundle IDs only; no window titles)
 - Every `Activate` and `Close` action must log:
   - timestamp
   - projectId
@@ -454,5 +456,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
+- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch (workspace-only; no cross-workspace adoption).
 - No silent failures: show user-facing errors + write structured logs.

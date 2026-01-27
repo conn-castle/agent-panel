@@ -422,21 +422,21 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
-            CommandSignature(path: aerospacePath, arguments: ["reload-config", "--no-gui"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["reload-config", "--no-gui"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
@@ -572,7 +572,7 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
-            CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
+            DoctorCommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "not found")
             ]
         ])
@@ -620,17 +620,17 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
-            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "restore failed")
             ]
         ])
@@ -680,14 +680,14 @@ final class DoctorTests: XCTestCase {
         )
 
         let commandRunner = TestCommandRunner(results: [
-            CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: "")
             ],
-            CommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
@@ -712,100 +712,17 @@ final class DoctorTests: XCTestCase {
     }
 }
 
-private final class TestFileSystem: FileSystem {
-    private var files: [String: Data]
-    private var directories: Set<String>
-    private var executableFiles: Set<String>
+// Uses TestFileSystem and TestAppDiscovery from TestSupport.swift
 
-    init(files: [String: Data], directories: Set<String>, executableFiles: Set<String> = []) {
-        self.files = files
-        self.directories = directories
-        self.executableFiles = executableFiles
-    }
-
-    func fileExists(at url: URL) -> Bool {
-        files[url.path] != nil
-    }
-
-    func directoryExists(at url: URL) -> Bool {
-        directories.contains(url.path)
-    }
-
-    func isExecutableFile(at url: URL) -> Bool {
-        executableFiles.contains(url.path)
-    }
-
-    func readFile(at url: URL) throws -> Data {
-        if let data = files[url.path] {
-            return data
-        }
-        throw NSError(domain: "TestFileSystem", code: 1)
-    }
-
-    func createDirectory(at url: URL) throws {
-        directories.insert(url.path)
-    }
-
-    func fileSize(at url: URL) throws -> UInt64 {
-        guard let data = files[url.path] else {
-            throw NSError(domain: "TestFileSystem", code: 2)
-        }
-        return UInt64(data.count)
-    }
-
-    func removeItem(at url: URL) throws {
-        if files.removeValue(forKey: url.path) != nil {
-            return
-        }
-        if directories.remove(url.path) != nil {
-            return
-        }
-        throw NSError(domain: "TestFileSystem", code: 3)
-    }
-
-    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
-        guard let data = files.removeValue(forKey: sourceURL.path) else {
-            throw NSError(domain: "TestFileSystem", code: 4)
-        }
-        if files[destinationURL.path] != nil {
-            throw NSError(domain: "TestFileSystem", code: 5)
-        }
-        files[destinationURL.path] = data
-    }
-
-    func appendFile(at url: URL, data: Data) throws {
-        if var existing = files[url.path] {
-            existing.append(data)
-            files[url.path] = existing
-        } else {
-            files[url.path] = data
-        }
-    }
-
-    func writeFile(at url: URL, data: Data) throws {
-        files[url.path] = data
-    }
-
-    func syncFile(at url: URL) throws {
-        if files[url.path] == nil {
-            throw NSError(domain: "TestFileSystem", code: 6)
-        }
-    }
-
-    func fileData(atPath path: String) -> Data? {
-        files[path]
-    }
-}
-
-private struct CommandSignature: Hashable {
+private struct DoctorCommandSignature: Hashable {
     let path: String
     let arguments: [String]
 }
 
 private final class TestCommandRunner: CommandRunning {
-    private var results: [CommandSignature: [CommandResult]]
+    private var results: [DoctorCommandSignature: [CommandResult]]
 
-    init(results: [CommandSignature: [CommandResult]]) {
+    init(results: [DoctorCommandSignature: [CommandResult]]) {
         self.results = results
     }
 
@@ -825,7 +742,7 @@ private final class TestCommandRunner: CommandRunning {
     ) throws -> CommandResult {
         let _ = environment
         let _ = workingDirectory
-        let signature = CommandSignature(path: command.path, arguments: arguments)
+        let signature = DoctorCommandSignature(path: command.path, arguments: arguments)
         guard var queue = results[signature], !queue.isEmpty else {
             throw NSError(domain: "TestCommandRunner", code: 1)
         }
@@ -862,23 +779,23 @@ private func makeValidConfig(includeSwitcherHotkey: Bool = false) -> String {
 ///   - previousWorkspace: Workspace name to restore after the check.
 /// - Returns: A command runner stub with success results.
 private func makePassingCommandRunner(executablePath: String, previousWorkspace: String) -> TestCommandRunner {
-    var results: [CommandSignature: [CommandResult]] = [:]
-    let configKey = CommandSignature(path: executablePath, arguments: ["config", "--config-path"])
+    var results: [DoctorCommandSignature: [CommandResult]] = [:]
+    let configKey = DoctorCommandSignature(path: executablePath, arguments: ["config", "--config-path"])
     results[configKey] = [
         CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
     ]
-    let focusedKey = CommandSignature(path: executablePath, arguments: ["list-workspaces", "--focused"])
+    let focusedKey = DoctorCommandSignature(path: executablePath, arguments: ["list-workspaces", "--focused"])
     results[focusedKey] = [
         CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: ""),
         CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
         CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: "")
     ]
 
-    let switchInboxKey = CommandSignature(path: executablePath, arguments: ["workspace", "pw-inbox"])
+    let switchInboxKey = DoctorCommandSignature(path: executablePath, arguments: ["workspace", "pw-inbox"])
     results[switchInboxKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
 
     if previousWorkspace != "pw-inbox" {
-        let restoreKey = CommandSignature(path: executablePath, arguments: ["workspace", previousWorkspace])
+        let restoreKey = DoctorCommandSignature(path: executablePath, arguments: ["workspace", previousWorkspace])
         results[restoreKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
     }
 
@@ -889,29 +806,7 @@ private func makeSafeAeroSpaceConfigData() -> Data {
     Data("# Managed by ProjectWorkspaces.\n".utf8)
 }
 
-private struct TestAppDiscovery: AppDiscovering {
-    let bundleIdMap: [String: String]
-    let nameMap: [String: String]
-    let bundleIdForPath: [String: String]
-
-    func applicationURL(bundleIdentifier: String) -> URL? {
-        guard let path = bundleIdMap[bundleIdentifier] else {
-            return nil
-        }
-        return URL(fileURLWithPath: path, isDirectory: true)
-    }
-
-    func applicationURL(named appName: String) -> URL? {
-        guard let path = nameMap[appName] else {
-            return nil
-        }
-        return URL(fileURLWithPath: path, isDirectory: true)
-    }
-
-    func bundleIdentifier(forApplicationAt url: URL) -> String? {
-        bundleIdForPath[url.path]
-    }
-}
+// TestAppDiscovery is provided by TestSupport.swift
 
 private struct TestHotkeyChecker: HotkeyChecking {
     let isAvailable: Bool

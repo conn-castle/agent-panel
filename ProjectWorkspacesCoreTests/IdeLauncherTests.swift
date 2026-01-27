@@ -14,28 +14,28 @@ final class IdeLauncherTests: XCTestCase {
             .appendingPathComponent("Contents/Resources/app/bin/code", isDirectory: false)
             .path
 
-        let runner = RecordingCommandRunner(results: [
-            CommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
+        let runner = IdeRecordingCommandRunner(results: [
+            IdeCommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
+            IdeCommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
 
-        let fileSystem = TestFileSystem(
+        let fileSystem = IdeTestFileSystem(
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeTestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
             commandRunner: runner,
-            environment: TestEnvironment(values: [:]),
+            environment: IdeTestEnvironment(values: [:]),
             appDiscovery: appDiscovery,
-            permissions: TestPermissions(),
+            permissions: IdeTestPermissions(),
             logger: logger
         )
 
@@ -65,31 +65,31 @@ final class IdeLauncherTests: XCTestCase {
             .appendingPathComponent("Contents/Resources/app/bin/code", isDirectory: false)
             .path
 
-        let runner = RecordingCommandRunner(results: [
-            CommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
+        let runner = IdeRecordingCommandRunner(results: [
+            IdeCommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "boom")
             ],
-            CommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
+            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
+            IdeCommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
 
-        let fileSystem = TestFileSystem(
+        let fileSystem = IdeTestFileSystem(
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeTestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
             commandRunner: runner,
-            environment: TestEnvironment(values: [:]),
+            environment: IdeTestEnvironment(values: [:]),
             appDiscovery: appDiscovery,
-            permissions: TestPermissions(),
+            permissions: IdeTestPermissions(),
             logger: logger
         )
 
@@ -119,27 +119,27 @@ final class IdeLauncherTests: XCTestCase {
         let project = makeProject(ide: .antigravity, ideCommand: "antigravity --open")
         let antigravityAppPath = "/Applications/Antigravity.app"
 
-        let runner = RecordingCommandRunner(results: [
-            CommandSignature(path: "/bin/zsh", arguments: ["-lc", "antigravity --open"]): [
+        let runner = IdeRecordingCommandRunner(results: [
+            IdeCommandSignature(path: "/bin/zsh", arguments: ["-lc", "antigravity --open"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "boom")
             ],
-            CommandSignature(path: "/usr/bin/open", arguments: ["-a", antigravityAppPath, project.path]): [
+            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", antigravityAppPath, project.path]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
 
-        let fileSystem = TestFileSystem(
+        let fileSystem = IdeTestFileSystem(
             directories: [antigravityAppPath, "/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery()
-        let logger = TestLogger()
+        let appDiscovery = IdeTestAppDiscovery()
+        let logger = IdeTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
             commandRunner: runner,
-            environment: TestEnvironment(values: [:]),
+            environment: IdeTestEnvironment(values: [:]),
             appDiscovery: appDiscovery,
-            permissions: TestPermissions(),
+            permissions: IdeTestPermissions(),
             logger: logger
         )
 
@@ -169,32 +169,32 @@ final class IdeLauncherTests: XCTestCase {
             .appendingPathComponent("Contents/Resources/app/bin/code", isDirectory: false)
             .path
 
-        let runner = RecordingCommandRunner(results: [
-            CommandSignature(path: launcherPath, arguments: []): [
+        let runner = IdeRecordingCommandRunner(results: [
+            IdeCommandSignature(path: launcherPath, arguments: []): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "boom")
             ],
-            CommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
+            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            CommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
+            IdeCommandSignature(path: cliPath, arguments: ["-r", workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
 
-        let fileSystem = TestFileSystem(
+        let fileSystem = IdeTestFileSystem(
             executableFiles: [launcherPath, cliPath],
             files: [launcherPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeTestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
             commandRunner: runner,
-            environment: TestEnvironment(values: [:]),
+            environment: IdeTestEnvironment(values: [:]),
             appDiscovery: appDiscovery,
-            permissions: TestPermissions(),
+            permissions: IdeTestPermissions(),
             logger: logger
         )
 
@@ -227,28 +227,28 @@ final class IdeLauncherTests: XCTestCase {
             .appendingPathComponent("Contents/Resources/app/bin/code", isDirectory: false)
             .path
 
-        let runner = RecordingCommandRunner(results: [
-            CommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
+        let runner = IdeRecordingCommandRunner(results: [
+            IdeCommandSignature(path: "/bin/zsh", arguments: ["-lc", "code ."]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "boom")
             ],
-            CommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
+            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", vscodeAppURL.path, workspacePath]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "open failed")
             ]
         ])
 
-        let fileSystem = TestFileSystem(
+        let fileSystem = IdeTestFileSystem(
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeTestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
             commandRunner: runner,
-            environment: TestEnvironment(values: [:]),
+            environment: IdeTestEnvironment(values: [:]),
             appDiscovery: appDiscovery,
-            permissions: TestPermissions(),
+            permissions: IdeTestPermissions(),
             logger: logger
         )
 
@@ -288,23 +288,23 @@ final class IdeLauncherTests: XCTestCase {
     }
 }
 
-private struct CommandSignature: Hashable {
+private struct IdeCommandSignature: Hashable {
     let path: String
     let arguments: [String]
 }
 
-private struct CommandInvocation: Equatable {
+private struct IdeCommandInvocation: Equatable {
     let path: String
     let arguments: [String]
     let environment: [String: String]?
     let workingDirectory: String?
 }
 
-private final class RecordingCommandRunner: CommandRunning {
-    private(set) var invocations: [CommandInvocation] = []
-    private var results: [CommandSignature: [CommandResult]]
+private final class IdeRecordingCommandRunner: CommandRunning {
+    private(set) var invocations: [IdeCommandInvocation] = []
+    private var results: [IdeCommandSignature: [CommandResult]]
 
-    init(results: [CommandSignature: [CommandResult]]) {
+    init(results: [IdeCommandSignature: [CommandResult]]) {
         self.results = results
     }
 
@@ -315,16 +315,16 @@ private final class RecordingCommandRunner: CommandRunning {
         workingDirectory: URL?
     ) throws -> CommandResult {
         invocations.append(
-            CommandInvocation(
+            IdeCommandInvocation(
                 path: command.path,
                 arguments: arguments,
                 environment: environment,
                 workingDirectory: workingDirectory?.path
             )
         )
-        let signature = CommandSignature(path: command.path, arguments: arguments)
+        let signature = IdeCommandSignature(path: command.path, arguments: arguments)
         guard var queue = results[signature], !queue.isEmpty else {
-            throw NSError(domain: "RecordingCommandRunner", code: 1)
+            throw NSError(domain: "IdeRecordingCommandRunner", code: 1)
         }
         let result = queue.removeFirst()
         results[signature] = queue
@@ -332,7 +332,7 @@ private final class RecordingCommandRunner: CommandRunning {
     }
 }
 
-private final class TestFileSystem: FileSystem {
+private final class IdeTestFileSystem: FileSystem {
     private let executableFiles: Set<String>
     private var files: Set<String>
     private var directories: Set<String>
@@ -362,7 +362,7 @@ private final class TestFileSystem: FileSystem {
 
     func readFile(at url: URL) throws -> Data {
         guard let data = writtenFiles[url.path] else {
-            throw NSError(domain: "TestFileSystem", code: 1)
+            throw NSError(domain: "IdeTestFileSystem", code: 1)
         }
         return data
     }
@@ -372,7 +372,7 @@ private final class TestFileSystem: FileSystem {
     }
 
     func fileSize(at url: URL) throws -> UInt64 {
-        throw NSError(domain: "TestFileSystem", code: 2)
+        throw NSError(domain: "IdeTestFileSystem", code: 2)
     }
 
     func removeItem(at url: URL) throws {
@@ -380,11 +380,11 @@ private final class TestFileSystem: FileSystem {
     }
 
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 3)
+        throw NSError(domain: "IdeTestFileSystem", code: 3)
     }
 
     func appendFile(at url: URL, data: Data) throws {
-        throw NSError(domain: "TestFileSystem", code: 4)
+        throw NSError(domain: "IdeTestFileSystem", code: 4)
     }
 
     func writeFile(at url: URL, data: Data) throws {
@@ -393,11 +393,11 @@ private final class TestFileSystem: FileSystem {
     }
 
     func syncFile(at url: URL) throws {
-        throw NSError(domain: "TestFileSystem", code: 5)
+        throw NSError(domain: "IdeTestFileSystem", code: 5)
     }
 }
 
-private struct TestAppDiscovery: AppDiscovering {
+private struct IdeTestAppDiscovery: AppDiscovering {
     let bundleIds: [String: URL]
     let names: [String: URL]
     let bundleByURL: [URL: String]
@@ -425,7 +425,7 @@ private struct TestAppDiscovery: AppDiscovering {
     }
 }
 
-private struct TestEnvironment: EnvironmentProviding {
+private struct IdeTestEnvironment: EnvironmentProviding {
     let values: [String: String]
 
     func value(forKey key: String) -> String? {
@@ -437,13 +437,13 @@ private struct TestEnvironment: EnvironmentProviding {
     }
 }
 
-private struct TestPermissions: FilePermissionsSetting {
+private struct IdeTestPermissions: FilePermissionsSetting {
     func setExecutable(at url: URL) throws {
         let _ = url
     }
 }
 
-private final class TestLogger: ProjectWorkspacesLogging {
+private final class IdeTestLogger: ProjectWorkspacesLogging {
     private(set) var entries: [(event: String, level: LogLevel, message: String?, context: [String: String]?)] = []
 
     func log(event: String, level: LogLevel, message: String?, context: [String: String]?) -> Result<Void, LogWriteError> {
