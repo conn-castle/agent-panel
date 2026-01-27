@@ -27,8 +27,8 @@ final class IdeLauncherTests: XCTestCase {
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeLauncherAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeLauncherTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
@@ -81,8 +81,8 @@ final class IdeLauncherTests: XCTestCase {
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeLauncherAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeLauncherTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
@@ -131,8 +131,8 @@ final class IdeLauncherTests: XCTestCase {
         let fileSystem = TestFileSystem(
             directories: [antigravityAppPath, "/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery()
-        let logger = TestLogger()
+        let appDiscovery = IdeLauncherAppDiscovery()
+        let logger = IdeLauncherTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
@@ -186,8 +186,8 @@ final class IdeLauncherTests: XCTestCase {
             files: [launcherPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeLauncherAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeLauncherTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
@@ -240,8 +240,8 @@ final class IdeLauncherTests: XCTestCase {
             executableFiles: [cliPath],
             directories: ["/Users/tester/.local/share/project-workspaces/bin"]
         )
-        let appDiscovery = TestAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
-        let logger = TestLogger()
+        let appDiscovery = IdeLauncherAppDiscovery(bundleIds: ["com.microsoft.VSCode": vscodeAppURL])
+        let logger = IdeLauncherTestLogger()
         let launcher = IdeLauncher(
             paths: paths,
             fileSystem: fileSystem,
@@ -397,7 +397,7 @@ private final class TestFileSystem: FileSystem {
     }
 }
 
-private struct TestAppDiscovery: AppDiscovering {
+private struct IdeLauncherAppDiscovery: AppDiscovering {
     let bundleIds: [String: URL]
     let names: [String: URL]
     let bundleByURL: [URL: String]
@@ -443,7 +443,7 @@ private struct TestPermissions: FilePermissionsSetting {
     }
 }
 
-private final class TestLogger: ProjectWorkspacesLogging {
+private final class IdeLauncherTestLogger: ProjectWorkspacesLogging {
     private(set) var entries: [(event: String, level: LogLevel, message: String?, context: [String: String]?)] = []
 
     func log(event: String, level: LogLevel, message: String?, context: [String: String]?) -> Result<Void, LogWriteError> {

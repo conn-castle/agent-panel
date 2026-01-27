@@ -11,11 +11,11 @@ We are building a macOS project workspace switcher that:
   - Switch to the project’s workspace
   - Ensure the project’s **IDE window** exists (create if missing)
   - Ensure the project’s **Chrome window** exists (create if missing)
-  - Apply the project’s saved layout for the current display mode (or defaults)
+  - Apply the default layout only when a window was created or moved during activation
   - End with the IDE focused
 - Provides a global keyboard-first switcher invoked by **⌘⇧Space**.
 - Provides a **Close Project** action that closes **every window in the project’s AeroSpace workspace** (closing the workspace by emptying it).
-- Persists per-project per-display-mode layout (laptop vs ultrawide).
+- Persists per-project per-display-mode layout (laptop vs ultrawide) in Phase 6.
 
 This roadmap is derived from the requirements spec but intentionally changes the prior “macOS Space pinning” and “Open/Create separation” into an “Activation” model.
 
@@ -162,17 +162,8 @@ Defaults (applied if keys are missing):
   "version": 1,
   "projects": {
     "codex": {
-      "workspaceName": "pw-codex",
-      "layouts": {
-        "laptop": {
-          "ide": {"x": 0, "y": 0, "w": 1440, "h": 900},
-          "chrome": {"x": 0, "y": 0, "w": 1440, "h": 900}
-        },
-        "ultrawide": {
-          "ide": {"x": 1280, "y": 0, "w": 1920, "h": 1440},
-          "chrome": {"x": 3200, "y": 0, "w": 1920, "h": 1440}
-        }
-      }
+      "ideWindowId": 101,
+      "chromeWindowId": 202
     }
   }
 }
@@ -180,7 +171,8 @@ Defaults (applied if keys are missing):
 
 Notes:
 - State is a cache and may be deleted without data loss (config is source of truth).
-- No window IDs are persisted across runs (avoid stale-window failure modes).
+- Managed window IDs are cached; if they go stale, activation falls back to workspace-local discovery or window creation.
+- Layout persistence extends this schema in Phase 6.
 
 ---
 
@@ -352,12 +344,15 @@ Notes:
 
 1) Switch to workspace `pw-<projectId>`.
 2) Enumerate windows in that workspace.
-3) Ensure IDE window exists (Phase 2).
-4) Ensure Chrome window exists (Phase 3).
-5) Move any found IDE/Chrome windows into the workspace if they are elsewhere.
-6) Force both windows to floating.
-7) Apply layout (Phase 5).
-8) Focus IDE.
+3) Ensure IDE window exists (Phase 2):
+   - Prefer managed window id if present in the workspace.
+   - Else adopt a workspace-local IDE window (deterministic pick).
+   - If managed id exists elsewhere, move it into the workspace.
+   - Otherwise create a new IDE window.
+4) Ensure Chrome window exists (Phase 3) using the same managed-id rules.
+5) Force both windows to floating (`aerospace layout floating --window-id <id>`).
+6) Apply the default layout only when a window was created or moved during this activation.
+7) Focus IDE.
 
 **Exit criteria**
 
@@ -394,7 +389,7 @@ Notes:
 
 ### Phase 6 — Layout engine + persistence
 
-**Objective:** Implement layout defaults and per-project persistence for laptop vs ultrawide.
+**Objective:** Persist per-project layouts and reapply them for laptop vs ultrawide.
 
 **Display mode detection (locked)**
 
@@ -418,6 +413,7 @@ Notes:
 **Persistence (locked)**
 
 - Persist per project per display mode in state.json.
+- When a saved layout exists, apply it instead of the defaults.
 - Save on window move/resize (debounced 500ms).
 
 **How window geometry is applied (locked)**

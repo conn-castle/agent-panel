@@ -30,7 +30,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = TestSleeper(clock: clock)
+        let sleeper = ClockAdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let client = makeClient(
             runner: runner,
@@ -80,7 +80,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = TestSleeper(clock: clock)
+        let sleeper = ClockAdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let policy = AeroSpaceRetryPolicy(
             maxAttempts: 3,
@@ -133,7 +133,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = TestSleeper(clock: clock)
+        let sleeper = ClockAdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let policy = AeroSpaceRetryPolicy(
             maxAttempts: 2,
@@ -185,7 +185,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = TestSleeper(clock: clock)
+        let sleeper = ClockAdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let client = makeClient(
             runner: runner,
@@ -223,7 +223,7 @@ private final class TestClock: DateProviding {
     }
 }
 
-private final class TestSleeper: AeroSpaceSleeping {
+private final class ClockAdvancingSleeper: AeroSpaceSleeping {
     private let clock: TestClock
     private(set) var slept: [TimeInterval] = []
 

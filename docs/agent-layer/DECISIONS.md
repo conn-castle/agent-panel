@@ -70,3 +70,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Require the expected AeroSpace workspace to be focused before creating Chrome, and use fixed polling constants with Chrome-only ID diffing plus explicit error outcomes.
     Reason: Keeps activation responsible for workspace switching and avoids flaky, non-deterministic window detection.
     Tradeoffs: Callers must ensure focus before launching; more error handling in activation code.
+
+- Decision 2026-01-26 0a7f2c1: Activation managed window IDs and state recovery
+    Decision: Cache managed IDE/Chrome window IDs in state.json; activation moves only managed IDs (no bundle-id rescue moves); corrupted state.json is backed up with a timestamp and reset to empty.
+    Reason: Deterministic activation without hijacking unrelated windows; avoid bricking activation due to corrupt state.
+    Tradeoffs: Cached IDs can become stale; additional state-handling logic and warnings.

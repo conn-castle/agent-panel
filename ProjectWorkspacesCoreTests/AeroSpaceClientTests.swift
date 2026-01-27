@@ -5,7 +5,7 @@ import XCTest
 final class AeroSpaceClientTests: XCTestCase {
     func testResolverUsesCandidatePathWhenExecutableExists() {
         let fileSystem = TestFileSystem(executableFiles: ["/opt/homebrew/bin/aerospace"])
-        let commandRunner = TestCommandRunner(results: [:])
+        let commandRunner = SequencedCommandRunner(results: [:])
         let resolver = DefaultAeroSpaceBinaryResolver(fileSystem: fileSystem, commandRunner: commandRunner)
 
         let result = resolver.resolve()
@@ -22,7 +22,7 @@ final class AeroSpaceClientTests: XCTestCase {
     func testResolverUsesWhichWhenCandidatesMissing() {
         let resolvedPath = "/custom/bin/aerospace"
         let fileSystem = TestFileSystem(executableFiles: ["/usr/bin/which", resolvedPath])
-        let commandRunner = TestCommandRunner(results: [
+        let commandRunner = SequencedCommandRunner(results: [
             CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
                 CommandResult(exitCode: 0, stdout: "\(resolvedPath)\n", stderr: "")
             ]
@@ -55,6 +55,7 @@ final class AeroSpaceClientTests: XCTestCase {
         _ = client.switchWorkspace("pw-codex")
         _ = client.listWindows(workspace: "pw-codex")
         _ = client.listWindowsAll()
+        _ = client.listWindowsFocused()
         _ = client.focusWindow(windowId: 42)
         _ = client.moveWindow(windowId: 42, to: "pw-codex")
         _ = client.setFloatingLayout(windowId: 42)
@@ -74,6 +75,11 @@ final class AeroSpaceClientTests: XCTestCase {
             AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["list-windows", "--all", "--json", "--format", format],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["list-windows", "--focused", "--json", "--format", format],
                 timeoutSeconds: 2
             ),
             AeroSpaceClientCommandCall(
@@ -137,6 +143,54 @@ final class AeroSpaceClientTests: XCTestCase {
 
         XCTAssertEqual(resolver.callCount, 1)
     }
+
+    func testListWindowsFocusedDecodedReturnsDecodedWindow() {
+        let json = """
+        [{"window-id":42,"workspace":"pw-codex","app-bundle-id":"com.microsoft.VSCode","app-name":"Visual Studio Code","window-title":"Project"}]
+        """
+        let runner = RecordingAeroSpaceCommandRunner(
+            result: .success(CommandResult(exitCode: 0, stdout: json, stderr: ""))
+        )
+        let client = AeroSpaceClient(
+            executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/aerospace"),
+            commandRunner: runner,
+            timeoutSeconds: 2
+        )
+
+        let result = client.listWindowsFocusedDecoded()
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success, got error: \(error)")
+        case .success(let windows):
+            XCTAssertEqual(windows.count, 1)
+            XCTAssertEqual(windows.first?.windowId, 42)
+            XCTAssertEqual(windows.first?.workspace, "pw-codex")
+            XCTAssertEqual(windows.first?.appBundleId, "com.microsoft.VSCode")
+            XCTAssertEqual(windows.first?.appName, "Visual Studio Code")
+            XCTAssertEqual(windows.first?.windowTitle, "Project")
+        }
+    }
+
+    func testListWindowsFocusedDecodedReturnsEmptyListWhenNoFocus() {
+        let runner = RecordingAeroSpaceCommandRunner(
+            result: .success(CommandResult(exitCode: 0, stdout: "[]", stderr: ""))
+        )
+        let client = AeroSpaceClient(
+            executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/aerospace"),
+            commandRunner: runner,
+            timeoutSeconds: 2
+        )
+
+        let result = client.listWindowsFocusedDecoded()
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success, got error: \(error)")
+        case .success(let windows):
+            XCTAssertTrue(windows.isEmpty)
+        }
+    }
 }
 
 private struct CommandSignature: Hashable {
@@ -150,7 +204,7 @@ private struct CommandInvocation: Equatable {
     let environment: [String: String]?
 }
 
-private final class TestCommandRunner: CommandRunning {
+private final class SequencedCommandRunner: CommandRunning {
     private(set) var invocations: [CommandInvocation] = []
     private var results: [CommandSignature: [CommandResult]]
 

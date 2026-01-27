@@ -7,9 +7,10 @@ final class ChromeLauncherTests: XCTestCase {
     private let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)
     private let listWindowsFormat =
         "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+    private typealias CommandResponses = [AeroSpaceCommandSignature: [Result<CommandResult, AeroSpaceCommandError>]]
 
     func testWorkspaceNotFocusedReturnsError() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: ""))
             ]
@@ -45,7 +46,7 @@ final class ChromeLauncherTests: XCTestCase {
 
     func testExistingChromeReturnsExistingOutcome() {
         let chromeWindow = windowPayload(id: 10, workspace: "pw-codex")
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -82,7 +83,7 @@ final class ChromeLauncherTests: XCTestCase {
     func testExistingMultipleChromeReturnsSortedOutcome() {
         let chromeWindowOne = windowPayload(id: 42, workspace: "pw-codex")
         let chromeWindowTwo = windowPayload(id: 7, workspace: "pw-codex")
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -115,7 +116,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testLaunchArgumentsOrderedAndDeduped() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -174,7 +175,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testLaunchUsesAboutBlankWhenUrlsEmpty() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -231,7 +232,7 @@ final class ChromeLauncherTests: XCTestCase {
             windowPayload(id: 12, workspace: "pw-codex"),
             windowPayload(id: 3, workspace: "pw-codex")
         ]
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -282,7 +283,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testTimeoutFallbackFindsElsewhere() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -343,7 +344,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testTimeoutFallbackNotDetected() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -397,7 +398,7 @@ final class ChromeLauncherTests: XCTestCase {
     }
 
     func testTimeoutFallbackDetectsCreatedInExpectedWorkspaceAndRefocuses() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -453,12 +454,12 @@ final class ChromeLauncherTests: XCTestCase {
             XCTAssertEqual(outcome, .created(windowId: 5))
         }
 
-        XCTAssertEqual(sleeper.sleepCalls, [0.2, 0.1])
+        XCTAssertEqual(sleeper.calls, [0.2, 0.1])
         XCTAssertEqual(runner.calls.last?.arguments, ["focus", "--window-id", "222"])
     }
 
     func testRefocusAfterCreationWhenProvided() {
-        let responses = [
+        let responses: CommandResponses = [
             signature(["list-workspaces", "--focused"]): [
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
@@ -509,7 +510,7 @@ final class ChromeLauncherTests: XCTestCase {
             XCTAssertEqual(outcome, .created(windowId: 99))
         }
 
-        XCTAssertEqual(sleeper.sleepCalls, [0.1])
+        XCTAssertEqual(sleeper.calls, [0.1])
         XCTAssertEqual(runner.calls.last?.arguments, ["focus", "--window-id", "321"])
     }
 
@@ -627,34 +628,3 @@ private final class RecordingCommandRunner: CommandRunning {
     }
 }
 
-private struct TestAppDiscovery: AppDiscovering {
-    let bundleIds: [String: URL]
-
-    init(bundleIds: [String: URL] = [:]) {
-        self.bundleIds = bundleIds
-    }
-
-    func applicationURL(bundleIdentifier: String) -> URL? {
-        bundleIds[bundleIdentifier]
-    }
-
-    func applicationURL(named appName: String) -> URL? {
-        let _ = appName
-        return nil
-    }
-
-    func bundleIdentifier(forApplicationAt url: URL) -> String? {
-        for (bundleId, bundleURL) in bundleIds where bundleURL == url {
-            return bundleId
-        }
-        return nil
-    }
-}
-
-private final class TestSleeper: AeroSpaceSleeping {
-    private(set) var sleepCalls: [TimeInterval] = []
-
-    func sleep(seconds: TimeInterval) {
-        sleepCalls.append(seconds)
-    }
-}

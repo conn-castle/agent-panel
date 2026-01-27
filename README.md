@@ -12,7 +12,7 @@ ProjectWorkspaces implements two primary actions:
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
    - Ensure a project IDE window exists (create if missing)
    - Ensure a project Chrome window exists (create if missing)
-   - Apply the project’s saved layout for the current display mode
+   - Apply the default layout **only when** a window was created or moved during this activation
    - End with the IDE focused (Chrome must not steal focus)
 
 2) **Close Project**
@@ -50,7 +50,7 @@ and provides a keyboard-first switcher that brings you to the right context quic
 ### Day-to-day
 
 - If you close the IDE or Chrome window, the next Activate recreates it.
-- If you resize windows, the layout is saved and restored for that project in that display mode.
+- If you resize windows, ProjectWorkspaces preserves those frames unless it had to create or move a window; layout persistence lands in Phase 6.
 
 ## Display modes and layouts
 
@@ -67,7 +67,9 @@ The app supports exactly two display modes:
      - segments 5–7: Chrome
    - IDE ends focused
 
-Layouts are persisted **per project per display mode**.
+Default layouts are applied only when a window is created or moved during activation.
+If both windows already exist in the target workspace, their frames are left unchanged.
+Layout persistence per project per display mode lands in Phase 6.
 
 ## Installation
 
@@ -152,6 +154,7 @@ If the safe config was installed by ProjectWorkspaces, Doctor offers **Uninstall
 - Config: `~/.config/project-workspaces/config.toml`
 - Generated VS Code workspace files: `~/.config/project-workspaces/vscode/*.code-workspace`
 - State: `~/.local/state/project-workspaces/state.json`
+- Corrupted state is backed up as `state.json.bak.<timestamp>` in the same directory.
 
 ### Config schema (locked)
 
@@ -355,6 +358,19 @@ Exit codes:
 - Closing the active project switches to `pw-inbox`.
 - `pw-inbox` is hard-coded and reserved; `projectId="inbox"` is invalid.
 
+### Managed window identity
+
+- Activation tracks managed window ids in `state.json`.
+- If a managed id exists and the window is found elsewhere, it is moved into `pw-<projectId>`.
+- If no managed id exists, the app adopts a window only if it is already in the target workspace.
+- The app does **not** move arbitrary Chrome/IDE windows from other workspaces based on bundle id.
+
+### Multiple windows in a workspace
+
+- If multiple IDE or Chrome windows are present in `pw-<projectId>`, the app logs WARN and chooses deterministically.
+- Priority: the managed id if present in the workspace; otherwise the lowest window id.
+- Extra windows are left open.
+
 ### Chrome tabs
 
 - Tabs are seeded only when the project Chrome window is created.
@@ -363,10 +379,8 @@ Exit codes:
 ### Multi-display behavior
 
 - Primary supported use case is one display at a time.
-- If multiple displays are detected, the app must:
-  1) apply layout on the display containing the focused window,
-  2) log a WARN,
-  3) continue without attempting cross-display moves.
+- Activation uses the main display’s visible frame for layout math.
+- If screen info is unavailable, layout is skipped with a WARN.
 
 ## Logging
 
@@ -444,15 +458,16 @@ Optional:
 - Manual integration checks:
   - activation idempotence (no duplicate IDE/Chrome windows)
   - Chrome recreation after manual close (verify tabs open in order: global -> repoUrl -> project)
-  - layout persistence per display mode
+  - default layout application when windows are created or moved (persistence lands in Phase 6)
 
 ### Engineering implementation notes (locked)
 
 - Third-party Swift dependencies are allowed only for TOML parsing (SwiftPM, version pinned). No other runtime dependencies in v1.
 - Global hotkey implementation uses Carbon `RegisterEventHotKey` (no third-party hotkey libraries).
-- Geometry/persistence uses Accessibility (AX) APIs.
+- Geometry uses Accessibility (AX) APIs; persistence lands in Phase 6.
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
+- Detect newly created IDE windows by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
+- Detect newly created Chrome windows by diffing the focused workspace list first, then falling back to `--all` if needed.
 - No silent failures: show user-facing errors + write structured logs.

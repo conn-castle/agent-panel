@@ -17,7 +17,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -65,7 +65,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
             ],
@@ -111,7 +111,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -159,7 +159,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -207,7 +207,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -253,7 +253,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -306,7 +306,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -358,7 +358,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -409,7 +409,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -421,7 +421,7 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        let commandRunner = DoctorCommandRunner(results: [
             CommandSignature(path: aerospacePath, arguments: ["reload-config", "--no-gui"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
@@ -477,7 +477,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -529,7 +529,7 @@ final class DoctorTests: XCTestCase {
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
             fileSystem: fileSystem,
-            appDiscovery: TestAppDiscovery(
+            appDiscovery: DoctorAppDiscovery(
                 bundleIdMap: ["com.google.Chrome": "/Applications/Google Chrome.app"],
                 nameMap: [:],
                 bundleIdForPath: ["/Applications/Google Chrome.app": "com.google.Chrome"]
@@ -559,7 +559,7 @@ final class DoctorTests: XCTestCase {
             "/usr/bin/which"
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -571,7 +571,7 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        let commandRunner = DoctorCommandRunner(results: [
             CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "not found")
             ]
@@ -607,7 +607,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -619,7 +619,7 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        let commandRunner = DoctorCommandRunner(results: [
             CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
@@ -667,7 +667,7 @@ final class DoctorTests: XCTestCase {
             aerospacePath
         ])
 
-        let appDiscovery = TestAppDiscovery(
+        let appDiscovery = DoctorAppDiscovery(
             bundleIdMap: [
                 "com.google.Chrome": "/Applications/Google Chrome.app",
                 "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
@@ -679,7 +679,7 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        let commandRunner = DoctorCommandRunner(results: [
             CommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
@@ -802,7 +802,7 @@ private struct CommandSignature: Hashable {
     let arguments: [String]
 }
 
-private final class TestCommandRunner: CommandRunning {
+private final class DoctorCommandRunner: CommandRunning {
     private var results: [CommandSignature: [CommandResult]]
 
     init(results: [CommandSignature: [CommandResult]]) {
@@ -861,7 +861,7 @@ private func makeValidConfig(includeSwitcherHotkey: Bool = false) -> String {
 ///   - executablePath: Resolved AeroSpace CLI path.
 ///   - previousWorkspace: Workspace name to restore after the check.
 /// - Returns: A command runner stub with success results.
-private func makePassingCommandRunner(executablePath: String, previousWorkspace: String) -> TestCommandRunner {
+private func makePassingCommandRunner(executablePath: String, previousWorkspace: String) -> DoctorCommandRunner {
     var results: [CommandSignature: [CommandResult]] = [:]
     let configKey = CommandSignature(path: executablePath, arguments: ["config", "--config-path"])
     results[configKey] = [
@@ -882,14 +882,14 @@ private func makePassingCommandRunner(executablePath: String, previousWorkspace:
         results[restoreKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
     }
 
-    return TestCommandRunner(results: results)
+    return DoctorCommandRunner(results: results)
 }
 
 private func makeSafeAeroSpaceConfigData() -> Data {
     Data("# Managed by ProjectWorkspaces.\n".utf8)
 }
 
-private struct TestAppDiscovery: AppDiscovering {
+private struct DoctorAppDiscovery: AppDiscovering {
     let bundleIdMap: [String: String]
     let nameMap: [String: String]
     let bundleIdForPath: [String: String]

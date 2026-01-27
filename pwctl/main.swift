@@ -161,6 +161,51 @@ private func renderFindings(_ findings: [DoctorFinding]) -> String {
     return lines.joined(separator: "\n")
 }
 
+/// Renders activation warnings for CLI output.
+/// - Parameter warnings: Activation warnings to render.
+/// - Returns: Rendered warning lines without a trailing newline.
+private func renderActivationWarnings(_ warnings: [ActivationWarning]) -> String {
+    var lines: [String] = []
+
+    for warning in warnings {
+        switch warning {
+        case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
+            let extras = extraIds.map(String.init).joined(separator: ", ")
+            lines.append("WARN  Multiple \(kind.rawValue.uppercased()) windows in \(workspace); using \(chosenId); extras: [\(extras)]")
+        case .floatingFailed(let kind, let windowId, let error):
+            lines.append("WARN  Failed to set \(kind.rawValue.uppercased()) window \(windowId) floating: \(error)")
+        case .moveFailed(let kind, let windowId, let workspace, let error):
+            lines.append("WARN  Failed to move managed \(kind.rawValue.uppercased()) window \(windowId) into \(workspace): \(error)")
+        case .createdElsewhereMoveFailed(let kind, let windowId, let actualWorkspace, let error):
+            lines.append("WARN  Failed to move newly created \(kind.rawValue.uppercased()) window \(windowId) from \(actualWorkspace): \(error)")
+        case .ideLaunchWarning(let warning):
+            switch warning {
+            case .ideCommandFailed(let command, let error):
+                lines.append("WARN  IDE command failed; falling back: \(command) (\(error))")
+            case .launcherFailed(let command, let error):
+                lines.append("WARN  Agent-layer launcher failed; falling back: \(command) (\(error))")
+            }
+        case .layoutSkipped(let reason):
+            switch reason {
+            case .screenUnavailable:
+                lines.append("WARN  Layout skipped: screen information unavailable.")
+            case .focusNotVerified(let expectedId, let expectedWorkspace, let actualId, let actualWorkspace):
+                let actualIdText = actualId.map(String.init) ?? "unknown"
+                let actualWorkspaceText = actualWorkspace ?? "unknown"
+                lines.append(
+                    "WARN  Layout skipped: focus mismatch (expected \(expectedId) in \(expectedWorkspace), got \(actualIdText) in \(actualWorkspaceText))."
+                )
+            }
+        case .layoutFailed(let kind, let windowId, let error):
+            lines.append("WARN  Layout apply failed for \(kind.rawValue.uppercased()) window \(windowId): \(error)")
+        case .stateRecovered(let backupPath):
+            lines.append("WARN  State was unreadable; moved to backup: \(backupPath)")
+        }
+    }
+
+    return lines.joined(separator: "\n")
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 let parser = PwctlArgumentParser()
 let pwctlService = PwctlService()
@@ -193,9 +238,25 @@ case .success(let command):
             exit(PwctlExitCode.ok.rawValue)
         }
     case .activate(let projectId):
-        logCommand("activate", result: .notImplemented)
-        printStderr("error: `pwctl activate \(projectId)` is not implemented yet")
-        exit(PwctlExitCode.failure.rawValue)
+        let activation = ProjectActivationEngine()
+        switch activation.activate(projectId: projectId) {
+        case .failure(let error):
+            logCommand("activate", result: .fail)
+            switch error {
+            case .configInvalid(let findings):
+                printStderr(renderFindings(findings))
+            default:
+                printStderr("error: \(error.message)")
+            }
+            exit(PwctlExitCode.failure.rawValue)
+        case .success(let outcome):
+            if !outcome.warnings.isEmpty {
+                printStderr(renderActivationWarnings(outcome.warnings))
+            }
+            print("Activated \(projectId) (IDE: \(outcome.ideWindowId), Chrome: \(outcome.chromeWindowId))")
+            logCommand("activate", result: .ok)
+            exit(PwctlExitCode.ok.rawValue)
+        }
     case .close(let projectId):
         logCommand("close", result: .notImplemented)
         printStderr("error: `pwctl close \(projectId)` is not implemented yet")
