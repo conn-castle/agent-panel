@@ -45,7 +45,7 @@ final class AeroSpaceClientTests: XCTestCase {
         let runner = RecordingAeroSpaceCommandRunner(
             result: .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
         )
-        let format = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+        let format = "%{window-id} %{workspace} %{app-bundle-id}"
         let client = AeroSpaceClient(
             executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/aerospace"),
             commandRunner: runner,

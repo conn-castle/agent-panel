@@ -12,6 +12,7 @@ ProjectWorkspaces implements two primary actions:
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
    - Ensure a project IDE window exists (create if missing)
    - Ensure a project Chrome window exists (create if missing)
+   - On first activation (no managed window IDs yet), the workspace must be empty or activation fails
    - Apply the default layout **only when** a window was created or moved during this activation
    - End with the IDE focused (Chrome must not steal focus)
 
@@ -50,6 +51,7 @@ and provides a keyboard-first switcher that brings you to the right context quic
 ### Day-to-day
 
 - If you close the IDE or Chrome window, the next Activate recreates it.
+- ProjectWorkspaces only manages windows it created (managed IDs); it does not auto-adopt existing windows in a workspace.
 - If you resize windows, ProjectWorkspaces preserves those frames unless it had to create or move a window; layout persistence lands in Phase 6.
 
 ## Display modes and layouts
@@ -76,14 +78,15 @@ Layout persistence per project per display mode lands in Phase 6.
 ### Prerequisites
 
 1) macOS 15.7+
-2) **AeroSpace installed** (Doctor will start it once a safe config is in place)
-3) Accessibility permission for `ProjectWorkspaces.app`
-4) Google Chrome
-5) VS Code and/or Antigravity
+2) Homebrew (required for installation)
+3) **AeroSpace installed** (Doctor will start it once a safe config is in place)
+4) Accessibility permission for `ProjectWorkspaces.app`
+5) Google Chrome
+6) VS Code and/or Antigravity
 
 ### Install AeroSpace
 
-Install via Homebrew (preferred):
+Install via Homebrew (required):
 
 ```bash
 brew install --cask nikitabobko/tap/aerospace
@@ -91,10 +94,11 @@ brew install --cask nikitabobko/tap/aerospace
 
 ### Install ProjectWorkspaces
 
-ProjectWorkspaces will be distributed as a signed + notarized `.app` via:
+ProjectWorkspaces will be distributed via Homebrew cask (required):
 
-- Homebrew cask (recommended) — planned
-- Direct download (`.zip` or `.dmg`) — planned
+```bash
+brew install --cask project-workspaces
+```
 
 **Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` Phase 8 for status.
 
@@ -124,6 +128,8 @@ Doctor must show PASS for:
 - Project paths exist
 
 Warnings are expected when optional config keys are omitted and defaults are applied.
+
+If AeroSpace is missing, Doctor offers **Install AeroSpace** (Homebrew required) in the in-app Doctor window.
 
 ### AeroSpace onboarding (safe config)
 
@@ -362,14 +368,13 @@ Exit codes:
 
 - Activation tracks managed window ids in `state.json`.
 - If a managed id exists and the window is found elsewhere, it is moved into `pw-<projectId>`.
-- If no managed id exists, the app adopts a window only if it is already in the target workspace.
+- If no managed ids exist yet, the target workspace must be empty; activation fails otherwise.
 - The app does **not** move arbitrary Chrome/IDE windows from other workspaces based on bundle id.
 
 ### Multiple windows in a workspace
 
-- If multiple IDE or Chrome windows are present in `pw-<projectId>`, the app logs WARN and chooses deterministically.
-- Priority: the managed id if present in the workspace; otherwise the lowest window id.
-- Extra windows are left open.
+- Extra windows in a project workspace are not adopted or managed.
+- If this is the first activation (no managed ids yet) and the workspace is not empty, activation fails with a clear error.
 
 ### Chrome tabs
 
@@ -468,6 +473,6 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE windows by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch.
+- Detect newly created IDE windows by diffing `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id}'` before/after launch.
 - Detect newly created Chrome windows by diffing the focused workspace list first, then falling back to `--all` if needed.
 - No silent failures: show user-facing errors + write structured logs.

@@ -3,6 +3,8 @@ import XCTest
 @testable import ProjectWorkspacesCore
 
 final class DoctorTests: XCTestCase {
+    private let homebrewPath = "/opt/homebrew/bin/brew"
+
     func testDoctorFailsWhenAccessibilityMissing() {
         let config = makeValidConfig()
         let aerospacePath = "/opt/homebrew/bin/aerospace"
@@ -14,7 +16,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -51,7 +54,7 @@ final class DoctorTests: XCTestCase {
         XCTAssertTrue(report.findings.contains { $0.title == "Accessibility permission missing" })
     }
 
-    func testDoctorFailsWhenChromeMissing() {
+    func testDoctorFailsWhenHomebrewMissing() {
         let config = makeValidConfig()
         let aerospacePath = "/opt/homebrew/bin/aerospace"
 
@@ -63,6 +66,105 @@ final class DoctorTests: XCTestCase {
             "/Applications/AeroSpace.app"
         ], executableFiles: [
             aerospacePath
+        ])
+
+        let appDiscovery = DoctorAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = makePassingCommandRunner(
+            executablePath: aerospacePath,
+            previousWorkspace: "pw-codex"
+        )
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.hasFailures)
+        XCTAssertTrue(report.findings.contains { $0.title == "Homebrew not found" })
+    }
+
+    func testDoctorInstallsAeroSpaceViaHomebrew() {
+        let config = makeValidConfig()
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8)
+        ], directories: [
+            "/Users/tester/src/codex"
+        ], executableFiles: [
+            homebrewPath,
+            "/usr/bin/which"
+        ])
+
+        let appDiscovery = DoctorAppDiscovery(
+            bundleIdMap: [
+                "com.google.Chrome": "/Applications/Google Chrome.app",
+                "com.microsoft.VSCode": "/Applications/Visual Studio Code.app"
+            ],
+            nameMap: [:],
+            bundleIdForPath: [
+                "/Applications/Google Chrome.app": "com.google.Chrome",
+                "/Applications/Visual Studio Code.app": "com.microsoft.VSCode"
+            ]
+        )
+
+        let commandRunner = DoctorCommandRunner(results: [
+            CommandSignature(path: homebrewPath, arguments: ["install", "--cask", "nikitabobko/tap/aerospace"]): [
+                CommandResult(exitCode: 0, stdout: "installed", stderr: "")
+            ],
+            CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
+                CommandResult(exitCode: 1, stdout: "", stderr: "not found")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.installAeroSpace()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Installed AeroSpace via Homebrew"
+        })
+    }
+
+    func testDoctorFailsWhenChromeMissing() {
+        let config = makeValidConfig()
+        let aerospacePath = "/opt/homebrew/bin/aerospace"
+
+        let fileSystem = TestFileSystem(files: [
+            "/Users/tester/.config/project-workspaces/config.toml": Data(config.utf8),
+            "/Users/tester/.aerospace.toml": makeSafeAeroSpaceConfigData()
+        ], directories: [
+            "/Users/tester/src/codex",
+            "/Applications/AeroSpace.app"
+        ], executableFiles: [
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -108,7 +210,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -156,7 +259,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -204,7 +308,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -250,7 +355,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -303,7 +409,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -355,7 +462,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -406,7 +514,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -474,7 +583,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -520,7 +630,8 @@ final class DoctorTests: XCTestCase {
         ], directories: [
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
         let commandRunner = makePassingCommandRunner(
             executablePath: aerospacePath,
@@ -556,7 +667,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            "/usr/bin/which"
+            "/usr/bin/which",
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -604,7 +716,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(
@@ -664,7 +777,8 @@ final class DoctorTests: XCTestCase {
             "/Users/tester/src/codex",
             "/Applications/AeroSpace.app"
         ], executableFiles: [
-            aerospacePath
+            aerospacePath,
+            homebrewPath
         ])
 
         let appDiscovery = DoctorAppDiscovery(

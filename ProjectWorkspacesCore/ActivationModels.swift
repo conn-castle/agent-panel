@@ -84,6 +84,7 @@ public enum ActivationError: Error, Equatable, Sendable {
     case ideWindowNotDetected(ide: IdeKind)
     case ideWindowAmbiguous(newWindowIds: [Int])
     case chromeLaunchFailed(ChromeLaunchError)
+    case workspaceNotEmpty(workspaceName: String, windowCount: Int)
     case stateReadFailed(path: String, detail: String)
     case stateWriteFailed(path: String, detail: String)
     case finalFocusFailed(AeroSpaceCommandError)
@@ -102,7 +103,7 @@ public enum ActivationError: Error, Equatable, Sendable {
         case .aeroSpaceResolutionFailed(let error):
             return "AeroSpace CLI resolution failed: \(error.detail)"
         case .aeroSpaceFailed(let error):
-            return "AeroSpace command failed: \(error)"
+            return "AeroSpace command failed: \(error.userFacingMessage)"
         case .ideResolutionFailed(let ide, let error):
             return "Failed to resolve \(ide.rawValue) app: \(error)"
         case .ideBundleIdUnavailable(let ide, let appPath):
@@ -115,6 +116,8 @@ public enum ActivationError: Error, Equatable, Sendable {
             return "Multiple new IDE windows detected: \(newWindowIds)"
         case .chromeLaunchFailed(let error):
             return "Chrome launch failed: \(error)"
+        case .workspaceNotEmpty(let workspaceName, let windowCount):
+            return "Workspace \(workspaceName) is not empty (\(windowCount) windows). Move windows out before first activation."
         case .stateReadFailed(let path, let detail):
             return "Failed to read state file \(path): \(detail)"
         case .stateWriteFailed(let path, let detail):

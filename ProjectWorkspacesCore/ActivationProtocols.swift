@@ -18,12 +18,14 @@ public protocol ChromeLaunching {
     ///   - globalChromeUrls: Global Chrome URL list.
     ///   - project: Project config.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after creation.
+    ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
     /// - Returns: Launch outcome or error.
     func ensureWindow(
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
-        ideWindowIdToRefocus: Int?
+        ideWindowIdToRefocus: Int?,
+        allowExistingWindows: Bool
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError>
 }
 

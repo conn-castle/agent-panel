@@ -334,20 +334,27 @@ Doctor entry UI strings (exact)
 - Primary buttons:
   - `Run Doctor`
   - `Copy Report`
+  - `Install AeroSpace`
   - `Install Safe AeroSpace Config`
   - `Start AeroSpace`
   - `Reload AeroSpace Config`
   - `Emergency: Disable AeroSpace`
   - `Close`
 
+Step 0 — Detect Homebrew (required)
+
+- PASS: `PASS  Homebrew found at: <absolute path>`
+- FAIL: `FAIL  Homebrew not found`
+  - `Fix: Install Homebrew (required for ProjectWorkspaces) and re-run Doctor.`
+
 Step 1 — Detect AeroSpace installation
 
 - PASS: `PASS  AeroSpace.app found at: /Applications/AeroSpace.app`
 - FAIL: `FAIL  AeroSpace.app not found in /Applications`
-  - `Fix: Install AeroSpace (recommended: Homebrew cask). Then re-run Doctor.`
+  - `Fix: Install AeroSpace via Homebrew and re-run Doctor.`
 - PASS: `PASS  aerospace CLI found at: <absolute path>`
 - FAIL: `FAIL  aerospace CLI not found`
-  - `Fix: Ensure AeroSpace CLI is installed and available. Re-run Doctor.`
+  - `Fix: Install AeroSpace via Homebrew and re-run Doctor.`
 
 Step 2 — Detect AeroSpace config state
 
@@ -456,7 +463,7 @@ Step 6 — Emergency action (panic button)
 - Introduce a repo-level `.xcworkspace` only if the repo contains 2+ `.xcodeproj` files that must be built together; if so, update scripts and record the migration in `docs/agent-layer/DECISIONS.md`.
 - Commit `Package.resolved` for reproducible SwiftPM dependency resolution; CI must resolve packages before building (e.g., `xcodebuild -resolvePackageDependencies`).
 - In this repo, the expected SwiftPM lockfile path is `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` (commit this file; do not add duplicate copies).
-- The release artifact is a signed + notarized `.app`, shipped via both a Homebrew cask (recommended) and a direct download (`.zip` or `.dmg`).
+- The release artifact is a signed + notarized `.app`, shipped via Homebrew cask (required). Direct download is deferred.
 
 ### NFR-006 — Platform support
 

@@ -68,12 +68,14 @@ public struct ChromeLauncher {
     ///   - globalChromeUrls: Global URLs to open when creating Chrome.
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
+    ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
     /// - Returns: Launch outcome or a structured error.
     public func ensureWindow(
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
-        ideWindowIdToRefocus: Int?
+        ideWindowIdToRefocus: Int?,
+        allowExistingWindows: Bool = true
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         switch focusedWorkspace() {
         case .failure(let error):
@@ -98,11 +100,13 @@ public struct ChromeLauncher {
         }
 
         let chromeWindowIdsBefore = chromeWindowIds(from: workspaceWindowsBefore)
-        if chromeWindowIdsBefore.count == 1, let existing = chromeWindowIdsBefore.first {
-            return .success(.existing(windowId: existing))
-        }
-        if chromeWindowIdsBefore.count > 1 {
-            return .success(.existingMultiple(windowIds: chromeWindowIdsBefore.sorted()))
+        if allowExistingWindows {
+            if chromeWindowIdsBefore.count == 1, let existing = chromeWindowIdsBefore.first {
+                return .success(.existing(windowId: existing))
+            }
+            if chromeWindowIdsBefore.count > 1 {
+                return .success(.existingMultiple(windowIds: chromeWindowIdsBefore.sorted()))
+            }
         }
 
         let allChromeIdsBefore: Set<Int>

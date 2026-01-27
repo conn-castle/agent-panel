@@ -194,15 +194,6 @@ public struct ProjectActivationEngine {
             }
             var state = loadResult.state
 
-            switch aeroSpaceClient.switchWorkspace(workspaceName) {
-            case .failure(let error):
-                let activationError = ActivationError.aeroSpaceFailed(error)
-                logResult(level: .error, projectId: projectId, workspaceName: workspaceName, warnings: warnings, error: activationError)
-                return .failure(activationError)
-            case .success:
-                break
-            }
-
             let ideBundleIdResult = resolveIdeBundleId(project: project, ideConfig: ideConfig)
             let ideBundleId: String
             switch ideBundleIdResult {
@@ -214,6 +205,36 @@ public struct ProjectActivationEngine {
             }
 
             let managedState = state.projects[project.id] ?? ManagedWindowState()
+            if managedState.ideWindowId == nil && managedState.chromeWindowId == nil {
+                let workspaceResult = aeroSpaceClient.listWindowsDecoded(workspace: workspaceName)
+                let workspaceWindows: [AeroSpaceWindow]
+                switch workspaceResult {
+                case .failure(let error):
+                    let activationError = ActivationError.aeroSpaceFailed(error)
+                    logResult(level: .error, projectId: projectId, workspaceName: workspaceName, warnings: warnings, error: activationError)
+                    return .failure(activationError)
+                case .success(let windows):
+                    workspaceWindows = windows
+                }
+
+                if !workspaceWindows.isEmpty {
+                    let activationError = ActivationError.workspaceNotEmpty(
+                        workspaceName: workspaceName,
+                        windowCount: workspaceWindows.count
+                    )
+                    logResult(level: .error, projectId: projectId, workspaceName: workspaceName, warnings: warnings, error: activationError)
+                    return .failure(activationError)
+                }
+            }
+
+            switch aeroSpaceClient.switchWorkspace(workspaceName) {
+            case .failure(let error):
+                let activationError = ActivationError.aeroSpaceFailed(error)
+                logResult(level: .error, projectId: projectId, workspaceName: workspaceName, warnings: warnings, error: activationError)
+                return .failure(activationError)
+            case .success:
+                break
+            }
             let ideResolutionResult = ensureIdeWindow(
                 project: project,
                 ideConfig: ideConfig,
@@ -567,7 +588,8 @@ public struct ProjectActivationEngine {
             expectedWorkspaceName: workspaceName,
             globalChromeUrls: globalChromeUrls,
             project: project,
-            ideWindowIdToRefocus: ideWindowIdToRefocus
+            ideWindowIdToRefocus: ideWindowIdToRefocus,
+            allowExistingWindows: false
         )
 
         switch chromeResult {

@@ -6,7 +6,7 @@ final class ChromeLauncherTests: XCTestCase {
     private let aeroSpacePath = "/opt/homebrew/bin/aerospace"
     private let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)
     private let listWindowsFormat =
-        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+        "%{window-id} %{workspace} %{app-bundle-id}"
     private typealias CommandResponses = [AeroSpaceCommandSignature: [Result<CommandResult, AeroSpaceCommandError>]]
 
     func testWorkspaceNotFocusedReturnsError() {
@@ -113,6 +113,54 @@ final class ChromeLauncherTests: XCTestCase {
         case .success(let outcome):
             XCTAssertEqual(outcome, .existingMultiple(windowIds: [7, 42]))
         }
+    }
+
+    func testIgnoreExistingWindowsForcesCreate() {
+        let chromeWindow = windowPayload(id: 10, workspace: "pw-codex")
+        let newWindow = windowPayload(id: 99, workspace: "pw-codex")
+        let responses: CommandResponses = [
+            signature(["list-workspaces", "--focused"]): [
+                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
+            ],
+            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindow]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindow, newWindow]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindow]), stderr: ""))
+            ]
+        ]
+        let runner = SequencedAeroSpaceCommandRunner(responses: responses)
+        let openSignature = OpenCommandSignature(
+            path: "/usr/bin/open",
+            arguments: ["-g", "-a", chromeAppURL.path, "--args", "--new-window", "about:blank"]
+        )
+        let commandRunner = RecordingCommandRunner(results: [
+            openSignature: [CommandResult(exitCode: 0, stdout: "", stderr: "")]
+        ])
+        let sleeper = TestSleeper()
+        let launcher = makeLauncher(
+            runner: runner,
+            commandRunner: commandRunner,
+            sleeper: sleeper
+        )
+
+        let result = launcher.ensureWindow(
+            expectedWorkspaceName: "pw-codex",
+            globalChromeUrls: [],
+            project: makeProject(),
+            ideWindowIdToRefocus: nil,
+            allowExistingWindows: false
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Unexpected failure: \(error)")
+        case .success(let outcome):
+            XCTAssertEqual(outcome, .created(windowId: 99))
+        }
+
+        XCTAssertEqual(commandRunner.invocations.count, 1)
     }
 
     func testLaunchArgumentsOrderedAndDeduped() {
@@ -627,4 +675,3 @@ private final class RecordingCommandRunner: CommandRunning {
         return result
     }
 }
-

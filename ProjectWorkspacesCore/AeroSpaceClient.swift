@@ -163,7 +163,7 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
 /// Typed wrapper around AeroSpace CLI command execution.
 public struct AeroSpaceClient {
     private static let listWindowsFormat =
-        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+        "%{window-id} %{workspace} %{app-bundle-id}"
 
     private static let readinessProbeArguments = ["list-workspaces", "--focused", "--count"]
 

@@ -1,6 +1,7 @@
 import Foundation
 
 /// Represents a window returned by `aerospace list-windows --json`.
+/// `appName` and `windowTitle` may be empty if the CLI format omits them.
 public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
     public let windowId: Int
     public let workspace: String
@@ -35,6 +36,15 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         case appBundleId = "app-bundle-id"
         case appName = "app-name"
         case windowTitle = "window-title"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        windowId = try container.decode(Int.self, forKey: .windowId)
+        workspace = try container.decode(String.self, forKey: .workspace)
+        appBundleId = try container.decode(String.self, forKey: .appBundleId)
+        appName = try container.decodeIfPresent(String.self, forKey: .appName) ?? ""
+        windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle) ?? ""
     }
 }
 

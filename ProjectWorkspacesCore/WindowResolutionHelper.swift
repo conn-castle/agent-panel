@@ -13,9 +13,8 @@ struct WindowResolutionHelper {
     /// Ensures a window of the given bundle ID exists in the workspace.
     ///
     /// Resolution order:
-    /// 1. Check workspace for existing windows matching bundle ID
-    /// 2. If managed ID exists, look globally and move if found elsewhere
-    /// 3. If not found, call the creation closure
+    /// 1. If managed ID exists, look globally and move if found elsewhere
+    /// 2. If not found, call the creation closure
     ///
     /// - Parameters:
     ///   - bundleId: Bundle identifier to filter windows.
@@ -37,25 +36,7 @@ struct WindowResolutionHelper {
         recordWarning: (ActivationWarning, String, String, inout [ActivationWarning]) -> Void,
         createWindow: (inout [ActivationWarning]) -> Result<WindowResolution, ActivationError>
     ) -> Result<WindowResolution, ActivationError> {
-        // Step 1: Check workspace for existing windows
-        let workspaceResult = aeroSpaceClient.listWindowsDecoded(workspace: workspaceName)
-        let workspaceWindows: [AeroSpaceWindow]
-        switch workspaceResult {
-        case .failure(let error):
-            return .failure(.aeroSpaceFailed(error))
-        case .success(let windows):
-            workspaceWindows = windows
-        }
-
-        let matchingWindows = workspaceWindows.filter { $0.appBundleId == bundleId }
-        if let selection = selectWindow(from: matchingWindows, managedWindowId: managedWindowId, kind: kind, workspaceName: workspaceName) {
-            if let warning = selection.warning {
-                recordWarning(warning, projectId, workspaceName, &warnings)
-            }
-            return .success(WindowResolution(windowId: selection.windowId, created: false, moved: false))
-        }
-
-        // Step 2: Check if managed window exists elsewhere and move it
+        // Step 1: Check if managed window exists elsewhere and move it
         if let managedWindowId {
             switch aeroSpaceClient.listWindowsAllDecoded() {
             case .failure(let error):
@@ -82,23 +63,8 @@ struct WindowResolutionHelper {
             }
         }
 
-        // Step 3: Create new window
+        // Step 2: Create new window
         return createWindow(&warnings)
-    }
-
-    /// Selects a window ID from the workspace list using deterministic rules.
-    private func selectWindow(
-        from windows: [AeroSpaceWindow],
-        managedWindowId: Int?,
-        kind: ActivationWindowKind,
-        workspaceName: String
-    ) -> WindowSelection? {
-        let ids = windows.map { $0.windowId }
-        guard !ids.isEmpty else {
-            return nil
-        }
-        let sortedIds = ids.sorted()
-        return selectFromIds(sortedIds, managedWindowId: managedWindowId, kind: kind, workspaceName: workspaceName)
     }
 
     /// Selects a window ID from sorted IDs, emitting warnings for multiples.

@@ -52,6 +52,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Implemented the full activation pipeline with workspace switching, managed window identification/moves, IDE/Chrome creation, floating enforcement, conditional default layout, and final IDE focus.
 - Added activation logging (including AeroSpace stdout/stderr), state caching with recovery backups, and CLI activation output.
 - Expanded unit coverage for idempotence, missing-window recovery, created-elsewhere handling, state recovery, and geometry focus verification.
+- Enforced managed-only activation: first activation fails if the project workspace is non-empty (no bundle-id adoption).
 
 
 ## Phase 5 — Switcher UI + global hotkey
@@ -113,7 +114,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - [ ] Finalize README: install, permissions, config schema, usage, troubleshooting.
 - [ ] Ensure `doctor` covers complete setup (AeroSpace, Accessibility, Chrome, IDEs, config validity, required directories).
 - [ ] Run the PRD end-to-end acceptance criteria and document results (manual + automated where feasible).
-- [ ] Implement and document distribution via both: Homebrew cask (recommended) and signed+notarized direct download (`.zip` or `.dmg`).
+- [ ] Implement and document distribution via Homebrew cask (required); defer direct download (`.zip` or `.dmg`) until needed.
 
 ### Exit criteria
 - A fresh macOS machine can be set up using README alone and `pwctl doctor` reports no FAIL on a correctly configured system.

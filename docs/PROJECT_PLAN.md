@@ -242,8 +242,8 @@ Notes:
 
 1) `AeroSpaceClient` that runs these commands:
    - `aerospace workspace <name>`
-   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
-   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
+   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id}'`
+   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id}'`
    - `aerospace focus --window-id <id>`
    - `aerospace move-node-to-workspace --window-id <id> <workspace>`
    - `aerospace layout floating --window-id <id>`
@@ -324,7 +324,7 @@ Notes:
    - No tab enforcement after creation.
 
 2) Window identification:
-   - Detect new Chrome window by diffing `list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after Chrome launch.
+   - Detect new Chrome window by diffing `list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id}'` before/after Chrome launch.
 
 3) Focus rule:
    - Always end activation by focusing IDE window (Chrome must not steal focus).
@@ -343,13 +343,11 @@ Notes:
 **Algorithm (must match exactly)**
 
 1) Switch to workspace `pw-<projectId>`.
-2) Enumerate windows in that workspace.
+2) If no managed window ids exist yet, the workspace must be empty (otherwise activation fails).
 3) Ensure IDE window exists (Phase 2):
-   - Prefer managed window id if present in the workspace.
-   - Else adopt a workspace-local IDE window (deterministic pick).
    - If managed id exists elsewhere, move it into the workspace.
-   - Otherwise create a new IDE window.
-4) Ensure Chrome window exists (Phase 3) using the same managed-id rules.
+   - If managed id is missing or not found, create a new IDE window.
+4) Ensure Chrome window exists (Phase 3) using the same managed-only rules (no bundle-id adoption).
 5) Force both windows to floating (`aerospace layout floating --window-id <id>`).
 6) Apply the default layout only when a window was created or moved during this activation.
 7) Focus IDE.
@@ -457,7 +455,7 @@ Notes:
 
 **Deliverables**
 
-- Signed + notarized `ProjectWorkspaces.app`, distributed via both Homebrew cask (recommended) and direct download (`.zip` or `.dmg`).
+- Signed + notarized `ProjectWorkspaces.app`, distributed via Homebrew cask (required); direct download deferred.
 - Release scripts (not yet implemented): `scripts/archive.sh` and `scripts/notarize.sh` will drive `xcodebuild archive/export`, notarization, and stapling (no Xcode UI required).
 - `pwctl` shipped alongside.
 - README finalized (install/config/usage/troubleshooting).

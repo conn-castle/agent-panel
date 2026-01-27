@@ -10,6 +10,33 @@ public enum AeroSpaceCommandError: Error, Equatable, Sendable {
     case notReady(AeroSpaceNotReady)
 }
 
+extension AeroSpaceCommandError {
+    /// User-facing summary for CLI output.
+    public var userFacingMessage: String {
+        switch self {
+        case .launchFailed(let command, let underlyingError):
+            return "Failed to launch AeroSpace command: \(command). \(underlyingError)"
+        case .nonZeroExit(let command, let result):
+            return "Command exited with code \(result.exitCode): \(command)"
+        case .timedOut(let command, let timeoutSeconds, _):
+            return """
+            Timed out after \(timeoutSeconds)s while running: \(command).
+            If this hangs when run manually, restart AeroSpace and try again.
+            """
+        case .decodingFailed(_, let underlyingError):
+            return "Failed to decode AeroSpace output: \(underlyingError)"
+        case .unexpectedOutput(let command, let detail):
+            return "Unexpected output from \(command): \(detail)"
+        case .notReady(let payload):
+            return """
+            AeroSpace not ready after \(payload.timeoutSeconds)s.
+            Last command: \(payload.lastCommandDescription) (exit \(payload.lastCommand.exitCode)).
+            Readiness probe: \(payload.lastProbeDescription) (exit \(payload.lastProbe.exitCode)).
+            """
+        }
+    }
+}
+
 /// Error returned when AeroSpace is not ready within the retry budget.
 public struct AeroSpaceNotReady: Error, Equatable, Sendable {
     public let timeoutSeconds: TimeInterval

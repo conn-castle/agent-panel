@@ -5,16 +5,30 @@ import XCTest
 
 final class ProjectActivationEngineTests: XCTestCase {
     private let aerospacePath = "/opt/homebrew/bin/aerospace"
-    private let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+    private let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id}"
 
     func testActivationIsIdempotentWhenWindowsExist() {
         let config = baseConfig()
-        let fileSystem = InMemoryFileSystem(files: [config.path: Data(config.contents.utf8)], directories: ["/Applications/Visual Studio Code.app"])
+        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
+        let managedState = ProjectWorkspacesState(
+            projects: [
+                "codex": ManagedWindowState(ideWindowId: 10, chromeWindowId: 20)
+            ]
+        )
+        let stateData = try? JSONEncoder().encode(managedState)
+
+        let fileSystem = InMemoryFileSystem(
+            files: [
+                config.path: Data(config.contents.utf8),
+                paths.stateFile.path: stateData ?? Data()
+            ],
+            directories: ["/Applications/Visual Studio Code.app"]
+        )
         let runner = SequencedAeroSpaceCommandRunner(responses: [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     windowPayload(id: 10, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
                     windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
@@ -39,7 +53,6 @@ final class ProjectActivationEngineTests: XCTestCase {
         let geometryApplier = TestGeometryApplier(outcome: .applied)
         let displayProvider = TestDisplayInfoProvider(displayInfo: DisplayInfo(visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 600), widthPixels: 800))
         let logger = TestLogger()
-        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let stateStore = ProjectWorkspacesStateStore(paths: paths, fileSystem: fileSystem, logger: logger, dateProvider: FixedDateProvider())
 
         let engine = ProjectActivationEngine(
@@ -80,7 +93,20 @@ final class ProjectActivationEngineTests: XCTestCase {
 
     func testFloatingFailureIsWarningAndDoesNotFailActivation() {
         let config = baseConfig()
-        let fileSystem = InMemoryFileSystem(files: [config.path: Data(config.contents.utf8)], directories: ["/Applications/Visual Studio Code.app"])
+        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
+        let managedState = ProjectWorkspacesState(
+            projects: [
+                "codex": ManagedWindowState(ideWindowId: 10, chromeWindowId: 20)
+            ]
+        )
+        let stateData = try? JSONEncoder().encode(managedState)
+        let fileSystem = InMemoryFileSystem(
+            files: [
+                config.path: Data(config.contents.utf8),
+                paths.stateFile.path: stateData ?? Data()
+            ],
+            directories: ["/Applications/Visual Studio Code.app"]
+        )
         let layoutError = AeroSpaceCommandError.nonZeroExit(
             command: "\(aerospacePath) layout floating --window-id 10",
             result: CommandResult(exitCode: 1, stdout: "", stderr: "")
@@ -89,7 +115,7 @@ final class ProjectActivationEngineTests: XCTestCase {
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     windowPayload(id: 10, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
                     windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
@@ -117,7 +143,6 @@ final class ProjectActivationEngineTests: XCTestCase {
         let geometryApplier = TestGeometryApplier(outcome: .applied)
         let displayProvider = TestDisplayInfoProvider(displayInfo: DisplayInfo(visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 600), widthPixels: 800))
         let logger = TestLogger()
-        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let stateStore = ProjectWorkspacesStateStore(paths: paths, fileSystem: fileSystem, logger: logger, dateProvider: FixedDateProvider())
 
         let engine = ProjectActivationEngine(
@@ -188,6 +213,10 @@ final class ProjectActivationEngineTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     windowPayload(id: 42, workspace: "pw-other", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
                     windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
+                ]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([
+                    windowPayload(id: 42, workspace: "pw-other", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
+                    windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
                 ]), stderr: ""))
             ],
             signature(["move-node-to-workspace", "--window-id", "42", "pw-codex"]): [
@@ -244,33 +273,16 @@ final class ProjectActivationEngineTests: XCTestCase {
         XCTAssertEqual(geometryApplier.applyCalls.count, 2)
     }
 
-    func testMultipleIdeWindowsWarnsAndSelectsLowest() {
+    func testActivationFailsWhenWorkspaceNotEmptyAndNoManagedIds() {
         let config = baseConfig()
         let fileSystem = InMemoryFileSystem(files: [config.path: Data(config.contents.utf8)], directories: ["/Applications/Visual Studio Code.app"])
         let runner = SequencedAeroSpaceCommandRunner(responses: [
-            signature(["workspace", "pw-codex"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     windowPayload(id: 9, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
                     windowPayload(id: 5, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
                     windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
                 ]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([
-                    windowPayload(id: 9, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
-                    windowPayload(id: 5, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
-                    windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
-                ]), stderr: ""))
-            ],
-            signature(["layout", "floating", "--window-id", "5"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["layout", "floating", "--window-id", "20"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["focus", "--window-id", "5"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ]
         ])
         let ideLauncher = TestIdeLauncher(result: .success(IdeLaunchSuccess(warnings: [])))
@@ -305,22 +317,37 @@ final class ProjectActivationEngineTests: XCTestCase {
         let result = engine.activate(projectId: "codex")
         switch result {
         case .failure(let error):
-            XCTFail("Expected success, got error: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome.ideWindowId, 5)
-            XCTAssertEqual(outcome.chromeWindowId, 20)
-            XCTAssertEqual(outcome.warnings, [
-                .multipleWindows(kind: .ide, workspace: "pw-codex", chosenId: 5, extraIds: [9])
-            ])
+            XCTAssertEqual(error, .workspaceNotEmpty(workspaceName: "pw-codex", windowCount: 3))
+        case .success:
+            XCTFail("Expected failure when workspace is not empty.")
         }
     }
 
     func testChromeCreatedElsewhereMovesIntoWorkspace() {
         let config = baseConfig()
-        let fileSystem = InMemoryFileSystem(files: [config.path: Data(config.contents.utf8)], directories: ["/Applications/Visual Studio Code.app"])
+        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
+        let managedState = ProjectWorkspacesState(
+            projects: [
+                "codex": ManagedWindowState(ideWindowId: 10, chromeWindowId: nil)
+            ]
+        )
+        let stateData = try? JSONEncoder().encode(managedState)
+        let fileSystem = InMemoryFileSystem(
+            files: [
+                config.path: Data(config.contents.utf8),
+                paths.stateFile.path: stateData ?? Data()
+            ],
+            directories: ["/Applications/Visual Studio Code.app"]
+        )
         let runner = SequencedAeroSpaceCommandRunner(responses: [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([
+                    windowPayload(id: 10, workspace: "pw-codex", bundleId: "com.microsoft.VSCode", appName: "Visual Studio Code"),
+                    windowPayload(id: 20, workspace: "pw-codex", bundleId: ChromeLauncher.chromeBundleId, appName: "Google Chrome")
+                ]), stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
@@ -351,7 +378,6 @@ final class ProjectActivationEngineTests: XCTestCase {
         let geometryApplier = TestGeometryApplier(outcome: .applied)
         let displayProvider = TestDisplayInfoProvider(displayInfo: DisplayInfo(visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 600), widthPixels: 800))
         let logger = TestLogger()
-        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let stateStore = ProjectWorkspacesStateStore(paths: paths, fileSystem: fileSystem, logger: logger, dateProvider: FixedDateProvider())
 
         let engine = ProjectActivationEngine(

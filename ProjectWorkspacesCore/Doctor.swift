@@ -83,6 +83,13 @@ public struct Doctor {
         buildReport(prependingFindings: [])
     }
 
+    /// Installs AeroSpace via Homebrew and refreshes the report.
+    /// - Returns: An updated Doctor report.
+    public func installAeroSpace() -> DoctorReport {
+        let finding = aeroSpaceChecker.installAeroSpaceViaHomebrew()
+        return buildReport(prependingFindings: [finding])
+    }
+
     /// Attempts to install the safe AeroSpace config when no config exists.
     /// - Returns: An updated Doctor report.
     public func installSafeAeroSpaceConfig() -> DoctorReport {
@@ -146,6 +153,7 @@ public struct Doctor {
     }
 
     private func buildReport(prependingFindings: [DoctorFinding]) -> DoctorReport {
+        let homebrewURL = aeroSpaceChecker.resolveHomebrew()
         let appExists = aeroSpaceChecker.appExists()
         let cliResolution = aeroSpaceChecker.resolveCLI()
         let cliURL = try? cliResolution.get()
@@ -164,10 +172,12 @@ public struct Doctor {
 
         var findings: [DoctorFinding] = []
         findings.append(contentsOf: prependingFindings)
+        findings.append(contentsOf: [aeroSpaceChecker.homebrewFinding(homebrewURL: homebrewURL)])
         findings.append(contentsOf: aeroSpaceChecker.aerospaceAppFinding(appExists: appExists))
         findings.append(contentsOf: aeroSpaceChecker.aerospaceCliFinding(resolution: cliResolution))
         findings.append(contentsOf: aeroSpaceChecker.aerospaceConfigFinding(state: configState, paths: configPaths))
 
+        let canInstallAeroSpace = homebrewURL != nil && (!appExists || cliURL == nil)
         let canInstallSafe: Bool
         let canStart: Bool
         let canReload: Bool
@@ -191,6 +201,7 @@ public struct Doctor {
         }
 
         let actionAvailability = DoctorActionAvailability(
+            canInstallAeroSpace: canInstallAeroSpace,
             canInstallSafeAeroSpaceConfig: canInstallSafe,
             canStartAeroSpace: canStart,
             canReloadAeroSpaceConfig: canReload,

@@ -75,3 +75,13 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Cache managed IDE/Chrome window IDs in state.json; activation moves only managed IDs (no bundle-id rescue moves); corrupted state.json is backed up with a timestamp and reset to empty.
     Reason: Deterministic activation without hijacking unrelated windows; avoid bricking activation due to corrupt state.
     Tradeoffs: Cached IDs can become stale; additional state-handling logic and warnings.
+
+- Decision 2026-01-27 d4ea44a: Managed-only activation with empty workspace gate
+    Decision: Activation no longer adopts existing IDE/Chrome windows by bundle id; if no managed IDs exist yet, activation fails when the project workspace is non-empty.
+    Reason: Prevent accidental hijacking of unrelated windows and keep project workspaces isolated from user windows.
+    Tradeoffs: First activation requires an empty workspace; users must explicitly clear or create a fresh workspace before activation.
+
+- Decision 2026-01-27 0f3c7b2: Homebrew-required install and Doctor action
+    Decision: Require Homebrew for ProjectWorkspaces distribution and add a Doctor action to install AeroSpace via Homebrew; direct download is deferred.
+    Reason: Provide a single, reproducible installation path with explicit consent and fewer platform edge cases.
+    Tradeoffs: Users without Homebrew must install it first; direct download onboarding is postponed.

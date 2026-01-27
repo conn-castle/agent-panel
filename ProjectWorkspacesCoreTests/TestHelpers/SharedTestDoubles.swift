@@ -122,12 +122,14 @@ final class TestChromeLauncher: ChromeLaunching {
         expectedWorkspaceName: String,
         globalChromeUrls: [String],
         project: ProjectConfig,
-        ideWindowIdToRefocus: Int?
+        ideWindowIdToRefocus: Int?,
+        allowExistingWindows: Bool
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         let _ = expectedWorkspaceName
         let _ = globalChromeUrls
         let _ = project
         let _ = ideWindowIdToRefocus
+        let _ = allowExistingWindows
         callCount += 1
         guard !results.isEmpty else {
             XCTFail("Missing Chrome launcher result stub.")
