@@ -339,10 +339,13 @@ Doctor entry UI strings (exact)
 - Primary buttons:
   - `Run Doctor`
   - `Copy Report`
+  - `Install AeroSpace`
   - `Install Safe AeroSpace Config`
   - `Start AeroSpace`
+- Secondary buttons:
   - `Reload AeroSpace Config`
   - `Emergency: Disable AeroSpace`
+  - `Uninstall Safe AeroSpace Config`
   - `Close`
 
 Step 1 — Detect AeroSpace installation

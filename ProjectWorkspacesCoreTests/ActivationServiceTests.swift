@@ -58,10 +58,7 @@ final class ActivationServiceTests: XCTestCase {
         case .success(let report, let warnings):
             XCTAssertEqual(report.ideWindowId, 12)
             XCTAssertEqual(report.chromeWindowId, 30)
-            XCTAssertTrue(warnings.contains { warning in
-                if case .layoutNotApplied = warning { return true }
-                return false
-            })
+            XCTAssertTrue(warnings.isEmpty)
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
@@ -120,10 +117,7 @@ final class ActivationServiceTests: XCTestCase {
         case .success(let report, let warnings):
             XCTAssertEqual(report.ideWindowId, 42)
             XCTAssertEqual(report.chromeWindowId, 77)
-            XCTAssertTrue(warnings.contains { warning in
-                if case .layoutNotApplied = warning { return true }
-                return false
-            })
+            XCTAssertTrue(warnings.isEmpty)
         }
 
         XCTAssertEqual(ideLauncher.callCount, 1)
@@ -131,7 +125,7 @@ final class ActivationServiceTests: XCTestCase {
         XCTAssertEqual(logger.entries.count, 1)
     }
 
-    func testActivationSelectsHighestNewIdeWindowWhenMultipleAppear() {
+    func testActivationSelectsLowestNewIdeWindowWhenMultipleAppear() {
         let ideWindowA = windowPayload(
             id: 10,
             workspace: "pw-codex",
@@ -158,13 +152,13 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ],
-            signature(["layout", "floating", "--window-id", "44"]): [
+            signature(["layout", "floating", "--window-id", "10"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["layout", "floating", "--window-id", "88"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["focus", "--window-id", "44"]): [
+            signature(["focus", "--window-id", "10"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ]
         ]
@@ -185,11 +179,14 @@ final class ActivationServiceTests: XCTestCase {
         case .failure(let error):
             XCTFail("Expected success, got failure: \(error)")
         case .success(let report, let warnings):
-            XCTAssertEqual(report.ideWindowId, 44)
+            XCTAssertEqual(report.ideWindowId, 10)
             XCTAssertEqual(report.chromeWindowId, 88)
             XCTAssertTrue(warnings.contains { warning in
-                if case .multipleIdeWindows(let ids, let selected) = warning {
-                    return ids.sorted() == [10, 44] && selected == 44
+                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
+                    return kind == .ide
+                        && workspace == "pw-codex"
+                        && chosenId == 10
+                        && extraIds.sorted() == [44]
                 }
                 return false
             })
@@ -299,14 +296,20 @@ final class ActivationServiceTests: XCTestCase {
             XCTFail("Expected success, got failure: \(error)")
         case .success(_, let warnings):
             XCTAssertTrue(warnings.contains { warning in
-                if case .multipleIdeWindows(let ids, let selected) = warning {
-                    return ids.sorted() == [12, 14] && selected == 12
+                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
+                    return kind == .ide
+                        && workspace == "pw-codex"
+                        && chosenId == 12
+                        && extraIds.sorted() == [14]
                 }
                 return false
             })
             XCTAssertTrue(warnings.contains { warning in
-                if case .multipleChromeWindows(let ids, let selected) = warning {
-                    return ids.sorted() == [30, 31] && selected == 30
+                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
+                    return kind == .chrome
+                        && workspace == "pw-codex"
+                        && chosenId == 30
+                        && extraIds.sorted() == [31]
                 }
                 return false
             })
@@ -648,7 +651,6 @@ final class ActivationServiceTests: XCTestCase {
             ideLauncher: ideLauncher,
             chromeLauncherFactory: { _ in chromeLauncher },
             ideAppResolver: ideResolver,
-            layoutApplier: TestLayoutApplier(),
             logger: logger,
             sleeper: TestSleeper(),
             pollIntervalMs: pollIntervalMs,

@@ -36,13 +36,8 @@ public struct ActivationReport: Equatable, Sendable {
 public enum ActivationWarning: Equatable, Sendable {
     case configWarning(DoctorFinding)
     case ideLaunchWarning(IdeLaunchWarning)
-    case multipleIdeWindows(windowIds: [Int], selectedWindowId: Int)
-    case multipleChromeWindows(windowIds: [Int], selectedWindowId: Int)
     case multipleWindows(kind: ActivationWindowKind, workspace: String, chosenId: Int, extraIds: [Int])
     case moveFailed(kind: ActivationWindowKind, windowId: Int, workspace: String, error: AeroSpaceCommandError)
-    case layoutNotApplied
-    case layoutSkipped(LayoutSkipReason)
-    case layoutFailed(windowId: Int, error: WindowGeometryError)
     case stateRecovered(backupPath: String)
 }
 
@@ -109,20 +104,6 @@ extension ActivationWarning {
                     fix: "Fix the launcher script or disable ideUseAgentLayerLauncher."
                 )
             }
-        case .multipleIdeWindows(let windowIds, let selectedWindowId):
-            return DoctorFinding(
-                severity: .warn,
-                title: "Multiple IDE windows found in workspace",
-                detail: "Window IDs: \(windowIds.sorted()). Using \(selectedWindowId).",
-                fix: "Close extra IDE windows if this is unintended."
-            )
-        case .multipleChromeWindows(let windowIds, let selectedWindowId):
-            return DoctorFinding(
-                severity: .warn,
-                title: "Multiple Chrome windows found in workspace",
-                detail: "Window IDs: \(windowIds.sorted()). Using \(selectedWindowId).",
-                fix: "Close extra Chrome windows if this is unintended."
-            )
         case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
             return DoctorFinding(
                 severity: .warn,
@@ -136,36 +117,6 @@ extension ActivationWarning {
                 title: "Failed to move \(kind.rawValue) window \(windowId) to \(workspace)",
                 detail: "\(error)",
                 fix: "The window may need to be closed and recreated."
-            )
-        case .layoutNotApplied:
-            return DoctorFinding(
-                severity: .warn,
-                title: "Layout not applied (Phase 6)",
-                detail: "Layout persistence is not implemented yet.",
-                fix: "This warning will disappear once Phase 6 is implemented."
-            )
-        case .layoutSkipped(let reason):
-            let detail: String
-            switch reason {
-            case .notImplemented:
-                detail = "Layout persistence is not implemented yet."
-            case .screenUnavailable:
-                detail = "Screen information was unavailable."
-            case .focusNotVerified(let expectedWindowId, let expectedWorkspace, let actualWindowId, let actualWorkspace):
-                detail = "Focus not verified: expected window \(expectedWindowId) in \(expectedWorkspace), got \(actualWindowId ?? -1) in \(actualWorkspace ?? "unknown")."
-            }
-            return DoctorFinding(
-                severity: .warn,
-                title: "Layout skipped",
-                detail: detail,
-                fix: "Re-run activation once the issue is resolved."
-            )
-        case .layoutFailed(let windowId, let error):
-            return DoctorFinding(
-                severity: .warn,
-                title: "Layout failed for window \(windowId)",
-                detail: "\(error)",
-                fix: "Check accessibility permissions and re-run activation."
             )
         case .stateRecovered(let backupPath):
             return DoctorFinding(
@@ -189,20 +140,10 @@ extension ActivationWarning {
             case .launcherFailed(let command, _):
                 return "launcherFailed: \(command)"
             }
-        case .multipleIdeWindows(let windowIds, let selectedWindowId):
-            return "multipleIdeWindows: \(windowIds.sorted()) -> \(selectedWindowId)"
-        case .multipleChromeWindows(let windowIds, let selectedWindowId):
-            return "multipleChromeWindows: \(windowIds.sorted()) -> \(selectedWindowId)"
         case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
             return "multipleWindows(\(kind.rawValue)): \(workspace) chose \(chosenId), extras \(extraIds.sorted())"
         case .moveFailed(let kind, let windowId, let workspace, let error):
             return "moveFailed(\(kind.rawValue)): window \(windowId) to \(workspace), error: \(error)"
-        case .layoutNotApplied:
-            return "layoutNotApplied"
-        case .layoutSkipped(let reason):
-            return "layoutSkipped: \(reason)"
-        case .layoutFailed(let windowId, let error):
-            return "layoutFailed: window \(windowId), error: \(error)"
         case .stateRecovered(let backupPath):
             return "stateRecovered: \(backupPath)"
         }

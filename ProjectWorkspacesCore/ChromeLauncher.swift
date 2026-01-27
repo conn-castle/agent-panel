@@ -216,11 +216,11 @@ public struct ChromeLauncher {
         expectedWorkspaceName: String,
         beforeWorkspaceIds: Set<Int>
     ) -> Result<Int, ChromeLaunchError> {
-        let intervalSeconds = TimeInterval(pollIntervalMs) / 1000.0
-        // Add one attempt to include an immediate check plus the final timeout boundary.
-        let maxAttempts = max(1, Int(ceil(Double(pollTimeoutMs) / Double(pollIntervalMs))) + 1)
-
-        for attempt in 0..<maxAttempts {
+        let pollOutcome: PollOutcome<Int, ChromeLaunchError> = Poller.poll(
+            intervalMs: pollIntervalMs,
+            timeoutMs: pollTimeoutMs,
+            sleeper: sleeper
+        ) { () -> PollDecision<Int, ChromeLaunchError> in
             let windowsResult = aeroSpaceClient.listWindowsDecoded(workspace: expectedWorkspaceName)
             let windows: [AeroSpaceWindow]
             switch windowsResult {
@@ -239,12 +239,17 @@ public struct ChromeLauncher {
                 return .failure(.chromeWindowAmbiguous(newWindowIds: newIds.sorted()))
             }
 
-            if attempt < maxAttempts - 1 {
-                sleeper.sleep(seconds: intervalSeconds)
-            }
+            return .keepWaiting
         }
 
-        return .failure(.chromeWindowNotDetected(expectedWorkspace: expectedWorkspaceName))
+        switch pollOutcome {
+        case .success(let windowId):
+            return .success(windowId)
+        case .failure(let error):
+            return .failure(error)
+        case .timedOut:
+            return .failure(.chromeWindowNotDetected(expectedWorkspace: expectedWorkspaceName))
+        }
     }
 
     /// Runs a command and converts non-zero exits into `ProcessCommandError`.

@@ -422,21 +422,6 @@ final class TestChromeLauncher: ChromeLaunching {
     }
 }
 
-// MARK: - Test Layout Applier
-
-/// No-op layout applier for testing.
-struct TestLayoutApplier: LayoutApplying {
-    let outcome: LayoutApplyOutcome
-
-    init(outcome: LayoutApplyOutcome = .skipped(reason: .notImplemented)) {
-        self.outcome = outcome
-    }
-
-    func applyLayout(project: ProjectConfig, ideWindowId: Int, chromeWindowId: Int) -> LayoutApplyOutcome {
-        outcome
-    }
-}
-
 // MARK: - Test Logger
 
 /// Logger that captures log entries for testing.

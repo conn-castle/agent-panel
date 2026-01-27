@@ -17,6 +17,7 @@ struct ProjectWorkspacesApp: App {
 private struct DoctorButtons {
     let runDoctor: NSButton
     let copyReport: NSButton
+    let installAeroSpace: NSButton
     let installSafeConfig: NSButton
     let startAeroSpace: NSButton
     let reloadConfig: NSButton
@@ -84,6 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(report, forType: .string)
+    }
+
+    /// Installs AeroSpace via Homebrew and refreshes the report.
+    @objc private func installAeroSpace() {
+        let report = Doctor().installAeroSpace()
+        showDoctorReport(report)
     }
 
     /// Installs the safe AeroSpace config and refreshes the report.
@@ -162,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         doctorTextView?.scrollToBeginningOfDocument(nil)
 
         if let buttons = doctorButtons {
+            buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
             buttons.installSafeConfig.isEnabled = report.actions.canInstallSafeAeroSpaceConfig
             buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
             buttons.reloadConfig.isEnabled = report.actions.canReloadAeroSpaceConfig
@@ -203,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let primaryRow = makeButtonRow(buttons: [
             buttons.runDoctor,
             buttons.copyReport,
+            buttons.installAeroSpace,
             buttons.installSafeConfig,
             buttons.startAeroSpace
         ])
@@ -243,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeDoctorButtons() -> DoctorButtons {
         let runDoctorButton = makeButton(title: "Run Doctor", action: #selector(runDoctor))
         let copyReportButton = makeButton(title: "Copy Report", action: #selector(copyDoctorReport))
+        let installAeroSpaceButton = makeButton(title: "Install AeroSpace", action: #selector(installAeroSpace))
         let installSafeConfigButton = makeButton(
             title: "Install Safe AeroSpace Config",
             action: #selector(installSafeAeroSpaceConfig)
@@ -262,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return DoctorButtons(
             runDoctor: runDoctorButton,
             copyReport: copyReportButton,
+            installAeroSpace: installAeroSpaceButton,
             installSafeConfig: installSafeConfigButton,
             startAeroSpace: startAeroSpaceButton,
             reloadConfig: reloadConfigButton,

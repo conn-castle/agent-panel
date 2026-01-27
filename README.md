@@ -89,6 +89,8 @@ Install via Homebrew (required):
 brew install --cask nikitabobko/tap/aerospace
 ```
 
+Or run Doctor and click **Install AeroSpace** (uses Homebrew).
+
 Manual AeroSpace installs are not supported yet.
 
 ### Install ProjectWorkspaces

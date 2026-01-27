@@ -9,7 +9,6 @@ public struct ActivationService {
     private let ideLauncher: IdeLaunching
     private let chromeLauncherFactory: (AeroSpaceClient) -> ChromeLaunching
     private let ideAppResolver: IdeAppResolver
-    private let layoutApplier: LayoutApplying
     private let logger: ProjectWorkspacesLogging
     private let sleeper: AeroSpaceSleeping
     private let pollIntervalMs: Int
@@ -23,7 +22,6 @@ public struct ActivationService {
     ///   - commandRunner: Command runner used for IDE/Chrome launches and CLI resolution.
     ///   - aeroSpaceCommandRunner: Runner used for AeroSpace CLI commands.
     ///   - aeroSpaceBinaryResolver: Optional resolver for the AeroSpace CLI.
-    ///   - layoutApplier: Layout applier (no-op by default).
     ///   - logger: Logger for activation events.
     ///   - pollIntervalMs: Polling interval for IDE window detection.
     ///   - pollTimeoutMs: Polling timeout for IDE window detection.
@@ -35,7 +33,6 @@ public struct ActivationService {
         commandRunner: CommandRunning = DefaultCommandRunner(),
         aeroSpaceCommandRunner: AeroSpaceCommandRunning = DefaultAeroSpaceCommandRunner(),
         aeroSpaceBinaryResolver: AeroSpaceBinaryResolving? = nil,
-        layoutApplier: LayoutApplying = NoopLayoutApplier(),
         logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
         pollIntervalMs: Int = 200,
         pollTimeoutMs: Int = 5000,
@@ -71,7 +68,6 @@ public struct ActivationService {
             )
         }
         self.ideAppResolver = IdeAppResolver(fileSystem: fileSystem, appDiscovery: appDiscovery)
-        self.layoutApplier = layoutApplier
         self.logger = logger
         self.sleeper = SystemAeroSpaceSleeper()
         self.pollIntervalMs = pollIntervalMs
@@ -87,7 +83,6 @@ public struct ActivationService {
         ideLauncher: IdeLaunching,
         chromeLauncherFactory: @escaping (AeroSpaceClient) -> ChromeLaunching,
         ideAppResolver: IdeAppResolver,
-        layoutApplier: LayoutApplying,
         logger: ProjectWorkspacesLogging,
         sleeper: AeroSpaceSleeping,
         pollIntervalMs: Int,
@@ -102,7 +97,6 @@ public struct ActivationService {
         self.ideLauncher = ideLauncher
         self.chromeLauncherFactory = chromeLauncherFactory
         self.ideAppResolver = ideAppResolver
-        self.layoutApplier = layoutApplier
         self.logger = logger
         self.sleeper = sleeper
         self.pollIntervalMs = pollIntervalMs
@@ -180,10 +174,7 @@ public struct ActivationService {
             return context.finalize(logger: logger)
         }
 
-        // Step 9: Apply layout
-        applyLayout(project: project, ideWindowId: ideWindowId, chromeWindowId: chromeWindowId, context: context)
-
-        // Step 10: Focus IDE window
+        // Step 9: Focus IDE window
         guard focusIdeWindow(client: client, ideWindowId: ideWindowId, context: context) else {
             return context.finalize(logger: logger)
         }
@@ -303,11 +294,11 @@ public struct ActivationService {
         let existingIdeIds = matchingWindowIds(in: initialWindows, identity: ideIdentity)
 
         if !existingIdeIds.isEmpty {
-            let selectedId = existingIdeIds.sorted().first ?? existingIdeIds[0]
-            if existingIdeIds.count > 1 {
-                context.warnings.append(.multipleIdeWindows(windowIds: existingIdeIds, selectedWindowId: selectedId))
+            let selection = selectWindowId(from: existingIdeIds, kind: .ide, workspace: context.workspaceName)
+            if let warning = selection.warning {
+                context.warnings.append(warning)
             }
-            return selectedId
+            return selection.selectedId
         }
 
         // Need to create IDE window
@@ -337,34 +328,42 @@ public struct ActivationService {
         beforeIds: Set<Int>,
         context: ActivationContext
     ) -> Int? {
-        let intervalSeconds = TimeInterval(pollIntervalMs) / 1000.0
-        let maxAttempts = max(1, Int(ceil(Double(pollTimeoutMs) / Double(pollIntervalMs))) + 1)
-
-        for attempt in 0..<maxAttempts {
+        let pollOutcome: PollOutcome<Int, AeroSpaceCommandError> = Poller.poll(
+            intervalMs: pollIntervalMs,
+            timeoutMs: pollTimeoutMs,
+            sleeper: sleeper
+        ) { () -> PollDecision<Int, AeroSpaceCommandError> in
             switch client.listWindowsDecoded(workspace: context.workspaceName) {
             case .failure(let error):
-                context.outcome = .failure(error: .aeroSpaceFailed(error))
-                return nil
+                return .failure(error)
             case .success(let windows):
                 let afterIds = Set(matchingWindowIds(in: windows, identity: identity))
                 let newIds = afterIds.subtracting(beforeIds)
-                if !newIds.isEmpty {
-                    let sortedNewIds = newIds.sorted()
-                    let selected = sortedNewIds.last ?? sortedNewIds[0]
-                    if sortedNewIds.count > 1 {
-                        context.warnings.append(.multipleIdeWindows(windowIds: sortedNewIds, selectedWindowId: selected))
-                    }
-                    return selected
+                guard !newIds.isEmpty else {
+                    return .keepWaiting
                 }
-            }
-
-            if attempt < maxAttempts - 1 {
-                sleeper.sleep(seconds: intervalSeconds)
+                let selection = selectWindowId(
+                    from: Array(newIds),
+                    kind: .ide,
+                    workspace: context.workspaceName
+                )
+                if let warning = selection.warning {
+                    context.warnings.append(warning)
+                }
+                return .success(selection.selectedId)
             }
         }
 
-        context.outcome = .failure(error: .ideWindowNotDetected(expectedWorkspace: context.workspaceName))
-        return nil
+        switch pollOutcome {
+        case .success(let windowId):
+            return windowId
+        case .failure(let error):
+            context.outcome = .failure(error: .aeroSpaceFailed(error))
+            return nil
+        case .timedOut:
+            context.outcome = .failure(error: .ideWindowNotDetected(expectedWorkspace: context.workspaceName))
+            return nil
+        }
     }
 
     // MARK: - Step 7: Chrome Window
@@ -397,11 +396,11 @@ public struct ActivationService {
         }
 
         if !existingChromeIds.isEmpty {
-            let selectedId = existingChromeIds.sorted().first ?? existingChromeIds[0]
-            if existingChromeIds.count > 1 {
-                context.warnings.append(.multipleChromeWindows(windowIds: existingChromeIds, selectedWindowId: selectedId))
+            let selection = selectWindowId(from: existingChromeIds, kind: .chrome, workspace: context.workspaceName)
+            if let warning = selection.warning {
+                context.warnings.append(warning)
             }
-            return selectedId
+            return selection.selectedId
         }
 
         // Need to create Chrome window
@@ -426,10 +425,11 @@ public struct ActivationService {
             case .created(let windowId), .existing(let windowId):
                 return windowId
             case .existingMultiple(let windowIds):
-                let sorted = windowIds.sorted()
-                let selected = sorted.first ?? windowIds[0]
-                context.warnings.append(.multipleChromeWindows(windowIds: windowIds, selectedWindowId: selected))
-                return selected
+                let selection = selectWindowId(from: windowIds, kind: .chrome, workspace: context.workspaceName)
+                if let warning = selection.warning {
+                    context.warnings.append(warning)
+                }
+                return selection.selectedId
             }
         }
     }
@@ -453,25 +453,7 @@ public struct ActivationService {
         return true
     }
 
-    // MARK: - Step 9: Layout Application
-
-    private func applyLayout(
-        project: ProjectConfig,
-        ideWindowId: Int,
-        chromeWindowId: Int,
-        context: ActivationContext
-    ) {
-        let layoutOutcome = layoutApplier.applyLayout(
-            project: project,
-            ideWindowId: ideWindowId,
-            chromeWindowId: chromeWindowId
-        )
-        if case .skipped = layoutOutcome {
-            context.warnings.append(.layoutNotApplied)
-        }
-    }
-
-    // MARK: - Step 10: Focus IDE
+    // MARK: - Step 9: Focus IDE
 
     private func focusIdeWindow(client: AeroSpaceClient, ideWindowId: Int, context: ActivationContext) -> Bool {
         switch client.focusWindow(windowId: ideWindowId) {
@@ -508,6 +490,31 @@ public struct ActivationService {
         return windows
             .filter { $0.appName == identity.appName }
             .map { $0.windowId }
+    }
+
+    /// Selects the lowest window id and emits a multiple-windows warning when needed.
+    /// - Parameters:
+    ///   - windowIds: Window IDs to consider (must be non-empty).
+    ///   - kind: Window kind for warning context.
+    ///   - workspace: Workspace name for warning context.
+    /// - Returns: Selected window id with an optional warning.
+    private func selectWindowId(
+        from windowIds: [Int],
+        kind: ActivationWindowKind,
+        workspace: String
+    ) -> (selectedId: Int, warning: ActivationWarning?) {
+        precondition(!windowIds.isEmpty, "windowIds must not be empty")
+        let sortedIds = windowIds.sorted()
+        let selectedId = sortedIds[0]
+        let warningValue = sortedIds.count > 1
+            ? ActivationWarning.multipleWindows(
+                kind: kind,
+                workspace: workspace,
+                chosenId: selectedId,
+                extraIds: Array(sortedIds.dropFirst())
+            )
+            : nil
+        return (selectedId, warningValue)
     }
 }
 

@@ -74,16 +74,6 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Apply locked default layouts and persist per-project per-display-mode geometry.
 
 ### Tasks
-- [ ] Audit Phase 6 layout/state dead code for suitability vs rewrite before integrating.
-    - `ProjectWorkspacesCore/DisplayLayout.swift`
-    - `ProjectWorkspacesCore/ProjectWorkspacesState.swift`
-    - `ProjectWorkspacesCore/WindowGeometry.swift`
-    - `ProjectWorkspacesCore/WindowResolutionHelper.swift`
-    - `ProjectWorkspacesCoreTests/AeroSpaceFocusVerifierTests.swift`
-    - `ProjectWorkspacesCoreTests/ProjectWorkspacesStateStoreTests.swift`
-    - `ProjectWorkspacesCoreTests/WindowGeometryTests.swift`
-    - `ProjectWorkspacesCoreTests/TestHelpers/SharedTestDoubles.swift`
-    - `ProjectWorkspacesCoreTests/TestHelpers/TestFileSystem.swift`
 - [ ] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
 - [ ] Implement locked default layouts for laptop and ultrawide (8-segment split).
 - [ ] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.
