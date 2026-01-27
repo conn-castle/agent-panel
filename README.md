@@ -129,7 +129,7 @@ Doctor must show PASS for:
 
 Warnings are expected when optional config keys are omitted and defaults are applied.
 
-If AeroSpace is missing, Doctor offers **Install AeroSpace** (Homebrew required) in the in-app Doctor window.
+If AeroSpace is missing, Doctor offers **Install AeroSpace** (Homebrew required) in the in-app Doctor window. If no AeroSpace config exists, Doctor creates the safe config first before installing AeroSpace.
 
 ### AeroSpace onboarding (safe config)
 

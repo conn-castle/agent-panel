@@ -150,6 +150,48 @@ final class DoctorTests: XCTestCase {
         XCTAssertTrue(report.findings.contains {
             $0.title == "Installed AeroSpace via Homebrew"
         })
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Installed safe AeroSpace config at: ~/.aerospace.toml"
+        })
+    }
+
+    func testInstallAeroSpaceSkipsInstallWhenSafeConfigFails() {
+        let fileSystem = FailingWriteFileSystem(files: [:], directories: [], executableFiles: [homebrewPath])
+
+        let appDiscovery = DoctorAppDiscovery(
+            bundleIdMap: [:],
+            nameMap: [:],
+            bundleIdForPath: [:]
+        )
+
+        let commandRunner = DoctorCommandRunner(results: [
+            CommandSignature(path: homebrewPath, arguments: ["install", "--cask", "nikitabobko/tap/aerospace"]): [
+                CommandResult(exitCode: 0, stdout: "installed", stderr: "")
+            ],
+            CommandSignature(path: "/usr/bin/which", arguments: ["aerospace"]): [
+                CommandResult(exitCode: 1, stdout: "", stderr: "not found")
+            ]
+        ])
+
+        let doctor = Doctor(
+            paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
+            fileSystem: fileSystem,
+            appDiscovery: appDiscovery,
+            hotkeyChecker: TestHotkeyChecker(isAvailable: true),
+            accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
+            runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
+            commandRunner: commandRunner,
+            environment: TestEnvironment(values: [:])
+        )
+
+        let report = doctor.installAeroSpace()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.title == "Skipped AeroSpace install because the safe config could not be created"
+        })
+        XCTAssertFalse(report.findings.contains {
+            $0.title == "Installed AeroSpace via Homebrew"
+        })
     }
 
     func testDoctorFailsWhenChromeMissing() {
@@ -903,6 +945,93 @@ private final class TestFileSystem: FileSystem {
     func syncFile(at url: URL) throws {
         if files[url.path] == nil {
             throw NSError(domain: "TestFileSystem", code: 6)
+        }
+    }
+
+    func fileData(atPath path: String) -> Data? {
+        files[path]
+    }
+}
+
+private final class FailingWriteFileSystem: FileSystem {
+    private var files: [String: Data]
+    private var directories: Set<String>
+    private var executableFiles: Set<String>
+
+    init(files: [String: Data], directories: Set<String>, executableFiles: Set<String> = []) {
+        self.files = files
+        self.directories = directories
+        self.executableFiles = executableFiles
+    }
+
+    func fileExists(at url: URL) -> Bool {
+        files[url.path] != nil
+    }
+
+    func directoryExists(at url: URL) -> Bool {
+        directories.contains(url.path)
+    }
+
+    func isExecutableFile(at url: URL) -> Bool {
+        executableFiles.contains(url.path)
+    }
+
+    func readFile(at url: URL) throws -> Data {
+        if let data = files[url.path] {
+            return data
+        }
+        throw NSError(domain: "FailingWriteFileSystem", code: 1)
+    }
+
+    func createDirectory(at url: URL) throws {
+        directories.insert(url.path)
+    }
+
+    func fileSize(at url: URL) throws -> UInt64 {
+        guard let data = files[url.path] else {
+            throw NSError(domain: "FailingWriteFileSystem", code: 2)
+        }
+        return UInt64(data.count)
+    }
+
+    func removeItem(at url: URL) throws {
+        if files.removeValue(forKey: url.path) != nil {
+            return
+        }
+        if directories.remove(url.path) != nil {
+            return
+        }
+        throw NSError(domain: "FailingWriteFileSystem", code: 3)
+    }
+
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+        guard let data = files.removeValue(forKey: sourceURL.path) else {
+            throw NSError(domain: "FailingWriteFileSystem", code: 4)
+        }
+        if files[destinationURL.path] != nil {
+            throw NSError(domain: "FailingWriteFileSystem", code: 5)
+        }
+        files[destinationURL.path] = data
+    }
+
+    func appendFile(at url: URL, data: Data) throws {
+        if var existing = files[url.path] {
+            existing.append(data)
+            files[url.path] = existing
+        } else {
+            files[url.path] = data
+        }
+    }
+
+    func writeFile(at url: URL, data: Data) throws {
+        let _ = url
+        let _ = data
+        throw NSError(domain: "FailingWriteFileSystem", code: 6)
+    }
+
+    func syncFile(at url: URL) throws {
+        if files[url.path] == nil {
+            throw NSError(domain: "FailingWriteFileSystem", code: 7)
         }
     }
 

@@ -86,8 +86,34 @@ public struct Doctor {
     /// Installs AeroSpace via Homebrew and refreshes the report.
     /// - Returns: An updated Doctor report.
     public func installAeroSpace() -> DoctorReport {
-        let finding = aeroSpaceChecker.installAeroSpaceViaHomebrew()
-        return buildReport(prependingFindings: [finding])
+        var findings: [DoctorFinding] = []
+
+        let configPaths = aeroSpaceChecker.resolveAeroSpaceConfigPaths()
+        let configState = aeroSpaceChecker.resolveAeroSpaceConfigState(paths: configPaths)
+        if case .missing = configState {
+            if let failureFinding = aeroSpaceChecker.installSafeConfig(configPaths: configPaths) {
+                findings.append(failureFinding)
+                findings.append(
+                    DoctorFinding(
+                        severity: .warn,
+                        title: "Skipped AeroSpace install because the safe config could not be created",
+                        fix: "Resolve the safe config error and retry Install AeroSpace."
+                    )
+                )
+                return buildReport(prependingFindings: findings)
+            }
+
+            findings.append(
+                DoctorFinding(
+                    severity: .pass,
+                    title: "Installed safe AeroSpace config at: ~/.aerospace.toml"
+                )
+            )
+        }
+
+        let installFinding = aeroSpaceChecker.installAeroSpaceViaHomebrew()
+        findings.append(installFinding)
+        return buildReport(prependingFindings: findings)
     }
 
     /// Attempts to install the safe AeroSpace config when no config exists.

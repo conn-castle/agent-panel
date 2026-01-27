@@ -32,7 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var doctorWindow: NSWindow?
     private var doctorTextView: NSTextView?
     private var doctorButtons: DoctorButtons?
+    private var doctorStatusLabel: NSTextField?
+    private var doctorProgressIndicator: NSProgressIndicator?
     private var lastDoctorReport: DoctorReport?
+    private var isDoctorBusy = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -73,8 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Runs Doctor and presents the report in a modal-style panel.
     @objc private func runDoctor() {
-        let report = Doctor().run()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Running Doctor...") {
+            Doctor().run()
+        }
     }
 
     /// Copies the current Doctor report to the clipboard.
@@ -89,38 +93,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Installs AeroSpace via Homebrew and refreshes the report.
     @objc private func installAeroSpace() {
-        let report = Doctor().installAeroSpace()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Installing AeroSpace...") {
+            Doctor().installAeroSpace()
+        }
     }
 
     /// Installs the safe AeroSpace config and refreshes the report.
     @objc private func installSafeAeroSpaceConfig() {
-        let report = Doctor().installSafeAeroSpaceConfig()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Installing safe AeroSpace config...") {
+            Doctor().installSafeAeroSpaceConfig()
+        }
     }
 
     /// Starts AeroSpace and refreshes the report.
     @objc private func startAeroSpace() {
-        let report = Doctor().startAeroSpace()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Starting AeroSpace...") {
+            Doctor().startAeroSpace()
+        }
     }
 
     /// Reloads AeroSpace config and refreshes the report.
     @objc private func reloadAeroSpaceConfig() {
-        let report = Doctor().reloadAeroSpaceConfig()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Reloading AeroSpace config...") {
+            Doctor().reloadAeroSpaceConfig()
+        }
     }
 
     /// Disables AeroSpace window management and refreshes the report.
     @objc private func disableAeroSpace() {
-        let report = Doctor().disableAeroSpace()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Disabling AeroSpace...") {
+            Doctor().disableAeroSpace()
+        }
     }
 
     /// Uninstalls the safe AeroSpace config and refreshes the report.
     @objc private func uninstallSafeAeroSpaceConfig() {
-        let report = Doctor().uninstallSafeAeroSpaceConfig()
-        showDoctorReport(report)
+        runDoctorAction(statusMessage: "Uninstalling safe AeroSpace config...") {
+            Doctor().uninstallSafeAeroSpaceConfig()
+        }
     }
 
     /// Closes the Doctor window.
@@ -136,26 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Displays the Doctor report in a scrollable, selectable text view.
     /// - Parameter report: Doctor report payload.
     private func showDoctorReport(_ report: DoctorReport) {
-        let textView: NSTextView
-        let window: NSWindow
-
-        if let existingWindow = doctorWindow, let existingTextView = doctorTextView {
-            window = existingWindow
-            textView = existingTextView
-        } else {
-            let panel = makeDoctorPanel()
-            let textViewInstance = makeDoctorTextView()
-            let buttons = makeDoctorButtons()
-            let contentView = makeDoctorContentView(textView: textViewInstance, buttons: buttons)
-            panel.contentView = contentView
-            panel.isReleasedWhenClosed = false
-
-            doctorWindow = panel
-            doctorTextView = textViewInstance
-            doctorButtons = buttons
-            window = panel
-            textView = textViewInstance
-        }
+        let window = ensureDoctorWindow()
 
         updateDoctorUI(with: report)
 
@@ -169,6 +160,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         doctorTextView?.scrollToBeginningOfDocument(nil)
 
         if let buttons = doctorButtons {
+            if isDoctorBusy {
+                disableDoctorButtons()
+                return
+            }
+
             buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
             buttons.installSafeConfig.isEnabled = report.actions.canInstallSafeAeroSpaceConfig
             buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
@@ -190,10 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         panel.title = "Doctor"
         panel.center()
+        panel.hidesOnDeactivate = false
         return panel
     }
 
-    private func makeDoctorContentView(textView: NSTextView, buttons: DoctorButtons) -> NSView {
+    private func makeDoctorContentView(
+        textView: NSTextView,
+        statusRow: NSView,
+        buttons: DoctorButtons
+    ) -> NSView {
         let container = NSStackView()
         container.orientation = .vertical
         container.spacing = 12
@@ -223,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             buttons.close
         ])
 
+        container.addArrangedSubview(statusRow)
         container.addArrangedSubview(scrollView)
         container.addArrangedSubview(primaryRow)
         container.addArrangedSubview(secondaryRow)
@@ -288,6 +290,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return button
     }
 
+    private func makeDoctorStatusRow() -> (view: NSView, label: NSTextField, indicator: NSProgressIndicator) {
+        let indicator = NSProgressIndicator()
+        indicator.style = .spinning
+        indicator.controlSize = .small
+        indicator.isDisplayedWhenStopped = false
+
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+
+        let row = NSStackView(views: [indicator, label])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 8
+
+        return (row, label, indicator)
+    }
+
+    private func runDoctorAction(statusMessage: String, action: @escaping () -> DoctorReport) {
+        let window = ensureDoctorWindow()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+
+        guard !isDoctorBusy else {
+            return
+        }
+
+        setDoctorBusy(true, message: statusMessage)
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let report = action()
+            DispatchQueue.main.async {
+                self?.setDoctorBusy(false, message: nil)
+                self?.showDoctorReport(report)
+            }
+        }
+    }
+
+    private func setDoctorBusy(_ isBusy: Bool, message: String?) {
+        isDoctorBusy = isBusy
+        doctorStatusLabel?.stringValue = message ?? ""
+        if isBusy {
+            doctorProgressIndicator?.startAnimation(nil)
+            disableDoctorButtons()
+        } else {
+            doctorProgressIndicator?.stopAnimation(nil)
+        }
+    }
+
+    private func disableDoctorButtons() {
+        guard let buttons = doctorButtons else {
+            return
+        }
+
+        buttons.runDoctor.isEnabled = false
+        buttons.copyReport.isEnabled = false
+        buttons.installAeroSpace.isEnabled = false
+        buttons.installSafeConfig.isEnabled = false
+        buttons.startAeroSpace.isEnabled = false
+        buttons.reloadConfig.isEnabled = false
+        buttons.disableAeroSpace.isEnabled = false
+        buttons.uninstallSafeConfig.isEnabled = false
+        buttons.close.isEnabled = true
+    }
+
     /// Creates a selectable, non-editable text view for Doctor output.
     /// - Returns: Configured text view instance.
     private func makeDoctorTextView() -> NSTextView {
@@ -300,5 +366,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.textContainer?.widthTracksTextView = true
         return textView
+    }
+
+    private func ensureDoctorWindow() -> NSWindow {
+        if let existingWindow = doctorWindow, doctorTextView != nil {
+            return existingWindow
+        }
+
+        let panel = makeDoctorPanel()
+        let textViewInstance = makeDoctorTextView()
+        let statusRow = makeDoctorStatusRow()
+        let buttons = makeDoctorButtons()
+        let contentView = makeDoctorContentView(
+            textView: textViewInstance,
+            statusRow: statusRow.view,
+            buttons: buttons
+        )
+        panel.contentView = contentView
+        panel.isReleasedWhenClosed = false
+
+        doctorWindow = panel
+        doctorTextView = textViewInstance
+        doctorButtons = buttons
+        doctorStatusLabel = statusRow.label
+        doctorProgressIndicator = statusRow.indicator
+        return panel
     }
 }
