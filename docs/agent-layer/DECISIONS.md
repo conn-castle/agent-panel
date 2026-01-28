@@ -85,3 +85,18 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Require Homebrew and only support AeroSpace installation via Homebrew for now; manual installs are deferred.
     Reason: Deterministic, scriptable install path for onboarding and Doctor automation.
     Tradeoffs: Users without Homebrew cannot onboard until a manual install path is added.
+
+- Decision 2026-01-28 c3f1a9: Token-based window identification
+    Decision: Identify Chrome and VS Code windows by deterministic token (`PW:<projectId>`) in window titles; allow `list-windows --all` only for token matching and move matched windows into the project workspace; fail on zero or multiple matches.
+    Reason: Deterministic, no-guessing identification without hijacking unrelated windows; recovers when windows spawn outside the workspace.
+    Tradeoffs: Window titles include a visible token; multiple tokened windows must be resolved manually.
+
+- Decision 2026-01-28 c3f1aa: VS Code workspace files in state dir
+    Decision: Store generated `.code-workspace` files under `~/.local/state/project-workspaces/vscode` and set `window.title` with the deterministic token.
+    Reason: Keeps generated artifacts in state cache and enables deterministic VS Code window identification.
+    Tradeoffs: Workspace files move from config to state; VS Code titles include a visible token.
+
+- Decision 2026-01-28 8e2d6bf: Chrome launch uses open -na with optional profile directories
+    Decision: Launch Chrome via `open -na` with `--window-name=PW:<projectId>` so window titles are deterministic; support optional per-project `chromeProfileDirectory` and surface available profile directory names in Doctor.
+    Reason: Chrome ignores `--new-window/--window-name` when launched without `-n` on some machines; profile selection is required for deterministic behavior when multiple profiles are open.
+    Tradeoffs: `-n` starts a new Chrome instance; profile configuration requires users to know Chrome profile directory names.

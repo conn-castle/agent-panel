@@ -297,7 +297,7 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows across all workspaces as JSON.
-    /// Note: Activation and Chrome detection must not use this (no cross-workspace scanning).
+    /// Note: Use only for token-based matching of ProjectWorkspaces-owned windows.
     /// - Returns: Command result containing JSON output or a structured error.
     public func listWindowsAll() -> Result<CommandResult, AeroSpaceCommandError> {
         runCommand(
@@ -324,7 +324,7 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows across all workspaces as decoded models.
-    /// Note: Activation and Chrome detection must not use this (no cross-workspace scanning).
+    /// Note: Use only for token-based matching of ProjectWorkspaces-owned windows.
     /// - Returns: Decoded windows or a structured error.
     public func listWindowsAllDecoded() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
         switch listWindowsAll() {

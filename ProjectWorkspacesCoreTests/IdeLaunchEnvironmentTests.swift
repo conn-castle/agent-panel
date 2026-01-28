@@ -13,7 +13,8 @@ final class IdeLaunchEnvironmentTests: XCTestCase {
             ide: .vscode,
             ideUseAgentLayerLauncher: true,
             ideCommand: "",
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let envBuilder = IdeLaunchEnvironment()
@@ -30,7 +31,7 @@ final class IdeLaunchEnvironmentTests: XCTestCase {
         XCTAssertEqual(environment["PW_PROJECT_ID"], "codex")
         XCTAssertEqual(environment["PW_PROJECT_NAME"], "Codex")
         XCTAssertEqual(environment["PW_PROJECT_PATH"], "/Users/tester/src/codex")
-        XCTAssertEqual(environment["PW_WORKSPACE_FILE"], "/Users/tester/.config/project-workspaces/vscode/codex.code-workspace")
+        XCTAssertEqual(environment["PW_WORKSPACE_FILE"], "/Users/tester/.local/state/project-workspaces/vscode/codex.code-workspace")
         XCTAssertEqual(environment["PW_REPO_URL"], "https://github.com/ORG/REPO")
         XCTAssertEqual(environment["PW_COLOR_HEX"], "#7C3AED")
         XCTAssertEqual(environment["PW_IDE"], "vscode")
@@ -48,7 +49,8 @@ final class IdeLaunchEnvironmentTests: XCTestCase {
             ide: .vscode,
             ideUseAgentLayerLauncher: true,
             ideCommand: "",
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let envBuilder = IdeLaunchEnvironment()
@@ -75,7 +77,8 @@ final class IdeLaunchEnvironmentTests: XCTestCase {
             ide: .vscode,
             ideUseAgentLayerLauncher: true,
             ideCommand: "",
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let envBuilder = IdeLaunchEnvironment()

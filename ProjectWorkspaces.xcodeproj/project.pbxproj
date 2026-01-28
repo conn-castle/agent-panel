@@ -33,6 +33,7 @@
 		3CAF236C3DAF3104C56FF66F /* ActivationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31055427CCC325984113204 /* ActivationService.swift */; };
 		3E702646EEFE04617DFB4BC1 /* AeroSpaceChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D459731C2122AAC2B0D0B2 /* AeroSpaceChecker.swift */; };
 		3F039924D5C492EA756000A9 /* IdeLaunchEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E251142A25AABB60AB01F46F /* IdeLaunchEnvironmentTests.swift */; };
+		3F9E352BA6B5457907853504 /* ChromeProfileDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A0B00D68F1D1657E420C2A /* ChromeProfileDiscoveryTests.swift */; };
 		3FD15FBF0E1F4114BC7FE5C1 /* IdeLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E28456856CBCF155F9518AA3 /* IdeLauncherTests.swift */; };
 		4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */; };
 		47E47EFEFF0AB64261067309 /* FilePermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD523063A734D765FB2F501A /* FilePermissions.swift */; };
@@ -51,13 +52,16 @@
 		A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0980D9F296FC33846D2EF524 /* DoctorModels.swift */; };
 		A473E2FD8F478AC72BE0DA7F /* ProjectWorkspacesLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */; };
 		A99847C3783DF6439C540400 /* VSCodeColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608E9027CC40A582D60DAF4E /* VSCodeColorPalette.swift */; };
+		B4676B286BFDAB23EEC2C9C6 /* ProjectWindowToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */; };
 		B512EC20D029713DFB1394F0 /* ChromeLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5359E0D00972ED7A323D65BA /* ChromeLauncher.swift */; };
 		BA3F48BFB05CC483B40B1D30 /* PermissionsChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */; };
 		BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34BA28935316C4E65502857 /* ConfigParser.swift */; };
 		C0CBA68748D54CE946A0EF80 /* PwctlServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */; };
+		C2D70606EFC87E69BA444D72 /* ChromeProfileDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C8245EC756254E978D749F /* ChromeProfileDiscovery.swift */; };
 		C56577537F84FA9CAF77E221 /* VSCodeWorkspaceGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEA937320C5A2ACA07F0A03 /* VSCodeWorkspaceGeneratorTests.swift */; };
 		CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */; };
 		DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */; };
+		DE1ADE4BE4401AB3358FA6C1 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58FD91CA7927FA8F14180CD /* TestSupport.swift */; };
 		DEAEE847DD0B745D001FAAA0 /* ActivationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */; };
 		E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */; };
 		E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */; };
@@ -65,7 +69,6 @@
 		F20F077BCFE0E1DD32BF36E7 /* IdeAppResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */; };
 		F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */; };
 		FDDCEA4BC0E904AFE9D9F1D9 /* ConfigLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C61D12DEBA4F9356A19E517 /* ConfigLoader.swift */; };
-		DCBA987654321ABCDEF12345 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD123456789ABCDEF01234 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,6 +125,7 @@
 		78D459731C2122AAC2B0D0B2 /* AeroSpaceChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceChecker.swift; sourceTree = "<group>"; };
 		7E82A0992420A094C6BC1789 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		7FC23A946E5D09149663D9F3 /* IdeLaunchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLaunchModels.swift; sourceTree = "<group>"; };
+		82A0B00D68F1D1657E420C2A /* ChromeProfileDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeProfileDiscoveryTests.swift; sourceTree = "<group>"; };
 		8375C545A0FB4632E4A0E063 /* ActivationDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationDependencies.swift; sourceTree = "<group>"; };
 		89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceWindowDecoderTests.swift; sourceTree = "<group>"; };
 		8C61D12DEBA4F9356A19E517 /* ConfigLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigLoader.swift; sourceTree = "<group>"; };
@@ -129,8 +133,10 @@
 		9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesPaths.swift; sourceTree = "<group>"; };
 		9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesLogger.swift; sourceTree = "<group>"; };
 		A34BA28935316C4E65502857 /* ConfigParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParser.swift; sourceTree = "<group>"; };
+		A58FD91CA7927FA8F14180CD /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserTests.swift; sourceTree = "<group>"; };
 		ABEA937320C5A2ACA07F0A03 /* VSCodeWorkspaceGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeWorkspaceGeneratorTests.swift; sourceTree = "<group>"; };
+		B1C8245EC756254E978D749F /* ChromeProfileDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeProfileDiscovery.swift; sourceTree = "<group>"; };
 		BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlCommand.swift; sourceTree = "<group>"; };
 		BD523063A734D765FB2F501A /* FilePermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePermissions.swift; sourceTree = "<group>"; };
 		BE9794BA9E17729BAEB9065A /* VSCodeWorkspaceGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeWorkspaceGenerator.swift; sourceTree = "<group>"; };
@@ -151,8 +157,8 @@
 		ED556F35DA4367F65256F98C /* vscode-workspace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vscode-workspace.json"; sourceTree = "<group>"; };
 		EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationModels.swift; sourceTree = "<group>"; };
 		F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorTests.swift; sourceTree = "<group>"; };
+		FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWindowToken.swift; sourceTree = "<group>"; };
 		FCA682AFBD72154C8F7B0B1E /* IdeLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLauncher.swift; sourceTree = "<group>"; };
-		ABCD123456789ABCDEF01234 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -200,6 +206,7 @@
 				2837CAEFE03BEEDF3018385E /* AeroSpaceRetryTests.swift */,
 				89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */,
 				DA8B56F7BF119FF989121C36 /* ChromeLauncherTests.swift */,
+				82A0B00D68F1D1657E420C2A /* ChromeProfileDiscoveryTests.swift */,
 				A68BC594B52C0CCB6EC18FC9 /* ConfigParserTests.swift */,
 				F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */,
 				E251142A25AABB60AB01F46F /* IdeLaunchEnvironmentTests.swift */,
@@ -209,7 +216,7 @@
 				22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */,
 				E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */,
 				1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */,
-				ABCD123456789ABCDEF01234 /* TestSupport.swift */,
+				A58FD91CA7927FA8F14180CD /* TestSupport.swift */,
 				C619E1497F90654F355A5ABA /* VSCodeColorPaletteTests.swift */,
 				ABEA937320C5A2ACA07F0A03 /* VSCodeWorkspaceGeneratorTests.swift */,
 				CC938F8D8600CA6779A1040B /* Fixtures */,
@@ -280,6 +287,7 @@
 				59F523D28298233703CE0CDB /* AppDiscoveryChecker.swift */,
 				5359E0D00972ED7A323D65BA /* ChromeLauncher.swift */,
 				43539ED3D599D7A64D7C7320 /* ChromeLaunchModels.swift */,
+				B1C8245EC756254E978D749F /* ChromeProfileDiscovery.swift */,
 				8C61D12DEBA4F9356A19E517 /* ConfigLoader.swift */,
 				CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */,
 				A34BA28935316C4E65502857 /* ConfigParser.swift */,
@@ -292,6 +300,7 @@
 				FCA682AFBD72154C8F7B0B1E /* IdeLauncher.swift */,
 				7FC23A946E5D09149663D9F3 /* IdeLaunchModels.swift */,
 				5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */,
+				FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */,
 				3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */,
 				9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */,
 				9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */,
@@ -464,6 +473,7 @@
 				2CE1D9CC6FAC99C16E6FF8B6 /* AppDiscoveryChecker.swift in Sources */,
 				10E6A0B9ABC2C02DCD7F99F9 /* ChromeLaunchModels.swift in Sources */,
 				B512EC20D029713DFB1394F0 /* ChromeLauncher.swift in Sources */,
+				C2D70606EFC87E69BA444D72 /* ChromeProfileDiscovery.swift in Sources */,
 				FDDCEA4BC0E904AFE9D9F1D9 /* ConfigLoader.swift in Sources */,
 				388343C1CD65DF59CC80EED5 /* ConfigModels.swift in Sources */,
 				BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */,
@@ -476,6 +486,7 @@
 				3798CCF4F4D47D9FE4225CE9 /* IdeLaunchModels.swift in Sources */,
 				241B7D05EAEDABAD27E01174 /* IdeLauncher.swift in Sources */,
 				BA3F48BFB05CC483B40B1D30 /* PermissionsChecker.swift in Sources */,
+				B4676B286BFDAB23EEC2C9C6 /* ProjectWindowToken.swift in Sources */,
 				31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */,
 				A473E2FD8F478AC72BE0DA7F /* ProjectWorkspacesLogger.swift in Sources */,
 				F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */,
@@ -498,6 +509,7 @@
 				081F29CEF4BA3B0F0CE53990 /* AeroSpaceRetryTests.swift in Sources */,
 				6C8266EFFB37AE56ED9BA648 /* AeroSpaceWindowDecoderTests.swift in Sources */,
 				34B04598F0FBC4E10ECF2F18 /* ChromeLauncherTests.swift in Sources */,
+				3F9E352BA6B5457907853504 /* ChromeProfileDiscoveryTests.swift in Sources */,
 				014031022B78EECB1C53C9B0 /* ConfigParserTests.swift in Sources */,
 				1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */,
 				3F039924D5C492EA756000A9 /* IdeLaunchEnvironmentTests.swift in Sources */,
@@ -507,7 +519,7 @@
 				DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */,
 				CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */,
 				C0CBA68748D54CE946A0EF80 /* PwctlServiceTests.swift in Sources */,
-				DCBA987654321ABCDEF12345 /* TestSupport.swift in Sources */,
+				DE1ADE4BE4401AB3358FA6C1 /* TestSupport.swift in Sources */,
 				F092788D2B7A3B8E0912160B /* VSCodeColorPaletteTests.swift in Sources */,
 				C56577537F84FA9CAF77E221 /* VSCodeWorkspaceGeneratorTests.swift in Sources */,
 			);

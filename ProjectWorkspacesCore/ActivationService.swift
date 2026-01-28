@@ -162,7 +162,6 @@ public struct ActivationService {
             project: project,
             globalChromeUrls: config.global.globalChromeUrls,
             ideWindowId: ideWindowId,
-            initialWindows: initialWindows,
             context: context
         ) else {
             return context.finalize(logger: logger)
@@ -291,18 +290,49 @@ public struct ActivationService {
         initialWindows: [AeroSpaceWindow],
         context: ActivationContext
     ) -> Int? {
-        let existingIdeIds = matchingWindowIds(in: initialWindows, identity: ideIdentity)
+        return ensureTokenIdeWindow(
+            client: client,
+            project: project,
+            ideConfig: ideConfig,
+            ideIdentity: ideIdentity,
+            context: context
+        )
+    }
 
-        if !existingIdeIds.isEmpty {
-            let selection = selectWindowId(from: existingIdeIds, kind: .ide, workspace: context.workspaceName)
-            if let warning = selection.warning {
-                context.warnings.append(warning)
-            }
-            return selection.selectedId
+    private func ensureTokenIdeWindow(
+        client: AeroSpaceClient,
+        project: ProjectConfig,
+        ideConfig: IdeConfig,
+        ideIdentity: IdeIdentity,
+        context: ActivationContext
+    ) -> Int? {
+        let token = context.windowToken
+        let existingMatchesResult = listTokenIdeWindows(client: client, token: token, identity: ideIdentity)
+        let existingMatches: [AeroSpaceWindow]
+        switch existingMatchesResult {
+        case .failure(let error):
+            context.outcome = .failure(error: error)
+            return nil
+        case .success(let matches):
+            existingMatches = matches
         }
 
-        // Need to create IDE window
-        guard ensureWorkspaceFocused(client: client, context: context) else {
+        if existingMatches.count == 1, let existing = existingMatches.first {
+            if !moveWindowIfNeeded(
+                client: client,
+                windowId: existing.windowId,
+                currentWorkspace: existing.workspace,
+                targetWorkspace: context.workspaceName,
+                context: context
+            ) {
+                return nil
+            }
+            return existing.windowId
+        }
+
+        if existingMatches.count > 1 {
+            let ids = existingMatches.map { $0.windowId }.sorted()
+            context.outcome = .failure(error: .ideWindowTokenAmbiguous(token: token.value, windowIds: ids))
             return nil
         }
 
@@ -314,54 +344,79 @@ public struct ActivationService {
             context.warnings.append(contentsOf: success.warnings.map { .ideLaunchWarning($0) })
         }
 
-        return detectNewIdeWindow(
+        return detectNewTokenIdeWindow(
             client: client,
+            token: token,
             identity: ideIdentity,
-            beforeIds: Set(existingIdeIds),
+            beforeIds: Set(existingMatches.map { $0.windowId }),
             context: context
         )
     }
 
-    private func detectNewIdeWindow(
+    private func listTokenIdeWindows(
         client: AeroSpaceClient,
+        token: ProjectWindowToken,
+        identity: IdeIdentity
+    ) -> Result<[AeroSpaceWindow], ActivationError> {
+        switch client.listWindowsAllDecoded() {
+        case .failure(let error):
+            return .failure(.aeroSpaceFailed(error))
+        case .success(let windows):
+            let matches = windows.filter { window in
+                token.matches(windowTitle: window.windowTitle) && matchesIdentity(window, identity: identity)
+            }
+            return .success(matches)
+        }
+    }
+
+    private func detectNewTokenIdeWindow(
+        client: AeroSpaceClient,
+        token: ProjectWindowToken,
         identity: IdeIdentity,
         beforeIds: Set<Int>,
         context: ActivationContext
     ) -> Int? {
-        let pollOutcome: PollOutcome<Int, AeroSpaceCommandError> = Poller.poll(
+        let pollOutcome: PollOutcome<AeroSpaceWindow, ActivationError> = Poller.poll(
             intervalMs: pollIntervalMs,
             timeoutMs: pollTimeoutMs,
             sleeper: sleeper
-        ) { () -> PollDecision<Int, AeroSpaceCommandError> in
-            switch client.listWindowsDecoded(workspace: context.workspaceName) {
+        ) { () -> PollDecision<AeroSpaceWindow, ActivationError> in
+            switch client.listWindowsAllDecoded() {
             case .failure(let error):
-                return .failure(error)
+                return .failure(.aeroSpaceFailed(error))
             case .success(let windows):
-                let afterIds = Set(matchingWindowIds(in: windows, identity: identity))
-                let newIds = afterIds.subtracting(beforeIds)
-                guard !newIds.isEmpty else {
-                    return .keepWaiting
+                let matches = windows.filter { window in
+                    token.matches(windowTitle: window.windowTitle) && matchesIdentity(window, identity: identity)
                 }
-                let selection = selectWindowId(
-                    from: Array(newIds),
-                    kind: .ide,
-                    workspace: context.workspaceName
-                )
-                if let warning = selection.warning {
-                    context.warnings.append(warning)
+                let newMatches = matches.filter { !beforeIds.contains($0.windowId) }
+                if newMatches.count == 1, let window = newMatches.first {
+                    return .success(window)
                 }
-                return .success(selection.selectedId)
+                if newMatches.count > 1 {
+                    let ids = newMatches.map { $0.windowId }.sorted()
+                    return .failure(.ideWindowTokenAmbiguous(token: token.value, windowIds: ids))
+                }
+                return .keepWaiting
             }
         }
 
         switch pollOutcome {
-        case .success(let windowId):
-            return windowId
+        case .success(let window):
+            if !moveWindowIfNeeded(
+                client: client,
+                windowId: window.windowId,
+                currentWorkspace: window.workspace,
+                targetWorkspace: context.workspaceName,
+                context: context
+            ) {
+                return nil
+            }
+            return window.windowId
         case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
+            context.outcome = .failure(error: error)
             return nil
         case .timedOut:
-            context.outcome = .failure(error: .ideWindowNotDetected(expectedWorkspace: context.workspaceName))
+            context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
             return nil
         }
     }
@@ -374,42 +429,11 @@ public struct ActivationService {
         project: ProjectConfig,
         globalChromeUrls: [String],
         ideWindowId: Int,
-        initialWindows: [AeroSpaceWindow],
         context: ActivationContext
     ) -> Int? {
-        var windowsForChrome = initialWindows
-        var existingChromeIds = windowsForChrome
-            .filter { $0.appBundleId == ChromeLauncher.chromeBundleId }
-            .map { $0.windowId }
-
-        if existingChromeIds.isEmpty {
-            switch client.listWindowsDecoded(workspace: context.workspaceName) {
-            case .failure(let error):
-                context.outcome = .failure(error: .aeroSpaceFailed(error))
-                return nil
-            case .success(let windows):
-                windowsForChrome = windows
-                existingChromeIds = windowsForChrome
-                    .filter { $0.appBundleId == ChromeLauncher.chromeBundleId }
-                    .map { $0.windowId }
-            }
-        }
-
-        if !existingChromeIds.isEmpty {
-            let selection = selectWindowId(from: existingChromeIds, kind: .chrome, workspace: context.workspaceName)
-            if let warning = selection.warning {
-                context.warnings.append(warning)
-            }
-            return selection.selectedId
-        }
-
-        // Need to create Chrome window
-        guard ensureWorkspaceFocused(client: client, context: context) else {
-            return nil
-        }
-
         let chromeResult = chromeLauncher.ensureWindow(
             expectedWorkspaceName: context.workspaceName,
+            windowToken: context.windowToken,
             globalChromeUrls: globalChromeUrls,
             project: project,
             ideWindowIdToRefocus: ideWindowId,
@@ -424,12 +448,6 @@ public struct ActivationService {
             switch outcome {
             case .created(let windowId), .existing(let windowId):
                 return windowId
-            case .existingMultiple(let windowIds):
-                let selection = selectWindowId(from: windowIds, kind: .chrome, workspace: context.workspaceName)
-                if let warning = selection.warning {
-                    context.warnings.append(warning)
-                }
-                return selection.selectedId
             }
         }
     }
@@ -467,29 +485,30 @@ public struct ActivationService {
 
     // MARK: - Helpers
 
-    private func ensureWorkspaceFocused(client: AeroSpaceClient, context: ActivationContext) -> Bool {
-        switch client.focusedWorkspace() {
+    private func matchesIdentity(_ window: AeroSpaceWindow, identity: IdeIdentity) -> Bool {
+        if let bundleId = identity.bundleId, !bundleId.isEmpty {
+            return window.appBundleId == bundleId
+        }
+        return window.appName == identity.appName
+    }
+
+    private func moveWindowIfNeeded(
+        client: AeroSpaceClient,
+        windowId: Int,
+        currentWorkspace: String,
+        targetWorkspace: String,
+        context: ActivationContext
+    ) -> Bool {
+        guard currentWorkspace != targetWorkspace else {
+            return true
+        }
+        switch client.moveWindow(windowId: windowId, to: targetWorkspace) {
+        case .success:
+            return true
         case .failure(let error):
             context.outcome = .failure(error: .aeroSpaceFailed(error))
             return false
-        case .success(let focused):
-            guard focused == context.workspaceName else {
-                context.outcome = .failure(error: .workspaceFocusChanged(expected: context.workspaceName, actual: focused))
-                return false
-            }
-            return true
         }
-    }
-
-    private func matchingWindowIds(in windows: [AeroSpaceWindow], identity: IdeIdentity) -> [Int] {
-        if let bundleId = identity.bundleId, !bundleId.isEmpty {
-            return windows
-                .filter { $0.appBundleId == bundleId }
-                .map { $0.windowId }
-        }
-        return windows
-            .filter { $0.appName == identity.appName }
-            .map { $0.windowId }
     }
 
     /// Selects the lowest window id and emits a multiple-windows warning when needed.
@@ -530,6 +549,9 @@ private struct IdeIdentity: Equatable, Sendable {
 private final class ActivationContext {
     let projectId: String
     let workspaceName: String
+    var windowToken: ProjectWindowToken {
+        ProjectWindowToken(projectId: projectId)
+    }
     var warnings: [ActivationWarning] = []
     let commandLogs: CommandLogAccumulator = CommandLogAccumulator()
     var ideWindowId: Int?

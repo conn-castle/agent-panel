@@ -12,7 +12,7 @@ ProjectWorkspaces implements two primary actions:
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
    - Ensure a project IDE window exists (create if missing)
    - Ensure a project Chrome window exists (create if missing)
-   - Never scan, move, or adopt windows outside `pw-<projectId>`; only enumerate/use windows already in the workspace
+   - Only scan/move windows outside `pw-<projectId>` when they carry a ProjectWorkspaces token (no guessing or fallbacks)
    - Apply the project’s saved layout for the current display mode
    - End with the IDE focused (Chrome must not steal focus)
 
@@ -157,7 +157,7 @@ If the safe config was installed by ProjectWorkspaces, Doctor offers **Uninstall
 ### Paths
 
 - Config: `~/.config/project-workspaces/config.toml`
-- Generated VS Code workspace files: `~/.config/project-workspaces/vscode/*.code-workspace`
+- Generated VS Code workspace files: `~/.local/state/project-workspaces/vscode/*.code-workspace`
 - State: `~/.local/state/project-workspaces/state.json`
 
 ### Config schema (locked)
@@ -205,6 +205,7 @@ ideCommand = ""                           # optional; default ""
 
 # Additional Chrome tabs (only used when Chrome window is created)
 chromeUrls = []                           # optional; default []
+chromeProfileDirectory = "Profile 2"      # optional; Chrome profile directory (see `pwctl doctor`)
 ```
 
 ### Defaults and doctor severity (locked)
@@ -236,6 +237,7 @@ Defaults (applied if keys are missing):
 | `display.ultrawideMinWidthPx`      | `5000`                      | WARN                         |
 | `project.ide`                      | inherit `global.defaultIde` | WARN                         |
 | `project.chromeUrls`               | `[]`                        | OK                           |
+| `project.chromeProfileDirectory`   | unset                       | OK                           |
 | `project.ideUseAgentLayerLauncher` | `true`                      | OK                           |
 | `project.ideCommand`               | `""`                        | OK                           |
 
@@ -256,12 +258,13 @@ Defaults (applied if keys are missing):
 
 For each project, the app generates a centralized VS Code workspace file:
 
-- `~/.config/project-workspaces/vscode/<projectId>.code-workspace`
+- `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`
 
 This file:
 
 - opens the repo folder
 - applies project visual identity via `workbench.colorCustomizations` (title/status/activity bars)
+- sets `window.title` to include a deterministic token (`PW:<projectId>`) for window identification
 
 Launch priority (no ambiguity):
 
@@ -269,7 +272,7 @@ Launch priority (no ambiguity):
 2) Else if `project.ideUseAgentLayerLauncher=true` and `<repo>/.agent-layer/open-vscode.command` exists: run that script.
 3) Else open the effective IDE:
    - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
-   - Antigravity: `open -a <Antigravity.appPath> <projectPath>`
+   - Antigravity: `open -a <Antigravity.appPath> <generatedWorkspaceFile>`
 
 If step 1 or 2 exits non-zero, the app logs WARN and falls back to the same “open” command for the effective IDE. If the fallback open fails, activation fails with an actionable error.
 
@@ -297,10 +300,11 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 
 ## Chrome handling
 
-### One Chrome window per project (enforced by workspace membership)
+### One Chrome window per project (enforced by deterministic token)
 
-The “project Chrome window” is defined as the Chrome window currently assigned to the project’s AeroSpace workspace. The app does not use Chrome profiles and does not pin tabs.
-ProjectWorkspaces never enumerates or adopts Chrome windows outside the project workspace.
+The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>`. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
+ProjectWorkspaces only scans across workspaces to find windows with that token, and will move a matched window into `pw-<projectId>` when needed.
+If zero or multiple tokened Chrome windows are found, activation fails (no guessing or fallbacks).
 
 ### Tab seeding (creation-only)
 
@@ -315,6 +319,16 @@ Duplicate URLs are deduped by exact string match, preserving first occurrence or
 If the computed URL list is empty, ProjectWorkspaces opens a single `about:blank` tab to make window creation deterministic.
 
 If the Chrome window already exists, the app does not modify tabs.
+
+### Chrome profile selection (optional)
+
+If you set `project.chromeProfileDirectory`, ProjectWorkspaces launches Chrome with:
+
+```
+open -na "Google Chrome" --args --new-window --window-name="PW:<projectId>" --profile-directory="<profileDir>"
+```
+
+Use `pwctl doctor` to list available Chrome profile directory names from Chrome's Local State file.
 
 ### Focus behavior
 
@@ -404,7 +418,7 @@ Exit codes:
 
 ### VS Code opens but color identity does not apply
 
-- Ensure the generated `.code-workspace` exists under `~/.config/project-workspaces/vscode/`.
+- Ensure the generated `.code-workspace` exists under `~/.local/state/project-workspaces/vscode/`.
 - Ensure `colorHex` is valid `#RRGGBB`.
 
 ### Custom IDE command fails
@@ -463,5 +477,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome window by diffing `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` before/after launch (workspace-only; no cross-workspace adoption).
+- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` output; fail on zero or multiple matches.
 - No silent failures: show user-facing errors + write structured logs.

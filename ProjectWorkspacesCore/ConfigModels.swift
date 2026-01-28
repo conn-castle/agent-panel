@@ -99,6 +99,7 @@ public struct ProjectConfig: Equatable, Sendable {
     public let ideUseAgentLayerLauncher: Bool
     public let ideCommand: String
     public let chromeUrls: [String]
+    public let chromeProfileDirectory: String?
 
     /// Creates a project configuration entry.
     /// - Parameters:
@@ -111,6 +112,7 @@ public struct ProjectConfig: Equatable, Sendable {
     ///   - ideUseAgentLayerLauncher: Whether to use the agent-layer launcher when present.
     ///   - ideCommand: Optional command used to launch the IDE.
     ///   - chromeUrls: Chrome URLs to open when the project Chrome window is created.
+    ///   - chromeProfileDirectory: Optional Chrome profile directory name used for the project.
     public init(
         id: String,
         name: String,
@@ -120,7 +122,8 @@ public struct ProjectConfig: Equatable, Sendable {
         ide: IdeKind,
         ideUseAgentLayerLauncher: Bool,
         ideCommand: String,
-        chromeUrls: [String]
+        chromeUrls: [String],
+        chromeProfileDirectory: String?
     ) {
         self.id = id
         self.name = name
@@ -131,5 +134,6 @@ public struct ProjectConfig: Equatable, Sendable {
         self.ideUseAgentLayerLauncher = ideUseAgentLayerLauncher
         self.ideCommand = ideCommand
         self.chromeUrls = chromeUrls
+        self.chromeProfileDirectory = chromeProfileDirectory
     }
 }

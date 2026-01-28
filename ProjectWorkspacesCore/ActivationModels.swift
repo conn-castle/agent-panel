@@ -50,6 +50,8 @@ public enum ActivationError: Error, Equatable, Sendable {
     case aeroSpaceResolutionFailed(AeroSpaceBinaryResolutionError)
     case ideLaunchFailed(IdeLaunchError)
     case ideWindowNotDetected(expectedWorkspace: String)
+    case ideWindowTokenNotDetected(token: String)
+    case ideWindowTokenAmbiguous(token: String, windowIds: [Int])
     case chromeLaunchFailed(ChromeLaunchError)
     case logWriteFailed(LogWriteError)
 }
@@ -211,6 +213,24 @@ extension ActivationError {
                     fix: "Ensure the IDE launches successfully and re-run activation."
                 )
             ]
+        case .ideWindowTokenNotDetected(let token):
+            return [
+                DoctorFinding(
+                    severity: .fail,
+                    title: "IDE window not detected with token",
+                    detail: "No IDE window title contained \(token).",
+                    fix: "Ensure the IDE window title includes the project token and re-run activation."
+                )
+            ]
+        case .ideWindowTokenAmbiguous(let token, let windowIds):
+            return [
+                DoctorFinding(
+                    severity: .fail,
+                    title: "Multiple IDE windows matched token",
+                    detail: "Token \(token) matched windows \(windowIds.sorted()).",
+                    fix: "Close extra IDE windows with the project token and re-run activation."
+                )
+            ]
         case .chromeLaunchFailed(let error):
             return [
                 DoctorFinding(
@@ -255,14 +275,10 @@ private extension AeroSpaceCommandError {
 private extension ChromeLaunchError {
     var detailMessage: String {
         switch self {
-        case .workspaceNotFocused(let expected, let actual):
-            return "Expected \(expected), but focused workspace was \(actual)."
-        case .chromeWindowNotDetected(let expectedWorkspace):
-            return "Chrome window was not detected in \(expectedWorkspace). It may have launched elsewhere."
-        case .chromeWindowAmbiguous(let newWindowIds):
-            return "Multiple Chrome windows detected: \(newWindowIds.sorted())."
-        case .chromeLaunchedElsewhere(let expectedWorkspace, let actualWorkspace, let newWindowId):
-            return "Chrome window \(newWindowId) launched in \(actualWorkspace) instead of \(expectedWorkspace)."
+        case .chromeWindowNotDetected(let token):
+            return "Chrome window was not detected with token \(token)."
+        case .chromeWindowAmbiguous(let token, let windowIds):
+            return "Multiple Chrome windows matched token \(token): \(windowIds.sorted())."
         case .chromeNotFound:
             return "Google Chrome could not be discovered."
         case .openFailed(let error):
@@ -274,14 +290,10 @@ private extension ChromeLaunchError {
 
     var fixMessage: String {
         switch self {
-        case .workspaceNotFocused:
-            return "Re-run activation and keep the project workspace focused."
         case .chromeWindowNotDetected:
-            return "Ensure the workspace remains focused and check AeroSpace rules that move Chrome windows."
+            return "Re-run activation and confirm the Chrome window title includes the project token."
         case .chromeWindowAmbiguous:
-            return "Close extra Chrome windows in the project workspace and re-run activation."
-        case .chromeLaunchedElsewhere:
-            return "Update AeroSpace rules to avoid moving Chrome windows during activation."
+            return "Close extra Chrome windows with the project token and re-run activation."
         case .chromeNotFound:
             return "Install Google Chrome and re-run activation."
         case .openFailed:

@@ -13,7 +13,8 @@ final class VSCodeWorkspaceGeneratorTests: XCTestCase {
             ide: .vscode,
             ideUseAgentLayerLauncher: true,
             ideCommand: "",
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
 
         let generator = VSCodeWorkspaceGenerator()
@@ -45,7 +46,8 @@ final class VSCodeWorkspaceGeneratorTests: XCTestCase {
             ide: .vscode,
             ideUseAgentLayerLauncher: true,
             ideCommand: "",
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
 
         let generator = VSCodeWorkspaceGenerator()

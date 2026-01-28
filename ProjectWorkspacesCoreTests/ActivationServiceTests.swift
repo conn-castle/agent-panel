@@ -13,13 +13,15 @@ final class ActivationServiceTests: XCTestCase {
             id: 12,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - Visual Studio Code"
         )
         let chromeWindow = windowPayload(
             id: 30,
             workspace: "pw-codex",
             bundleId: ChromeLauncher.chromeBundleId,
-            appName: "Google Chrome"
+            appName: "Google Chrome",
+            windowTitle: "PW:codex - Chrome"
         )
 
         let responses: AeroSpaceCommandResponses = [
@@ -28,6 +30,9 @@ final class ActivationServiceTests: XCTestCase {
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
             signature(["layout", "floating", "--window-id", "12"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
@@ -41,7 +46,7 @@ final class ActivationServiceTests: XCTestCase {
         ]
 
         let ideLauncher = TestIdeLauncher.success()
-        let chromeLauncher = TestChromeLauncher.created(windowId: 99)
+        let chromeLauncher = TestChromeLauncher.existing(windowId: 30)
         let logger = TestLogger()
 
         let service = makeService(
@@ -62,7 +67,8 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
-        XCTAssertEqual(chromeLauncher.callCount, 0)
+        XCTAssertEqual(chromeLauncher.callCount, 1)
+        XCTAssertEqual(chromeLauncher.lastWindowToken?.value, "PW:codex")
         XCTAssertEqual(logger.entries.count, 1)
     }
 
@@ -71,7 +77,8 @@ final class ActivationServiceTests: XCTestCase {
             id: 42,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - Visual Studio Code"
         )
 
         let responses: AeroSpaceCommandResponses = [
@@ -79,14 +86,11 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
             signature(["layout", "floating", "--window-id", "42"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
@@ -125,18 +129,20 @@ final class ActivationServiceTests: XCTestCase {
         XCTAssertEqual(logger.entries.count, 1)
     }
 
-    func testActivationSelectsLowestNewIdeWindowWhenMultipleAppear() {
+    func testActivationFailsWhenMultipleTokenIdeWindowsAppearAfterLaunch() {
         let ideWindowA = windowPayload(
             id: 10,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - A"
         )
         let ideWindowB = windowPayload(
             id: 44,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - B"
         )
 
         let responses: AeroSpaceCommandResponses = [
@@ -144,22 +150,11 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB]), stderr: ""))
-            ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")),
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
-            ],
-            signature(["layout", "floating", "--window-id", "10"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["layout", "floating", "--window-id", "88"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["focus", "--window-id", "10"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ]
         ]
 
@@ -176,29 +171,20 @@ final class ActivationServiceTests: XCTestCase {
 
         let outcome = service.activate(projectId: "codex")
         switch outcome {
+        case .success:
+            XCTFail("Expected failure when multiple token windows appear.")
         case .failure(let error):
-            XCTFail("Expected success, got failure: \(error)")
-        case .success(let report, let warnings):
-            XCTAssertEqual(report.ideWindowId, 10)
-            XCTAssertEqual(report.chromeWindowId, 88)
-            XCTAssertTrue(warnings.contains { warning in
-                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
-                    return kind == .ide
-                        && workspace == "pw-codex"
-                        && chosenId == 10
-                        && extraIds.sorted() == [44]
-                }
-                return false
-            })
+            XCTAssertEqual(error, .ideWindowTokenAmbiguous(token: "PW:codex", windowIds: [10, 44]))
         }
     }
 
-    func testActivationUsesFreshChromeWindowsWhenInitialMissing() {
+    func testActivationIgnoresUntokenedChromeWindows() {
         let ideWindow = windowPayload(
             id: 12,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - Visual Studio Code"
         )
         let chromeWindow = chromeWindowPayload(id: 33, workspace: "pw-codex")
 
@@ -207,13 +193,15 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
             signature(["layout", "floating", "--window-id", "12"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["layout", "floating", "--window-id", "33"]): [
+            signature(["layout", "floating", "--window-id", "99"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["focus", "--window-id", "12"]): [
@@ -238,44 +226,38 @@ final class ActivationServiceTests: XCTestCase {
             XCTFail("Expected success, got failure: \(error)")
         case .success(let report, _):
             XCTAssertEqual(report.ideWindowId, 12)
-            XCTAssertEqual(report.chromeWindowId, 33)
+            XCTAssertEqual(report.chromeWindowId, 99)
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
-        XCTAssertEqual(chromeLauncher.callCount, 0)
+        XCTAssertEqual(chromeLauncher.callCount, 1)
     }
 
-    func testActivationWarnsWhenMultipleExistingIdeAndChromeWindows() {
+    func testActivationFailsWhenMultipleTokenIdeWindowsExist() {
         let ideWindowA = windowPayload(
             id: 12,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - A"
         )
         let ideWindowB = windowPayload(
             id: 14,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - B"
         )
-        let chromeWindowA = chromeWindowPayload(id: 30, workspace: "pw-codex")
-        let chromeWindowB = chromeWindowPayload(id: 31, workspace: "pw-codex")
 
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB, chromeWindowA, chromeWindowB]), stderr: ""))
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ],
-            signature(["layout", "floating", "--window-id", "12"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["layout", "floating", "--window-id", "30"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["focus", "--window-id", "12"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB]), stderr: ""))
             ]
         ]
 
@@ -292,27 +274,10 @@ final class ActivationServiceTests: XCTestCase {
 
         let outcome = service.activate(projectId: "codex")
         switch outcome {
+        case .success:
+            XCTFail("Expected failure when multiple token IDE windows exist.")
         case .failure(let error):
-            XCTFail("Expected success, got failure: \(error)")
-        case .success(_, let warnings):
-            XCTAssertTrue(warnings.contains { warning in
-                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
-                    return kind == .ide
-                        && workspace == "pw-codex"
-                        && chosenId == 12
-                        && extraIds.sorted() == [14]
-                }
-                return false
-            })
-            XCTAssertTrue(warnings.contains { warning in
-                if case .multipleWindows(let kind, let workspace, let chosenId, let extraIds) = warning {
-                    return kind == .chrome
-                        && workspace == "pw-codex"
-                        && chosenId == 30
-                        && extraIds.sorted() == [31]
-                }
-                return false
-            })
+            XCTAssertEqual(error, .ideWindowTokenAmbiguous(token: "PW:codex", windowIds: [12, 14]))
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
@@ -324,9 +289,10 @@ final class ActivationServiceTests: XCTestCase {
             id: 12,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - Visual Studio Code"
         )
-        let chromeWindow = chromeWindowPayload(id: 30, workspace: "pw-codex")
+        let chromeWindow = chromeWindowPayload(id: 30, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
 
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
@@ -334,6 +300,9 @@ final class ActivationServiceTests: XCTestCase {
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
             signature(["layout", "floating", "--window-id", "12"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
@@ -347,7 +316,7 @@ final class ActivationServiceTests: XCTestCase {
         ]
 
         let ideLauncher = TestIdeLauncher.success()
-        let chromeLauncher = TestChromeLauncher.created(windowId: 99)
+        let chromeLauncher = TestChromeLauncher.existing(windowId: 30)
         let logger = TestLogger()
         logger.shouldFail = true
         logger.failureError = .writeFailed("log failure")
@@ -444,21 +413,20 @@ final class ActivationServiceTests: XCTestCase {
         XCTAssertEqual(chromeLauncher.callCount, 0)
     }
 
-    func testActivationFailsWhenIdeWindowNotDetectedAfterTimeout() {
+    func testActivationFailsWhenIdeTokenWindowNotDetectedAfterTimeout() {
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
-            ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
             ]
         ]
 
@@ -480,11 +448,7 @@ final class ActivationServiceTests: XCTestCase {
         case .success:
             XCTFail("Expected failure when IDE window not detected")
         case .failure(let error):
-            if case .ideWindowNotDetected(let workspace) = error {
-                XCTAssertEqual(workspace, "pw-codex")
-            } else {
-                XCTFail("Expected ideWindowNotDetected error, got: \(error)")
-            }
+            XCTAssertEqual(error, .ideWindowTokenNotDetected(token: "PW:codex"))
         }
 
         XCTAssertEqual(ideLauncher.callCount, 1)
@@ -496,7 +460,8 @@ final class ActivationServiceTests: XCTestCase {
             id: 42,
             workspace: "pw-codex",
             bundleId: TestConstants.vscodeBundleId,
-            appName: "Visual Studio Code"
+            appName: "Visual Studio Code",
+            windowTitle: "PW:codex - Visual Studio Code"
         )
 
         let responses: AeroSpaceCommandResponses = [
@@ -504,11 +469,10 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ]
         ]
 
@@ -539,46 +503,6 @@ final class ActivationServiceTests: XCTestCase {
         XCTAssertEqual(chromeLauncher.callCount, 1)
     }
 
-    func testActivationFailsWhenWorkspaceFocusChanges() {
-        let responses: AeroSpaceCommandResponses = [
-            signature(["workspace", "pw-codex"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
-            ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: ""))
-            ]
-        ]
-
-        let ideLauncher = TestIdeLauncher.success()
-        let chromeLauncher = TestChromeLauncher.created(windowId: 99)
-        let logger = TestLogger()
-
-        let service = makeService(
-            responses: responses,
-            ideLauncher: ideLauncher,
-            chromeLauncher: chromeLauncher,
-            logger: logger
-        )
-
-        let outcome = service.activate(projectId: "codex")
-        switch outcome {
-        case .success:
-            XCTFail("Expected failure when workspace focus changes")
-        case .failure(let error):
-            if case .workspaceFocusChanged(let expected, let actual) = error {
-                XCTAssertEqual(expected, "pw-codex")
-                XCTAssertEqual(actual, "pw-other")
-            } else {
-                XCTFail("Expected workspaceFocusChanged error, got: \(error)")
-            }
-        }
-
-        XCTAssertEqual(ideLauncher.callCount, 0)
-    }
-
     func testActivationFailsWhenIdeLaunchFails() {
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
@@ -587,8 +511,8 @@ final class ActivationServiceTests: XCTestCase {
             signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ],
-            signature(["list-workspaces", "--focused"]): [
-                .success(CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""))
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ]
         ]
 

@@ -2,17 +2,21 @@ import Foundation
 
 /// Checks application discovery for required apps (Chrome, IDEs).
 struct AppDiscoveryChecker {
+    private let paths: ProjectWorkspacesPaths
     private let fileSystem: FileSystem
     private let appDiscovery: AppDiscovering
 
     /// Creates an app discovery checker with the provided dependencies.
     /// - Parameters:
+    ///   - paths: ProjectWorkspaces filesystem paths.
     ///   - fileSystem: File system accessor.
     ///   - appDiscovery: Application discovery provider.
     init(
+        paths: ProjectWorkspacesPaths,
         fileSystem: FileSystem,
         appDiscovery: AppDiscovering
     ) {
+        self.paths = paths
         self.fileSystem = fileSystem
         self.appDiscovery = appDiscovery
     }
@@ -26,6 +30,7 @@ struct AppDiscoveryChecker {
         let ideKinds = outcome?.effectiveIdeKinds ?? []
 
         findings.append(checkChrome())
+        findings.append(contentsOf: checkChromeProfiles(outcome: outcome))
 
         if ideKinds.contains(.vscode) {
             findings.append(
@@ -79,6 +84,92 @@ struct AppDiscoveryChecker {
             title: "Google Chrome not found",
             fix: "Install Google Chrome so ProjectWorkspaces can create Chrome windows."
         )
+    }
+
+    /// Lists Chrome profile directories from the Chrome Local State file.
+    /// - Parameter outcome: Parsed config outcome if available.
+    /// - Returns: Findings describing available profiles or validation errors.
+    private func checkChromeProfiles(outcome: ConfigParseOutcome?) -> [DoctorFinding] {
+        let configuredProfiles = Set((outcome?.projects ?? []).compactMap { $0.chromeProfileDirectory })
+        let discovery = ChromeProfileDiscovery(paths: paths, fileSystem: fileSystem)
+        let result = discovery.discoverProfiles()
+
+        switch result {
+        case .success(let profiles):
+            guard !profiles.isEmpty else {
+                return [
+                    DoctorFinding(
+                        severity: .warn,
+                        title: "Chrome profiles not found",
+                        detail: paths.chromeLocalStateFile.path,
+                        fix: "Launch Chrome once to generate profile metadata, then re-run Doctor."
+                    )
+                ]
+            }
+
+            var findings: [DoctorFinding] = []
+            let bodyLines = profiles.map { profileLine($0) }
+            findings.append(
+                DoctorFinding(
+                    severity: .pass,
+                    title: "Chrome profiles discovered",
+                    detail: paths.chromeLocalStateFile.path,
+                    bodyLines: bodyLines
+                )
+            )
+
+            if !configuredProfiles.isEmpty {
+                let availableDirectories = Set(profiles.map { $0.directory })
+                let missingProfiles = configuredProfiles
+                    .filter { !availableDirectories.contains($0) }
+                    .sorted()
+                if !missingProfiles.isEmpty {
+                    let detail = missingProfiles.map { "- \($0)" }.joined(separator: "\n")
+                    findings.append(
+                        DoctorFinding(
+                            severity: .fail,
+                            title: "Chrome profile directory not found",
+                            detail: detail,
+                            fix: "Set project.chromeProfileDirectory to a directory listed above."
+                        )
+                    )
+                }
+            }
+
+            return findings
+        case .failure(let error):
+            var findings: [DoctorFinding] = [
+                DoctorFinding(
+                    severity: .warn,
+                    title: "Chrome profiles unavailable",
+                    detail: error.description,
+                    fix: "Launch Chrome once to generate profile metadata, then re-run Doctor."
+                )
+            ]
+            if !configuredProfiles.isEmpty {
+                let detail = configuredProfiles.sorted().map { "- \($0)" }.joined(separator: "\n")
+                findings.append(
+                    DoctorFinding(
+                        severity: .warn,
+                        title: "Chrome profile directories could not be validated",
+                        detail: detail,
+                        fix: "Ensure Chrome has launched at least once and re-run Doctor."
+                    )
+                )
+            }
+            return findings
+        }
+    }
+
+    private func profileLine(_ profile: ChromeProfileDescriptor) -> String {
+        var line = profile.directory
+        if let displayName = profile.displayName, !displayName.isEmpty {
+            line += " — \(displayName)"
+        }
+        if let userName = profile.userName, !userName.isEmpty {
+            line += " (\(userName))"
+        }
+        return line
     }
 
     /// Checks app discovery for a supported IDE.

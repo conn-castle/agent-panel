@@ -14,7 +14,8 @@ public protocol IdeLaunching {
 public protocol ChromeLaunching {
     /// Ensures a Chrome window exists for the expected workspace.
     /// - Parameters:
-    ///   - expectedWorkspaceName: Workspace that must already be focused.
+    ///   - expectedWorkspaceName: Target workspace name.
+    ///   - windowToken: Deterministic token used to identify the Chrome window.
     ///   - globalChromeUrls: Global URLs to open when creating Chrome.
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
@@ -22,6 +23,7 @@ public protocol ChromeLaunching {
     /// - Returns: Launch outcome or a structured error.
     func ensureWindow(
         expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
