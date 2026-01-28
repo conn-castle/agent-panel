@@ -302,7 +302,7 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 
 ### One Chrome window per project (enforced by deterministic token)
 
-The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>`. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
+The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>` followed by a non-word character or end of string. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
 ProjectWorkspaces only scans across workspaces to find windows with that token, and will move a matched window into `pw-<projectId>` when needed.
 If zero or multiple tokened Chrome windows are found, activation fails (no guessing or fallbacks).
 

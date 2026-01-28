@@ -91,14 +91,12 @@ public struct ChromeLauncher {
         }
 
         if !existingMatches.isEmpty {
-            let existingIds = existingMatches.map { $0.windowId }.sorted()
-            if allowExistingWindows, existingMatches.count == 1, let existing = existingMatches.first {
-                if case .failure(let error) = moveWindowIfNeeded(existing, to: expectedWorkspaceName) {
-                    return .failure(error)
-                }
-                return .success(.existing(windowId: existing.windowId))
-            }
-            return .failure(.chromeWindowAmbiguous(token: windowToken.value, windowIds: existingIds))
+            return handleExistingMatches(
+                existingMatches,
+                allowExistingWindows: allowExistingWindows,
+                expectedWorkspaceName: expectedWorkspaceName,
+                windowToken: windowToken
+            )
         }
 
         guard let chromeAppURL = resolveChromeAppURL() else {
@@ -150,6 +148,24 @@ public struct ChromeLauncher {
         case .failure(let error):
             return .failure(error)
         }
+    }
+
+    /// Handles tokened Chrome windows that already exist before creation attempts.
+    /// - Note: When reuse is disallowed, any existing token match fails to avoid duplicate windows.
+    private func handleExistingMatches(
+        _ matches: [AeroSpaceWindow],
+        allowExistingWindows: Bool,
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken
+    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
+        let existingIds = matches.map { $0.windowId }.sorted()
+        if allowExistingWindows, matches.count == 1, let existing = matches.first {
+            if case .failure(let error) = moveWindowIfNeeded(existing, to: expectedWorkspaceName) {
+                return .failure(error)
+            }
+            return .success(.existing(windowId: existing.windowId))
+        }
+        return .failure(.chromeWindowAmbiguous(token: windowToken.value, windowIds: existingIds))
     }
 
     /// Refocuses the IDE window after Chrome creation if a window id was provided.

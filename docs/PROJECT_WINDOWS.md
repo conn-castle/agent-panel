@@ -16,7 +16,7 @@
   - If `project.chromeProfileDirectory` is set, include `--profile-directory="<dir>"` in the launch args.
 - Scan all windows via AeroSpace and match **exactly**:
   - `appBundleId == com.google.Chrome`
-  - `window-title` contains the token.
+  - `window-title` contains the token followed by a non-word character or end of string.
 - Outcomes:
   - Exactly one match: ensure it is in `pw-<projectId>` (move if needed).
   - Zero matches: create a new Chrome window with the token, then detect/move it.
@@ -28,7 +28,7 @@
 - Store workspace files under `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`.
 - Scan all windows via AeroSpace and match **exactly**:
   - IDE identity (bundle id or app name).
-  - `window-title` contains the token.
+  - `window-title` contains the token followed by a non-word character or end of string.
 - Outcomes:
   - Exactly one match: ensure it is in `pw-<projectId>` (move if needed).
   - Zero matches after launch timeout: fail.

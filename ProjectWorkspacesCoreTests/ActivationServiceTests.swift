@@ -16,20 +16,10 @@ final class ActivationServiceTests: XCTestCase {
             appName: "Visual Studio Code",
             windowTitle: "PW:codex - Visual Studio Code"
         )
-        let chromeWindow = windowPayload(
-            id: 30,
-            workspace: "pw-codex",
-            bundleId: ChromeLauncher.chromeBundleId,
-            appName: "Google Chrome",
-            windowTitle: "PW:codex - Chrome"
-        )
 
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
@@ -84,9 +74,6 @@ final class ActivationServiceTests: XCTestCase {
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
@@ -149,9 +136,6 @@ final class ActivationServiceTests: XCTestCase {
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
-            ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB]), stderr: ""))
@@ -186,14 +170,10 @@ final class ActivationServiceTests: XCTestCase {
             appName: "Visual Studio Code",
             windowTitle: "PW:codex - Visual Studio Code"
         )
-        let chromeWindow = chromeWindowPayload(id: 33, workspace: "pw-codex")
 
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
@@ -253,9 +233,6 @@ final class ActivationServiceTests: XCTestCase {
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
-            ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowA, ideWindowB]), stderr: ""))
             ]
@@ -292,14 +269,10 @@ final class ActivationServiceTests: XCTestCase {
             appName: "Visual Studio Code",
             windowTitle: "PW:codex - Visual Studio Code"
         )
-        let chromeWindow = chromeWindowPayload(id: 30, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
 
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow, chromeWindow]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
@@ -418,9 +391,6 @@ final class ActivationServiceTests: XCTestCase {
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
-            ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
@@ -468,9 +438,6 @@ final class ActivationServiceTests: XCTestCase {
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
-            ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ]
@@ -507,9 +474,6 @@ final class ActivationServiceTests: XCTestCase {
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
                 .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
-            ],
-            signature(["list-windows", "--workspace", "pw-codex", "--json", "--format", listWindowsFormat]): [
-                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ],
             signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))

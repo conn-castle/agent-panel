@@ -447,3 +447,18 @@ final class ChromeLauncherTests: XCTestCase {
         AeroSpaceCommandSignature(path: aeroSpacePath, arguments: arguments)
     }
 }
+
+final class ProjectWindowTokenTests: XCTestCase {
+    func testMatchesAcceptsTrailingDelimiterOrEnd() {
+        let token = ProjectWindowToken(projectId: "code")
+
+        XCTAssertTrue(token.matches(windowTitle: "PW:code - Chrome"))
+        XCTAssertTrue(token.matches(windowTitle: "Chrome PW:code"))
+    }
+
+    func testMatchesRejectsPrefixOfLongerProjectId() {
+        let token = ProjectWindowToken(projectId: "code")
+
+        XCTAssertFalse(token.matches(windowTitle: "PW:codex - Chrome"))
+    }
+}

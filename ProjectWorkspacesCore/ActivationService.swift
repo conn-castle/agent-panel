@@ -132,30 +132,24 @@ public struct ActivationService {
             return context.finalize(logger: logger)
         }
 
-        // Step 4: Get initial window state
-        guard let initialWindows = listWorkspaceWindows(client: client, context: context) else {
-            return context.finalize(logger: logger)
-        }
-
-        // Step 5: Resolve IDE identity
+        // Step 4: Resolve IDE identity
         guard let ideIdentity = resolveIdeIdentity(project: project, ideConfig: config.ide, context: context) else {
             return context.finalize(logger: logger)
         }
 
-        // Step 6: Ensure IDE window exists
+        // Step 5: Ensure IDE window exists
         guard let ideWindowId = ensureIdeWindow(
             client: client,
             project: project,
             ideConfig: config.ide,
             ideIdentity: ideIdentity,
-            initialWindows: initialWindows,
             context: context
         ) else {
             return context.finalize(logger: logger)
         }
         context.ideWindowId = ideWindowId
 
-        // Step 7: Ensure Chrome window exists
+        // Step 6: Ensure Chrome window exists
         guard let chromeWindowId = ensureChromeWindow(
             client: client,
             chromeLauncher: chromeLauncher,
@@ -168,12 +162,12 @@ public struct ActivationService {
         }
         context.chromeWindowId = chromeWindowId
 
-        // Step 8: Set floating layout for both windows
+        // Step 7: Set floating layout for both windows
         guard setFloatingLayouts(client: client, ideWindowId: ideWindowId, chromeWindowId: chromeWindowId, context: context) else {
             return context.finalize(logger: logger)
         }
 
-        // Step 9: Focus IDE window
+        // Step 8: Focus IDE window
         guard focusIdeWindow(client: client, ideWindowId: ideWindowId, context: context) else {
             return context.finalize(logger: logger)
         }
@@ -250,18 +244,6 @@ public struct ActivationService {
         }
     }
 
-    // MARK: - Step 4: Window Enumeration
-
-    private func listWorkspaceWindows(client: AeroSpaceClient, context: ActivationContext) -> [AeroSpaceWindow]? {
-        switch client.listWindowsDecoded(workspace: context.workspaceName) {
-        case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
-            return nil
-        case .success(let windows):
-            return windows
-        }
-    }
-
     // MARK: - Step 5: IDE Identity Resolution
 
     private func resolveIdeIdentity(
@@ -287,7 +269,6 @@ public struct ActivationService {
         project: ProjectConfig,
         ideConfig: IdeConfig,
         ideIdentity: IdeIdentity,
-        initialWindows: [AeroSpaceWindow],
         context: ActivationContext
     ) -> Int? {
         return ensureTokenIdeWindow(
