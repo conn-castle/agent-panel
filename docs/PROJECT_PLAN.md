@@ -131,7 +131,7 @@ Doctor FAIL if missing/invalid:
 - Any project missing/invalid: `id` (regex + unique + not `inbox`), `name` (non-empty), `path` (exists), `colorHex` (`#RRGGBB`)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
 - Accessibility permission not granted (required for layout)
-- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, skip this check and report PASS with a note.
+- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, use the app-reported hotkey status when available, otherwise skip this check and report PASS with a note.
 
 Doctor WARN if present:
 - `global.switcherHotkey` (ignored; hotkey is fixed to ⌘⇧Space)

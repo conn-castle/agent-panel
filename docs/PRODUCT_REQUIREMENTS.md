@@ -152,6 +152,14 @@ Defaults (applied if keys are missing):
 - Switcher displays project identity:
   - color swatch
   - name
+- Switcher ordering and filtering:
+  - Preserve config file order by default.
+  - Filter is case-insensitive substring match on project `id` or `name`.
+  - After each query change, selection resets to the first match.
+  - If there are no matches, show a “No matches” row/label and Enter does nothing.
+- Hotkey toggle: if the switcher is visible, ⌘⇧Space dismisses it (same as Esc).
+- Activation UX: Enter shows a busy state (disable input + “Activating…”); on success, dismiss (show non-blocking warnings if any); on failure, keep the switcher open with an inline error and allow retry.
+- If the hotkey cannot be registered, the menu bar must show a persistent “Hotkey unavailable” warning and provide **Open Switcher...** to access the switcher manually.
 
 **MUST (Close)**
 
@@ -279,7 +287,7 @@ Per project, IDE launch priority is:
   - Chrome installed
   - VS Code installed (and Antigravity if configured)
   - global hotkey ⌘⇧Space can be registered (FAIL if registration fails due to conflict / OS denial)
-  - if the agent app is running, Doctor must skip the hotkey registration check and report PASS with a note that the hotkey is managed by the agent
+  - if the agent app is running, Doctor must use the app-reported hotkey status when available; otherwise skip the hotkey registration check and report PASS with a note that the hotkey is managed by the agent
   - config parses and is valid
   - project paths exist
   - required directories are writable

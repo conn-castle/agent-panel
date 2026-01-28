@@ -15,14 +15,17 @@
 		10E6A0B9ABC2C02DCD7F99F9 /* ChromeLaunchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43539ED3D599D7A64D7C7320 /* ChromeLaunchModels.swift */; };
 		137A26ED38AFC2B33C913164 /* vscode-workspace.json in Resources */ = {isa = PBXBuildFile; fileRef = ED556F35DA4367F65256F98C /* vscode-workspace.json */; };
 		13BA1FB60F27ECF0809049EE /* ActivationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B444D0192C002004F200FE6 /* ActivationServiceTests.swift */; };
+		1D9CEA5204D43505A1F4BF4E /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */; };
 		241B7D05EAEDABAD27E01174 /* IdeLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA682AFBD72154C8F7B0B1E /* IdeLauncher.swift */; };
 		27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		287956BD40E6B8E89E36BBAA /* VSCodeCLIResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59BE2D0548045724A9158A2B /* VSCodeCLIResolver.swift */; };
 		2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */; };
 		2CE1D9CC6FAC99C16E6FF8B6 /* AppDiscoveryChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F523D28298233703CE0CDB /* AppDiscoveryChecker.swift */; };
+		2D9D118AD5FA6D9BCF5FDDBB /* ProjectFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43021B5D6A347EF3B7ECF6D9 /* ProjectFilter.swift */; };
 		31178CF9DB741EBFEB634657 /* AeroSpaceErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */; };
 		31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */; };
+		33110A2AB18F083A16BB1A26 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = A83CD50E6F2AB972AC570D4B /* TOMLDecoder */; };
 		345AC9F26EE8EA40DDA6D1C5 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E82A0992420A094C6BC1789 /* main.swift */; };
 		34B04598F0FBC4E10ECF2F18 /* ChromeLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA8B56F7BF119FF989121C36 /* ChromeLauncherTests.swift */; };
 		353D2AC2B2CBCCF7AE53A3FC /* AeroSpaceCommandTracer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09205C65723670593B3E7109 /* AeroSpaceCommandTracer.swift */; };
@@ -31,13 +34,18 @@
 		3972E6F128A30168790962CE /* AeroSpaceWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB43B61F43F39612081E63F /* AeroSpaceWindow.swift */; };
 		3A32E2F69F1768D1982DC5DC /* IdeLaunchEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4618E46EEA1C805A4304FA87 /* IdeLaunchEnvironment.swift */; };
 		3CAF236C3DAF3104C56FF66F /* ActivationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31055427CCC325984113204 /* ActivationService.swift */; };
+		3DD2EAB627686018EC47163E /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F33EC84D088C9E3D979A9F7 /* SwitcherPanelController.swift */; };
 		3E702646EEFE04617DFB4BC1 /* AeroSpaceChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D459731C2122AAC2B0D0B2 /* AeroSpaceChecker.swift */; };
 		3F039924D5C492EA756000A9 /* IdeLaunchEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E251142A25AABB60AB01F46F /* IdeLaunchEnvironmentTests.swift */; };
 		3F9E352BA6B5457907853504 /* ChromeProfileDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A0B00D68F1D1657E420C2A /* ChromeProfileDiscoveryTests.swift */; };
 		3FD15FBF0E1F4114BC7FE5C1 /* IdeLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E28456856CBCF155F9518AA3 /* IdeLauncherTests.swift */; };
 		4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */; };
+		4589A7BA114C72E89398F46C /* ProjectFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F7FF11EF79AD3CC381AB7B9 /* ProjectFilterTests.swift */; };
 		47E47EFEFF0AB64261067309 /* FilePermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD523063A734D765FB2F501A /* FilePermissions.swift */; };
+		4CFA3513BE5857447391A662 /* SwitcherPanelControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99C6CE3A3A68078C7522AF3 /* SwitcherPanelControllerTests.swift */; };
+		5621F1808FA434F214DD05CE /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 5BA7BCD95D7F83B6077F6279 /* TOMLDecoder */; };
 		59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */; };
+		6005076365F35BA20E12AF4B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 5DFFE2ED67B07BBBA4895FB5 /* TOMLDecoder */; };
 		62FED868FA129C98FED3D0AC /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		6AD43DB21D17C3914807B6CB /* VSCodeWorkspaceGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE9794BA9E17729BAEB9065A /* VSCodeWorkspaceGenerator.swift */; };
 		6C8266EFFB37AE56ED9BA648 /* AeroSpaceWindowDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89AF31039BF5FC0A9AABDA6E /* AeroSpaceWindowDecoderTests.swift */; };
@@ -46,12 +54,14 @@
 		78FBDEC9CB3E26F90E643D45 /* AeroSpaceBinaryResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5483801F8DC406E0499CE10B /* AeroSpaceBinaryResolver.swift */; };
 		7E5C8BB2DF6B0A2ED0E69253 /* AeroSpaceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0BB4470C6E24287C582C34B /* AeroSpaceClient.swift */; };
 		831F38D95C6E471BA6874C7B /* AeroSpaceRetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */; };
+		8F9DAF6CB7BE6890552F21D8 /* ProjectCatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE7E43E9D817427800961A03 /* ProjectCatalogService.swift */; };
 		90F079F8156706BEF99CACD6 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		9D244F9BC75D765342C35AC9 /* VSCodeShimInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8A1A256234FBAA14603A921 /* VSCodeShimInstaller.swift */; };
 		A083CFBB0B652F6FE250D38B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */; };
 		A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0980D9F296FC33846D2EF524 /* DoctorModels.swift */; };
 		A473E2FD8F478AC72BE0DA7F /* ProjectWorkspacesLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */; };
 		A99847C3783DF6439C540400 /* VSCodeColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 608E9027CC40A582D60DAF4E /* VSCodeColorPalette.swift */; };
+		B2BF302562CF85A19BB2A30C /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 9459069FE493CF9D8B805C13 /* TOMLDecoder */; };
 		B4676B286BFDAB23EEC2C9C6 /* ProjectWindowToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */; };
 		B512EC20D029713DFB1394F0 /* ChromeLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5359E0D00972ED7A323D65BA /* ChromeLauncher.swift */; };
 		BA3F48BFB05CC483B40B1D30 /* PermissionsChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */; };
@@ -60,6 +70,8 @@
 		C2D70606EFC87E69BA444D72 /* ChromeProfileDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C8245EC756254E978D749F /* ChromeProfileDiscovery.swift */; };
 		C56577537F84FA9CAF77E221 /* VSCodeWorkspaceGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEA937320C5A2ACA07F0A03 /* VSCodeWorkspaceGeneratorTests.swift */; };
 		CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */; };
+		CC8EE6744251B7D5A37D677E /* HotkeyRegistrationStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AA9857B18A6538E3637B1E /* HotkeyRegistrationStatus.swift */; };
+		DBB3F860352136FECBF6CDC9 /* ProjectCatalogServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65A9110DBCC68179E7B99CC /* ProjectCatalogServiceTests.swift */; };
 		DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */; };
 		DE1ADE4BE4401AB3358FA6C1 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A58FD91CA7927FA8F14180CD /* TestSupport.swift */; };
 		DEAEE847DD0B745D001FAAA0 /* ActivationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */; };
@@ -68,11 +80,19 @@
 		F092788D2B7A3B8E0912160B /* VSCodeColorPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C619E1497F90654F355A5ABA /* VSCodeColorPaletteTests.swift */; };
 		F20F077BCFE0E1DD32BF36E7 /* IdeAppResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */; };
 		F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */; };
+		F810C237A602812110E2A923 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB90636D8E0C80415266A4BF /* HotkeyManager.swift */; };
 		FDDCEA4BC0E904AFE9D9F1D9 /* ConfigLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C61D12DEBA4F9356A19E517 /* ConfigLoader.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		6C915782880E88AB47593739 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0F443EF38EEBB3995D2C5B41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 05DA0BB87C17C68B90FA16AC;
+			remoteInfo = ProjectWorkspacesCore;
+		};
+		76EA4459EF285B1408991BAA /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0F443EF38EEBB3995D2C5B41 /* Project object */;
 			proxyType = 1;
@@ -85,6 +105,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 05DA0BB87C17C68B90FA16AC;
 			remoteInfo = ProjectWorkspacesCore;
+		};
+		BA1E26E1D7EC0D0C727708F9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0F443EF38EEBB3995D2C5B41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 45E10229B68F4E64A6AABC79;
+			remoteInfo = ProjectWorkspacesApp;
 		};
 		E6F50D8408BA7848ABAF6B29 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -99,6 +126,7 @@
 		09205C65723670593B3E7109 /* AeroSpaceCommandTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCommandTracer.swift; sourceTree = "<group>"; };
 		0980D9F296FC33846D2EF524 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
 		0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceRetry.swift; sourceTree = "<group>"; };
+		0F7FF11EF79AD3CC381AB7B9 /* ProjectFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFilterTests.swift; sourceTree = "<group>"; };
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
 		1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlServiceTests.swift; sourceTree = "<group>"; };
 		22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectWorkspacesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -109,12 +137,14 @@
 		3B444D0192C002004F200FE6 /* ActivationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationServiceTests.swift; sourceTree = "<group>"; };
 		3DE2FA81C4BD12C763EA0DF7 /* ProjectWorkspacesCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectWorkspacesCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesCore.swift; sourceTree = "<group>"; };
+		43021B5D6A347EF3B7ECF6D9 /* ProjectFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFilter.swift; sourceTree = "<group>"; };
 		43539ED3D599D7A64D7C7320 /* ChromeLaunchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeLaunchModels.swift; sourceTree = "<group>"; };
 		4618E46EEA1C805A4304FA87 /* IdeLaunchEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLaunchEnvironment.swift; sourceTree = "<group>"; };
 		4C4A4F3F4BE0D94FAE368FD6 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		4D055AE4660CC2EEE67E7AEE /* AeroSpaceIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceIntegrationTests.swift; sourceTree = "<group>"; };
 		5359E0D00972ED7A323D65BA /* ChromeLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeLauncher.swift; sourceTree = "<group>"; };
 		5483801F8DC406E0499CE10B /* AeroSpaceBinaryResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceBinaryResolver.swift; sourceTree = "<group>"; };
+		550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectWorkspacesAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		59BE2D0548045724A9158A2B /* VSCodeCLIResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeCLIResolver.swift; sourceTree = "<group>"; };
 		59F523D28298233703CE0CDB /* AppDiscoveryChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiscoveryChecker.swift; sourceTree = "<group>"; };
 		5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesLoggerTests.swift; sourceTree = "<group>"; };
@@ -122,8 +152,10 @@
 		5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeAppResolver.swift; sourceTree = "<group>"; };
 		608E9027CC40A582D60DAF4E /* VSCodeColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPalette.swift; sourceTree = "<group>"; };
 		6873A9C5B58A71CC29798F0C /* PwctlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlService.swift; sourceTree = "<group>"; };
+		76AA9857B18A6538E3637B1E /* HotkeyRegistrationStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRegistrationStatus.swift; sourceTree = "<group>"; };
 		78D459731C2122AAC2B0D0B2 /* AeroSpaceChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceChecker.swift; sourceTree = "<group>"; };
 		7E82A0992420A094C6BC1789 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		7F33EC84D088C9E3D979A9F7 /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
 		7FC23A946E5D09149663D9F3 /* IdeLaunchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLaunchModels.swift; sourceTree = "<group>"; };
 		82A0B00D68F1D1657E420C2A /* ChromeProfileDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeProfileDiscoveryTests.swift; sourceTree = "<group>"; };
 		8375C545A0FB4632E4A0E063 /* ActivationDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationDependencies.swift; sourceTree = "<group>"; };
@@ -146,18 +178,22 @@
 		C619E1497F90654F355A5ABA /* VSCodeColorPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPaletteTests.swift; sourceTree = "<group>"; };
 		CA1DFAB471DD9D958C7C52F0 /* ConfigModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigModels.swift; sourceTree = "<group>"; };
 		CE07B01C725DCD484B2140BC /* pwctl */ = {isa = PBXFileReference; includeInIndex = 0; path = pwctl; sourceTree = BUILT_PRODUCTS_DIR; };
+		CE7E43E9D817427800961A03 /* ProjectCatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCatalogService.swift; sourceTree = "<group>"; };
 		D0BB4470C6E24287C582C34B /* AeroSpaceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceClient.swift; sourceTree = "<group>"; };
 		D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceErrors.swift; sourceTree = "<group>"; };
 		D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Doctor.swift; sourceTree = "<group>"; };
+		D99C6CE3A3A68078C7522AF3 /* SwitcherPanelControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelControllerTests.swift; sourceTree = "<group>"; };
 		DA8B56F7BF119FF989121C36 /* ChromeLauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeLauncherTests.swift; sourceTree = "<group>"; };
 		E251142A25AABB60AB01F46F /* IdeLaunchEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLaunchEnvironmentTests.swift; sourceTree = "<group>"; };
 		E28456856CBCF155F9518AA3 /* IdeLauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLauncherTests.swift; sourceTree = "<group>"; };
 		E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlArgumentParserTests.swift; sourceTree = "<group>"; };
+		E65A9110DBCC68179E7B99CC /* ProjectCatalogServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCatalogServiceTests.swift; sourceTree = "<group>"; };
 		E8A1A256234FBAA14603A921 /* VSCodeShimInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeShimInstaller.swift; sourceTree = "<group>"; };
 		ED556F35DA4367F65256F98C /* vscode-workspace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vscode-workspace.json"; sourceTree = "<group>"; };
 		EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationModels.swift; sourceTree = "<group>"; };
 		F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorTests.swift; sourceTree = "<group>"; };
 		FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWindowToken.swift; sourceTree = "<group>"; };
+		FB90636D8E0C80415266A4BF /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		FCA682AFBD72154C8F7B0B1E /* IdeLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeLauncher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -167,6 +203,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */,
+				5621F1808FA434F214DD05CE /* TOMLDecoder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -175,6 +212,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				90F079F8156706BEF99CACD6 /* ProjectWorkspacesCore.framework in Frameworks */,
+				33110A2AB18F083A16BB1A26 /* TOMLDecoder in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4319800868C250B7A598CC4F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D9CEA5204D43505A1F4BF4E /* ProjectWorkspacesCore.framework in Frameworks */,
+				B2BF302562CF85A19BB2A30C /* TOMLDecoder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -191,6 +238,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				62FED868FA129C98FED3D0AC /* ProjectWorkspacesCore.framework in Frameworks */,
+				6005076365F35BA20E12AF4B /* TOMLDecoder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -211,6 +259,8 @@
 				F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */,
 				E251142A25AABB60AB01F46F /* IdeLaunchEnvironmentTests.swift */,
 				E28456856CBCF155F9518AA3 /* IdeLauncherTests.swift */,
+				E65A9110DBCC68179E7B99CC /* ProjectCatalogServiceTests.swift */,
+				0F7FF11EF79AD3CC381AB7B9 /* ProjectFilterTests.swift */,
 				3A40C49513E54AF5F36FCD3D /* ProjectWorkspacesCoreTests.swift */,
 				5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */,
 				22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */,
@@ -224,10 +274,19 @@
 			path = ProjectWorkspacesCoreTests;
 			sourceTree = "<group>";
 		};
+		90A03AE47AE5253B1C479F8C /* ProjectWorkspacesAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				D99C6CE3A3A68078C7522AF3 /* SwitcherPanelControllerTests.swift */,
+			);
+			path = ProjectWorkspacesAppTests;
+			sourceTree = "<group>";
+		};
 		9BD450460A73A349743786D3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */,
+				550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */,
 				BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */,
 				3DE2FA81C4BD12C763EA0DF7 /* ProjectWorkspacesCoreTests.xctest */,
 				CE07B01C725DCD484B2140BC /* pwctl */,
@@ -239,6 +298,7 @@
 			isa = PBXGroup;
 			children = (
 				E0A3A944F976FF23B46FE502 /* ProjectWorkspacesApp */,
+				90A03AE47AE5253B1C479F8C /* ProjectWorkspacesAppTests */,
 				F710D1A554E2179D37B2F186 /* ProjectWorkspacesCore */,
 				3EF6F416E609B690C86D5B6D /* ProjectWorkspacesCoreTests */,
 				D4ADDBBB9A1FF0CDDE5BA145 /* pwctl */,
@@ -265,8 +325,10 @@
 		E0A3A944F976FF23B46FE502 /* ProjectWorkspacesApp */ = {
 			isa = PBXGroup;
 			children = (
+				FB90636D8E0C80415266A4BF /* HotkeyManager.swift */,
 				4C4A4F3F4BE0D94FAE368FD6 /* Info.plist */,
 				180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */,
+				7F33EC84D088C9E3D979A9F7 /* SwitcherPanelController.swift */,
 			);
 			path = ProjectWorkspacesApp;
 			sourceTree = "<group>";
@@ -295,11 +357,14 @@
 				C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */,
 				0980D9F296FC33846D2EF524 /* DoctorModels.swift */,
 				BD523063A734D765FB2F501A /* FilePermissions.swift */,
+				76AA9857B18A6538E3637B1E /* HotkeyRegistrationStatus.swift */,
 				5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */,
 				4618E46EEA1C805A4304FA87 /* IdeLaunchEnvironment.swift */,
 				FCA682AFBD72154C8F7B0B1E /* IdeLauncher.swift */,
 				7FC23A946E5D09149663D9F3 /* IdeLaunchModels.swift */,
 				5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */,
+				CE7E43E9D817427800961A03 /* ProjectCatalogService.swift */,
+				43021B5D6A347EF3B7ECF6D9 /* ProjectFilter.swift */,
 				FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */,
 				3FE20C096B317AF02A26B246 /* ProjectWorkspacesCore.swift */,
 				9E6EDEAAC486C652827491AE /* ProjectWorkspacesLogger.swift */,
@@ -350,6 +415,7 @@
 			);
 			name = ProjectWorkspacesApp;
 			packageProductDependencies = (
+				5DFFE2ED67B07BBBA4895FB5 /* TOMLDecoder */,
 			);
 			productName = ProjectWorkspacesApp;
 			productReference = 22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */;
@@ -369,10 +435,32 @@
 			);
 			name = pwctl;
 			packageProductDependencies = (
+				A83CD50E6F2AB972AC570D4B /* TOMLDecoder */,
 			);
 			productName = pwctl;
 			productReference = CE07B01C725DCD484B2140BC /* pwctl */;
 			productType = "com.apple.product-type.tool";
+		};
+		A7175CDC2F90A81CB8C16451 /* ProjectWorkspacesAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D91406B32A2416069864DD1A /* Build configuration list for PBXNativeTarget "ProjectWorkspacesAppTests" */;
+			buildPhases = (
+				2B31F1713C148E69401D28BD /* Sources */,
+				4319800868C250B7A598CC4F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DB6ABAB1D1A47443E4303618 /* PBXTargetDependency */,
+				4C059762F692A7A4B287AF4E /* PBXTargetDependency */,
+			);
+			name = ProjectWorkspacesAppTests;
+			packageProductDependencies = (
+				9459069FE493CF9D8B805C13 /* TOMLDecoder */,
+			);
+			productName = ProjectWorkspacesAppTests;
+			productReference = 550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		CDAB6A5157B78E5693FF5BB1 /* ProjectWorkspacesCoreTests */ = {
 			isa = PBXNativeTarget;
@@ -389,6 +477,7 @@
 			);
 			name = ProjectWorkspacesCoreTests;
 			packageProductDependencies = (
+				5BA7BCD95D7F83B6077F6279 /* TOMLDecoder */,
 			);
 			productName = ProjectWorkspacesCoreTests;
 			productReference = 3DE2FA81C4BD12C763EA0DF7 /* ProjectWorkspacesCoreTests.xctest */;
@@ -421,6 +510,7 @@
 			projectRoot = "";
 			targets = (
 				45E10229B68F4E64A6AABC79 /* ProjectWorkspacesApp */,
+				A7175CDC2F90A81CB8C16451 /* ProjectWorkspacesAppTests */,
 				05DA0BB87C17C68B90FA16AC /* ProjectWorkspacesCore */,
 				CDAB6A5157B78E5693FF5BB1 /* ProjectWorkspacesCoreTests */,
 				9465A67A95ADB59E1402A241 /* pwctl */,
@@ -444,7 +534,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F810C237A602812110E2A923 /* HotkeyManager.swift in Sources */,
 				4377BB67E4B299545A022386 /* ProjectWorkspacesApp.swift in Sources */,
+				3DD2EAB627686018EC47163E /* SwitcherPanelController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -453,6 +545,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				345AC9F26EE8EA40DDA6D1C5 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2B31F1713C148E69401D28BD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4CFA3513BE5857447391A662 /* SwitcherPanelControllerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -481,11 +581,14 @@
 				E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */,
 				A43FC3468A3E4E04E22AFC81 /* DoctorModels.swift in Sources */,
 				47E47EFEFF0AB64261067309 /* FilePermissions.swift in Sources */,
+				CC8EE6744251B7D5A37D677E /* HotkeyRegistrationStatus.swift in Sources */,
 				F20F077BCFE0E1DD32BF36E7 /* IdeAppResolver.swift in Sources */,
 				3A32E2F69F1768D1982DC5DC /* IdeLaunchEnvironment.swift in Sources */,
 				3798CCF4F4D47D9FE4225CE9 /* IdeLaunchModels.swift in Sources */,
 				241B7D05EAEDABAD27E01174 /* IdeLauncher.swift in Sources */,
 				BA3F48BFB05CC483B40B1D30 /* PermissionsChecker.swift in Sources */,
+				8F9DAF6CB7BE6890552F21D8 /* ProjectCatalogService.swift in Sources */,
+				2D9D118AD5FA6D9BCF5FDDBB /* ProjectFilter.swift in Sources */,
 				B4676B286BFDAB23EEC2C9C6 /* ProjectWindowToken.swift in Sources */,
 				31E24AE2F0C079847D24850B /* ProjectWorkspacesCore.swift in Sources */,
 				A473E2FD8F478AC72BE0DA7F /* ProjectWorkspacesLogger.swift in Sources */,
@@ -514,6 +617,8 @@
 				1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */,
 				3F039924D5C492EA756000A9 /* IdeLaunchEnvironmentTests.swift in Sources */,
 				3FD15FBF0E1F4114BC7FE5C1 /* IdeLauncherTests.swift in Sources */,
+				DBB3F860352136FECBF6CDC9 /* ProjectCatalogServiceTests.swift in Sources */,
+				4589A7BA114C72E89398F46C /* ProjectFilterTests.swift in Sources */,
 				59859DEFF1381E4A5E53638C /* ProjectWorkspacesCoreTests.swift in Sources */,
 				6D7CC26AF8BC1151C65D7575 /* ProjectWorkspacesLoggerTests.swift in Sources */,
 				DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */,
@@ -542,6 +647,16 @@
 			isa = PBXTargetDependency;
 			target = 05DA0BB87C17C68B90FA16AC /* ProjectWorkspacesCore */;
 			targetProxy = 6C915782880E88AB47593739 /* PBXContainerItemProxy */;
+		};
+		4C059762F692A7A4B287AF4E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 05DA0BB87C17C68B90FA16AC /* ProjectWorkspacesCore */;
+			targetProxy = 76EA4459EF285B1408991BAA /* PBXContainerItemProxy */;
+		};
+		DB6ABAB1D1A47443E4303618 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 45E10229B68F4E64A6AABC79 /* ProjectWorkspacesApp */;
+			targetProxy = BA1E26E1D7EC0D0C727708F9 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -579,6 +694,23 @@
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		56F12107ABAAA125478D7C9C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ProjectWorkspacesAppTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProjectWorkspaces.app/Contents/MacOS/ProjectWorkspaces";
 			};
 			name = Release;
 		};
@@ -671,6 +803,23 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		729822CEACD4C6EF456083CA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ProjectWorkspacesAppTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProjectWorkspaces.app/Contents/MacOS/ProjectWorkspaces";
 			};
 			name = Debug;
 		};
@@ -831,6 +980,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		D91406B32A2416069864DD1A /* Build configuration list for PBXNativeTarget "ProjectWorkspacesAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				729822CEACD4C6EF456083CA /* Debug */,
+				56F12107ABAAA125478D7C9C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		F3463BD9C115C430DFB2DB93 /* Build configuration list for PBXNativeTarget "pwctl" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -864,6 +1022,26 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		1B568C3ACB634D0CE8DFA0CB /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+		5BA7BCD95D7F83B6077F6279 /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+		5DFFE2ED67B07BBBA4895FB5 /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+		9459069FE493CF9D8B805C13 /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+		A83CD50E6F2AB972AC570D4B /* TOMLDecoder */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4FC63D636EC158668346A93F /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
 			productName = TOMLDecoder;

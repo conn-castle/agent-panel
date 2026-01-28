@@ -26,6 +26,11 @@ private struct DoctorButtons {
     let close: NSButton
 }
 
+private struct MenuItems {
+    let hotkeyWarning: NSMenuItem
+    let openSwitcher: NSMenuItem
+}
+
 /// App lifecycle hook used to create a minimal menu bar presence.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -33,17 +38,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var doctorTextView: NSTextView?
     private var doctorButtons: DoctorButtons?
     private var lastDoctorReport: DoctorReport?
+    private var hotkeyManager: HotkeyManager?
+    private var switcherController: SwitcherPanelController?
+    private var menuItems: MenuItems?
+    private let logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "PW"
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
+
+        let switcherController = SwitcherPanelController(logger: logger)
+        self.switcherController = switcherController
+
+        let hotkeyManager = HotkeyManager()
+        hotkeyManager.onHotkey = { [weak self] in
+            self?.toggleSwitcher()
+        }
+        hotkeyManager.onStatusChange = { [weak self] status in
+            self?.updateHotkeyStatus(status)
+        }
+        hotkeyManager.registerHotkey()
+        self.hotkeyManager = hotkeyManager
+        updateHotkeyStatus(hotkeyManager.hotkeyRegistrationStatus())
     }
 
     /// Creates the menu bar menu.
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+
+        let hotkeyWarningItem = NSMenuItem(
+            title: "Hotkey unavailable",
+            action: nil,
+            keyEquivalent: ""
+        )
+        hotkeyWarningItem.isEnabled = false
+        hotkeyWarningItem.isHidden = true
+        menu.addItem(hotkeyWarningItem)
+
+        let openSwitcherItem = NSMenuItem(
+            title: "Open Switcher...",
+            action: #selector(openSwitcher(_:)),
+            keyEquivalent: ""
+        )
+        openSwitcherItem.target = self
+        menu.addItem(openSwitcherItem)
+
+        menu.addItem(.separator())
 
         menu.addItem(
             NSMenuItem(
@@ -68,12 +111,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
+        menuItems = MenuItems(hotkeyWarning: hotkeyWarningItem, openSwitcher: openSwitcherItem)
+
         return menu
+    }
+
+    /// Opens the switcher panel from the menu bar.
+    @objc private func openSwitcher(_ sender: Any?) {
+        _ = logger.log(event: "switcher.menu.invoked", level: .info, message: nil, context: nil)
+        statusItem?.menu?.cancelTracking()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else {
+                return
+            }
+            NSApp.activate(ignoringOtherApps: true)
+            self.ensureSwitcherController().show(origin: .menu)
+        }
+    }
+
+    /// Toggles the switcher panel from the global hotkey.
+    private func toggleSwitcher() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            _ = self.logger.log(event: "switcher.hotkey.invoked", level: .info, message: nil, context: nil)
+            NSApp.activate(ignoringOtherApps: true)
+            self.ensureSwitcherController().toggle(origin: .hotkey)
+        }
+    }
+
+    /// Ensures the switcher controller exists for menu/hotkey actions.
+    /// - Returns: Switcher panel controller instance.
+    private func ensureSwitcherController() -> SwitcherPanelController {
+        if let switcherController {
+            return switcherController
+        }
+        let controller = SwitcherPanelController(logger: logger)
+        switcherController = controller
+        return controller
+    }
+
+    /// Updates menu bar UI and tooltip based on hotkey registration status.
+    private func updateHotkeyStatus(_ status: HotkeyRegistrationStatus?) {
+        guard let statusItem, let menuItems else {
+            return
+        }
+
+        switch status {
+        case .registered:
+            menuItems.hotkeyWarning.isHidden = true
+            statusItem.button?.toolTip = nil
+        case .failed(let osStatus):
+            menuItems.hotkeyWarning.title = "Hotkey unavailable (OSStatus: \(osStatus))"
+            menuItems.hotkeyWarning.isHidden = false
+            statusItem.button?.toolTip = "Hotkey unavailable (OSStatus: \(osStatus))"
+        case nil:
+            menuItems.hotkeyWarning.isHidden = true
+            statusItem.button?.toolTip = nil
+        }
+    }
+
+    /// Creates a Doctor instance with the current hotkey status provider.
+    private func makeDoctor() -> Doctor {
+        Doctor(hotkeyStatusProvider: hotkeyManager)
     }
 
     /// Runs Doctor and presents the report in a modal-style panel.
     @objc private func runDoctor() {
-        let report = Doctor().run()
+        let report = makeDoctor().run()
         showDoctorReport(report)
     }
 
@@ -89,37 +195,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Installs AeroSpace via Homebrew and refreshes the report.
     @objc private func installAeroSpace() {
-        let report = Doctor().installAeroSpace()
+        let report = makeDoctor().installAeroSpace()
         showDoctorReport(report)
     }
 
     /// Installs the safe AeroSpace config and refreshes the report.
     @objc private func installSafeAeroSpaceConfig() {
-        let report = Doctor().installSafeAeroSpaceConfig()
+        let report = makeDoctor().installSafeAeroSpaceConfig()
         showDoctorReport(report)
     }
 
     /// Starts AeroSpace and refreshes the report.
     @objc private func startAeroSpace() {
-        let report = Doctor().startAeroSpace()
+        let report = makeDoctor().startAeroSpace()
         showDoctorReport(report)
     }
 
     /// Reloads AeroSpace config and refreshes the report.
     @objc private func reloadAeroSpaceConfig() {
-        let report = Doctor().reloadAeroSpaceConfig()
+        let report = makeDoctor().reloadAeroSpaceConfig()
         showDoctorReport(report)
     }
 
     /// Disables AeroSpace window management and refreshes the report.
     @objc private func disableAeroSpace() {
-        let report = Doctor().disableAeroSpace()
+        let report = makeDoctor().disableAeroSpace()
         showDoctorReport(report)
     }
 
     /// Uninstalls the safe AeroSpace config and refreshes the report.
     @objc private func uninstallSafeAeroSpaceConfig() {
-        let report = Doctor().uninstallSafeAeroSpaceConfig()
+        let report = makeDoctor().uninstallSafeAeroSpaceConfig()
         showDoctorReport(report)
     }
 

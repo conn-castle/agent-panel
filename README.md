@@ -43,10 +43,12 @@ and provides a keyboard-first switcher that brings you to the right context quic
 
 ### Global switcher
 
-- Hotkey: **⌘⇧Space**
+- Hotkey: **⌘⇧Space** (press again to dismiss)
 - Type to filter projects
 - Press **Enter** to Activate
+- Press **Esc** to dismiss
 - Press **⌘W** to Close the selected project
+- If the hotkey is unavailable, the menu bar shows **Hotkey unavailable** and **Open Switcher...** opens it manually.
 
 ### Day-to-day
 
@@ -223,7 +225,7 @@ Doctor FAIL if missing/invalid:
 - AeroSpace config is ambiguous (found in more than one location)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
 - Accessibility permission not granted (required for layout)
-- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor skips this check and reports PASS with a note.
+- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor uses the app-reported hotkey status when available, otherwise it skips this check and reports PASS with a note.
 
 Doctor WARN if present:
 - `global.switcherHotkey` (ignored; hotkey is fixed to ⌘⇧Space)

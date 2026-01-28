@@ -5,20 +5,24 @@ struct PermissionsChecker {
     private let accessibilityChecker: AccessibilityChecking
     private let hotkeyChecker: HotkeyChecking
     private let runningApplicationChecker: RunningApplicationChecking
+    private let hotkeyStatusProvider: HotkeyRegistrationStatusProviding?
 
     /// Creates a permissions checker with the provided dependencies.
     /// - Parameters:
     ///   - accessibilityChecker: Accessibility permission checker.
     ///   - hotkeyChecker: Hotkey availability checker.
     ///   - runningApplicationChecker: Running application checker.
+    ///   - hotkeyStatusProvider: Optional provider for the current hotkey registration status.
     init(
         accessibilityChecker: AccessibilityChecking,
         hotkeyChecker: HotkeyChecking,
-        runningApplicationChecker: RunningApplicationChecking
+        runningApplicationChecker: RunningApplicationChecking,
+        hotkeyStatusProvider: HotkeyRegistrationStatusProviding? = nil
     ) {
         self.accessibilityChecker = accessibilityChecker
         self.hotkeyChecker = hotkeyChecker
         self.runningApplicationChecker = runningApplicationChecker
+        self.hotkeyStatusProvider = hotkeyStatusProvider
     }
 
     /// Builds the accessibility permission finding.
@@ -42,6 +46,23 @@ struct PermissionsChecker {
     /// Builds the hotkey availability finding.
     /// - Returns: Finding for Cmd+Shift+Space registration status.
     func hotkeyFinding() -> DoctorFinding {
+        if let status = hotkeyStatusProvider?.hotkeyRegistrationStatus() {
+            switch status {
+            case .registered:
+                return DoctorFinding(
+                    severity: .pass,
+                    title: "Cmd+Shift+Space hotkey is registered"
+                )
+            case .failed(let errorCode):
+                return DoctorFinding(
+                    severity: .fail,
+                    title: "Cmd+Shift+Space hotkey cannot be registered",
+                    detail: "OSStatus: \(errorCode)",
+                    fix: "Unassign Cmd+Shift+Space in conflicting apps and restart ProjectWorkspaces."
+                )
+            }
+        }
+
         if runningApplicationChecker.isApplicationRunning(bundleIdentifier: ProjectWorkspacesCore.appBundleIdentifier) {
             return DoctorFinding(
                 severity: .pass,

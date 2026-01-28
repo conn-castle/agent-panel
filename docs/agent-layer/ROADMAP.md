@@ -59,10 +59,10 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Provide the keyboard-first switcher UX with Activate and Close actions.
 
 ### Tasks
-- [ ] Implement global hotkey ⌘⇧Space to open the switcher using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
-- [ ] Implement type-to-filter list with color swatch + name; Enter activates; Esc dismisses.
+- [x] Implement global hotkey ⌘⇧Space to open the switcher using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
+- [x] Implement type-to-filter list with color swatch + name; Enter activates; Esc dismisses.
 - [ ] Implement Close Project shortcut ⌘W to close the selected project.
-- [ ] Ensure the switcher works when invoked from any application (app runs as background agent).
+- [x] Ensure the switcher works when invoked from any application (app runs as background agent).
 
 ### Exit criteria
 - Switcher is usable entirely from the keyboard and reliably invoked from any app.

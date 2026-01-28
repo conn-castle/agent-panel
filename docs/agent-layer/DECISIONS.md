@@ -100,3 +100,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Launch Chrome via `open -na` with `--window-name=PW:<projectId>` so window titles are deterministic; support optional per-project `chromeProfileDirectory` and surface available profile directory names in Doctor.
     Reason: Chrome ignores `--new-window/--window-name` when launched without `-n` on some machines; profile selection is required for deterministic behavior when multiple profiles are open.
     Tradeoffs: `-n` starts a new Chrome instance; profile configuration requires users to know Chrome profile directory names.
+
+- Decision 2026-01-28 f7b2a1: Hotkey status overrides skip when agent runs
+    Decision: When the agent app is running, Doctor uses the app-reported hotkey registration status (success/failure with OSStatus) when available; otherwise it skips the hotkey registration check.
+    Reason: Avoid false failures while still surfacing real hotkey registration failures.
+    Tradeoffs: Requires the agent to provide status; CLI Doctor may still skip when status is unavailable.

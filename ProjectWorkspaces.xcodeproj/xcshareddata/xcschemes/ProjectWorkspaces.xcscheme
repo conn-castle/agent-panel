@@ -64,6 +64,17 @@
                ReferencedContainer = "container:ProjectWorkspaces.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A7175CDC2F90A81CB8C16451"
+               BuildableName = "ProjectWorkspacesAppTests.xctest"
+               BlueprintName = "ProjectWorkspacesAppTests"
+               ReferencedContainer = "container:ProjectWorkspaces.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

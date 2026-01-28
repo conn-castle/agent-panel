@@ -6,6 +6,12 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-01-28 c4e1a7: Switcher can add projects when config is missing
+    Priority: Medium. Area: Switcher UX
+    Description: Allow the switcher to open even without config.toml and provide an “Open Project...” picker that adds the project to config and then activates it.
+    Acceptance criteria: With no config.toml, Open Switcher shows an “Open Project...” action, selecting a folder adds it to config and opens the project, and failures are reported clearly.
+    Notes: Should preserve existing config ordering rules and avoid silent defaults; may require CLI-independent config writer.
+
 - Backlog 2026-01-27 7d2f4a: Open project workspaces on dedicated macOS Spaces
     Priority: Medium. Area: macOS Integration
     Description: Ensure project workspaces are opened on dedicated macOS Spaces (either one space per workspace or all workspaces on a single dedicated space).
