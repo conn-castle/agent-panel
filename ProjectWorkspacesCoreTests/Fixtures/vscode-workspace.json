@@ -18,6 +18,7 @@
       "titleBar.activeForeground" : "#FFFFFF",
       "titleBar.inactiveBackground" : "#51269A",
       "titleBar.inactiveForeground" : "#CCCCCC"
-    }
+    },
+    "window.title" : "PW:codex - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
   }
 }

@@ -72,7 +72,12 @@ public struct IdeLauncher {
         case .vscode:
             return launchVSCode(project: project, ideConfig: ideConfig, workspaceURL: workspaceURL, environment: environment)
         case .antigravity:
-            return launchAntigravity(project: project, ideConfig: ideConfig, environment: environment)
+            return launchAntigravity(
+                project: project,
+                ideConfig: ideConfig,
+                workspaceURL: workspaceURL,
+                environment: environment
+            )
         }
     }
 
@@ -214,6 +219,7 @@ public struct IdeLauncher {
     private func launchAntigravity(
         project: ProjectConfig,
         ideConfig: IdeConfig,
+        workspaceURL: URL,
         environment: [String: String]
     ) -> Result<IdeLaunchSuccess, IdeLaunchError> {
         let resolutionResult = appResolver.resolve(ide: .antigravity, config: ideConfig.antigravity)
@@ -245,7 +251,7 @@ public struct IdeLauncher {
                 logWarning(warning)
                 return fallbackOpenAntigravity(
                     appURL: antigravityResolution.appURL,
-                    projectPath: project.path,
+                    workspaceURL: workspaceURL,
                     environment: environment,
                     warnings: warnings
                 )
@@ -254,7 +260,7 @@ public struct IdeLauncher {
 
         return fallbackOpenAntigravity(
             appURL: antigravityResolution.appURL,
-            projectPath: project.path,
+            workspaceURL: workspaceURL,
             environment: environment,
             warnings: warnings
         )
@@ -262,13 +268,13 @@ public struct IdeLauncher {
 
     private func fallbackOpenAntigravity(
         appURL: URL,
-        projectPath: String,
+        workspaceURL: URL,
         environment: [String: String],
         warnings: [IdeLaunchWarning]
     ) -> Result<IdeLaunchSuccess, IdeLaunchError> {
         let openResult = runCommand(
             executable: URL(fileURLWithPath: "/usr/bin/open", isDirectory: false),
-            arguments: ["-a", appURL.path, projectPath],
+            arguments: ["-a", appURL.path, workspaceURL.path],
             environment: environment,
             workingDirectory: nil
         )

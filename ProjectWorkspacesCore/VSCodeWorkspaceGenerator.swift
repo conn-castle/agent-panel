@@ -37,9 +37,13 @@ public struct VSCodeWorkspaceGenerator {
         case .failure:
             return .failure(.invalidColorHex(project.colorHex))
         case .success(let customizations):
+            let windowTitle = workspaceWindowTitle(projectId: project.id)
             let workspace = VSCodeWorkspaceFile(
                 folders: [VSCodeWorkspaceFolder(path: project.path)],
-                settings: VSCodeWorkspaceSettings(colorCustomizations: customizations)
+                settings: VSCodeWorkspaceSettings(
+                    colorCustomizations: customizations,
+                    windowTitle: windowTitle
+                )
             )
             return encode(workspace: workspace)
         }
@@ -93,8 +97,15 @@ private struct VSCodeWorkspaceFolder: Encodable, Equatable {
 
 private struct VSCodeWorkspaceSettings: Encodable, Equatable {
     let colorCustomizations: VSCodeColorCustomizations
+    let windowTitle: String
 
     enum CodingKeys: String, CodingKey {
         case colorCustomizations = "workbench.colorCustomizations"
+        case windowTitle = "window.title"
     }
+}
+
+private func workspaceWindowTitle(projectId: String) -> String {
+    let token = ProjectWindowToken(projectId: projectId).value
+    return "\(token) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
 }

@@ -91,7 +91,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 ### 5.3 Files
 
 - Config (source of truth): `~/.config/project-workspaces/config.toml`
-- Generated VS Code workspace files: `~/.config/project-workspaces/vscode/<projectId>.code-workspace`
+- Generated VS Code workspace files: `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`
 - Runtime state (cache): `~/.local/state/project-workspaces/state.json`
 - Logs (active): `~/.local/state/project-workspaces/logs/workspaces.log`
 - Logs (rotated): `~/.local/state/project-workspaces/logs/workspaces.log.1` … `~/.local/state/project-workspaces/logs/workspaces.log.5`
@@ -124,6 +124,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 - Doctor must print discovered values as a copy/paste config snippet and must not auto-edit `config.toml`.
 - Config parsing must tolerate unknown keys so that unsupported keys can be surfaced as WARN instead of becoming a parse failure (at minimum: tolerate `global.switcherHotkey` so it can be WARNed + ignored).
 - If `global.switcherHotkey` is present, Doctor must WARN (“Hotkey is fixed to ⌘⇧Space; key is ignored; remove it.”) and runtime must ignore it.
+- Doctor should list available Chrome profile directories (directory name + display name) when Chrome metadata is available, and WARN when the profile list is unavailable.
 
 Defaults (applied if keys are missing):
 
@@ -134,6 +135,7 @@ Defaults (applied if keys are missing):
 | `display.ultrawideMinWidthPx`      | `5000`                        | WARN                         |
 | `project.ide`                      | inherit `global.defaultIde`   | WARN                         |
 | `project.chromeUrls`               | `[]`                          | OK                           |
+| `project.chromeProfileDirectory`   | unset                         | OK                           |
 | `project.ideUseAgentLayerLauncher` | `true`                        | OK                           |
 | `project.ideCommand`               | `""`                          | OK                           |
 
@@ -162,10 +164,16 @@ Defaults (applied if keys are missing):
 Given `projectId`:
 
 1) Switch to workspace `pw-<projectId>`.
-2) Ensure IDE window exists in that workspace.
+2) Ensure IDE window exists.
+   - VS Code window is identified by a deterministic token (`PW:<projectId>`) in its title.
+   - If found in another workspace, move it into `pw-<projectId>`.
    - If missing, create it.
-3) Ensure Chrome window exists in that workspace.
+   - If multiple matches are found, fail (no guessing).
+3) Ensure Chrome window exists.
+   - Chrome window is identified by the same token in its title.
+   - If found in another workspace, move it into `pw-<projectId>`.
    - If missing, create it.
+   - If multiple matches are found, fail (no guessing).
 4) Force IDE and Chrome windows to floating mode (to allow deterministic geometry).
 5) Apply layout for the current display mode:
    - use persisted layout if available
@@ -174,7 +182,7 @@ Given `projectId`:
 
 **MUST**
 
-- Activation must never scan, move, or adopt windows from other workspaces. It only enumerates windows already in `pw-<projectId>` and creates new ones in that workspace if missing.
+- Activation may scan across workspaces **only** to find windows carrying the deterministic project token. It must never guess or adopt windows without that token.
 
 **MUST**
 
@@ -197,7 +205,7 @@ Given `projectId`:
 **MUST**
 
 - Exactly one Chrome window per project workspace.
-- Chrome remains logged in normally (no enforced profiles).
+- Chrome remains logged in normally; per-project profile directories are optional and opt-in.
 - Tabs are seeded only when the project Chrome window is created/recreated:
   1) `global.globalChromeUrls`
   2) `project.repoUrl` (if set)
@@ -219,7 +227,7 @@ Per project, IDE launch priority is:
 2) Else if `ideUseAgentLayerLauncher=true` and `./.agent-layer/open-vscode.command` exists: execute it in project root.
 3) Else: open the effective IDE:
    - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
-   - Antigravity: `open -a <Antigravity.appPath> <projectPath>`
+   - Antigravity: `open -a <Antigravity.appPath> <generatedWorkspaceFile>`
 
 **MUST (fallback behavior)**
 
@@ -229,6 +237,7 @@ Per project, IDE launch priority is:
 **MUST (deterministic project identity in IDE)**
 
 - The tool must generate a centralized `.code-workspace` file that applies project identity via VS Code workspace settings.
+- The `.code-workspace` file must set `window.title` to include a deterministic token (`PW:<projectId>`).
 - If a custom launcher opens VS Code by folder, the tool must follow up by opening the generated workspace file in **reuse-window** mode so colors/settings apply.
 
 **MUST (no assumptions about preconfigured CLIs)**

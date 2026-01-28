@@ -64,6 +64,7 @@ public struct Doctor {
             runningApplicationChecker: runningApplicationChecker
         )
         self.appDiscoveryChecker = AppDiscoveryChecker(
+            paths: paths,
             fileSystem: fileSystem,
             appDiscovery: appDiscovery
         )

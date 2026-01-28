@@ -144,6 +144,26 @@ final class ConfigParserTests: XCTestCase {
         assertFinding(outcome.findings, severity: .fail, title: "project[0].colorHex is invalid")
     }
 
+    func testChromeProfileDirectoryParses() {
+        let toml = """
+        [[project]]
+        id = "codex"
+        name = "Codex"
+        path = "/Users/tester/src/codex"
+        colorHex = "#7C3AED"
+        chromeProfileDirectory = "Profile 2"
+        """
+
+        let outcome = ConfigParser().parse(toml: toml)
+
+        guard let project = outcome.config?.projects.first else {
+            XCTFail("Expected project config")
+            return
+        }
+
+        XCTAssertEqual(project.chromeProfileDirectory, "Profile 2")
+    }
+
     private func assertFinding(
         _ findings: [DoctorFinding],
         severity: DoctorSeverity,

@@ -469,7 +469,8 @@ struct ConfigParser {
                     "ide",
                     "ideUseAgentLayerLauncher",
                     "ideCommand",
-                    "chromeUrls"
+                    "chromeUrls",
+                    "chromeProfileDirectory"
                 ],
                 prefix: "project[\(index)]"
             ))
@@ -574,6 +575,37 @@ struct ConfigParser {
                 ))
             case .invalid:
                 chromeUrls = nil
+            }
+
+            let chromeProfileDirectory: String?
+            let chromeProfileDirectoryIsValid: Bool
+            switch readStringField(
+                from: projectTable,
+                key: "chromeProfileDirectory",
+                keyPath: "project[\(index)].chromeProfileDirectory",
+                findings: &findings
+            ) {
+            case .value(let directory):
+                if directory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    findings.append(
+                        DoctorFinding(
+                            severity: .fail,
+                            title: "project[\(index)].chromeProfileDirectory is empty",
+                            fix: "Set project.chromeProfileDirectory to a non-empty Chrome profile directory name."
+                        )
+                    )
+                    chromeProfileDirectory = nil
+                    chromeProfileDirectoryIsValid = false
+                } else {
+                    chromeProfileDirectory = directory
+                    chromeProfileDirectoryIsValid = true
+                }
+            case .missing:
+                chromeProfileDirectory = nil
+                chromeProfileDirectoryIsValid = true
+            case .invalid:
+                chromeProfileDirectory = nil
+                chromeProfileDirectoryIsValid = false
             }
 
             var projectIsValid = true
@@ -714,6 +746,9 @@ struct ConfigParser {
             if ideUseAgentLayerLauncher == nil || ideCommand == nil || chromeUrls == nil {
                 projectIsValid = false
             }
+            if !chromeProfileDirectoryIsValid {
+                projectIsValid = false
+            }
 
             if projectIsValid,
                let id,
@@ -733,7 +768,8 @@ struct ConfigParser {
                     ide: resolvedIde,
                     ideUseAgentLayerLauncher: ideUseAgentLayerLauncher,
                     ideCommand: ideCommand,
-                    chromeUrls: chromeUrls
+                    chromeUrls: chromeUrls,
+                    chromeProfileDirectory: chromeProfileDirectory
                 )
                 outcomes.append(ProjectOutcome(config: projectConfig, effectiveIde: resolvedIde))
             } else {

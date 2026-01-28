@@ -79,13 +79,13 @@ struct WindowPayload: Encodable {
 ///   - id: Window ID.
 ///   - workspace: Workspace name.
 /// - Returns: Window payload configured as a Chrome window.
-func chromeWindowPayload(id: Int, workspace: String) -> WindowPayload {
+func chromeWindowPayload(id: Int, workspace: String, windowTitle: String = "Chrome") -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: ChromeLauncher.chromeBundleId,
         appName: "Google Chrome",
-        windowTitle: "Chrome"
+        windowTitle: windowTitle
     )
 }
 
@@ -100,14 +100,15 @@ func windowPayload(
     id: Int,
     workspace: String,
     bundleId: String,
-    appName: String
+    appName: String,
+    windowTitle: String = ""
 ) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: bundleId,
         appName: appName,
-        windowTitle: ""
+        windowTitle: windowTitle
     )
 }
 
@@ -390,6 +391,7 @@ final class TestChromeLauncher: ChromeLaunching {
     private let result: Result<ChromeLaunchOutcome, ChromeLaunchError>
     private(set) var callCount: Int = 0
     private(set) var lastWorkspaceName: String?
+    private(set) var lastWindowToken: ProjectWindowToken?
     private(set) var lastIdeWindowIdToRefocus: Int?
 
     init(result: Result<ChromeLaunchOutcome, ChromeLaunchError>) {
@@ -410,6 +412,7 @@ final class TestChromeLauncher: ChromeLaunching {
 
     func ensureWindow(
         expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
@@ -417,6 +420,7 @@ final class TestChromeLauncher: ChromeLaunching {
     ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
         callCount += 1
         lastWorkspaceName = expectedWorkspaceName
+        lastWindowToken = windowToken
         lastIdeWindowIdToRefocus = ideWindowIdToRefocus
         return result
     }

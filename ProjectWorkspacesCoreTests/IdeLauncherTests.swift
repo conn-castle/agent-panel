@@ -119,11 +119,12 @@ final class IdeLauncherTests: XCTestCase {
         let project = makeProject(ide: .antigravity, ideCommand: "antigravity --open")
         let antigravityAppPath = "/Applications/Antigravity.app"
 
+        let workspacePath = paths.vscodeWorkspaceFile(projectId: project.id).path
         let runner = IdeRecordingCommandRunner(results: [
             IdeCommandSignature(path: "/bin/zsh", arguments: ["-lc", "antigravity --open"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "boom")
             ],
-            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", antigravityAppPath, project.path]): [
+            IdeCommandSignature(path: "/usr/bin/open", arguments: ["-a", antigravityAppPath, workspacePath]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
         ])
@@ -154,7 +155,7 @@ final class IdeLauncherTests: XCTestCase {
         }
 
         XCTAssertEqual(runner.invocations.count, 2)
-        XCTAssertEqual(runner.invocations[1].arguments, ["-a", antigravityAppPath, project.path])
+        XCTAssertEqual(runner.invocations[1].arguments, ["-a", antigravityAppPath, workspacePath])
     }
 
     func testLauncherFailureFallsBackToOpen() {
@@ -276,7 +277,8 @@ final class IdeLauncherTests: XCTestCase {
             ide: ide,
             ideUseAgentLayerLauncher: true,
             ideCommand: ideCommand,
-            chromeUrls: []
+            chromeUrls: [],
+            chromeProfileDirectory: nil
         )
     }
 

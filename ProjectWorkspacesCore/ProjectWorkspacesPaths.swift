@@ -24,12 +24,12 @@ public struct ProjectWorkspacesPaths: Sendable {
         configDirectory.appendingPathComponent("config.toml", isDirectory: false)
     }
 
-    /// Returns `~/.config/project-workspaces/vscode`.
+    /// Returns `~/.local/state/project-workspaces/vscode`.
     public var vscodeWorkspaceDirectory: URL {
-        configDirectory.appendingPathComponent("vscode", isDirectory: true)
+        stateDirectory.appendingPathComponent("vscode", isDirectory: true)
     }
 
-    /// Returns `~/.config/project-workspaces/vscode/<projectId>.code-workspace`.
+    /// Returns `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`.
     /// - Parameter projectId: Project identifier used to name the workspace file.
     /// - Returns: URL for the generated VS Code workspace file.
     public func vscodeWorkspaceFile(projectId: String) -> URL {
@@ -56,6 +56,16 @@ public struct ProjectWorkspacesPaths: Sendable {
         sharedToolsDirectory
             .appendingPathComponent("bin", isDirectory: true)
             .appendingPathComponent("code", isDirectory: false)
+    }
+
+    /// Returns `~/Library/Application Support/Google/Chrome/Local State`.
+    public var chromeLocalStateFile: URL {
+        homeDirectory
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("Google", isDirectory: true)
+            .appendingPathComponent("Chrome", isDirectory: true)
+            .appendingPathComponent("Local State", isDirectory: false)
     }
 
     private var configDirectory: URL {
