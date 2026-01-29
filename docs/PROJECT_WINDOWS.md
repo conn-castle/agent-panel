@@ -15,7 +15,7 @@
   - Example: `open -na "Google Chrome" --args --new-window --window-name="PW:<projectId>" <urls...>`
   - If `project.chromeProfileDirectory` is set, include `--profile-directory="<dir>"` in the launch args.
 - **Stage 1 (steady-state):** list only the target workspace, filtered by bundle id:
-  - `aerospace list-windows --workspace pw-<projectId> --app-bundle-id com.google.Chrome --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
+  - `aerospace list-windows --workspace pw-<projectId> --app-bundle-id com.google.Chrome --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
   - Match by token in `window-title`.
 - Outcomes:
   - Exactly one match: use it.
@@ -25,7 +25,7 @@
   - Poll `list-windows --workspace pw-<projectId> --app-bundle-id com.google.Chrome ...` for the token.
   - Keep this probe short (≈0.5–0.8s), then move to focused capture.
 - **Stage 3 (post-launch, focused recovery):**
-  - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`.
+  - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
   - Accept only if:
     - `app-bundle-id == com.google.Chrome`
     - `window-title` contains the token.
@@ -37,7 +37,7 @@
   - Example title: `PW:<projectId> - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}`
 - Store workspace files under `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`.
 - **Stage 1 (steady-state):** list only the target workspace, filtered by bundle id when known:
-  - `aerospace list-windows --workspace pw-<projectId> --app-bundle-id <IDE_BUNDLE_ID> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
+  - `aerospace list-windows --workspace pw-<projectId> --app-bundle-id <IDE_BUNDLE_ID> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
   - Match by token in `window-title` + IDE identity (bundle id or app name).
 - Outcomes:
   - Exactly one match: use it.
@@ -47,7 +47,7 @@
   - Poll `list-windows --workspace pw-<projectId> --app-bundle-id <IDE_BUNDLE_ID> ...` for the token.
   - Keep this probe short (≈0.5–0.8s), then move to focused capture.
 - **Stage 3 (post-launch, focused recovery):**
-  - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`.
+  - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
   - Accept only if:
     - IDE identity matches (bundle id/app name)
     - `window-title` contains the token.

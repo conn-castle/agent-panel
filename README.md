@@ -480,5 +480,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace, otherwise fail loudly.
+- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace, otherwise fail loudly.
 - No silent failures: show user-facing errors + write structured logs.

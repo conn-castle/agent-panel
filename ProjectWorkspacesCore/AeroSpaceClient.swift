@@ -163,7 +163,7 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
 /// Typed wrapper around AeroSpace CLI command execution.
 public struct AeroSpaceClient {
     private static let listWindowsFormat =
-        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
 
     private static let readinessProbeArguments = ["list-workspaces", "--focused", "--count"]
 
@@ -390,7 +390,7 @@ public struct AeroSpaceClient {
     /// - Parameter windowId: AeroSpace window id to update.
     /// - Returns: Command result or a structured error.
     public func setFloatingLayout(windowId: Int) -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(arguments: ["layout", "floating", "--window-id", String(windowId)])
+        runCommand(arguments: ["layout", "--window-id", String(windowId), "floating"])
     }
 
     /// Closes a window by id.

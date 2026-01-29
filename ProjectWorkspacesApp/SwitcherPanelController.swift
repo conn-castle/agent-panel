@@ -114,12 +114,18 @@ final class SwitcherPanelController: NSObject {
         panel.isVisible
     }
 
+    /// Returns the panel collection behavior for tests.
+    /// - Returns: Collection behavior flags for the panel.
+    func panelCollectionBehaviorForTesting() -> NSWindow.CollectionBehavior {
+        panel.collectionBehavior
+    }
+
     /// Configures the switcher panel presentation behavior.
     private func configurePanel() {
         panel.title = "Project Switcher"
         panel.isFloatingPanel = true
         panel.level = .floating
-        panel.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace, .transient]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.delegate = self
@@ -465,7 +471,11 @@ final class SwitcherPanelController: NSObject {
         setBusy(true, message: "Activating...")
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome = self.activationService.activate(projectId: project.id)
+            let outcome = self.activationService.activate(
+                projectId: project.id,
+                focusIdeWindow: false,
+                switchWorkspace: false
+            )
             DispatchQueue.main.async {
                 self.handleActivationOutcome(outcome)
             }
@@ -486,7 +496,7 @@ final class SwitcherPanelController: NSObject {
         }
 
         switch outcome {
-        case .success(_, let warnings):
+        case .success(let report, let warnings):
             logEvent(
                 event: "switcher.activate.success",
                 level: warnings.isEmpty ? .info : .warn,
@@ -499,11 +509,14 @@ final class SwitcherPanelController: NSObject {
             if warnings.isEmpty {
                 pendingActivationProject = nil
                 dismiss(reason: .activationSuccess)
+                activateIdeAfterDismiss(report: report)
             } else {
                 setStatus(message: "Activated with warnings. See logs.", level: .warning)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.pendingActivationProject = nil
-                    self?.dismiss(reason: .activationWarning)
+                    guard let self else { return }
+                    self.pendingActivationProject = nil
+                    self.dismiss(reason: .activationWarning)
+                    self.activateIdeAfterDismiss(report: report)
                 }
             }
         case .failure(let error):
@@ -519,6 +532,92 @@ final class SwitcherPanelController: NSObject {
             )
             pendingActivationProject = nil
         }
+    }
+
+    /// Activates the IDE application after dismissing the switcher.
+    private func activateIdeAfterDismiss(report: ActivationReport) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self else { return }
+            self.logEvent(
+                event: "switcher.ide.focus.requested",
+                context: [
+                    "workspace": report.workspaceName,
+                    "window_id": "\(report.ideWindowId)"
+                ]
+            )
+            DispatchQueue.global(qos: .userInitiated).async {
+                let focusResult = self.activationService.focusWorkspaceAndWindow(report: report)
+                DispatchQueue.main.async {
+                    self.handlePostActivationFocusResult(focusResult, report: report)
+                }
+            }
+        }
+    }
+
+    private func handlePostActivationFocusResult(
+        _ result: Result<Void, ActivationError>,
+        report: ActivationReport
+    ) {
+        switch result {
+        case .success:
+            logEvent(
+                event: "switcher.ide.focus.completed",
+                context: [
+                    "workspace": report.workspaceName,
+                    "window_id": "\(report.ideWindowId)"
+                ]
+            )
+        case .failure(let error):
+            let detail = error.asFindings().first?.title ?? "Focus failed"
+            logEvent(
+                event: "switcher.ide.focus.failed",
+                level: .warn,
+                message: detail,
+                context: [
+                    "workspace": report.workspaceName,
+                    "window_id": "\(report.ideWindowId)"
+                ]
+            )
+            activateIdeApplication(report: report, reason: "focus_failed")
+        }
+    }
+
+    /// Brings the IDE application to the foreground after activation.
+    private func activateIdeApplication(report: ActivationReport, reason: String) {
+        guard let bundleId = report.ideBundleId, !bundleId.isEmpty else {
+            logEvent(
+                event: "switcher.ide.activate.skipped",
+                level: .warn,
+                message: "No IDE bundle id available for activation.",
+                context: ["reason": "missing_bundle_id"]
+            )
+            return
+        }
+
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
+            logEvent(
+                event: "switcher.ide.activate.skipped",
+                level: .warn,
+                message: "IDE application is not running.",
+                context: [
+                    "reason": "not_running",
+                    "bundle_id": bundleId
+                ]
+            )
+            return
+        }
+
+        let activated = app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        logEvent(
+            event: "switcher.ide.activate.completed",
+            level: activated ? .info : .warn,
+            message: activated ? nil : "IDE activation returned false.",
+            context: [
+                "bundle_id": bundleId,
+                "result": activated ? "true" : "false",
+                "reason": reason
+            ]
+        )
     }
 
     /// Returns the currently selected project, if any.

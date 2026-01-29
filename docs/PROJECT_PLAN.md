@@ -253,11 +253,11 @@ Notes:
 
 1) `AeroSpaceClient` that runs these commands:
    - `aerospace workspace <name>`
-   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
-   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`
+   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
+   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
    - `aerospace focus --window-id <id>`
    - `aerospace move-node-to-workspace --window-id <id> <workspace>`
-   - `aerospace layout floating --window-id <id>`
+   - `aerospace layout --window-id <id> floating`
    - `aerospace close --window-id <id>`
 
 2) JSON decoding for list-windows output.
@@ -337,7 +337,7 @@ Notes:
    - No tab enforcement after creation.
 
 2) Window identification:
-   - Detect Chrome windows by matching a deterministic token in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`.
+   - Detect Chrome windows by matching a deterministic token in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
    - On multiple matches, WARN and choose the lowest window id deterministically.
    - If none appear after launch, attempt focused-window recovery via `aerospace list-windows --focused ...` and move the new window into the workspace; otherwise fail loudly.
 

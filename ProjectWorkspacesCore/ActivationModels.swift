@@ -12,6 +12,7 @@ public struct ActivationReport: Equatable, Sendable {
     public let workspaceName: String
     public let ideWindowId: Int
     public let chromeWindowId: Int
+    public let ideBundleId: String?
 
     /// Creates an activation report.
     /// - Parameters:
@@ -23,12 +24,14 @@ public struct ActivationReport: Equatable, Sendable {
         projectId: String,
         workspaceName: String,
         ideWindowId: Int,
-        chromeWindowId: Int
+        chromeWindowId: Int,
+        ideBundleId: String? = nil
     ) {
         self.projectId = projectId
         self.workspaceName = workspaceName
         self.ideWindowId = ideWindowId
         self.chromeWindowId = chromeWindowId
+        self.ideBundleId = ideBundleId
     }
 }
 
@@ -84,6 +87,15 @@ struct ActivationLogPayload: Codable, Equatable, Sendable {
     let ideWindowId: Int?
     let chromeWindowId: Int?
     let warnings: [String]
+    let aeroSpaceCommands: [AeroSpaceCommandLog]
+}
+
+/// Serialized focus log payload stored inside the logger context.
+struct ActivationFocusLogPayload: Codable, Equatable, Sendable {
+    let projectId: String
+    let workspaceName: String
+    let windowId: Int
+    let outcome: String
     let aeroSpaceCommands: [AeroSpaceCommandLog]
 }
 

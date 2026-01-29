@@ -61,7 +61,6 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 ### Tasks
 - [x] Implement global hotkey ⌘⇧Space to open the switcher using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
 - [x] Implement type-to-filter list with color swatch + name; Enter activates; Esc dismisses.
-- [ ] Implement Close Project shortcut ⌘W to close the selected project.
 - [x] Ensure the switcher works when invoked from any application (app runs as background agent).
 
 ### Exit criteria
@@ -93,6 +92,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 ### Tasks
 - [ ] Implement `Close(projectId)` algorithm: enumerate windows in `pw-<projectId>` and close each (sorted ascending by id).
 - [ ] When closing the focused project workspace, switch to fallback workspace `pw-inbox`.
+- [ ] Implement Close Project shortcut ⌘W to close the selected project.
 - [ ] Surface close in both switcher (⌘W) and `pwctl close <projectId>`.
 - [ ] Ensure per-window close failures are WARN; overall command fails only on AeroSpace execution failure.
 - [ ] Log every close action with timestamp, projectId, workspaceName, AeroSpace command stdout/stderr, and final outcome (success/warn/fail).

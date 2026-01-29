@@ -5,6 +5,26 @@ import ProjectWorkspacesCore
 @testable import ProjectWorkspaces
 
 final class SwitcherPanelControllerTests: XCTestCase {
+    func testPanelJoinsAllSpaces() {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+
+        let catalogService = ProjectCatalogService(
+            paths: .defaultPaths(),
+            fileSystem: MissingConfigFileSystem()
+        )
+        let controller = SwitcherPanelController(
+            projectCatalogService: catalogService,
+            logger: NoopLogger()
+        )
+
+        let behavior = controller.panelCollectionBehaviorForTesting()
+        XCTAssertTrue(behavior.contains(.canJoinAllSpaces))
+        XCTAssertFalse(behavior.contains(.moveToActiveSpace))
+        XCTAssertTrue(behavior.contains(.transient))
+        XCTAssertTrue(behavior.contains(.fullScreenAuxiliary))
+    }
+
     func testShowMakesPanelVisibleWhenConfigIsMissing() {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)

@@ -64,6 +64,7 @@ struct WindowPayload: Encodable {
     let appBundleId: String
     let appName: String
     let windowTitle: String
+    let windowLayout: String
 
     enum CodingKeys: String, CodingKey {
         case windowId = "window-id"
@@ -71,6 +72,7 @@ struct WindowPayload: Encodable {
         case appBundleId = "app-bundle-id"
         case appName = "app-name"
         case windowTitle = "window-title"
+        case windowLayout = "window-layout"
     }
 }
 
@@ -79,13 +81,19 @@ struct WindowPayload: Encodable {
 ///   - id: Window ID.
 ///   - workspace: Workspace name.
 /// - Returns: Window payload configured as a Chrome window.
-func chromeWindowPayload(id: Int, workspace: String, windowTitle: String = "Chrome") -> WindowPayload {
+func chromeWindowPayload(
+    id: Int,
+    workspace: String,
+    windowTitle: String = "Chrome",
+    windowLayout: String = "tiling"
+) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: ChromeLauncher.chromeBundleId,
         appName: "Google Chrome",
-        windowTitle: windowTitle
+        windowTitle: windowTitle,
+        windowLayout: windowLayout
     )
 }
 
@@ -101,14 +109,16 @@ func windowPayload(
     workspace: String,
     bundleId: String,
     appName: String,
-    windowTitle: String = ""
+    windowTitle: String = "",
+    windowLayout: String = "tiling"
 ) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: bundleId,
         appName: appName,
-        windowTitle: windowTitle
+        windowTitle: windowTitle,
+        windowLayout: windowLayout
     )
 }
 
@@ -460,7 +470,7 @@ final class TestLogger: ProjectWorkspacesLogging {
 /// Common test constants.
 enum TestConstants {
     static let aerospacePath = "/opt/homebrew/bin/aerospace"
-    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
     static let vscodeBundleId = "com.microsoft.VSCode"
     static let vscodeAppURL = URL(fileURLWithPath: "/Applications/Visual Studio Code.app", isDirectory: true)
     static let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)

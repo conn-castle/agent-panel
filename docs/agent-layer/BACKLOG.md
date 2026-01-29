@@ -6,6 +6,11 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-01-28 e8f3b1: Keybind to go back to most recent space or non-project window
+    Priority: Medium. Area: Hotkeys
+    Description: Add a keybind that allows the user to toggle back to their most recent macOS space or the most recent window that is not part of an active project.
+    Acceptance criteria: A configurable hotkey successfully switches focus to the previous space or non-project window, and it works reliably even when multiple projects are open.
+
 - Backlog 2026-01-28 c4e1a7: Switcher can add projects when config is missing
     Priority: Medium. Area: Switcher UX
     Description: Allow the switcher to open even without config.toml and provide an “Open Project...” picker that adds the project to config and then activates it.

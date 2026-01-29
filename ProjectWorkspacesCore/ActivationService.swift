@@ -120,11 +120,67 @@ public struct ActivationService {
     }
 
     /// Activates the project workspace for the given project id.
-    /// - Parameter projectId: Project identifier to activate.
+    /// - Parameters:
+    ///   - projectId: Project identifier to activate.
+    ///   - focusIdeWindow: Whether to focus the IDE window at the end of activation.
+    ///   - switchWorkspace: Whether to switch to the project workspace during activation.
     /// - Returns: Activation outcome with warnings or failure.
-    public func activate(projectId: String) -> ActivationOutcome {
-        let context = ActivationContext(projectId: projectId)
+    public func activate(
+        projectId: String,
+        focusIdeWindow: Bool = true,
+        switchWorkspace: Bool = true
+    ) -> ActivationOutcome {
+        let context = ActivationContext(
+            projectId: projectId,
+            shouldFocusIdeWindow: focusIdeWindow,
+            shouldSwitchWorkspace: switchWorkspace
+        )
         return runActivation(context)
+    }
+
+    /// Focuses the provided workspace and IDE window id after activation.
+    /// - Parameter report: Activation report that includes workspace and IDE window information.
+    /// - Returns: Success or a structured activation error.
+    public func focusWorkspaceAndWindow(report: ActivationReport) -> Result<Void, ActivationError> {
+        let commandLogs = CommandLogAccumulator()
+        let clientResult = makeTracingClient(commandLogs: commandLogs)
+
+        let focusResult: Result<Void, ActivationError>
+        switch clientResult {
+        case .failure(let error):
+            focusResult = .failure(error)
+        case .success(let client):
+            switch client.switchWorkspace(report.workspaceName) {
+            case .failure(let error):
+                focusResult = .failure(.aeroSpaceFailed(error))
+            case .success:
+                switch client.focusWindow(windowId: report.ideWindowId) {
+                case .failure(let error):
+                    focusResult = .failure(.aeroSpaceFailed(error))
+                case .success:
+                    focusResult = .success(())
+                }
+            }
+        }
+
+        let outcomeLabel: String
+        switch focusResult {
+        case .success:
+            outcomeLabel = "success"
+        case .failure:
+            outcomeLabel = "fail"
+        }
+
+        let logResult = logFocus(
+            report: report,
+            outcome: outcomeLabel,
+            commandLogs: commandLogs.allLogs
+        )
+        if case .failure(let error) = logResult, case .success = focusResult {
+            return .failure(.logWriteFailed(error))
+        }
+
+        return focusResult
     }
 
     // MARK: - Activation Orchestration
@@ -143,9 +199,11 @@ public struct ActivationService {
             return context.finalize(logger: logger)
         }
 
-        // Step 3: Switch to workspace
-        guard switchToWorkspace(client: client, context: context) else {
-            return context.finalize(logger: logger)
+        // Step 3: Switch to workspace (if enabled)
+        if context.shouldSwitchWorkspace {
+            guard switchToWorkspace(client: client, context: context) else {
+                return context.finalize(logger: logger)
+            }
         }
 
         // Step 4: Resolve IDE identity
@@ -184,8 +242,10 @@ public struct ActivationService {
         }
 
         // Step 8: Focus IDE window
-        guard focusIdeWindow(client: client, ideWindowId: ideWindowId, context: context) else {
-            return context.finalize(logger: logger)
+        if context.shouldFocusIdeWindow {
+            guard focusIdeWindow(client: client, ideWindowId: ideWindowId, context: context) else {
+                return context.finalize(logger: logger)
+            }
         }
 
         // Success
@@ -193,7 +253,8 @@ public struct ActivationService {
             projectId: context.projectId,
             workspaceName: context.workspaceName,
             ideWindowId: ideWindowId,
-            chromeWindowId: chromeWindowId
+            chromeWindowId: chromeWindowId,
+            ideBundleId: context.ideBundleId
         )
         context.outcome = .success(report: report, warnings: context.warnings)
         return context.finalize(logger: logger)
@@ -202,21 +263,65 @@ public struct ActivationService {
     // MARK: - Step 1: AeroSpace Client Resolution
 
     private func resolveAeroSpaceClient(_ context: ActivationContext) -> AeroSpaceClient? {
+        switch makeTracingClient(commandLogs: context.commandLogs) {
+        case .failure(let error):
+            context.outcome = .failure(error: error)
+            return nil
+        case .success(let client):
+            return client
+        }
+    }
+
+    private func makeTracingClient(
+        commandLogs: CommandLogAccumulator
+    ) -> Result<AeroSpaceClient, ActivationError> {
         switch aeroSpaceBinaryResolver.resolve() {
         case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceResolutionFailed(error))
-            return nil
+            return .failure(.aeroSpaceResolutionFailed(error))
         case .success(let executableURL):
             let tracingRunner = TracingAeroSpaceCommandRunner(
                 wrapped: aeroSpaceCommandRunner,
-                traceSink: { context.commandLogs.append($0) }
+                traceSink: { commandLogs.append($0) }
             )
-            return AeroSpaceClient(
-                executableURL: executableURL,
-                commandRunner: tracingRunner,
-                timeoutSeconds: aeroSpaceTimeoutSeconds
+            return .success(
+                AeroSpaceClient(
+                    executableURL: executableURL,
+                    commandRunner: tracingRunner,
+                    timeoutSeconds: aeroSpaceTimeoutSeconds
+                )
             )
         }
+    }
+
+    private func logFocus(
+        report: ActivationReport,
+        outcome: String,
+        commandLogs: [AeroSpaceCommandLog]
+    ) -> Result<Void, LogWriteError> {
+        let payload = ActivationFocusLogPayload(
+            projectId: report.projectId,
+            workspaceName: report.workspaceName,
+            windowId: report.ideWindowId,
+            outcome: outcome,
+            aeroSpaceCommands: commandLogs
+        )
+
+        let encoder = JSONEncoder()
+        let context: [String: String]
+        do {
+            let data = try encoder.encode(payload)
+            let json = String(data: data, encoding: .utf8) ?? "{}"
+            context = ["focus": json]
+        } catch {
+            context = ["focus": "{\"error\":\"Failed to encode focus log payload.\"}"]
+        }
+
+        return logger.log(
+            event: "activation.focus",
+            level: outcome == "fail" ? .error : .info,
+            message: nil,
+            context: context
+        )
     }
 
     // MARK: - Step 2: Config Loading
@@ -287,6 +392,7 @@ public struct ActivationService {
         ideIdentity: IdeIdentity,
         context: ActivationContext
     ) -> Int? {
+        context.ideBundleId = ideIdentity.bundleId
         return ensureTokenIdeWindow(
             client: client,
             project: project,
@@ -333,6 +439,7 @@ public struct ActivationService {
                 context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
                 return nil
             }
+            context.ideWindowLayout = selectedWindow.windowLayout
             if !moveWindowIfNeeded(
                 client: client,
                 windowId: selectedWindow.windowId,
@@ -540,6 +647,7 @@ public struct ActivationService {
         client: AeroSpaceClient,
         context: ActivationContext
     ) -> Int? {
+        context.ideWindowLayout = window.windowLayout
         if !moveWindowIfNeeded(
             client: client,
             windowId: window.windowId,
@@ -559,7 +667,7 @@ public struct ActivationService {
         chromeLauncher: ChromeLaunching,
         project: ProjectConfig,
         globalChromeUrls: [String],
-        ideWindowId: Int,
+        ideWindowId _: Int,
         context: ActivationContext
     ) -> Int? {
         let chromeResult = chromeLauncher.ensureWindow(
@@ -567,7 +675,7 @@ public struct ActivationService {
             windowToken: context.windowToken,
             globalChromeUrls: globalChromeUrls,
             project: project,
-            ideWindowIdToRefocus: ideWindowId,
+            ideWindowIdToRefocus: nil,
             allowExistingWindows: true
         )
 
@@ -605,12 +713,24 @@ public struct ActivationService {
         chromeWindowId: Int,
         context: ActivationContext
     ) -> Bool {
-        if case .failure(let error) = client.setFloatingLayout(windowId: ideWindowId) {
-            context.warnings.append(.layoutFailed(kind: .ide, windowId: ideWindowId, error: error))
-        }
-        if case .failure(let error) = client.setFloatingLayout(windowId: chromeWindowId) {
-            context.warnings.append(.layoutFailed(kind: .chrome, windowId: chromeWindowId, error: error))
-        }
+        ensureFloatingLayout(
+            client: client,
+            windowId: ideWindowId,
+            kind: .ide,
+            workspaceName: context.workspaceName,
+            appBundleId: context.ideBundleId,
+            currentLayout: context.ideWindowLayout,
+            context: context
+        )
+        ensureFloatingLayout(
+            client: client,
+            windowId: chromeWindowId,
+            kind: .chrome,
+            workspaceName: context.workspaceName,
+            appBundleId: ChromeLauncher.chromeBundleId,
+            currentLayout: context.chromeWindowLayout,
+            context: context
+        )
         return true
     }
 
@@ -652,6 +772,63 @@ public struct ActivationService {
             context.outcome = .failure(error: .aeroSpaceFailed(error))
             return false
         }
+    }
+
+    /// Ensures a window uses floating layout, warning only if the layout remains non-floating.
+    private func ensureFloatingLayout(
+        client: AeroSpaceClient,
+        windowId: Int,
+        kind: ActivationWindowKind,
+        workspaceName: String,
+        appBundleId: String?,
+        currentLayout: String?,
+        context: ActivationContext
+    ) {
+        let initialLayout = currentLayout ?? lookupWindowLayout(
+            client: client,
+            windowId: windowId,
+            workspaceName: workspaceName,
+            appBundleId: appBundleId
+        )
+        if let layout = initialLayout, isFloatingLayout(layout) {
+            return
+        }
+
+        let layoutOutcome = client.setFloatingLayout(windowId: windowId)
+        switch layoutOutcome {
+        case .success:
+            return
+        case .failure(let error):
+            let updatedLayout = lookupWindowLayout(
+                client: client,
+                windowId: windowId,
+                workspaceName: workspaceName,
+                appBundleId: appBundleId
+            )
+            if let layout = updatedLayout, isFloatingLayout(layout) {
+                return
+            }
+            context.warnings.append(.layoutFailed(kind: kind, windowId: windowId, error: error))
+        }
+    }
+
+    /// Looks up the layout string for a specific window id in a workspace.
+    private func lookupWindowLayout(
+        client: AeroSpaceClient,
+        windowId: Int,
+        workspaceName: String,
+        appBundleId: String?
+    ) -> String? {
+        switch client.listWindowsDecoded(workspace: workspaceName, appBundleId: appBundleId) {
+        case .failure:
+            return nil
+        case .success(let windows):
+            return windows.first(where: { $0.windowId == windowId })?.windowLayout
+        }
+    }
+
+    private func isFloatingLayout(_ layout: String) -> Bool {
+        layout.lowercased() == "floating"
     }
 
     private func launchDetectionTimeouts() -> LaunchDetectionTimeouts {
@@ -733,6 +910,8 @@ private struct IdeIdentity: Equatable, Sendable {
 private final class ActivationContext {
     let projectId: String
     let workspaceName: String
+    let shouldFocusIdeWindow: Bool
+    let shouldSwitchWorkspace: Bool
     var windowToken: ProjectWindowToken {
         ProjectWindowToken(projectId: projectId)
     }
@@ -740,11 +919,16 @@ private final class ActivationContext {
     let commandLogs: CommandLogAccumulator = CommandLogAccumulator()
     var ideWindowId: Int?
     var chromeWindowId: Int?
+    var ideWindowLayout: String?
+    var chromeWindowLayout: String?
+    var ideBundleId: String?
     var outcome: ActivationOutcome?
 
-    init(projectId: String) {
+    init(projectId: String, shouldFocusIdeWindow: Bool, shouldSwitchWorkspace: Bool) {
         self.projectId = projectId
         self.workspaceName = "pw-\(projectId)"
+        self.shouldFocusIdeWindow = shouldFocusIdeWindow
+        self.shouldSwitchWorkspace = shouldSwitchWorkspace
     }
 }
 

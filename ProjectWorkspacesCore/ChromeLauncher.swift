@@ -75,8 +75,8 @@ public struct ChromeLauncher {
     /// Window detection is scoped to the expected workspace.
     /// New windows are created via `open -n` so Chrome honors `--window-name`.
     ///
-    /// Refocus only occurs when `ideWindowIdToRefocus` is provided; activation is expected
-    /// to supply it when Chrome is created.
+    /// Refocus only occurs when `ideWindowIdToRefocus` is provided; callers may pass `nil`
+    /// to avoid mid-activation focus changes and handle final focus elsewhere.
     /// - Parameters:
     ///   - expectedWorkspaceName: Target workspace name.
     ///   - windowToken: Deterministic token used to identify the Chrome window.
