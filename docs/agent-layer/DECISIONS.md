@@ -77,9 +77,9 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Tradeoffs: If AeroSpace rules move new windows elsewhere, activation fails and requires user configuration fixes.
 
 - Decision 2026-01-27 e7c3a1b: Workspace-only window enumeration
-    Decision: Never scan or use windows outside `pw-<projectId>` (no `list-windows --all` in activation or Chrome detection); only enumerate the focused project workspace.
-    Reason: Eliminates any chance of hijacking user windows and keeps behavior predictable.
-    Tradeoffs: Less recovery when windows spawn outside the workspace; errors surface as timeouts and require user configuration fixes.
+    Decision: Enumerate only `pw-<projectId>` for steady-state detection (no `list-windows --all`); allow focused-window recovery immediately after launch to capture the new window and move it into the workspace.
+    Reason: Eliminates heavy global scans while still recovering from launch-time workspace misplacement.
+    Tradeoffs: Focused recovery is time-bound and can fail if the new window never becomes focused.
 
 - Decision 2026-01-27 b1f4c2d: Homebrew required for AeroSpace install
     Decision: Require Homebrew and only support AeroSpace installation via Homebrew for now; manual installs are deferred.
@@ -87,9 +87,9 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Tradeoffs: Users without Homebrew cannot onboard until a manual install path is added.
 
 - Decision 2026-01-28 c3f1a9: Token-based window identification
-    Decision: Identify Chrome and VS Code windows by deterministic token (`PW:<projectId>`) in window titles; allow `list-windows --all` only for token matching and move matched windows into the project workspace; fail on zero or multiple matches.
-    Reason: Deterministic, no-guessing identification without hijacking unrelated windows; recovers when windows spawn outside the workspace.
-    Tradeoffs: Window titles include a visible token; multiple tokened windows must be resolved manually.
+    Decision: Identify Chrome and VS Code windows by deterministic token (`PW:<projectId>`) in window titles scoped to `pw-<projectId>`; avoid global scans; warn+choose lowest id on multiple matches; use focused-window recovery immediately after launch when a new window spawns outside the workspace.
+    Reason: Deterministic identification without heavy scans, while still recovering from launch-time workspace misplacement.
+    Tradeoffs: Window titles include a visible token; focused recovery is time-bound and can fail if the new window never becomes focused.
 
 - Decision 2026-01-28 c3f1aa: VS Code workspace files in state dir
     Decision: Store generated `.code-workspace` files under `~/.local/state/project-workspaces/vscode` and set `window.title` with the deterministic token.
@@ -105,3 +105,8 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: When the agent app is running, Doctor uses the app-reported hotkey registration status (success/failure with OSStatus) when available; otherwise it skips the hotkey registration check.
     Reason: Avoid false failures while still surfacing real hotkey registration failures.
     Tradeoffs: Requires the agent to provide status; CLI Doctor may still skip when status is unavailable.
+
+- Decision 2026-01-29 d4e7b9: Activation recovery timing and log timings
+    Decision: Use a short workspace probe before focused-window recovery; treat list-windows timeouts/not-ready as retryable inside poll loops; log per-command start/end timestamps plus duration; treat floating-layout failures as warnings.
+    Reason: Reduce perceived activation delay, avoid false failures from transient timeouts, and make activation timing diagnosable without guesswork.
+    Tradeoffs: Poll timing is more complex; activation may report success with layout warnings that require manual correction.

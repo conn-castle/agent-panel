@@ -281,19 +281,24 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows for a specific workspace as JSON.
-    /// - Parameter workspace: Workspace name to query.
+    /// - Parameters:
+    ///   - workspace: Workspace name to query.
+    ///   - appBundleId: Optional bundle ID filter to reduce output volume.
     /// - Returns: Command result containing JSON output or a structured error.
-    public func listWindows(workspace: String) -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(
-            arguments: [
-                "list-windows",
-                "--workspace",
-                workspace,
-                "--json",
-                "--format",
-                Self.listWindowsFormat
-            ]
-        )
+    public func listWindows(
+        workspace: String,
+        appBundleId: String? = nil
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        var arguments = [
+            "list-windows",
+            "--workspace",
+            workspace
+        ]
+        if let appBundleId, !appBundleId.isEmpty {
+            arguments.append(contentsOf: ["--app-bundle-id", appBundleId])
+        }
+        arguments.append(contentsOf: ["--json", "--format", Self.listWindowsFormat])
+        return runCommand(arguments: arguments)
     }
 
     /// Lists windows across all workspaces as JSON.
@@ -312,10 +317,15 @@ public struct AeroSpaceClient {
     }
 
     /// Lists windows for a specific workspace as decoded models.
-    /// - Parameter workspace: Workspace name to query.
+    /// - Parameters:
+    ///   - workspace: Workspace name to query.
+    ///   - appBundleId: Optional bundle ID filter to reduce output volume.
     /// - Returns: Decoded windows or a structured error.
-    public func listWindowsDecoded(workspace: String) -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
-        switch listWindows(workspace: workspace) {
+    public func listWindowsDecoded(
+        workspace: String,
+        appBundleId: String? = nil
+    ) -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindows(workspace: workspace, appBundleId: appBundleId) {
         case .success(let result):
             return windowDecoder.decodeWindows(from: result.stdout)
         case .failure(let error):

@@ -63,6 +63,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.registerHotkey()
         self.hotkeyManager = hotkeyManager
         updateHotkeyStatus(hotkeyManager.hotkeyRegistrationStatus())
+
+        let paths = ProjectWorkspacesPaths.defaultPaths()
+        logAppEvent(
+            event: "app.started",
+            context: [
+                "version": ProjectWorkspacesCore.version,
+                "log_path": paths.primaryLogFile.path,
+                "config_path": paths.configFile.path
+            ]
+        )
     }
 
     /// Creates the menu bar menu.
@@ -118,7 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opens the switcher panel from the menu bar.
     @objc private func openSwitcher(_ sender: Any?) {
-        _ = logger.log(event: "switcher.menu.invoked", level: .info, message: nil, context: nil)
+        logAppEvent(
+            event: "switcher.menu.invoked",
+            context: ["menu_item": "Open Switcher..."]
+        )
         statusItem?.menu?.cancelTracking()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else {
@@ -135,7 +148,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else {
                 return
             }
-            _ = self.logger.log(event: "switcher.hotkey.invoked", level: .info, message: nil, context: nil)
+            self.logAppEvent(
+                event: "switcher.hotkey.invoked",
+                context: ["hotkey": "Cmd+Shift+Space"]
+            )
             NSApp.activate(ignoringOtherApps: true)
             self.ensureSwitcherController().toggle(origin: .hotkey)
         }
@@ -172,6 +188,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Writes a structured log entry for app-level events.
+    /// - Parameters:
+    ///   - event: Event name to log.
+    ///   - level: Severity level.
+    ///   - message: Optional message for the log entry.
+    ///   - context: Optional structured context.
+    private func logAppEvent(
+        event: String,
+        level: LogLevel = .info,
+        message: String? = nil,
+        context: [String: String]? = nil
+    ) {
+        _ = logger.log(event: event, level: level, message: message, context: context)
+    }
+
+    /// Logs a summary for Doctor reports to aid diagnostics.
+    /// - Parameters:
+    ///   - report: Doctor report to summarize.
+    ///   - event: Event name to log.
+    private func logDoctorSummary(_ report: DoctorReport, event: String) {
+        let passCount = report.findings.filter { $0.severity == .pass }.count
+        let warnCount = report.findings.filter { $0.severity == .warn }.count
+        let failCount = report.findings.filter { $0.severity == .fail }.count
+
+        let level: LogLevel
+        if failCount > 0 {
+            level = .error
+        } else if warnCount > 0 {
+            level = .warn
+        } else {
+            level = .info
+        }
+
+        logAppEvent(
+            event: event,
+            level: level,
+            context: [
+                "pass_count": "\(passCount)",
+                "warn_count": "\(warnCount)",
+                "fail_count": "\(failCount)"
+            ]
+        )
+    }
+
     /// Creates a Doctor instance with the current hotkey status provider.
     private func makeDoctor() -> Doctor {
         Doctor(hotkeyStatusProvider: hotkeyManager)
@@ -179,15 +239,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Runs Doctor and presents the report in a modal-style panel.
     @objc private func runDoctor() {
+        logAppEvent(event: "doctor.run.requested")
         let report = makeDoctor().run()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.run.completed")
     }
 
     /// Copies the current Doctor report to the clipboard.
     @objc private func copyDoctorReport() {
         guard let report = lastDoctorReport?.rendered() else {
+            logAppEvent(event: "doctor.copy.skipped", level: .warn, message: "No report to copy.")
             return
         }
+        logAppEvent(event: "doctor.copy.requested")
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(report, forType: .string)
@@ -195,47 +259,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Installs AeroSpace via Homebrew and refreshes the report.
     @objc private func installAeroSpace() {
+        logAppEvent(event: "doctor.install_aerospace.requested")
         let report = makeDoctor().installAeroSpace()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.install_aerospace.completed")
     }
 
     /// Installs the safe AeroSpace config and refreshes the report.
     @objc private func installSafeAeroSpaceConfig() {
+        logAppEvent(event: "doctor.install_safe_config.requested")
         let report = makeDoctor().installSafeAeroSpaceConfig()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.install_safe_config.completed")
     }
 
     /// Starts AeroSpace and refreshes the report.
     @objc private func startAeroSpace() {
+        logAppEvent(event: "doctor.start_aerospace.requested")
         let report = makeDoctor().startAeroSpace()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.start_aerospace.completed")
     }
 
     /// Reloads AeroSpace config and refreshes the report.
     @objc private func reloadAeroSpaceConfig() {
+        logAppEvent(event: "doctor.reload_aerospace.requested")
         let report = makeDoctor().reloadAeroSpaceConfig()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.reload_aerospace.completed")
     }
 
     /// Disables AeroSpace window management and refreshes the report.
     @objc private func disableAeroSpace() {
+        logAppEvent(event: "doctor.disable_aerospace.requested")
         let report = makeDoctor().disableAeroSpace()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.disable_aerospace.completed")
     }
 
     /// Uninstalls the safe AeroSpace config and refreshes the report.
     @objc private func uninstallSafeAeroSpaceConfig() {
+        logAppEvent(event: "doctor.uninstall_safe_config.requested")
         let report = makeDoctor().uninstallSafeAeroSpaceConfig()
         showDoctorReport(report)
+        logDoctorSummary(report, event: "doctor.uninstall_safe_config.completed")
     }
 
     /// Closes the Doctor window.
     @objc private func closeDoctorWindow() {
+        logAppEvent(event: "doctor.window.closed")
         doctorWindow?.close()
     }
 
     /// Terminates the app.
     @objc private func quit() {
+        logAppEvent(event: "app.quit.requested")
         NSApplication.shared.terminate(nil)
     }
 

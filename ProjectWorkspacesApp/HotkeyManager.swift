@@ -59,6 +59,12 @@ final class HotkeyManager: HotkeyRegistrationStatusProviding {
         if status == noErr {
             hotKeyRef = ref
             registrationStatus = .registered
+            _ = logger.log(
+                event: "hotkey.registered",
+                level: .info,
+                message: "Cmd+Shift+Space hotkey registered",
+                context: ["hotkey": "Cmd+Shift+Space"]
+            )
         } else {
             recordFailure(osStatus: status)
             unregisterHotkey()
@@ -117,6 +123,12 @@ final class HotkeyManager: HotkeyRegistrationStatusProviding {
             return
         }
 
+        _ = logger.log(
+            event: "hotkey.pressed",
+            level: .info,
+            message: nil,
+            context: ["hotkey": "Cmd+Shift+Space"]
+        )
         DispatchQueue.main.async { [weak self] in
             self?.onHotkey?()
         }

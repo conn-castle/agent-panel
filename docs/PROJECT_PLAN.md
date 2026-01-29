@@ -44,7 +44,7 @@ This roadmap is derived from the requirements spec but intentionally changes the
 10) **Dependency policy**: Third-party Swift dependencies are allowed only for TOML parsing (SwiftPM, version pinned).
 11) **Hotkey implementation**: Apple-only via Carbon `RegisterEventHotKey` (no third-party hotkey libraries).
 12) **Test policy**: CI runs unit tests only; AeroSpace integration tests are local-only behind `RUN_AEROSPACE_IT=1`.
-13) **Logs contract**: Single active log file with deterministic rotation (rotate at 10 MiB, keep 5 archives).
+13) **Logs contract**: Single active log file with deterministic rotation (rotate at 10 MiB, keep 5 archives); activation logs include per-command start/end timestamps + duration.
 14) **Fallback workspace**: `pw-inbox` is hard-coded and reserved; `projectId == "inbox"` is invalid and Doctor performs a connectivity check by switching to `pw-inbox` once.
 15) **AeroSpace onboarding**: Install a ProjectWorkspaces-safe config at `~/.aerospace.toml` only when no config exists; never modify existing configs; do not use config-based window moving; provide an emergency `aerospace enable off` action.
 16) **Build workflow**: Keep a single `ProjectWorkspaces.xcodeproj` in-repo and drive builds/tests/archives via `xcodebuild -project` scripts so the Xcode GUI is not required day-to-day.
@@ -337,8 +337,9 @@ Notes:
    - No tab enforcement after creation.
 
 2) Window identification:
-   - Detect Chrome windows by matching a deterministic token in `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`.
-   - Exactly one token match is required; zero or multiple matches fail loudly.
+   - Detect Chrome windows by matching a deterministic token in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'`.
+   - On multiple matches, WARN and choose the lowest window id deterministically.
+   - If none appear after launch, attempt focused-window recovery via `aerospace list-windows --focused ...` and move the new window into the workspace; otherwise fail loudly.
 
 3) Focus rule:
    - Always end activation by focusing IDE window (Chrome must not steal focus).
@@ -357,11 +358,12 @@ Notes:
 **Algorithm (must match exactly)**
 
 1) Switch to workspace `pw-<projectId>`.
-2) Enumerate windows in the workspace for baseline; token-based scans may use `list-windows --all`.
+2) Enumerate windows in the workspace for baseline; token-based scans use `list-windows --workspace pw-<projectId>` only.
+   - If a just-launched IDE/Chrome window does not appear in the workspace, attempt focused-window recovery (`list-windows --focused`) and move it into the workspace; otherwise fail.
 3) Ensure IDE window exists:
-   - VS Code: match the `PW:<projectId>` token; move to `pw-<projectId>` if needed; fail on zero or multiple matches.
+   - VS Code: match the `PW:<projectId>` token; move to `pw-<projectId>` if needed; warn+choose lowest id on multiple matches; fail if none are detected after launch-time recovery.
 4) Ensure Chrome window exists:
-   - Match the same token in Chrome window titles; move to `pw-<projectId>` if needed; create if missing; fail on zero or multiple matches.
+   - Match the same token in Chrome window titles; move to `pw-<projectId>` if needed; create if missing; warn+choose lowest id on multiple matches; fail if none are detected after launch-time recovery.
 5) Force both windows to floating.
 6) Apply layout (Phase 5).
 7) Focus IDE.

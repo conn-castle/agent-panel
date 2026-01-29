@@ -9,13 +9,10 @@ final class ChromeLauncherTests: XCTestCase {
 
     func testExistingChromeReturnsExistingOutcome() {
         let token = ProjectWindowToken(projectId: "codex")
-        let chromeWindow = chromeWindowPayload(id: 10, workspace: "pw-other", windowTitle: "PW:codex - Chrome")
+        let chromeWindow = chromeWindowPayload(id: 10, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindow]), stderr: ""))
-            ],
-            signature(["move-node-to-workspace", "--window-id", "10", "pw-codex"]): [
-                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
@@ -38,19 +35,20 @@ final class ChromeLauncherTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Unexpected failure: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome, .existing(windowId: 10))
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .existing(windowId: 10))
+            XCTAssertTrue(result.warnings.isEmpty)
         }
 
         XCTAssertTrue(commandRunner.invocations.isEmpty)
     }
 
-    func testExistingMultipleChromeReturnsAmbiguous() {
+    func testExistingMultipleChromeChoosesLowestWithWarning() {
         let token = ProjectWindowToken(projectId: "codex")
         let chromeWindowOne = chromeWindowPayload(id: 42, workspace: "pw-codex", windowTitle: "PW:codex - A")
-        let chromeWindowTwo = chromeWindowPayload(id: 7, workspace: "pw-other", windowTitle: "PW:codex - B")
+        let chromeWindowTwo = chromeWindowPayload(id: 7, workspace: "pw-codex", windowTitle: "PW:codex - B")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindowOne, chromeWindowTwo]), stderr: ""))
             ]
         ]
@@ -72,17 +70,21 @@ final class ChromeLauncherTests: XCTestCase {
         )
 
         switch result {
-        case .success:
-            XCTFail("Expected ambiguous failure.")
         case .failure(let error):
-            XCTAssertEqual(error, .chromeWindowAmbiguous(token: "PW:codex", windowIds: [7, 42]))
+            XCTFail("Unexpected failure: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .existing(windowId: 7))
+            XCTAssertEqual(
+                result.warnings,
+                [.multipleWindows(workspace: "pw-codex", chosenId: 7, extraIds: [42])]
+            )
         }
     }
 
     func testLaunchArgumentsOrderedAndDeduped() {
         let token = ProjectWindowToken(projectId: "codex")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     chromeWindowPayload(id: 55, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
@@ -129,8 +131,9 @@ final class ChromeLauncherTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Unexpected failure: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome, .created(windowId: 55))
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 55))
+            XCTAssertTrue(result.warnings.isEmpty)
         }
 
         XCTAssertEqual(commandRunner.invocations.count, 1)
@@ -140,7 +143,7 @@ final class ChromeLauncherTests: XCTestCase {
     func testLaunchUsesAboutBlankWhenUrlsEmpty() {
         let token = ProjectWindowToken(projectId: "codex")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     chromeWindowPayload(id: 88, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
@@ -181,8 +184,9 @@ final class ChromeLauncherTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Unexpected failure: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome, .created(windowId: 88))
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 88))
+            XCTAssertTrue(result.warnings.isEmpty)
         }
 
         XCTAssertEqual(commandRunner.invocations.count, 1)
@@ -192,7 +196,7 @@ final class ChromeLauncherTests: XCTestCase {
     func testLaunchIncludesProfileDirectoryWhenConfigured() {
         let token = ProjectWindowToken(projectId: "codex")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     chromeWindowPayload(id: 66, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
@@ -234,22 +238,23 @@ final class ChromeLauncherTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Unexpected failure: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome, .created(windowId: 66))
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 66))
+            XCTAssertTrue(result.warnings.isEmpty)
         }
 
         XCTAssertEqual(commandRunner.invocations.count, 1)
         XCTAssertEqual(commandRunner.invocations[0].arguments, openArgs)
     }
 
-    func testPollingMultipleNewWindowsReturnsAmbiguousSorted() {
+    func testPollingMultipleNewWindowsChoosesLowestWithWarning() {
         let token = ProjectWindowToken(projectId: "codex")
         let newWindows = [
             chromeWindowPayload(id: 12, workspace: "pw-codex", windowTitle: "PW:codex - A"),
             chromeWindowPayload(id: 3, workspace: "pw-codex", windowTitle: "PW:codex - B")
         ]
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON(newWindows), stderr: ""))
             ]
@@ -287,18 +292,26 @@ final class ChromeLauncherTests: XCTestCase {
         )
 
         switch result {
-        case .success:
-            XCTFail("Expected ambiguous failure.")
         case .failure(let error):
-            XCTAssertEqual(error, .chromeWindowAmbiguous(token: "PW:codex", windowIds: [3, 12]))
+            XCTFail("Unexpected failure: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 3))
+            XCTAssertEqual(
+                result.warnings,
+                [.multipleWindows(workspace: "pw-codex", chosenId: 3, extraIds: [12])]
+            )
         }
     }
 
     func testPollingTimeoutReturnsNotDetected() {
         let token = ProjectWindowToken(projectId: "codex")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            signature(["list-windows", "--focused", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ]
@@ -345,10 +358,125 @@ final class ChromeLauncherTests: XCTestCase {
         XCTAssertEqual(commandRunner.invocations.count, 1)
     }
 
+    func testFocusedRecoveryMovesChromeWindowWhenWorkspacePollingTimesOut() {
+        let token = ProjectWindowToken(projectId: "codex")
+        let focusedWindow = chromeWindowPayload(id: 101, workspace: "pw-other", windowTitle: "PW:codex - Chrome")
+        let responses: AeroSpaceCommandResponses = [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            signature(["list-windows", "--focused", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([focusedWindow]), stderr: ""))
+            ],
+            signature(["move-node-to-workspace", "--window-id", "101", "pw-codex"]): [
+                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
+            ]
+        ]
+        let runner = SequencedAeroSpaceCommandRunner(responses: responses)
+        let openArgs = [
+            "-n",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "--window-name=PW:codex",
+            "about:blank"
+        ]
+        let commandRunner = RecordingCommandRunner(results: [
+            OpenCommandSignature(path: "/usr/bin/open", arguments: openArgs): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+        let sleeper = TestSleeper()
+        let launcher = makeLauncher(
+            runner: runner,
+            commandRunner: commandRunner,
+            sleeper: sleeper,
+            pollIntervalMs: 10,
+            pollTimeoutMs: 20
+        )
+
+        let result = launcher.ensureWindow(
+            expectedWorkspaceName: "pw-codex",
+            windowToken: token,
+            globalChromeUrls: [],
+            project: makeProject(repoUrl: nil, chromeUrls: []),
+            ideWindowIdToRefocus: nil
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Unexpected failure: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 101))
+            XCTAssertTrue(result.warnings.isEmpty)
+        }
+
+        XCTAssertEqual(commandRunner.invocations.count, 1)
+    }
+
+    func testWorkspacePollKeepsWaitingAfterTimeout() {
+        let token = ProjectWindowToken(projectId: "codex")
+        let newWindow = chromeWindowPayload(id: 66, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
+        let responses: AeroSpaceCommandResponses = [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .failure(.timedOut(
+                    command: "aerospace list-windows --workspace pw-codex",
+                    timeoutSeconds: 2,
+                    result: CommandResult(exitCode: 15, stdout: "", stderr: "")
+                )),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([newWindow]), stderr: ""))
+            ]
+        ]
+        let runner = SequencedAeroSpaceCommandRunner(responses: responses)
+        let openArgs = [
+            "-n",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "--window-name=PW:codex",
+            "about:blank"
+        ]
+        let commandRunner = RecordingCommandRunner(results: [
+            OpenCommandSignature(path: "/usr/bin/open", arguments: openArgs): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+        let sleeper = TestSleeper()
+        let launcher = makeLauncher(
+            runner: runner,
+            commandRunner: commandRunner,
+            sleeper: sleeper,
+            pollIntervalMs: 10,
+            pollTimeoutMs: 30
+        )
+
+        let result = launcher.ensureWindow(
+            expectedWorkspaceName: "pw-codex",
+            windowToken: token,
+            globalChromeUrls: [],
+            project: makeProject(),
+            ideWindowIdToRefocus: nil
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Unexpected failure: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 66))
+            XCTAssertTrue(result.warnings.isEmpty)
+        }
+    }
+
     func testRefocusAfterCreationWhenProvided() {
         let token = ProjectWindowToken(projectId: "codex")
         let responses: AeroSpaceCommandResponses = [
-            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([
                     chromeWindowPayload(id: 99, workspace: "pw-codex", windowTitle: "PW:codex - Chrome")
@@ -392,8 +520,9 @@ final class ChromeLauncherTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Unexpected failure: \(error)")
-        case .success(let outcome):
-            XCTAssertEqual(outcome, .created(windowId: 99))
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 99))
+            XCTAssertTrue(result.warnings.isEmpty)
         }
 
         XCTAssertEqual(sleeper.sleepCalls, [0.1])
@@ -406,6 +535,8 @@ final class ChromeLauncherTests: XCTestCase {
         sleeper: TestSleeper,
         pollIntervalMs: Int = ChromeLauncher.defaultPollIntervalMs,
         pollTimeoutMs: Int = ChromeLauncher.defaultPollTimeoutMs,
+        workspaceProbeTimeoutMs: Int = ChromeLauncher.defaultWorkspaceProbeTimeoutMs,
+        focusedProbeTimeoutMs: Int = ChromeLauncher.defaultFocusedProbeTimeoutMs,
         refocusDelayMs: Int = ChromeLauncher.defaultRefocusDelayMs
     ) -> ChromeLauncher {
         let client = AeroSpaceClient(
@@ -420,6 +551,8 @@ final class ChromeLauncherTests: XCTestCase {
             sleeper: sleeper,
             pollIntervalMs: pollIntervalMs,
             pollTimeoutMs: pollTimeoutMs,
+            workspaceProbeTimeoutMs: workspaceProbeTimeoutMs,
+            focusedProbeTimeoutMs: focusedProbeTimeoutMs,
             refocusDelayMs: refocusDelayMs
         )
     }

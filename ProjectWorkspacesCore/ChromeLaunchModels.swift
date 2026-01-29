@@ -8,6 +8,22 @@ public enum ChromeLaunchOutcome: Equatable, Sendable {
     case existing(windowId: Int)
 }
 
+/// Non-fatal warnings emitted during Chrome window detection.
+public enum ChromeLaunchWarning: Equatable, Sendable {
+    case multipleWindows(workspace: String, chosenId: Int, extraIds: [Int])
+}
+
+/// Result of ensuring a Chrome window exists, including any warnings.
+public struct ChromeLaunchResult: Equatable, Sendable {
+    public let outcome: ChromeLaunchOutcome
+    public let warnings: [ChromeLaunchWarning]
+
+    public init(outcome: ChromeLaunchOutcome, warnings: [ChromeLaunchWarning]) {
+        self.outcome = outcome
+        self.warnings = warnings
+    }
+}
+
 /// Errors surfaced when ensuring a Chrome window exists.
 public enum ChromeLaunchError: Error, Equatable, Sendable {
     /// No Chrome window with the expected token was detected within the polling window.

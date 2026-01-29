@@ -13,6 +13,8 @@ public struct ActivationService {
     private let sleeper: AeroSpaceSleeping
     private let pollIntervalMs: Int
     private let pollTimeoutMs: Int
+    private let workspaceProbeTimeoutMs: Int
+    private let focusedProbeTimeoutMs: Int
 
     /// Creates an activation service with default dependencies.
     /// - Parameters:
@@ -25,6 +27,8 @@ public struct ActivationService {
     ///   - logger: Logger for activation events.
     ///   - pollIntervalMs: Polling interval for IDE window detection.
     ///   - pollTimeoutMs: Polling timeout for IDE window detection.
+    ///   - workspaceProbeTimeoutMs: Short workspace-only probe timeout after launch.
+    ///   - focusedProbeTimeoutMs: Initial focused-window probe timeout after launch.
     ///   - aeroSpaceTimeoutSeconds: Timeout for individual AeroSpace commands.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
@@ -36,10 +40,14 @@ public struct ActivationService {
         logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
         pollIntervalMs: Int = 200,
         pollTimeoutMs: Int = 5000,
+        workspaceProbeTimeoutMs: Int = 800,
+        focusedProbeTimeoutMs: Int = 1500,
         aeroSpaceTimeoutSeconds: TimeInterval = 2
     ) {
         precondition(pollIntervalMs > 0, "pollIntervalMs must be positive")
         precondition(pollTimeoutMs > 0, "pollTimeoutMs must be positive")
+        precondition(workspaceProbeTimeoutMs > 0, "workspaceProbeTimeoutMs must be positive")
+        precondition(focusedProbeTimeoutMs > 0, "focusedProbeTimeoutMs must be positive")
         self.configLoader = ConfigLoader(paths: paths, fileSystem: fileSystem)
         if let aeroSpaceBinaryResolver {
             self.aeroSpaceBinaryResolver = aeroSpaceBinaryResolver
@@ -72,6 +80,8 @@ public struct ActivationService {
         self.sleeper = SystemAeroSpaceSleeper()
         self.pollIntervalMs = pollIntervalMs
         self.pollTimeoutMs = pollTimeoutMs
+        self.workspaceProbeTimeoutMs = workspaceProbeTimeoutMs
+        self.focusedProbeTimeoutMs = focusedProbeTimeoutMs
     }
 
     /// Internal initializer for tests.
@@ -86,10 +96,14 @@ public struct ActivationService {
         logger: ProjectWorkspacesLogging,
         sleeper: AeroSpaceSleeping,
         pollIntervalMs: Int,
-        pollTimeoutMs: Int
+        pollTimeoutMs: Int,
+        workspaceProbeTimeoutMs: Int,
+        focusedProbeTimeoutMs: Int
     ) {
         precondition(pollIntervalMs > 0, "pollIntervalMs must be positive")
         precondition(pollTimeoutMs > 0, "pollTimeoutMs must be positive")
+        precondition(workspaceProbeTimeoutMs > 0, "workspaceProbeTimeoutMs must be positive")
+        precondition(focusedProbeTimeoutMs > 0, "focusedProbeTimeoutMs must be positive")
         self.configLoader = configLoader
         self.aeroSpaceBinaryResolver = aeroSpaceBinaryResolver
         self.aeroSpaceCommandRunner = aeroSpaceCommandRunner
@@ -101,6 +115,8 @@ public struct ActivationService {
         self.sleeper = sleeper
         self.pollIntervalMs = pollIntervalMs
         self.pollTimeoutMs = pollTimeoutMs
+        self.workspaceProbeTimeoutMs = workspaceProbeTimeoutMs
+        self.focusedProbeTimeoutMs = focusedProbeTimeoutMs
     }
 
     /// Activates the project workspace for the given project id.
@@ -288,7 +304,12 @@ public struct ActivationService {
         context: ActivationContext
     ) -> Int? {
         let token = context.windowToken
-        let existingMatchesResult = listTokenIdeWindows(client: client, token: token, identity: ideIdentity)
+        let existingMatchesResult = listTokenIdeWindows(
+            client: client,
+            token: token,
+            identity: ideIdentity,
+            workspace: context.workspaceName
+        )
         let existingMatches: [AeroSpaceWindow]
         switch existingMatchesResult {
         case .failure(let error):
@@ -298,23 +319,30 @@ public struct ActivationService {
             existingMatches = matches
         }
 
-        if existingMatches.count == 1, let existing = existingMatches.first {
+        if !existingMatches.isEmpty {
+            let ids = existingMatches.map { $0.windowId }
+            let selection = selectWindowId(
+                from: ids,
+                kind: .ide,
+                workspace: context.workspaceName
+            )
+            if let warning = selection.warning {
+                context.warnings.append(warning)
+            }
+            guard let selectedWindow = existingMatches.first(where: { $0.windowId == selection.selectedId }) else {
+                context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
+                return nil
+            }
             if !moveWindowIfNeeded(
                 client: client,
-                windowId: existing.windowId,
-                currentWorkspace: existing.workspace,
+                windowId: selectedWindow.windowId,
+                currentWorkspace: selectedWindow.workspace,
                 targetWorkspace: context.workspaceName,
                 context: context
             ) {
                 return nil
             }
-            return existing.windowId
-        }
-
-        if existingMatches.count > 1 {
-            let ids = existingMatches.map { $0.windowId }.sorted()
-            context.outcome = .failure(error: .ideWindowTokenAmbiguous(token: token.value, windowIds: ids))
-            return nil
+            return selectedWindow.windowId
         }
 
         switch ideLauncher.launch(project: project, ideConfig: ideConfig) {
@@ -337,9 +365,11 @@ public struct ActivationService {
     private func listTokenIdeWindows(
         client: AeroSpaceClient,
         token: ProjectWindowToken,
-        identity: IdeIdentity
+        identity: IdeIdentity,
+        workspace: String
     ) -> Result<[AeroSpaceWindow], ActivationError> {
-        switch client.listWindowsAllDecoded() {
+        let appBundleId = identity.bundleId?.isEmpty == false ? identity.bundleId : nil
+        switch client.listWindowsDecoded(workspace: workspace, appBundleId: appBundleId) {
         case .failure(let error):
             return .failure(.aeroSpaceFailed(error))
         case .success(let windows):
@@ -357,13 +387,94 @@ public struct ActivationService {
         beforeIds: Set<Int>,
         context: ActivationContext
     ) -> Int? {
-        let pollOutcome: PollOutcome<AeroSpaceWindow, ActivationError> = Poller.poll(
+        let timeouts = launchDetectionTimeouts()
+        let workspaceOutcome = pollForTokenIdeWindowInWorkspace(
+            client: client,
+            token: token,
+            identity: identity,
+            beforeIds: beforeIds,
+            workspaceName: context.workspaceName,
+            timeoutMs: timeouts.workspaceMs,
+            context: context
+        )
+
+        switch workspaceOutcome {
+        case .success(let window):
+            return finalizeIdeWindow(window, client: client, context: context)
+        case .failure(let error):
+            context.outcome = .failure(error: error)
+            return nil
+        case .timedOut:
+            break
+        }
+
+        let focusedPrimaryOutcome = pollForFocusedTokenIdeWindow(
+            client: client,
+            token: token,
+            identity: identity,
+            timeoutMs: timeouts.focusedPrimaryMs
+        )
+
+        switch focusedPrimaryOutcome {
+        case .success(let window):
+            return finalizeIdeWindow(window, client: client, context: context)
+        case .failure(let error):
+            context.outcome = .failure(error: error)
+            return nil
+        case .timedOut:
+            break
+        }
+
+        if timeouts.focusedSecondaryMs > 0 {
+            let focusedSecondaryOutcome = pollForFocusedTokenIdeWindow(
+                client: client,
+                token: token,
+                identity: identity,
+                timeoutMs: timeouts.focusedSecondaryMs
+            )
+            switch focusedSecondaryOutcome {
+            case .success(let window):
+                return finalizeIdeWindow(window, client: client, context: context)
+            case .failure(let error):
+                context.outcome = .failure(error: error)
+                return nil
+            case .timedOut:
+                break
+            }
+        }
+
+        if context.outcome == nil {
+            context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
+        }
+        return nil
+    }
+
+    private func pollForTokenIdeWindowInWorkspace(
+        client: AeroSpaceClient,
+        token: ProjectWindowToken,
+        identity: IdeIdentity,
+        beforeIds: Set<Int>,
+        workspaceName: String,
+        timeoutMs: Int,
+        context: ActivationContext
+    ) -> PollOutcome<AeroSpaceWindow, ActivationError> {
+        guard timeoutMs > 0 else {
+            return .timedOut
+        }
+        return Poller.poll(
             intervalMs: pollIntervalMs,
-            timeoutMs: pollTimeoutMs,
+            timeoutMs: timeoutMs,
             sleeper: sleeper
         ) { () -> PollDecision<AeroSpaceWindow, ActivationError> in
-            switch client.listWindowsAllDecoded() {
+            let appBundleId = identity.bundleId?.isEmpty == false ? identity.bundleId : nil
+            switch client.listWindowsDecoded(
+                workspace: workspaceName,
+                appBundleId: appBundleId
+            ) {
             case .failure(let error):
+                if shouldRetryPoll(error) {
+                    return .keepWaiting
+                }
                 return .failure(.aeroSpaceFailed(error))
             case .success(let windows):
                 let matches = windows.filter { window in
@@ -374,32 +485,71 @@ public struct ActivationService {
                     return .success(window)
                 }
                 if newMatches.count > 1 {
-                    let ids = newMatches.map { $0.windowId }.sorted()
-                    return .failure(.ideWindowTokenAmbiguous(token: token.value, windowIds: ids))
+                    let ids = newMatches.map { $0.windowId }
+                    let selection = selectWindowId(
+                        from: ids,
+                        kind: .ide,
+                        workspace: workspaceName
+                    )
+                    if let warning = selection.warning {
+                        context.warnings.append(warning)
+                    }
+                    let selected = newMatches.sorted { $0.windowId < $1.windowId }[0]
+                    return .success(selected)
                 }
                 return .keepWaiting
             }
         }
+    }
 
-        switch pollOutcome {
-        case .success(let window):
-            if !moveWindowIfNeeded(
-                client: client,
-                windowId: window.windowId,
-                currentWorkspace: window.workspace,
-                targetWorkspace: context.workspaceName,
-                context: context
-            ) {
-                return nil
+    private func pollForFocusedTokenIdeWindow(
+        client: AeroSpaceClient,
+        token: ProjectWindowToken,
+        identity: IdeIdentity,
+        timeoutMs: Int
+    ) -> PollOutcome<AeroSpaceWindow, ActivationError> {
+        guard timeoutMs > 0 else {
+            return .timedOut
+        }
+        return Poller.poll(
+            intervalMs: pollIntervalMs,
+            timeoutMs: timeoutMs,
+            sleeper: sleeper
+        ) { () -> PollDecision<AeroSpaceWindow, ActivationError> in
+            switch client.listWindowsFocusedDecoded() {
+            case .failure(let error):
+                if shouldRetryFocusedWindow(error) {
+                    return .keepWaiting
+                }
+                return .failure(.aeroSpaceFailed(error))
+            case .success(let windows):
+                guard let window = windows.first else {
+                    return .keepWaiting
+                }
+                guard token.matches(windowTitle: window.windowTitle),
+                      matchesIdentity(window, identity: identity) else {
+                    return .keepWaiting
+                }
+                return .success(window)
             }
-            return window.windowId
-        case .failure(let error):
-            context.outcome = .failure(error: error)
-            return nil
-        case .timedOut:
-            context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
+        }
+    }
+
+    private func finalizeIdeWindow(
+        _ window: AeroSpaceWindow,
+        client: AeroSpaceClient,
+        context: ActivationContext
+    ) -> Int? {
+        if !moveWindowIfNeeded(
+            client: client,
+            windowId: window.windowId,
+            currentWorkspace: window.workspace,
+            targetWorkspace: context.workspaceName,
+            context: context
+        ) {
             return nil
         }
+        return window.windowId
     }
 
     // MARK: - Step 7: Chrome Window
@@ -425,8 +575,22 @@ public struct ActivationService {
         case .failure(let error):
             context.outcome = .failure(error: .chromeLaunchFailed(error))
             return nil
-        case .success(let outcome):
-            switch outcome {
+        case .success(let result):
+            if !result.warnings.isEmpty {
+                let activationWarnings = result.warnings.map { warning in
+                    switch warning {
+                    case .multipleWindows(let workspace, let chosenId, let extraIds):
+                        return ActivationWarning.multipleWindows(
+                            kind: .chrome,
+                            workspace: workspace,
+                            chosenId: chosenId,
+                            extraIds: extraIds
+                        )
+                    }
+                }
+                context.warnings.append(contentsOf: activationWarnings)
+            }
+            switch result.outcome {
             case .created(let windowId), .existing(let windowId):
                 return windowId
             }
@@ -442,12 +606,10 @@ public struct ActivationService {
         context: ActivationContext
     ) -> Bool {
         if case .failure(let error) = client.setFloatingLayout(windowId: ideWindowId) {
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
-            return false
+            context.warnings.append(.layoutFailed(kind: .ide, windowId: ideWindowId, error: error))
         }
         if case .failure(let error) = client.setFloatingLayout(windowId: chromeWindowId) {
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
-            return false
+            context.warnings.append(.layoutFailed(kind: .chrome, windowId: chromeWindowId, error: error))
         }
         return true
     }
@@ -492,6 +654,41 @@ public struct ActivationService {
         }
     }
 
+    private func launchDetectionTimeouts() -> LaunchDetectionTimeouts {
+        let overallTimeoutMs = pollTimeoutMs
+        let workspaceMs = min(workspaceProbeTimeoutMs, max(1, overallTimeoutMs / 2))
+        let remainingMs = max(0, overallTimeoutMs - workspaceMs)
+        let focusedPrimaryMs = min(focusedProbeTimeoutMs, remainingMs)
+        let focusedSecondaryMs = max(0, remainingMs - focusedPrimaryMs)
+        return LaunchDetectionTimeouts(
+            workspaceMs: workspaceMs,
+            focusedPrimaryMs: focusedPrimaryMs,
+            focusedSecondaryMs: focusedSecondaryMs
+        )
+    }
+
+    private func shouldRetryPoll(_ error: AeroSpaceCommandError) -> Bool {
+        switch error {
+        case .timedOut, .notReady:
+            return true
+        case .launchFailed, .decodingFailed, .unexpectedOutput, .nonZeroExit:
+            return false
+        }
+    }
+
+    private func shouldRetryFocusedWindow(_ error: AeroSpaceCommandError) -> Bool {
+        switch error {
+        case .nonZeroExit(let command, _):
+            return command.contains("list-windows --focused")
+        case .unexpectedOutput(let command, _):
+            return command.contains("list-windows --focused")
+        case .timedOut, .notReady:
+            return true
+        case .launchFailed, .decodingFailed:
+            return false
+        }
+    }
+
     /// Selects the lowest window id and emits a multiple-windows warning when needed.
     /// - Parameters:
     ///   - windowIds: Window IDs to consider (must be non-empty).
@@ -519,6 +716,12 @@ public struct ActivationService {
 }
 
 // MARK: - Internal Types
+
+private struct LaunchDetectionTimeouts {
+    let workspaceMs: Int
+    let focusedPrimaryMs: Int
+    let focusedSecondaryMs: Int
+}
 
 private struct IdeIdentity: Equatable, Sendable {
     let bundleId: String?

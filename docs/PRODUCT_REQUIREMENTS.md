@@ -174,14 +174,14 @@ Given `projectId`:
 1) Switch to workspace `pw-<projectId>`.
 2) Ensure IDE window exists.
    - VS Code window is identified by a deterministic token (`PW:<projectId>`) in its title.
-   - If found in another workspace, move it into `pw-<projectId>`.
+   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
    - If missing, create it.
-   - If multiple matches are found, fail (no guessing).
+   - If multiple matches are found, warn and choose the lowest window id deterministically.
 3) Ensure Chrome window exists.
    - Chrome window is identified by the same token in its title.
-   - If found in another workspace, move it into `pw-<projectId>`.
+   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
    - If missing, create it.
-   - If multiple matches are found, fail (no guessing).
+   - If multiple matches are found, warn and choose the lowest window id deterministically.
 4) Force IDE and Chrome windows to floating mode (to allow deterministic geometry).
 5) Apply layout for the current display mode:
    - use persisted layout if available
@@ -190,7 +190,7 @@ Given `projectId`:
 
 **MUST**
 
-- Activation may scan across workspaces **only** to find windows carrying the deterministic project token. It must never guess or adopt windows without that token.
+- Activation must avoid global scans. It may inspect only the focused window immediately after launch to recover a newly created tokened window.
 
 **MUST**
 
@@ -443,6 +443,7 @@ Step 6 — Emergency action (panic button)
   - timestamp
   - projectId
   - workspaceName
+  - per-command start/end timestamps + durationMs
   - AeroSpace command invocations and stdout/stderr
   - final result (success/warn/fail)
 - No silent failures.

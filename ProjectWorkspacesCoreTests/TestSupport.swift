@@ -388,22 +388,22 @@ final class TestIdeLauncher: IdeLaunching {
 
 /// Configurable Chrome launcher for testing.
 final class TestChromeLauncher: ChromeLaunching {
-    private let result: Result<ChromeLaunchOutcome, ChromeLaunchError>
+    private let result: Result<ChromeLaunchResult, ChromeLaunchError>
     private(set) var callCount: Int = 0
     private(set) var lastWorkspaceName: String?
     private(set) var lastWindowToken: ProjectWindowToken?
     private(set) var lastIdeWindowIdToRefocus: Int?
 
-    init(result: Result<ChromeLaunchOutcome, ChromeLaunchError>) {
+    init(result: Result<ChromeLaunchResult, ChromeLaunchError>) {
         self.result = result
     }
 
     static func created(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(.created(windowId: windowId)))
+        TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .created(windowId: windowId), warnings: [])))
     }
 
     static func existing(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(.existing(windowId: windowId)))
+        TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .existing(windowId: windowId), warnings: [])))
     }
 
     static func failure(_ error: ChromeLaunchError) -> TestChromeLauncher {
@@ -417,7 +417,7 @@ final class TestChromeLauncher: ChromeLaunching {
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
         allowExistingWindows: Bool
-    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         callCount += 1
         lastWorkspaceName = expectedWorkspaceName
         lastWindowToken = windowToken

@@ -37,6 +37,7 @@ public enum ActivationWarning: Equatable, Sendable {
     case configWarning(DoctorFinding)
     case ideLaunchWarning(IdeLaunchWarning)
     case multipleWindows(kind: ActivationWindowKind, workspace: String, chosenId: Int, extraIds: [Int])
+    case layoutFailed(kind: ActivationWindowKind, windowId: Int, error: AeroSpaceCommandError)
     case moveFailed(kind: ActivationWindowKind, windowId: Int, workspace: String, error: AeroSpaceCommandError)
     case stateRecovered(backupPath: String)
 }
@@ -64,6 +65,9 @@ public enum ActivationOutcome: Equatable, Sendable {
 
 /// Summary of a traced AeroSpace command for activation logs.
 struct AeroSpaceCommandLog: Codable, Equatable, Sendable {
+    let startedAt: String
+    let endedAt: String
+    let durationMs: Int
     let command: String
     let arguments: [String]
     let exitCode: Int32?
@@ -113,6 +117,13 @@ extension ActivationWarning {
                 detail: "Chose window \(chosenId). Extra windows: \(extraIds.sorted()).",
                 fix: "Close extra \(kind.rawValue) windows if this is unintended."
             )
+        case .layoutFailed(let kind, let windowId, let error):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Failed to set \(kind.rawValue) window \(windowId) to floating",
+                detail: "\(error)",
+                fix: "Window placement may be incorrect; try re-activating the project."
+            )
         case .moveFailed(let kind, let windowId, let workspace, let error):
             return DoctorFinding(
                 severity: .warn,
@@ -144,6 +155,8 @@ extension ActivationWarning {
             }
         case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
             return "multipleWindows(\(kind.rawValue)): \(workspace) chose \(chosenId), extras \(extraIds.sorted())"
+        case .layoutFailed(let kind, let windowId, let error):
+            return "layoutFailed(\(kind.rawValue)): window \(windowId), error: \(error)"
         case .moveFailed(let kind, let windowId, let workspace, let error):
             return "moveFailed(\(kind.rawValue)): window \(windowId) to \(workspace), error: \(error)"
         case .stateRecovered(let backupPath):

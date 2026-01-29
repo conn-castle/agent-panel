@@ -43,6 +43,16 @@ xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -deriv
 xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO
 ```
 
+## Clean
+
+Clean build artifacts (DerivedData + build output). Logs are outside the repo and must be removed manually as instructed by the script:
+
+```bash
+scripts/clean.sh
+```
+
+Run from repo root. Notes: The script prints the exact `rm -rf` command to delete logs under `~/.local/state/project-workspaces/logs`.
+
 ## Test
 
 Run unit tests (Debug), without code signing:

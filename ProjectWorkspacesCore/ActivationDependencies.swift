@@ -20,7 +20,7 @@ public protocol ChromeLaunching {
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
     ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
-    /// - Returns: Launch outcome or a structured error.
+    /// - Returns: Launch result with warnings or a structured error.
     func ensureWindow(
         expectedWorkspaceName: String,
         windowToken: ProjectWindowToken,
@@ -28,7 +28,7 @@ public protocol ChromeLaunching {
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
         allowExistingWindows: Bool
-    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError>
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError>
 }
 
 extension IdeLauncher: IdeLaunching {}

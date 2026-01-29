@@ -305,8 +305,8 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 ### One Chrome window per project (enforced by deterministic token)
 
 The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>` followed by a non-word character or end of string. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
-ProjectWorkspaces only scans across workspaces to find windows with that token, and will move a matched window into `pw-<projectId>` when needed.
-If zero or multiple tokened Chrome windows are found, activation fails (no guessing or fallbacks).
+ProjectWorkspaces enumerates only `pw-<projectId>`. If the window was just launched and doesn’t appear there, it uses focused-window recovery to capture the new Chrome window and move it into the workspace (no global scan).
+If multiple tokened Chrome windows are found in the workspace, activation warns and chooses the lowest window id deterministically.
 
 ### Tab seeding (creation-only)
 
@@ -402,6 +402,7 @@ Exit codes:
   - timestamp
   - projectId
   - workspaceName
+  - per-command start/end timestamps + durationMs
   - AeroSpace stdout/stderr for each command
   - final outcome (success/warn/fail)
 
@@ -479,5 +480,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` output; fail on zero or multiple matches.
+- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace, otherwise fail loudly.
 - No silent failures: show user-facing errors + write structured logs.
