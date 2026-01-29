@@ -53,18 +53,11 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added unit coverage for idempotence, missing-window recovery, and edge cases in activation orchestration.
 
 
-## Phase 5 — Switcher UI + global hotkey
+## Phase 5 ✅ — Switcher UI + global hotkey
 
-### Goal
-- Provide the keyboard-first switcher UX with Activate and Close actions.
-
-### Tasks
-- [x] Implement global hotkey ⌘⇧Space to open the switcher using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
-- [x] Implement type-to-filter list with color swatch + name; Enter activates; Esc dismisses.
-- [x] Ensure the switcher works when invoked from any application (app runs as background agent).
-
-### Exit criteria
-- Switcher is usable entirely from the keyboard and reliably invoked from any app.
+- Implemented global hotkey ⌘⇧Space using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
+- Implemented type-to-filter switcher list with color swatch + name; Enter activates; Esc dismisses.
+- Switcher works when invoked from any application (app runs as background agent).
 
 
 ## Phase 6 — Layout engine + persistence

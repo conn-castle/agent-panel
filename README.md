@@ -102,7 +102,7 @@ ProjectWorkspaces will be distributed as a signed + notarized `.app` via:
 - Homebrew cask (recommended) — planned
 - Direct download (`.zip` or `.dmg`) — planned
 
-**Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` Phase 8 for status.
+**Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` for status.
 
 ### Grant Accessibility permission
 

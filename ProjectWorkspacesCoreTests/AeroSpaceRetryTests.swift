@@ -14,6 +14,35 @@ final class AeroSpaceRetryTests: XCTestCase {
         XCTAssertEqual(policy.jitterFraction, 0.2, accuracy: 0.000_1)
     }
 
+    func testPollerUsesInitialIntervalsThenSteady() {
+        let sleeper = TestSleeper()
+        let schedule = PollSchedule(initialIntervalsMs: [5], steadyIntervalMs: 10)
+        var attempts = 0
+
+        let outcome: PollOutcome<Int, Never> = Poller.poll(
+            schedule: schedule,
+            timeoutMs: 40,
+            sleeper: sleeper
+        ) {
+            attempts += 1
+            return .keepWaiting
+        }
+
+        switch outcome {
+        case .timedOut:
+            break
+        case .success, .failure:
+            XCTFail("Expected timedOut outcome.")
+        }
+
+        XCTAssertEqual(attempts, 5)
+        XCTAssertEqual(sleeper.sleepCalls.count, 4)
+        let expectedSleeps: [TimeInterval] = [0.005, 0.01, 0.01, 0.01]
+        for (actual, expected) in zip(sleeper.sleepCalls, expectedSleeps) {
+            XCTAssertEqual(actual, expected, accuracy: 0.000_1)
+        }
+    }
+
     func testNoRetryWhenProbeSucceeds() {
         let commandArgs = ["workspace", "pw-codex"]
         let probeArgs = ["list-workspaces", "--focused", "--count"]

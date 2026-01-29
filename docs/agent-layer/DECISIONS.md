@@ -63,7 +63,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 - Decision 2026-01-26 24a9013: Extract Doctor checker structs
     Decision: Extract focused checker structs from Doctor.swift: PermissionsChecker (accessibility, hotkey), AppDiscoveryChecker (Chrome, IDEs), AeroSpaceChecker (all AeroSpace functionality). Doctor orchestrates checkers via composition.
-    Reason: Doctor.swift grew to ~1165 lines with mixed responsibilities; extraction improves maintainability before Phase 3 adds more checks.
+    Reason: Doctor.swift had grown large with mixed responsibilities; extraction improves maintainability.
     Tradeoffs: More files to navigate; slight indirection in code flow.
 
 - Decision 2026-01-26 c1a9e7f: Chrome launcher precondition and detection policy

@@ -1,6 +1,6 @@
 # ProjectWorkspaces — Implementation Roadmap
 
-This roadmap captures the implementation plan and major architectural decisions so engineers can implement without design decisions. The agent-layer ROADMAP is the active execution plan; if they diverge, surface the conflict for user guidance.
+This document captures the locked architectural decisions, schemas, and contracts so engineers can implement without design decisions. For the active execution plan and phase tracking, see `docs/agent-layer/ROADMAP.md`.
 
 ## Scope baseline (what we are building)
 

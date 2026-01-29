@@ -41,7 +41,7 @@ public struct ActivationService {
         pollIntervalMs: Int = 200,
         pollTimeoutMs: Int = 5000,
         workspaceProbeTimeoutMs: Int = 800,
-        focusedProbeTimeoutMs: Int = 1500,
+        focusedProbeTimeoutMs: Int = 1000,
         aeroSpaceTimeoutSeconds: TimeInterval = 2
     ) {
         precondition(pollIntervalMs > 0, "pollIntervalMs must be positive")
@@ -519,7 +519,8 @@ public struct ActivationService {
             client: client,
             token: token,
             identity: identity,
-            timeoutMs: timeouts.focusedPrimaryMs
+            timeoutMs: timeouts.focusedPrimaryMs,
+            schedule: focusedFastPollSchedule()
         )
 
         switch focusedPrimaryOutcome {
@@ -537,7 +538,8 @@ public struct ActivationService {
                 client: client,
                 token: token,
                 identity: identity,
-                timeoutMs: timeouts.focusedSecondaryMs
+                timeoutMs: timeouts.focusedSecondaryMs,
+                schedule: focusedSteadyPollSchedule()
             )
             switch focusedSecondaryOutcome {
             case .success(let window):
@@ -569,7 +571,7 @@ public struct ActivationService {
             return .timedOut
         }
         return Poller.poll(
-            intervalMs: pollIntervalMs,
+            schedule: workspacePollSchedule(),
             timeoutMs: timeoutMs,
             sleeper: sleeper
         ) { () -> PollDecision<AeroSpaceWindow, ActivationError> in
@@ -613,13 +615,14 @@ public struct ActivationService {
         client: AeroSpaceClient,
         token: ProjectWindowToken,
         identity: IdeIdentity,
-        timeoutMs: Int
+        timeoutMs: Int,
+        schedule: PollSchedule
     ) -> PollOutcome<AeroSpaceWindow, ActivationError> {
         guard timeoutMs > 0 else {
             return .timedOut
         }
         return Poller.poll(
-            intervalMs: pollIntervalMs,
+            schedule: schedule,
             timeoutMs: timeoutMs,
             sleeper: sleeper
         ) { () -> PollDecision<AeroSpaceWindow, ActivationError> in
@@ -841,6 +844,31 @@ public struct ActivationService {
             workspaceMs: workspaceMs,
             focusedPrimaryMs: focusedPrimaryMs,
             focusedSecondaryMs: focusedSecondaryMs
+        )
+    }
+
+    private func fastPollIntervalMs() -> Int {
+        max(1, pollIntervalMs / 2)
+    }
+
+    private func workspacePollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [fastPollIntervalMs()],
+            steadyIntervalMs: pollIntervalMs
+        )
+    }
+
+    private func focusedFastPollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: fastPollIntervalMs()
+        )
+    }
+
+    private func focusedSteadyPollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: pollIntervalMs
         )
     }
 

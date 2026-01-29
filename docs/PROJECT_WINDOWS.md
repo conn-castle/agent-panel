@@ -23,9 +23,10 @@
   - Zero matches: launch Chrome, then detect it.
 - **Stage 2 (post-launch, workspace poll):**
   - Poll `list-windows --workspace pw-<projectId> --app-bundle-id com.google.Chrome ...` for the token.
-  - Keep this probe short (≈0.5–0.8s), then move to focused capture.
+  - Schedule: immediate, then ~100ms, then every ~200ms until the short probe budget (≈0.6–0.8s).
 - **Stage 3 (post-launch, focused recovery):**
   - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
+  - Schedule: fast phase (~100ms interval) for ~0.8–1.0s, then steady (~200ms) until the overall deadline.
   - Accept only if:
     - `app-bundle-id == com.google.Chrome`
     - `window-title` contains the token.
@@ -45,9 +46,10 @@
   - Zero matches: launch IDE, then detect it.
 - **Stage 2 (post-launch, workspace poll):**
   - Poll `list-windows --workspace pw-<projectId> --app-bundle-id <IDE_BUNDLE_ID> ...` for the token.
-  - Keep this probe short (≈0.5–0.8s), then move to focused capture.
+  - Schedule: immediate, then ~100ms, then every ~200ms until the short probe budget (≈0.6–0.8s).
 - **Stage 3 (post-launch, focused recovery):**
   - Poll `aerospace list-windows --focused --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
+  - Schedule: fast phase (~100ms interval) for ~0.8–1.0s, then steady (~200ms) until the overall deadline.
   - Accept only if:
     - IDE identity matches (bundle id/app name)
     - `window-title` contains the token.

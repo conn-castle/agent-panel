@@ -1028,7 +1028,7 @@ final class ActivationServiceTests: XCTestCase {
         pollIntervalMs: Int = 10,
         pollTimeoutMs: Int = 50,
         workspaceProbeTimeoutMs: Int = 800,
-        focusedProbeTimeoutMs: Int = 1500
+        focusedProbeTimeoutMs: Int = 1000
     ) -> ActivationService {
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let configURL = paths.configFile

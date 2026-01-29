@@ -7,7 +7,7 @@ public struct ChromeLauncher {
     public static let defaultPollIntervalMs = 200
     public static let defaultPollTimeoutMs = 5000
     public static let defaultWorkspaceProbeTimeoutMs = 800
-    public static let defaultFocusedProbeTimeoutMs = 1500
+    public static let defaultFocusedProbeTimeoutMs = 1000
     public static let defaultRefocusDelayMs = 100
 
     private let aeroSpaceClient: AeroSpaceClient
@@ -179,7 +179,8 @@ public struct ChromeLauncher {
 
         let focusedPrimaryOutcome = pollForFocusedChromeWindow(
             windowToken: windowToken,
-            timeoutMs: timeouts.focusedPrimaryMs
+            timeoutMs: timeouts.focusedPrimaryMs,
+            schedule: focusedFastPollSchedule()
         )
         switch focusedPrimaryOutcome {
         case .success(let focusedWindow):
@@ -198,7 +199,8 @@ public struct ChromeLauncher {
         if timeouts.focusedSecondaryMs > 0 {
             let focusedSecondaryOutcome = pollForFocusedChromeWindow(
                 windowToken: windowToken,
-                timeoutMs: timeouts.focusedSecondaryMs
+                timeoutMs: timeouts.focusedSecondaryMs,
+                schedule: focusedSteadyPollSchedule()
             )
             switch focusedSecondaryOutcome {
             case .success(let focusedWindow):
@@ -341,7 +343,7 @@ public struct ChromeLauncher {
             return .timedOut
         }
         let pollOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = Poller.poll(
-            intervalMs: pollIntervalMs,
+            schedule: workspacePollSchedule(),
             timeoutMs: timeoutMs,
             sleeper: sleeper
         ) { () -> PollDecision<AeroSpaceWindow, ChromeLaunchError> in
@@ -387,13 +389,14 @@ public struct ChromeLauncher {
 
     private func pollForFocusedChromeWindow(
         windowToken: ProjectWindowToken,
-        timeoutMs: Int
+        timeoutMs: Int,
+        schedule: PollSchedule
     ) -> PollOutcome<AeroSpaceWindow, ChromeLaunchError> {
         guard timeoutMs > 0 else {
             return .timedOut
         }
         let pollOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = Poller.poll(
-            intervalMs: pollIntervalMs,
+            schedule: schedule,
             timeoutMs: timeoutMs,
             sleeper: sleeper
         ) { () -> PollDecision<AeroSpaceWindow, ChromeLaunchError> in
@@ -449,6 +452,31 @@ public struct ChromeLauncher {
             workspaceMs: workspaceMs,
             focusedPrimaryMs: focusedPrimaryMs,
             focusedSecondaryMs: focusedSecondaryMs
+        )
+    }
+
+    private func fastPollIntervalMs() -> Int {
+        max(1, pollIntervalMs / 2)
+    }
+
+    private func workspacePollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [fastPollIntervalMs()],
+            steadyIntervalMs: pollIntervalMs
+        )
+    }
+
+    private func focusedFastPollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: fastPollIntervalMs()
+        )
+    }
+
+    private func focusedSteadyPollSchedule() -> PollSchedule {
+        PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: pollIntervalMs
         )
     }
 
