@@ -1,4 +1,4 @@
-# ProjectWorkspaces — Implementation Roadmap
+# ProjectWorkspaces — Locked Specifications
 
 This document captures the locked architectural decisions, schemas, and contracts so engineers can implement without design decisions. For the active execution plan and phase tracking, see `docs/agent-layer/ROADMAP.md`.
 
@@ -9,11 +9,12 @@ We are building a macOS project workspace switcher that:
 - Uses **AeroSpace workspaces** as the only workspace container (not macOS Spaces).
 - Implements a single primary action: **Activate(project)**
   - Switch to the project’s workspace
-  - Ensure the project’s **IDE window** exists (create if missing)
   - Ensure the project’s **Chrome window** exists (create if missing)
+  - Ensure the project’s **IDE window** exists (create if missing)
   - Apply the project’s saved layout for the current display mode (or defaults)
   - End with the IDE focused
 - Provides a global keyboard-first switcher invoked by **⌘⇧Space**.
+- Switcher remains visible during activation as a non-key HUD, shows loading/error states, and closes on success after IDE focus.
 - Provides a **Close Project** action that closes **every window in the project’s AeroSpace workspace** (closing the workspace by emptying it).
 - Persists per-project per-display-mode layout (laptop vs ultrawide).
 
@@ -24,7 +25,7 @@ This roadmap is derived from the requirements spec but intentionally changes the
 - No macOS Spaces pinning, desk labels, or Mission Control navigation.
 - No Chrome pinned tabs, no Chrome extension.
 - No forced Chrome Profile isolation (per-project profile selection is optional).
-- No multi-monitor orchestration. If multiple displays are present, behavior is best-effort and the app should show a warning.
+- No multi-monitor orchestration. If multiple displays are present, ProjectWorkspaces uses the main display only and warns once.
 
 ## Key design decisions (locked)
 
@@ -164,15 +165,18 @@ Defaults (applied if keys are missing):
   "version": 1,
   "projects": {
     "codex": {
-      "workspaceName": "pw-codex",
+      "managed": {
+        "ideWindowId": 400373,
+        "chromeWindowId": 400375
+      },
       "layouts": {
         "laptop": {
-          "ide": {"x": 0, "y": 0, "w": 1440, "h": 900},
-          "chrome": {"x": 0, "y": 0, "w": 1440, "h": 900}
+          "ide": {"x": 0, "y": 0, "width": 1, "height": 1},
+          "chrome": {"x": 0, "y": 0, "width": 1, "height": 1}
         },
         "ultrawide": {
-          "ide": {"x": 1280, "y": 0, "w": 1920, "h": 1440},
-          "chrome": {"x": 3200, "y": 0, "w": 1920, "h": 1440}
+          "ide": {"x": 0.25, "y": 0, "width": 0.375, "height": 1},
+          "chrome": {"x": 0.625, "y": 0, "width": 0.375, "height": 1}
         }
       }
     }
@@ -182,301 +186,4 @@ Defaults (applied if keys are missing):
 
 Notes:
 - State is a cache and may be deleted without data loss (config is source of truth).
-- No window IDs are persisted across runs (avoid stale-window failure modes).
-
----
-
-## Phases
-
-### Phase 0 — Project scaffold + contracts + doctor skeleton
-
-**Objective:** Create a runnable macOS agent app skeleton, lock file paths, lock config parsing, and implement `doctor` with actionable output.
-
-**Deliverables**
-
-1) Xcode project(s):
-   - `ProjectWorkspacesApp` (SwiftUI, menu bar)
-   - `ProjectWorkspacesCore` (pure Swift module)
-   - `pwctl` (Swift command-line tool)
-
-2) CLI-driven build workflow (no Xcode UI required day-to-day):
-   - Provide `scripts/dev_bootstrap.sh` to validate the Xcode toolchain is installed/selected (`xcode-select`) and fail loudly with fix instructions.
-   - Provide `scripts/build.sh` and `scripts/test.sh` that call `xcodebuild -project ProjectWorkspaces.xcodeproj ...` with deterministic schemes/configuration.
-   - Commit `ProjectWorkspaces.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` and ensure CI resolves packages before building (for example via `xcodebuild -resolvePackageDependencies`).
-   - Allow developers to edit code in VS Code (or any editor); opening Xcode is optional.
-
-3) Config parsing and validation (TOML):
-   - Parse `config.toml` into typed models with explicit defaults and tolerant unknown-key handling (unknown keys must not cause a parse failure).
-   - Validate required per-project fields:
-     - `id` matches `^[a-z0-9-]+$`, is unique, and is not `inbox`
-     - `name` is non-empty
-     - `path` exists
-     - `colorHex` matches `#RRGGBB`
-   - Resolve effective IDE per project: `project.ide` defaults to `global.defaultIde`, which defaults to `"vscode"`.
-
-4) Doctor (MVP):
-   - Checks:
-     - Config file exists and parses
-     - At least one `[[project]]` exists
-     - Homebrew installed (required for AeroSpace install; manual installs deferred)
-     - AeroSpace installed (binary exists)
-     - `aerospace` CLI callable (resolve absolute path)
-     - AeroSpace config state (missing / existing / ambiguous) checked before server start
-     - Safe config install at `~/.aerospace.toml` when no config exists (marker required, atomic write)
-     - Never modify an existing AeroSpace config; fail if configs are ambiguous
-     - Accessibility permission status (for the agent app)
-     - Chrome installed
-     - VS Code installed (Antigravity optional)
-     - Global hotkey ⌘⇧Space can be registered (FAIL if registration fails due to conflict / OS denial)
-     - Warn on ignored config keys (for example: `global.switcherHotkey`)
-     - Required apps are discoverable for the effective IDE selection(s) and Chrome (use Launch Services discovery if config values are omitted)
-     - Reserved ID validation: FAIL if any `project.id == "inbox"`
-     - AeroSpace connectivity check by switching to `pw-inbox` once (switch back best-effort)
-     - Report the loaded AeroSpace config path via `aerospace config --config-path`
-     - Emergency action: `aerospace enable off`
-     - Workspace directory write access
-   - Output format: list of PASS/FAIL/WARN with a “Fix” line and a report header (timestamp, version, macOS, AeroSpace app/CLI paths).
-
-**Exit criteria**
-
-- `pwctl doctor` runs and returns non-zero if any FAIL exists.
-- `scripts/build.sh` and `scripts/test.sh` work end-to-end from the CLI on a developer machine with Xcode installed.
-- A new developer can clone repo, run app, run doctor, and see actionable guidance.
-
----
-
-### Phase 1 — AeroSpace client wrapper + window enumeration primitives
-
-**Objective:** Establish a reliable, testable AeroSpace integration layer.
-
-**Deliverables**
-
-1) `AeroSpaceClient` that runs these commands:
-   - `aerospace workspace <name>`
-   - `aerospace list-windows --workspace <name> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
-   - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
-   - `aerospace focus --window-id <id>`
-   - `aerospace move-node-to-workspace --window-id <id> <workspace>`
-   - `aerospace layout --window-id <id> floating`
-   - `aerospace close --window-id <id>`
-
-2) JSON decoding for list-windows output.
-
-3) Robust execution:
-   - Timeouts
-   - Structured error output including stdout/stderr
-   - Retry policy for “AeroSpace not ready” failures (max 20 attempts, 50ms initial, 1.5x backoff, 750ms cap, 5s total, +/-20% jitter)
-
-**Exit criteria**
-
-- CI-required unit tests cover JSON decoding and CLI wrapper behavior using fixtures/mocks.
-- When `RUN_AEROSPACE_IT=1`, a local integration test can:
-  - create/focus a workspace
-  - enumerate windows
-  - focus a window by id
-- No hardcoded PATH assumptions; binary path resolved once at startup.
-
----
-
-### Phase 2 — VS Code workspace file generation + IDE launch pipeline
-
-**Objective:** Make IDE window creation deterministic and apply project color identity.
-
-**Deliverables**
-
-1) Workspace file generator:
-   - Writes `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`
-   - Includes:
-     - `folders: [{ path: <project.path> }]`
-     - `settings.workbench.colorCustomizations` derived from `project.colorHex`
-     - `settings.window.title` with a deterministic token (`PW:<projectId>`)
-
-2) IDE launch strategy (per project):
-   - Working directory is always project root.
-   - Launch priority:
-     1) If `ideCommand` non-empty → run via `/bin/zsh -lc`.
-     2) Else if `ideUseAgentLayerLauncher=true` and `<repo>/.agent-layer/open-vscode.command` exists → run it.
-     3) Else open the effective IDE:
-        - VS Code: `open -a <VSCode.appPath> <workspaceFile>`
-        - Antigravity: `open -a <Antigravity.appPath> <workspaceFile>`
-   - `ideCommand`/launcher always receives: `PW_PROJECT_ID`, `PW_PROJECT_NAME`, `PW_PROJECT_PATH`, `PW_WORKSPACE_FILE`, `PW_REPO_URL`, `PW_COLOR_HEX`, `PW_IDE`, `OPEN_VSCODE_NO_CLOSE=1`.
-   - If `ideCommand`/launcher exits non-zero, log WARN and fall back to the effective IDE open command; if the fallback open fails, activation fails with an actionable error.
-
-3) VS Code “color enforcement” after custom launch:
-   - After any VS Code launch (including fallback), ensure the workspace file is opened in the IDE by running VS Code CLI with reuse-window against the workspace file.
-   - Implement a tool-owned `code` shim so VS Code CLI is available without manual setup.
-     - Install to: `~/.local/share/project-workspaces/bin/code`
-     - The shim invokes the VS Code bundled CLI within the VS Code app bundle.
-     - The agent sets PATH to include this shim directory when running custom commands.
-
-4) Antigravity support:
-   - Uses same workspace file.
-   - No Antigravity CLI assumptions; fallback is `open -a <Antigravity.appPath> <workspaceFile>`.
-
-**Exit criteria**
-
-- Activating a project with no IDE window successfully opens the IDE.
-- IDE color identity is visible and stable when the project is activated.
-- `ideCommand` and agent-layer launcher both work; failures fall back to opening the effective IDE and fail if the fallback open fails.
-
----
-
-### Phase 3 — Chrome window creation + tab seeding (no pinning)
-
-**Objective:** Ensure one Chrome window exists for the project and seed its tabs only on creation.
-
-**Deliverables**
-
-1) Chrome launch behavior:
-   - When a project’s Chrome window is missing, create it with tabs:
-     - Global tabs (`global.globalChromeUrls`)
-     - If `repoUrl` set, add it as a tab
-     - Project tabs (`project.chromeUrls`)
-   - Tabs are opened by launching Chrome with `open -na "Google Chrome" --args --new-window --window-name="PW:<projectId>"` and URLs.
-   - If `project.chromeProfileDirectory` is set, include `--profile-directory="<dir>"` in the launch args.
-   - No tab enforcement after creation.
-
-2) Window identification:
-   - Detect Chrome windows by matching a deterministic token in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`.
-   - On multiple matches, WARN and choose the lowest window id deterministically.
-   - If none appear after launch, attempt focused-window recovery via `aerospace list-windows --focused ...` and move the new window into the workspace; otherwise fail loudly.
-
-3) Focus rule:
-   - Always end activation by focusing IDE window (Chrome must not steal focus).
-
-**Exit criteria**
-
-- If Chrome window is closed, activation recreates it with the expected tabs.
-- Activation ends with IDE focused every time.
-
----
-
-### Phase 4 — Activation engine (single action)
-
-**Objective:** Implement `Activate(projectId)` end-to-end.
-
-**Algorithm (must match exactly)**
-
-1) Switch to workspace `pw-<projectId>`.
-2) Enumerate windows in the workspace for baseline; token-based scans use `list-windows --workspace pw-<projectId>` only.
-   - If a just-launched IDE/Chrome window does not appear in the workspace, attempt focused-window recovery (`list-windows --focused`) and move it into the workspace; otherwise fail.
-3) Ensure IDE window exists:
-   - VS Code: match the `PW:<projectId>` token; move to `pw-<projectId>` if needed; warn+choose lowest id on multiple matches; fail if none are detected after launch-time recovery.
-4) Ensure Chrome window exists:
-   - Match the same token in Chrome window titles; move to `pw-<projectId>` if needed; create if missing; warn+choose lowest id on multiple matches; fail if none are detected after launch-time recovery.
-5) Force both windows to floating.
-6) Apply layout (Phase 5).
-7) Focus IDE.
-
-**Exit criteria**
-
-- `pwctl activate <projectId>` is idempotent: running twice does not create extra IDE/Chrome windows.
-- Missing-window recovery works.
-
----
-
-### Phase 5 — Switcher UI + global hotkey
-
-**Objective:** Provide the user-facing experience.
-
-**Deliverables**
-
-1) Switcher UI:
-   - Invoked by ⌘⇧Space.
-   - Hotkey implementation uses Carbon `RegisterEventHotKey` (no third-party hotkey libraries).
-   - Type-to-filter.
-   - Shows: color swatch + project name.
-   - Enter activates.
-   - Escape closes.
-
-2) Additional action: Close Project
-   - Shortcut: ⌘W closes selected project (see Phase 7 behavior).
-
-3) No Open/Create toggle.
-
-**Exit criteria**
-
-- Switcher is usable entirely from keyboard.
-- Invoking from any app works.
-
----
-
-### Phase 6 — Layout engine + persistence
-
-**Objective:** Implement layout defaults and per-project persistence for laptop vs ultrawide.
-
-**Display mode detection (locked)**
-
-- If main display width >= `display.ultrawideMinWidthPx` → `ultrawide`
-- Else → `laptop`
-
-**Default layouts (locked)**
-
-- Laptop:
-  - Both IDE and Chrome frames = screen visible frame.
-  - Focus IDE.
-
-- Ultrawide (8 segments):
-  - Segment width = `visibleFrame.width / 8`
-  - Empty: segments 0–1
-  - IDE: segments 2–4
-  - Chrome: segments 5–7
-  - Full height.
-  - Focus IDE.
-
-**Persistence (locked)**
-
-- Persist per project per display mode in state.json.
-- Save on window move/resize (debounced 500ms).
-
-**How window geometry is applied (locked)**
-
-- Use Accessibility (AX) APIs to set window position/size.
-- Avoid mapping window-id → AXWindow directly by using:
-  - `aerospace focus --window-id <id>`
-  - then read/write the system “focused window” via AX as the target.
-
-**Exit criteria**
-
-- Resizing windows in a project persists and is restored on next activation in the same display mode.
-
----
-
-### Phase 7 — Close Project (close workspace by emptying it)
-
-**Objective:** Provide a reliable “close workspace” action.
-
-**Behavior (locked)**
-
-- Close Project closes **every window assigned to the project’s AeroSpace workspace**.
-- If a window belongs to an app that is “show on all desktops,” closing it may close it globally. This is an acceptable side effect.
-
-**Algorithm (locked)**
-
-1) Enumerate windows in workspace `pw-<projectId>`.
-2) For each window id (sorted ascending): `aerospace close --window-id <id>`
-3) After closing, switch to `pw-inbox` if the closed workspace was focused.
-
-**Exit criteria**
-
-- Close Project removes all windows from the project workspace.
-- Next activation recreates missing IDE/Chrome windows as needed.
-
----
-
-### Phase 8 — Packaging + onboarding + documentation polish
-
-**Objective:** Make the tool easy to install and hard to misconfigure.
-
-**Deliverables**
-
-- Signed + notarized `ProjectWorkspaces.app`, distributed via both Homebrew cask (recommended) and direct download (`.zip` or `.dmg`).
-- Release scripts (not yet implemented): `scripts/archive.sh` and `scripts/notarize.sh` will drive `xcodebuild archive/export`, notarization, and stapling (no Xcode UI required).
-- `pwctl` shipped alongside.
-- README finalized (install/config/usage/troubleshooting).
-- Doctor covers the complete setup, including Accessibility.
-
-**Exit criteria**
-
-- A fresh macOS machine can be set up using README alone.
-- Doctor reports no FAIL on a correctly configured machine.
+- Window IDs are cached to avoid redundant AeroSpace lookups; layouts are stored as normalized rects in visible-frame coordinates.

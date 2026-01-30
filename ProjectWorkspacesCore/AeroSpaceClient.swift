@@ -280,6 +280,28 @@ public struct AeroSpaceClient {
         }
     }
 
+    /// Lists all workspace names.
+    /// - Returns: Workspace names or a structured error.
+    public func listWorkspaces() -> Result<[String], AeroSpaceCommandError> {
+        switch runCommand(arguments: ["list-workspaces"]) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            let lines = result.stdout
+                .split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            return .success(lines)
+        }
+    }
+
+    /// Checks whether a workspace exists.
+    /// - Parameter name: Workspace name to check.
+    /// - Returns: True if the workspace exists.
+    public func workspaceExists(_ name: String) -> Result<Bool, AeroSpaceCommandError> {
+        listWorkspaces().map { $0.contains(name) }
+    }
+
     /// Lists windows for a specific workspace as JSON.
     /// - Parameters:
     ///   - workspace: Workspace name to query.
@@ -299,6 +321,27 @@ public struct AeroSpaceClient {
         }
         arguments.append(contentsOf: ["--json", "--format", Self.listWindowsFormat])
         return runCommand(arguments: arguments)
+    }
+
+    /// Lists windows for a specific workspace as JSON without internal retries.
+    /// - Parameters:
+    ///   - workspace: Workspace name to query.
+    ///   - appBundleId: Optional bundle ID filter to reduce output volume.
+    /// - Returns: Command result containing JSON output or a structured error.
+    func listWindowsNoRetry(
+        workspace: String,
+        appBundleId: String? = nil
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        var arguments = [
+            "list-windows",
+            "--workspace",
+            workspace
+        ]
+        if let appBundleId, !appBundleId.isEmpty {
+            arguments.append(contentsOf: ["--app-bundle-id", appBundleId])
+        }
+        arguments.append(contentsOf: ["--json", "--format", Self.listWindowsFormat])
+        return runCommandNoRetry(arguments: arguments)
     }
 
     /// Lists windows across all workspaces as JSON.
@@ -333,6 +376,23 @@ public struct AeroSpaceClient {
         }
     }
 
+    /// Lists windows for a specific workspace as decoded models without internal retries.
+    /// - Parameters:
+    ///   - workspace: Workspace name to query.
+    ///   - appBundleId: Optional bundle ID filter to reduce output volume.
+    /// - Returns: Decoded windows or a structured error.
+    func listWindowsDecodedNoRetry(
+        workspace: String,
+        appBundleId: String? = nil
+    ) -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindowsNoRetry(workspace: workspace, appBundleId: appBundleId) {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
     /// Lists windows across all workspaces as decoded models.
     /// Note: Use only for token-based matching of ProjectWorkspaces-owned windows.
     /// - Returns: Decoded windows or a structured error.
@@ -359,10 +419,35 @@ public struct AeroSpaceClient {
         )
     }
 
+    /// Lists the currently focused window as JSON without internal retries.
+    /// - Returns: Command result containing JSON output or a structured error.
+    func listWindowsFocusedNoRetry() -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommandNoRetry(
+            arguments: [
+                "list-windows",
+                "--focused",
+                "--json",
+                "--format",
+                Self.listWindowsFormat
+            ]
+        )
+    }
+
     /// Lists the currently focused window as decoded models.
     /// - Returns: Decoded windows (typically one) or a structured error.
     public func listWindowsFocusedDecoded() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
         switch listWindowsFocused() {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    /// Lists the currently focused window as decoded models without internal retries.
+    /// - Returns: Decoded windows (typically one) or a structured error.
+    func listWindowsFocusedDecodedNoRetry() -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        switch listWindowsFocusedNoRetry() {
         case .success(let result):
             return windowDecoder.decodeWindows(from: result.stdout)
         case .failure(let error):
@@ -405,6 +490,14 @@ public struct AeroSpaceClient {
     /// - Returns: Command result or a structured error.
     private func runCommand(arguments: [String]) -> Result<CommandResult, AeroSpaceCommandError> {
         runCommandWithRetry(arguments: arguments)
+    }
+
+    private func runCommandNoRetry(arguments: [String]) -> Result<CommandResult, AeroSpaceCommandError> {
+        commandRunner.run(
+            executable: executableURL,
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds
+        )
     }
 
     private func runCommandWithRetry(arguments: [String]) -> Result<CommandResult, AeroSpaceCommandError> {

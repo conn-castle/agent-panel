@@ -37,17 +37,18 @@ and provides a keyboard-first switcher that brings you to the right context quic
 - No macOS Spaces pinning. AeroSpace workspaces are the only container.
 - No Chrome pinned tabs and no Chrome extension.
 - No enforced Chrome profile isolation.
-- No multi-monitor orchestration (best-effort warning only).
+- No multi-monitor orchestration; ProjectWorkspaces uses the main display only and warns when multiple displays are present.
 
 ## User workflow
 
 ### Global switcher
 
-- Hotkey: **⌘⇧Space** (press again to dismiss)
+- Hotkey: **⌘⇧Space** (press again to dismiss when browsing; during loading it focuses the switcher)
 - Type to filter projects
-- Press **Enter** to Activate
-- Press **Esc** to dismiss
+- Press **Enter** to Activate (switcher stays visible while loading)
+- Press **Esc** to dismiss when browsing; during loading, press ⌘⇧Space to focus the switcher, then Esc cancels
 - Press **⌘W** to Close the selected project
+- During activation, the switcher is a non-key HUD with a loading indicator; on success it closes and IDE is focused
 - If the hotkey is unavailable, the menu bar shows **Hotkey unavailable** and **Open Switcher...** opens it manually.
 
 ### Day-to-day
@@ -388,9 +389,9 @@ Exit codes:
 
 - Primary supported use case is one display at a time.
 - If multiple displays are detected, the app must:
-  1) apply layout on the display containing the focused window,
-  2) log a WARN,
-  3) continue without attempting cross-display moves.
+  1) warn once that ProjectWorkspaces uses the main display only,
+  2) apply/persist layouts only for windows already on the main display,
+  3) skip layout for off-main windows without attempting cross-display moves.
 
 ## Logging
 

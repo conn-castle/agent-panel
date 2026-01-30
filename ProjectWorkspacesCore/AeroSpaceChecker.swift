@@ -429,13 +429,28 @@ struct AeroSpaceChecker {
     /// - Parameter executable: Resolved AeroSpace executable URL.
     /// - Returns: Config path if available after retries.
     private func retryAeroSpaceConfigPath(executable: URL) -> String? {
-        for _ in 0..<Self.aerospaceServerRetryCount {
+        let delayMs = max(1, Int(Self.aerospaceServerRetryDelaySeconds * 1000))
+        let timeoutMs = max(delayMs, delayMs * Self.aerospaceServerRetryCount)
+        let schedule = PollSchedule(initialIntervalsMs: [], steadyIntervalMs: delayMs)
+        let outcome: PollOutcome<String, Never> = Poller.poll(
+            schedule: schedule,
+            timeoutMs: timeoutMs,
+            sleeper: SystemAeroSpaceSleeper()
+        ) {
             if let path = queryAeroSpaceConfigPath(executable: executable) {
-                return path
+                return .success(path)
             }
-            Thread.sleep(forTimeInterval: Self.aerospaceServerRetryDelaySeconds)
+            return .keepWaiting
         }
-        return nil
+
+        switch outcome {
+        case .success(let path):
+            return path
+        case .failure:
+            return nil
+        case .timedOut:
+            return nil
+        }
     }
 
     /// Checks AeroSpace workspace switching.

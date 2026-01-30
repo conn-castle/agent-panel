@@ -403,17 +403,23 @@ final class TestChromeLauncher: ChromeLaunching {
     private(set) var lastWorkspaceName: String?
     private(set) var lastWindowToken: ProjectWindowToken?
     private(set) var lastIdeWindowIdToRefocus: Int?
+    /// Whether checkExistingWindow should return "found" (true) or "notFound" (false)
+    var existingWindowFound: Bool = true
 
     init(result: Result<ChromeLaunchResult, ChromeLaunchError>) {
         self.result = result
     }
 
     static func created(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .created(windowId: windowId), warnings: [])))
+        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .created(windowId: windowId), warnings: [])))
+        launcher.existingWindowFound = false
+        return launcher
     }
 
     static func existing(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .existing(windowId: windowId), warnings: [])))
+        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .existing(windowId: windowId), warnings: [])))
+        launcher.existingWindowFound = true
+        return launcher
     }
 
     static func failure(_ error: ChromeLaunchError) -> TestChromeLauncher {
@@ -426,12 +432,62 @@ final class TestChromeLauncher: ChromeLaunching {
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowExistingWindows: Bool
+        allowExistingWindows: Bool,
+        cancellationToken _: ActivationCancellationToken?
     ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         callCount += 1
         lastWorkspaceName = expectedWorkspaceName
         lastWindowToken = windowToken
         lastIdeWindowIdToRefocus = ideWindowIdToRefocus
+        return result
+    }
+
+    func checkExistingWindow(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        allowExistingWindows: Bool
+    ) -> ChromeLauncher.ExistingWindowCheck {
+        callCount += 1
+        lastWorkspaceName = expectedWorkspaceName
+        lastWindowToken = windowToken
+        switch result {
+        case .success(let launchResult):
+            if existingWindowFound {
+                return .found(launchResult)
+            } else {
+                return .notFound(existingIds: [])
+            }
+        case .failure(let error):
+            return .error(error)
+        }
+    }
+
+    func launchChrome(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        globalChromeUrls: [String],
+        project: ProjectConfig,
+        existingIds: Set<Int>,
+        ideWindowIdToRefocus: Int?
+    ) -> Result<ChromeLauncher.ChromeLaunchToken, ChromeLaunchError> {
+        callCount += 1
+        lastWorkspaceName = expectedWorkspaceName
+        lastWindowToken = windowToken
+        lastIdeWindowIdToRefocus = ideWindowIdToRefocus
+        // Return a token that can be used for detection
+        return .success(ChromeLauncher.ChromeLaunchToken(
+            windowToken: windowToken,
+            expectedWorkspaceName: expectedWorkspaceName,
+            beforeIds: existingIds,
+            ideWindowIdToRefocus: ideWindowIdToRefocus
+        ))
+    }
+
+    func detectLaunchedWindow(
+        token: ChromeLauncher.ChromeLaunchToken,
+        cancellationToken: ActivationCancellationToken?,
+        warningSink: @escaping (ChromeLaunchWarning) -> Void
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         return result
     }
 }

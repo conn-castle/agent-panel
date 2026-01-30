@@ -120,7 +120,7 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 1)
-        XCTAssertEqual(chromeLauncher.callCount, 1)
+        XCTAssertEqual(chromeLauncher.callCount, 2) // checkExistingWindow + launchChrome
         XCTAssertEqual(logger.entries.count, 1)
     }
 
@@ -240,7 +240,7 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
-        XCTAssertEqual(chromeLauncher.callCount, 1)
+        XCTAssertEqual(chromeLauncher.callCount, 2) // checkExistingWindow + launchChrome
     }
 
     func testActivationChoosesLowestWhenMultipleTokenIdeWindowsExist() {
@@ -306,7 +306,7 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 0)
-        XCTAssertEqual(chromeLauncher.callCount, 1)
+        XCTAssertEqual(chromeLauncher.callCount, 2) // checkExistingWindow + launchChrome
     }
 
     func testActivationFailsWhenLogWriteFailsOnSuccess() {
@@ -480,7 +480,7 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 1)
-        XCTAssertEqual(chromeLauncher.callCount, 0)
+        XCTAssertEqual(chromeLauncher.callCount, 2) // checkExistingWindow + launchChrome
     }
 
     func testActivationRecoversIdeWindowFromFocusedAfterWorkspaceTimeout() {
@@ -975,7 +975,7 @@ final class ActivationServiceTests: XCTestCase {
         }
 
         XCTAssertEqual(ideLauncher.callCount, 1)
-        XCTAssertEqual(chromeLauncher.callCount, 0)
+        XCTAssertEqual(chromeLauncher.callCount, 2) // checkExistingWindow + launchChrome
     }
 
     func testFocusWorkspaceAndWindowLogsCommands() {
@@ -1050,6 +1050,7 @@ final class ActivationServiceTests: XCTestCase {
             ideLauncher: ideLauncher,
             chromeLauncherFactory: { _ in chromeLauncher },
             ideAppResolver: ideResolver,
+            layoutCoordinator: TestLayoutCoordinator(),
             logger: logger,
             sleeper: TestSleeper(),
             pollIntervalMs: pollIntervalMs,
@@ -1061,5 +1062,19 @@ final class ActivationServiceTests: XCTestCase {
 
     private func signature(_ arguments: [String]) -> AeroSpaceCommandSignature {
         AeroSpaceCommandSignature(path: aerospacePath, arguments: arguments)
+    }
+}
+
+private struct TestLayoutCoordinator: LayoutCoordinating {
+    func stopObserving() {}
+
+    func applyLayout(
+        projectId _: String,
+        config _: Config,
+        ideWindow _: ActivatedWindow,
+        chromeWindow _: ActivatedWindow,
+        client _: AeroSpaceClient
+    ) -> [ActivationWarning] {
+        []
     }
 }

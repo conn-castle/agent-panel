@@ -13,10 +13,19 @@ enum SwitcherPresentationSource: String {
 enum SwitcherDismissReason: String {
     case toggle
     case escape
-    case activationSuccess
+    case activationRequested
+    case activationSucceeded
     case activationWarning
     case windowClose
     case unknown
+}
+
+/// Switcher UI states.
+private enum SwitcherState: Equatable {
+    case browsing
+    case loading(projectId: String, step: String)
+    case warning(projectId: String, message: String)
+    case error(projectId: String, message: String)
 }
 
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
@@ -26,10 +35,13 @@ final class SwitcherPanelController: NSObject {
     private let activationService: ActivationService
     private let logger: ProjectWorkspacesLogging
 
-    private let panel: NSPanel
+    private let panel: SwitcherPanel
     private let searchField: NSSearchField
     private let tableView: NSTableView
     private let statusLabel: NSTextField
+    private let progressIndicator: NSProgressIndicator
+    private let retryButton: NSButton
+    private let cancelButton: NSButton
 
     private var allProjects: [ProjectListItem] = []
     private var filteredProjects: [ProjectListItem] = []
@@ -39,10 +51,15 @@ final class SwitcherPanelController: NSObject {
     private var lastFilterQuery: String = ""
     private var lastStatusMessage: String?
     private var lastStatusLevel: StatusLevel?
-    private var pendingActivationProject: ProjectListItem?
-    private var isBusy: Bool = false
     private var expectsVisible: Bool = false
     private var pendingVisibilityCheckToken: UUID?
+    private var isActivating: Bool = false
+    private var state: SwitcherState = .browsing
+    private var activeProject: ProjectListItem?
+    private var activationRequestId: UUID?
+    private var activationCancellationToken: ActivationCancellationToken?
+    private var previousFocusSnapshot: SwitcherFocusSnapshot?
+    private let focusProvider: SwitcherAeroSpaceProviding
 
     /// Creates a switcher panel controller.
     /// - Parameters:
@@ -53,14 +70,16 @@ final class SwitcherPanelController: NSObject {
         projectCatalogService: ProjectCatalogService = ProjectCatalogService(),
         projectFilter: ProjectFilter = ProjectFilter(),
         activationService: ActivationService = ActivationService(),
-        logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger()
+        logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
+        focusProvider: SwitcherAeroSpaceProviding? = nil
     ) {
         self.projectCatalogService = projectCatalogService
         self.projectFilter = projectFilter
         self.activationService = activationService
         self.logger = logger
+        self.focusProvider = focusProvider ?? AeroSpaceSwitcherService(logger: logger)
 
-        self.panel = NSPanel(
+        self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
             styleMask: [.titled, .closable],
             backing: .buffered,
@@ -69,6 +88,9 @@ final class SwitcherPanelController: NSObject {
         self.searchField = NSSearchField()
         self.tableView = NSTableView()
         self.statusLabel = NSTextField(labelWithString: "")
+        self.progressIndicator = NSProgressIndicator()
+        self.retryButton = NSButton(title: "Retry", target: nil, action: nil)
+        self.cancelButton = NSButton(title: "Cancel", target: nil, action: nil)
 
         super.init()
 
@@ -76,13 +98,20 @@ final class SwitcherPanelController: NSObject {
         configureSearchField()
         configureTableView()
         configureStatusLabel()
+        configureProgressIndicator()
+        configureActionButtons()
         layoutContent()
     }
 
     /// Toggles the switcher panel visibility.
     func toggle(origin: SwitcherPresentationSource = .unknown) {
         if panel.isVisible {
-            dismiss(reason: .toggle)
+            switch state {
+            case .loading:
+                focusPanelForCancel()
+            case .browsing, .error, .warning:
+                dismiss(reason: .toggle)
+            }
         } else {
             show(origin: origin)
         }
@@ -94,10 +123,14 @@ final class SwitcherPanelController: NSObject {
         expectsVisible = true
         beginSession(origin: origin)
         logShowRequested(origin: origin)
-        showPanel()
-        loadProjects()
-        applyFilter(query: "")
-        scheduleVisibilityCheck(origin: origin)
+        capturePreviousFocusSnapshot { [weak self] in
+            guard let self else { return }
+            guard self.expectsVisible else { return }
+            self.showPanel()
+            self.loadProjects()
+            self.applyFilter(query: "")
+            self.scheduleVisibilityCheck(origin: origin)
+        }
     }
 
     /// Dismisses the switcher panel and clears transient state.
@@ -106,6 +139,9 @@ final class SwitcherPanelController: NSObject {
         endSession(reason: reason)
         panel.orderOut(nil)
         resetState()
+        if shouldRestoreFocus(reason: reason) {
+            restorePreviousFocusIfNeeded()
+        }
     }
 
     /// Returns the panel visibility for tests.
@@ -157,8 +193,33 @@ final class SwitcherPanelController: NSObject {
     private func configureStatusLabel() {
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.font = NSFont.systemFont(ofSize: 12)
+        statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.isHidden = true
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    /// Configures the progress indicator shown during loading.
+    private func configureProgressIndicator() {
+        progressIndicator.style = .spinning
+        progressIndicator.controlSize = .small
+        progressIndicator.isDisplayedWhenStopped = false
+        progressIndicator.isHidden = true
+        progressIndicator.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    /// Configures retry/cancel buttons shown on errors.
+    private func configureActionButtons() {
+        retryButton.target = self
+        retryButton.action = #selector(retryActivation(_:))
+        retryButton.bezelStyle = .rounded
+        retryButton.isHidden = true
+        retryButton.translatesAutoresizingMaskIntoConstraints = false
+
+        cancelButton.target = self
+        cancelButton.action = #selector(cancelActivation(_:))
+        cancelButton.bezelStyle = .rounded
+        cancelButton.isHidden = true
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
     }
 
     /// Lays out the panel content using Auto Layout.
@@ -168,7 +229,28 @@ final class SwitcherPanelController: NSObject {
         scrollView.hasVerticalScroller = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [searchField, scrollView, statusLabel])
+        let statusStack = NSStackView(views: [progressIndicator, statusLabel])
+        statusStack.orientation = .horizontal
+        statusStack.alignment = .centerY
+        statusStack.spacing = 8
+        statusStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let buttonStack = NSStackView(views: [retryButton, cancelButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.spacing = 8
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+
+        let footerStack = NSStackView(views: [statusStack, spacer, buttonStack])
+        footerStack.orientation = .horizontal
+        footerStack.alignment = .centerY
+        footerStack.spacing = 8
+        footerStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = NSStackView(views: [searchField, scrollView, footerStack])
         stack.orientation = .vertical
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -212,6 +294,9 @@ final class SwitcherPanelController: NSObject {
     /// Applies filtering and updates selection.
     /// - Parameter query: Current filter query.
     private func applyFilter(query: String) {
+        guard case .browsing = state else {
+            return
+        }
         let previousQuery = lastFilterQuery
         lastFilterQuery = query
         guard catalogErrorMessage == nil else {
@@ -256,26 +341,31 @@ final class SwitcherPanelController: NSObject {
 
     /// Resets query, selection, and status labels.
     private func resetState() {
-        isBusy = false
         allProjects = []
         searchField.stringValue = ""
         searchField.isEnabled = true
+        searchField.isEditable = true
         catalogErrorMessage = nil
         filteredProjects = []
         tableView.isEnabled = true
-        pendingActivationProject = nil
         lastFilterQuery = ""
         lastStatusMessage = nil
         lastStatusLevel = nil
-        clearStatus()
+        isActivating = false
+        activeProject = nil
+        activationCancellationToken = nil
+        activationRequestId = nil
+        panel.allowsKeyWindow = true
+        setState(.browsing)
         tableView.reloadData()
         tableView.deselectAll(nil)
     }
 
     /// Shows the panel and focuses the search field.
     private func showPanel() {
-        NSApp.activate(ignoringOtherApps: true)
+        panel.allowsKeyWindow = true
         panel.center()
+        NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
@@ -439,16 +529,9 @@ final class SwitcherPanelController: NSObject {
 
     /// Activates the selected project if available.
     private func activateSelectedProject() {
-        guard !isBusy else {
-            logEvent(
-                event: "switcher.activate.skipped",
-                level: .warn,
-                message: "Activation skipped because switcher is busy.",
-                context: ["reason": "busy"]
-            )
+        guard !isActivating else {
             return
         }
-
         guard let project = selectedProject() else {
             logEvent(
                 event: "switcher.activate.skipped",
@@ -459,7 +542,6 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
-        pendingActivationProject = project
         logEvent(
             event: "switcher.activate.requested",
             context: [
@@ -468,74 +550,166 @@ final class SwitcherPanelController: NSObject {
             ]
         )
 
-        setBusy(true, message: "Activating...")
+        beginActivation(project: project)
+    }
 
+    /// Starts activation for the selected project and transitions the UI to loading.
+    /// - Parameter project: Project to activate.
+    private func beginActivation(project: ProjectListItem) {
+        isActivating = true
+        activeProject = project
+
+        let requestId = UUID()
+        activationRequestId = requestId
+        let cancellationToken = ActivationCancellationToken()
+        activationCancellationToken = cancellationToken
+
+        // Show loading state immediately before any async work
+        enterLoadingState(project: project, step: "Switching workspace…")
+
+        // Log workspace existence check asynchronously (for diagnostics only)
+        let workspaceName = "pw-\(project.id)"
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let workspaceExists = self.focusProvider.workspaceExists(workspaceName: workspaceName)
+            self.logEvent(
+                event: "switcher.workspace.checked",
+                context: [
+                    "project_id": project.id,
+                    "workspace": workspaceName,
+                    "exists": "\(workspaceExists)"
+                ]
+            )
+        }
+
+        DispatchQueue.main.async {
+            self.startActivation(
+                project: project,
+                requestId: requestId,
+                cancellationToken: cancellationToken
+            )
+        }
+    }
+
+    /// Runs activation on a background queue and forwards progress/outcome to the main thread.
+    /// - Parameters:
+    ///   - project: Project being activated.
+    ///   - requestId: Identifier used to ignore stale updates.
+    ///   - cancellationToken: Token used to cancel activation.
+    private func startActivation(
+        project: ProjectListItem,
+        requestId: UUID,
+        cancellationToken: ActivationCancellationToken
+    ) {
         DispatchQueue.global(qos: .userInitiated).async {
             let outcome = self.activationService.activate(
                 projectId: project.id,
-                focusIdeWindow: false,
-                switchWorkspace: false
+                focusIdeWindow: true,
+                switchWorkspace: true,
+                progress: { [weak self] progress in
+                    DispatchQueue.main.async {
+                        self?.handleActivationProgress(progress, requestId: requestId, project: project)
+                    }
+                },
+                cancellationToken: cancellationToken
             )
             DispatchQueue.main.async {
-                self.handleActivationOutcome(outcome)
+                self.handleActivationOutcome(outcome, project: project, requestId: requestId)
             }
         }
     }
 
-    /// Handles activation outcomes and updates UI state.
-    /// - Parameter outcome: Activation result.
-    private func handleActivationOutcome(_ outcome: ActivationOutcome) {
-        let projectContext: [String: String]
-        if let project = pendingActivationProject {
-            projectContext = [
-                "project_id": project.id,
-                "project_name": project.name
-            ]
-        } else {
-            projectContext = [:]
+    /// Updates the loading UI for activation progress events.
+    /// - Parameters:
+    ///   - progress: Activation progress milestone.
+    ///   - requestId: Identifier used to ignore stale updates.
+    ///   - project: Project being activated.
+    private func handleActivationProgress(
+        _ progress: ActivationProgress,
+        requestId: UUID,
+        project: ProjectListItem
+    ) {
+        guard requestId == activationRequestId else { return }
+        switch progress {
+        case .switchingWorkspace(_):
+            updateLoadingStep(project: project, step: "Switching workspace…")
+        case .switchedWorkspace(_):
+            panel.orderFront(nil)
+        case .ensuringChrome:
+            updateLoadingStep(project: project, step: "Opening Chrome…")
+        case .ensuringIde:
+            updateLoadingStep(project: project, step: "Opening VS Code…")
+        case .applyingLayout:
+            updateLoadingStep(project: project, step: "Applying layout…")
+        case .finishing:
+            updateLoadingStep(project: project, step: "Finishing…")
         }
+    }
+
+    /// Handles activation outcomes and updates UI state.
+    private func handleActivationOutcome(
+        _ outcome: ActivationOutcome,
+        project: ProjectListItem,
+        requestId: UUID
+    ) {
+        guard requestId == activationRequestId else { return }
+        activationRequestId = nil
+        activationCancellationToken = nil
+        isActivating = false
+
+        let projectContext = [
+            "project_id": project.id,
+            "project_name": project.name
+        ]
 
         switch outcome {
         case .success(let report, let warnings):
-            logEvent(
-                event: "switcher.activate.success",
-                level: warnings.isEmpty ? .info : .warn,
-                message: warnings.isEmpty ? nil : "Activation completed with warnings.",
-                context: projectContext.merging(
-                    ["warning_count": "\(warnings.count)"],
-                    uniquingKeysWith: { current, _ in current }
-                )
-            )
             if warnings.isEmpty {
-                pendingActivationProject = nil
-                dismiss(reason: .activationSuccess)
-                activateIdeAfterDismiss(report: report)
+                logEvent(
+                    event: "switcher.activate.success",
+                    level: .info,
+                    message: nil,
+                    context: projectContext
+                )
+                dismiss(reason: .activationSucceeded)
+                focusWorkspaceAndIdeAfterDismiss(report: report)
             } else {
-                setStatus(message: "Activated with warnings. See logs.", level: .warning)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    guard let self else { return }
-                    self.pendingActivationProject = nil
-                    self.dismiss(reason: .activationWarning)
-                    self.activateIdeAfterDismiss(report: report)
-                }
+                let warningDetails = warnings.map { $0.userMessage }.joined(separator: " | ")
+                logEvent(
+                    event: "switcher.activate.success",
+                    level: .warn,
+                    message: "Activation completed with warnings.",
+                    context: projectContext.merging(
+                        [
+                            "warning_count": "\(warnings.count)",
+                            "warnings": warningDetails
+                        ],
+                        uniquingKeysWith: { current, _ in current }
+                    )
+                )
+                // Show warning to user without auto-dismiss; focus IDE in background
+                enterWarningState(project: project, message: "Activated with warnings. See logs.")
+                focusWorkspaceAndIdeInBackground(report: report)
             }
         case .failure(let error):
-            setBusy(false, message: nil)
+            if case .cancelled = error {
+                return
+            }
             let finding = error.asFindings().first
             let message = finding?.title ?? "Activation failed"
-            setStatus(message: message, level: .error)
             logEvent(
                 event: "switcher.activate.failure",
                 level: .error,
                 message: message,
                 context: projectContext
             )
-            pendingActivationProject = nil
+            enterErrorState(project: project, message: message)
         }
     }
 
-    /// Activates the IDE application after dismissing the switcher.
-    private func activateIdeAfterDismiss(report: ActivationReport) {
+    /// Focuses the workspace and IDE window after the switcher is dismissed.
+    /// - Parameter report: Activation report containing workspace and window information.
+    private func focusWorkspaceAndIdeAfterDismiss(report: ActivationReport) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else { return }
             self.logEvent(
@@ -548,13 +722,14 @@ final class SwitcherPanelController: NSObject {
             DispatchQueue.global(qos: .userInitiated).async {
                 let focusResult = self.activationService.focusWorkspaceAndWindow(report: report)
                 DispatchQueue.main.async {
-                    self.handlePostActivationFocusResult(focusResult, report: report)
+                    self.handlePostDismissFocusResult(focusResult, report: report)
                 }
             }
         }
     }
 
-    private func handlePostActivationFocusResult(
+    /// Handles the result of post-dismiss focus attempt.
+    private func handlePostDismissFocusResult(
         _ result: Result<Void, ActivationError>,
         report: ActivationReport
     ) {
@@ -578,46 +753,31 @@ final class SwitcherPanelController: NSObject {
                     "window_id": "\(report.ideWindowId)"
                 ]
             )
-            activateIdeApplication(report: report, reason: "focus_failed")
         }
     }
 
-    /// Brings the IDE application to the foreground after activation.
-    private func activateIdeApplication(report: ActivationReport, reason: String) {
-        guard let bundleId = report.ideBundleId, !bundleId.isEmpty else {
-            logEvent(
-                event: "switcher.ide.activate.skipped",
-                level: .warn,
-                message: "No IDE bundle id available for activation.",
-                context: ["reason": "missing_bundle_id"]
-            )
+    /// Captures the previously focused AeroSpace window and workspace (best effort).
+    /// Captures the previously focused window/workspace before the switcher becomes key.
+    /// - Parameter completion: Optional completion called on the main thread.
+    private func capturePreviousFocusSnapshot(completion: (() -> Void)? = nil) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let snapshot = self.focusProvider.captureSnapshot()
+            DispatchQueue.main.async {
+                self.previousFocusSnapshot = snapshot
+                completion?()
+            }
+        }
+    }
+
+    /// Attempts to restore focus to the previously focused AeroSpace window/workspace.
+    private func restorePreviousFocusIfNeeded() {
+        guard let snapshot = previousFocusSnapshot else {
             return
         }
-
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
-            logEvent(
-                event: "switcher.ide.activate.skipped",
-                level: .warn,
-                message: "IDE application is not running.",
-                context: [
-                    "reason": "not_running",
-                    "bundle_id": bundleId
-                ]
-            )
-            return
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.focusProvider.restore(snapshot: snapshot)
         }
-
-        let activated = app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-        logEvent(
-            event: "switcher.ide.activate.completed",
-            level: activated ? .info : .warn,
-            message: activated ? nil : "IDE activation returned false.",
-            context: [
-                "bundle_id": bundleId,
-                "result": activated ? "true" : "false",
-                "reason": reason
-            ]
-        )
+        previousFocusSnapshot = nil
     }
 
     /// Returns the currently selected project, if any.
@@ -627,29 +787,6 @@ final class SwitcherPanelController: NSObject {
             return nil
         }
         return filteredProjects[row]
-    }
-
-    /// Sets busy state and updates UI controls.
-    /// - Parameters:
-    ///   - busy: True when activation is in progress.
-    ///   - message: Optional status message.
-    private func setBusy(_ busy: Bool, message: String?) {
-        isBusy = busy
-        searchField.isEnabled = !busy
-        tableView.isEnabled = !busy
-        if let message {
-            setStatus(message: message, level: .info)
-        } else {
-            clearStatus()
-        }
-
-        logEvent(
-            event: "switcher.busy.changed",
-            context: [
-                "busy": busy ? "true" : "false",
-                "message": message ?? ""
-            ]
-        )
     }
 
     /// Updates the status label with a message and visual level.
@@ -693,6 +830,194 @@ final class SwitcherPanelController: NSObject {
         }
     }
 
+    /// Updates the UI state and applies its visual changes.
+    /// - Parameter newState: Desired switcher state.
+    private func setState(_ newState: SwitcherState) {
+        state = newState
+        applyState()
+    }
+
+    /// Applies the current state to the UI controls.
+    private func applyState() {
+        switch state {
+        case .browsing:
+            progressIndicator.stopAnimation(nil)
+            progressIndicator.isHidden = true
+            retryButton.isHidden = true
+            cancelButton.isHidden = true
+            searchField.isEditable = true
+            tableView.isEnabled = true
+            clearStatus()
+        case .loading(_, let step):
+            progressIndicator.isHidden = false
+            progressIndicator.startAnimation(nil)
+            retryButton.isHidden = true
+            cancelButton.isHidden = true
+            searchField.isEditable = false
+            tableView.isEnabled = false
+            setStatus(message: step, level: .info)
+        case .warning(_, let message):
+            progressIndicator.stopAnimation(nil)
+            progressIndicator.isHidden = true
+            retryButton.isHidden = true
+            cancelButton.isHidden = false // Show cancel/dismiss button
+            searchField.isEditable = false
+            tableView.isEnabled = false
+            setStatus(message: message, level: .warning)
+        case .error(_, let message):
+            progressIndicator.stopAnimation(nil)
+            progressIndicator.isHidden = true
+            retryButton.isHidden = false
+            cancelButton.isHidden = false
+            searchField.isEditable = false
+            tableView.isEnabled = false
+            setStatus(message: message, level: .error)
+        }
+    }
+
+    /// Enters loading state and ensures the panel is visible but non-key.
+    /// - Parameters:
+    ///   - project: Project being activated.
+    ///   - step: Step label to display.
+    private func enterLoadingState(project: ProjectListItem, step: String) {
+        panel.allowsKeyWindow = false
+        let message = "\(project.name) — \(step)"
+        setState(.loading(projectId: project.id, step: message))
+        panel.orderFront(nil)
+        panel.resignKey()
+    }
+
+    /// Updates the loading step text for the current project.
+    /// - Parameters:
+    ///   - project: Project being activated.
+    ///   - step: Step label to display.
+    private func updateLoadingStep(project: ProjectListItem, step: String) {
+        guard case .loading = state else {
+            let message = "\(project.name) — \(step)"
+            setState(.loading(projectId: project.id, step: message))
+            return
+        }
+        let message = "\(project.name) — \(step)"
+        setState(.loading(projectId: project.id, step: message))
+    }
+
+    /// Enters error state and makes the panel key to allow retry/cancel input.
+    /// - Parameters:
+    ///   - project: Project that failed to activate.
+    ///   - message: Error message to display.
+    private func enterErrorState(project: ProjectListItem, message: String) {
+        panel.allowsKeyWindow = true
+        let formatted = "\(project.name) — \(message)"
+        setState(.error(projectId: project.id, message: formatted))
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(searchField)
+    }
+
+    /// Enters warning state and makes the panel key to show the warning.
+    /// - Parameters:
+    ///   - project: Project that activated with warnings.
+    ///   - message: Warning message to display.
+    private func enterWarningState(project: ProjectListItem, message: String) {
+        panel.allowsKeyWindow = true
+        let formatted = "\(project.name) — \(message)"
+        setState(.warning(projectId: project.id, message: formatted))
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(searchField)
+    }
+
+    /// Focuses the workspace and IDE window in the background without dismissing.
+    /// Used when activation succeeds with warnings.
+    /// - Parameter report: Activation report containing workspace and window information.
+    private func focusWorkspaceAndIdeInBackground(report: ActivationReport) {
+        logEvent(
+            event: "switcher.ide.focus.requested",
+            context: [
+                "workspace": report.workspaceName,
+                "window_id": "\(report.ideWindowId)",
+                "mode": "background"
+            ]
+        )
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let focusResult = self?.activationService.focusWorkspaceAndWindow(report: report)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                switch focusResult {
+                case .success:
+                    self.logEvent(
+                        event: "switcher.ide.focus.completed",
+                        context: [
+                            "workspace": report.workspaceName,
+                            "window_id": "\(report.ideWindowId)",
+                            "mode": "background"
+                        ]
+                    )
+                case .failure(let error):
+                    let detail = error.asFindings().first?.title ?? "Focus failed"
+                    self.logEvent(
+                        event: "switcher.ide.focus.failed",
+                        level: .warn,
+                        message: detail,
+                        context: [
+                            "workspace": report.workspaceName,
+                            "window_id": "\(report.ideWindowId)",
+                            "mode": "background"
+                        ]
+                    )
+                case .none:
+                    break
+                }
+            }
+        }
+    }
+
+    /// Focuses the panel while loading so the user can cancel with Escape.
+    private func focusPanelForCancel() {
+        panel.allowsKeyWindow = true
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeFirstResponder(searchField)
+    }
+
+    @objc private func retryActivation(_ sender: Any?) {
+        guard let project = activeProject else {
+            return
+        }
+        logEvent(
+            event: "switcher.activate.retry",
+            context: ["project_id": project.id, "project_name": project.name]
+        )
+        beginActivation(project: project)
+    }
+
+    @objc private func cancelActivation(_ sender: Any?) {
+        cancelActivation()
+    }
+
+    /// Cancels the in-flight activation and dismisses the switcher.
+    private func cancelActivation() {
+        if case .loading = state {
+            activationCancellationToken?.cancel()
+            let context = activeProject.map { ["project_id": $0.id, "project_name": $0.name] }
+            logEvent(event: "switcher.activate.cancelled", context: context)
+        }
+        activationCancellationToken = nil
+        activationRequestId = nil
+        isActivating = false
+        dismiss(reason: .escape)
+    }
+
+    /// Determines whether to restore the previously focused app after dismissing the switcher.
+    /// - Parameter reason: Dismissal reason for the switcher panel.
+    /// - Returns: True if focus should be restored to the pre-switcher app.
+    func shouldRestoreFocus(reason: SwitcherDismissReason) -> Bool {
+        switch reason {
+        case .toggle, .escape, .windowClose:
+            return true
+        case .activationRequested, .activationSucceeded, .activationWarning, .unknown:
+            return false
+        }
+    }
+
     private var emptyStateMessage: String? {
         if let catalogErrorMessage {
             return catalogErrorMessage
@@ -702,11 +1027,23 @@ final class SwitcherPanelController: NSObject {
 }
 
 extension SwitcherPanelController: NSWindowDelegate {
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        true
+    }
+
     func windowWillClose(_ notification: Notification) {
-        if switcherSessionId != nil {
-            endSession(reason: .windowClose)
+        switch state {
+        case .loading:
+            cancelActivation()
+        case .browsing, .error, .warning:
+            dismiss(reason: .windowClose)
         }
-        resetState()
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        if case .loading = state {
+            panel.allowsKeyWindow = false
+        }
     }
 }
 
@@ -735,6 +1072,9 @@ extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
         guard emptyStateMessage == nil else {
             return
         }
+        guard case .browsing = state else {
+            return
+        }
 
         let row = tableView.selectedRow
         guard row >= 0, row < filteredProjects.count else {
@@ -759,19 +1099,34 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
         guard let field = obj.object as? NSSearchField else {
             return
         }
+        guard case .browsing = state else {
+            field.stringValue = lastFilterQuery
+            return
+        }
         applyFilter(query: field.stringValue)
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             logEvent(event: "switcher.action.enter")
-            activateSelectedProject()
+            if case .browsing = state {
+                activateSelectedProject()
+            }
             return true
         }
 
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             logEvent(event: "switcher.action.escape")
-            dismiss(reason: .escape)
+            switch state {
+            case .browsing:
+                dismiss(reason: .escape)
+            case .loading:
+                cancelActivation()
+            case .error:
+                cancelActivation()
+            case .warning:
+                dismiss(reason: .activationWarning)
+            }
             return true
         }
 
@@ -792,6 +1147,96 @@ private enum StatusLevel {
             return .systemOrange
         case .error:
             return .systemRed
+        }
+    }
+}
+
+final class SwitcherPanel: NSPanel {
+    var allowsKeyWindow: Bool = true
+
+    override var canBecomeKey: Bool {
+        allowsKeyWindow
+    }
+}
+
+struct SwitcherFocusSnapshot: Equatable {
+    let windowId: Int?
+    let workspaceName: String?
+}
+
+protocol SwitcherAeroSpaceProviding {
+    func captureSnapshot() -> SwitcherFocusSnapshot?
+    func restore(snapshot: SwitcherFocusSnapshot)
+    func workspaceExists(workspaceName: String) -> Bool
+}
+
+struct AeroSpaceSwitcherService: SwitcherAeroSpaceProviding {
+    private let logger: ProjectWorkspacesLogging
+    private let timeoutSeconds: TimeInterval
+
+    init(logger: ProjectWorkspacesLogging, timeoutSeconds: TimeInterval = 2) {
+        self.logger = logger
+        self.timeoutSeconds = timeoutSeconds
+    }
+
+    func captureSnapshot() -> SwitcherFocusSnapshot? {
+        guard let client = makeClient() else { return nil }
+
+        if case .success(let windows) = client.listWindowsFocusedDecoded(),
+           let focused = windows.first {
+            return SwitcherFocusSnapshot(windowId: focused.windowId, workspaceName: focused.workspace)
+        }
+
+        if case .success(let workspace) = client.focusedWorkspace() {
+            return SwitcherFocusSnapshot(windowId: nil, workspaceName: workspace)
+        }
+
+        return nil
+    }
+
+    func restore(snapshot: SwitcherFocusSnapshot) {
+        guard let client = makeClient() else { return }
+        if let windowId = snapshot.windowId {
+            if case .success = client.focusWindow(windowId: windowId) {
+                return
+            }
+        }
+        if let workspaceName = snapshot.workspaceName {
+            _ = client.switchWorkspace(workspaceName)
+        }
+    }
+
+    func workspaceExists(workspaceName: String) -> Bool {
+        guard let client = makeClient() else { return false }
+        switch client.workspaceExists(workspaceName) {
+        case .success(let exists):
+            return exists
+        case .failure(let error):
+            _ = logger.log(
+                event: "switcher.workspace.exists.failed",
+                level: .warn,
+                message: "\(error)",
+                context: ["workspace": workspaceName]
+            )
+            return false
+        }
+    }
+
+    private func makeClient() -> AeroSpaceClient? {
+        do {
+            return try AeroSpaceClient(
+                resolver: DefaultAeroSpaceBinaryResolver(),
+                commandRunner: DefaultAeroSpaceCommandRunner(),
+                timeoutSeconds: timeoutSeconds
+            )
+        } catch {
+            _ = logger.log(
+                event: "switcher.aerospace.client.failed",
+                level: .warn,
+                message: "\(error)",
+                context: nil
+            )
+            return nil
         }
     }
 }

@@ -314,6 +314,9 @@ final class ChromeLauncherTests: XCTestCase {
             signature(["list-windows", "--focused", "--json", "--format", listWindowsFormat]): [
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
             ]
         ]
         let runner = SequencedAeroSpaceCommandRunner(responses: responses)
@@ -555,6 +558,74 @@ final class ChromeLauncherTests: XCTestCase {
             focusedProbeTimeoutMs: focusedProbeTimeoutMs,
             refocusDelayMs: refocusDelayMs
         )
+    }
+
+    func testAllWorkspacesFallbackFindsChromeWindowWhenPollingTimesOut() {
+        let token = ProjectWindowToken(projectId: "codex")
+        // Chrome window exists in a different workspace, not focused
+        let chromeWindow = chromeWindowPayload(id: 200, workspace: "some-other-workspace", windowTitle: "PW:codex - Chrome")
+        let responses: AeroSpaceCommandResponses = [
+            // Initial check for existing windows in expected workspace: none found
+            signature(["list-windows", "--workspace", "pw-codex", "--app-bundle-id", ChromeLauncher.chromeBundleId, "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            // Focused window probing: returns some other window (not Chrome)
+            signature(["list-windows", "--focused", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: "")),
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([]), stderr: ""))
+            ],
+            // Fallback all-workspaces check: finds Chrome in another workspace
+            signature(["list-windows", "--all", "--json", "--format", listWindowsFormat]): [
+                .success(CommandResult(exitCode: 0, stdout: windowsJSON([chromeWindow]), stderr: ""))
+            ],
+            // Move window to expected workspace
+            signature(["move-node-to-workspace", "--window-id", "200", "pw-codex"]): [
+                .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
+            ]
+        ]
+        let runner = SequencedAeroSpaceCommandRunner(responses: responses)
+        let openArgs = [
+            "-n",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "--window-name=PW:codex",
+            "about:blank"
+        ]
+        let commandRunner = RecordingCommandRunner(results: [
+            OpenCommandSignature(path: "/usr/bin/open", arguments: openArgs): [
+                CommandResult(exitCode: 0, stdout: "", stderr: "")
+            ]
+        ])
+        let sleeper = TestSleeper()
+        let launcher = makeLauncher(
+            runner: runner,
+            commandRunner: commandRunner,
+            sleeper: sleeper,
+            pollIntervalMs: 10,
+            pollTimeoutMs: 10
+        )
+
+        let result = launcher.ensureWindow(
+            expectedWorkspaceName: "pw-codex",
+            windowToken: token,
+            globalChromeUrls: [],
+            project: makeProject(repoUrl: nil, chromeUrls: []),
+            ideWindowIdToRefocus: nil
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Unexpected failure: \(error). All-workspaces fallback should find Chrome window.")
+        case .success(let result):
+            XCTAssertEqual(result.outcome, .created(windowId: 200))
+            XCTAssertTrue(result.warnings.isEmpty)
+        }
+
+        XCTAssertEqual(commandRunner.invocations.count, 1)
     }
 
     private func makeProject(

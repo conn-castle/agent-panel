@@ -5,7 +5,7 @@ public struct ChromeLauncher {
     public static let chromeBundleId = "com.google.Chrome"
     public static let chromeAppName = "Google Chrome"
     public static let defaultPollIntervalMs = 200
-    public static let defaultPollTimeoutMs = 5000
+    public static let defaultPollTimeoutMs = 10000
     public static let defaultWorkspaceProbeTimeoutMs = 800
     public static let defaultFocusedProbeTimeoutMs = 1000
     public static let defaultRefocusDelayMs = 100
@@ -71,6 +71,183 @@ public struct ChromeLauncher {
         self.refocusDelayMs = refocusDelayMs
     }
 
+    /// Result of checking for existing Chrome windows.
+    public enum ExistingWindowCheck {
+        case found(ChromeLaunchResult)
+        case notFound(existingIds: Set<Int>)
+        case error(ChromeLaunchError)
+    }
+
+    /// Result of launching Chrome (before detection).
+    public struct ChromeLaunchToken {
+        let windowToken: ProjectWindowToken
+        let expectedWorkspaceName: String
+        let beforeIds: Set<Int>
+        let ideWindowIdToRefocus: Int?
+    }
+
+    /// Checks for existing Chrome windows matching the token.
+    /// - Parameters:
+    ///   - expectedWorkspaceName: Target workspace name.
+    ///   - windowToken: Token to match.
+    ///   - allowExistingWindows: Whether existing windows are acceptable.
+    /// - Returns: Found window, not found with existing IDs, or error.
+    public func checkExistingWindow(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        allowExistingWindows: Bool = true
+    ) -> ExistingWindowCheck {
+        var warnings: [ChromeLaunchWarning] = []
+        let existingMatchesResult = listChromeWindowsMatching(
+            token: windowToken,
+            workspace: expectedWorkspaceName
+        )
+        let existingMatches: [AeroSpaceWindow]
+        switch existingMatchesResult {
+        case .failure(let error):
+            return .error(error)
+        case .success(let matches):
+            existingMatches = matches
+        }
+
+        if !existingMatches.isEmpty {
+            let existingResult = handleExistingMatches(
+                existingMatches,
+                allowExistingWindows: allowExistingWindows,
+                expectedWorkspaceName: expectedWorkspaceName,
+                windowToken: windowToken,
+                warningSink: { warnings.append($0) }
+            )
+            switch existingResult {
+            case .failure(let error):
+                return .error(error)
+            case .success(let outcome):
+                return .found(ChromeLaunchResult(outcome: outcome, warnings: warnings))
+            }
+        }
+
+        return .notFound(existingIds: Set(existingMatches.map { $0.windowId }))
+    }
+
+    /// Launches Chrome without waiting for window detection.
+    /// - Parameters:
+    ///   - expectedWorkspaceName: Target workspace name.
+    ///   - windowToken: Token for the new window.
+    ///   - globalChromeUrls: URLs to open.
+    ///   - project: Project config for URLs and profile.
+    ///   - existingIds: IDs of existing windows to exclude from detection.
+    ///   - ideWindowIdToRefocus: IDE window to refocus after detection.
+    /// - Returns: Launch token for later detection, or error.
+    public func launchChrome(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        globalChromeUrls: [String],
+        project: ProjectConfig,
+        existingIds: Set<Int>,
+        ideWindowIdToRefocus: Int?
+    ) -> Result<ChromeLaunchToken, ChromeLaunchError> {
+        guard let chromeAppURL = resolveChromeAppURL() else {
+            return .failure(.chromeNotFound)
+        }
+
+        let launchUrls = buildLaunchUrls(
+            globalChromeUrls: globalChromeUrls,
+            project: project
+        )
+
+        var openArguments = [
+            "-n",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "--window-name=\(windowToken.value)"
+        ]
+        if let profileDirectory = project.chromeProfileDirectory {
+            openArguments.append("--profile-directory=\(profileDirectory)")
+        }
+        openArguments.append(contentsOf: launchUrls)
+
+        let openResult = runCommand(
+            executable: URL(fileURLWithPath: "/usr/bin/open", isDirectory: false),
+            arguments: openArguments
+        )
+
+        if case .failure(let error) = openResult {
+            return .failure(.openFailed(error))
+        }
+
+        return .success(ChromeLaunchToken(
+            windowToken: windowToken,
+            expectedWorkspaceName: expectedWorkspaceName,
+            beforeIds: existingIds,
+            ideWindowIdToRefocus: ideWindowIdToRefocus
+        ))
+    }
+
+    /// Detects a Chrome window after launch.
+    /// - Parameters:
+    ///   - token: Launch token from `launchChrome`.
+    ///   - cancellationToken: Optional cancellation token.
+    ///   - warningSink: Callback for warnings.
+    /// - Returns: Launch result or error.
+    public func detectLaunchedWindow(
+        token: ChromeLaunchToken,
+        cancellationToken: ActivationCancellationToken? = nil,
+        warningSink: @escaping (ChromeLaunchWarning) -> Void
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
+        var warnings: [ChromeLaunchWarning] = []
+        let timeouts = launchDetectionTimeouts()
+        let pipeline = windowDetectionPipeline()
+        let detectionOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = pipeline.run(
+            timeouts: timeouts,
+            workspaceAttempt: {
+                if cancellationToken?.isCancelled == true {
+                    return .failure(.cancelled)
+                }
+                return self.attemptChromeWindowInWorkspace(
+                    windowToken: token.windowToken,
+                    beforeWindowIds: token.beforeIds,
+                    workspace: token.expectedWorkspaceName,
+                    warningSink: { warnings.append($0); warningSink($0) }
+                )
+            },
+            focusedAttempt: {
+                if cancellationToken?.isCancelled == true {
+                    return .failure(.cancelled)
+                }
+                return self.attemptFocusedChromeWindow(windowToken: token.windowToken)
+            }
+        )
+
+        switch detectionOutcome {
+        case .success(let detectedWindow):
+            let result = finalizeDetectedWindow(
+                detectedWindow,
+                expectedWorkspaceName: token.expectedWorkspaceName,
+                ideWindowIdToRefocus: token.ideWindowIdToRefocus
+            )
+            return result.map { ChromeLaunchResult(outcome: $0, warnings: warnings) }
+        case .failure(let error):
+            return .failure(error)
+        case .timedOut:
+            // Fallback: check ALL workspaces for the Chrome window.
+            if let fallbackWindow = attemptAllWorkspacesFallback(
+                windowToken: token.windowToken,
+                beforeWindowIds: token.beforeIds,
+                warningSink: { warnings.append($0); warningSink($0) }
+            ) {
+                let result = finalizeDetectedWindow(
+                    fallbackWindow,
+                    expectedWorkspaceName: token.expectedWorkspaceName,
+                    ideWindowIdToRefocus: token.ideWindowIdToRefocus
+                )
+                return result.map { ChromeLaunchResult(outcome: $0, warnings: warnings) }
+            }
+            return .failure(.chromeWindowNotDetected(token: token.windowToken.value))
+        }
+    }
+
     /// Ensures a Chrome window exists for the provided workspace using a deterministic token.
     /// Window detection is scoped to the expected workspace.
     /// New windows are created via `open -n` so Chrome honors `--window-name`.
@@ -91,8 +268,12 @@ public struct ChromeLauncher {
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowExistingWindows: Bool = true
+        allowExistingWindows: Bool = true,
+        cancellationToken: ActivationCancellationToken? = nil
     ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
+        if cancellationToken?.isCancelled == true {
+            return .failure(.cancelled)
+        }
         var warnings: [ChromeLaunchWarning] = []
         let existingMatchesResult = listChromeWindowsMatching(
             token: windowToken,
@@ -144,6 +325,10 @@ public struct ChromeLauncher {
         }
         openArguments.append(contentsOf: launchUrls)
 
+        if cancellationToken?.isCancelled == true {
+            return .failure(.cancelled)
+        }
+
         let openResult = runCommand(
             executable: URL(fileURLWithPath: "/usr/bin/open", isDirectory: false),
             arguments: openArguments
@@ -155,18 +340,32 @@ public struct ChromeLauncher {
 
         let beforeIds = Set(existingMatches.map { $0.windowId })
         let timeouts = launchDetectionTimeouts()
-        let workspaceOutcome = pollForChromeWindowInWorkspace(
-            windowToken: windowToken,
-            beforeWindowIds: beforeIds,
-            workspace: expectedWorkspaceName,
-            timeoutMs: timeouts.workspaceMs,
-            warningSink: { warnings.append($0) }
+        let pipeline = windowDetectionPipeline()
+        let detectionOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = pipeline.run(
+            timeouts: timeouts,
+            workspaceAttempt: {
+                if cancellationToken?.isCancelled == true {
+                    return .failure(.cancelled)
+                }
+                return self.attemptChromeWindowInWorkspace(
+                    windowToken: windowToken,
+                    beforeWindowIds: beforeIds,
+                    workspace: expectedWorkspaceName,
+                    warningSink: { warnings.append($0) }
+                )
+            },
+            focusedAttempt: {
+                if cancellationToken?.isCancelled == true {
+                    return .failure(.cancelled)
+                }
+                return self.attemptFocusedChromeWindow(windowToken: windowToken)
+            }
         )
 
-        switch workspaceOutcome {
-        case .success(let newWindow):
+        switch detectionOutcome {
+        case .success(let detectedWindow):
             let result = finalizeDetectedWindow(
-                newWindow,
+                detectedWindow,
                 expectedWorkspaceName: expectedWorkspaceName,
                 ideWindowIdToRefocus: ideWindowIdToRefocus
             )
@@ -174,50 +373,55 @@ public struct ChromeLauncher {
         case .failure(let error):
             return .failure(error)
         case .timedOut:
-            break
-        }
-
-        let focusedPrimaryOutcome = pollForFocusedChromeWindow(
-            windowToken: windowToken,
-            timeoutMs: timeouts.focusedPrimaryMs,
-            schedule: focusedFastPollSchedule()
-        )
-        switch focusedPrimaryOutcome {
-        case .success(let focusedWindow):
-            let result = finalizeDetectedWindow(
-                focusedWindow,
-                expectedWorkspaceName: expectedWorkspaceName,
-                ideWindowIdToRefocus: ideWindowIdToRefocus
-            )
-            return result.map { ChromeLaunchResult(outcome: $0, warnings: warnings) }
-        case .failure(let error):
-            return .failure(error)
-        case .timedOut:
-            break
-        }
-
-        if timeouts.focusedSecondaryMs > 0 {
-            let focusedSecondaryOutcome = pollForFocusedChromeWindow(
+            // Fallback: check ALL workspaces for the Chrome window.
+            // Chrome may have created the window in a different workspace.
+            if let fallbackWindow = attemptAllWorkspacesFallback(
                 windowToken: windowToken,
-                timeoutMs: timeouts.focusedSecondaryMs,
-                schedule: focusedSteadyPollSchedule()
-            )
-            switch focusedSecondaryOutcome {
-            case .success(let focusedWindow):
+                beforeWindowIds: beforeIds,
+                warningSink: { warnings.append($0) }
+            ) {
                 let result = finalizeDetectedWindow(
-                    focusedWindow,
+                    fallbackWindow,
                     expectedWorkspaceName: expectedWorkspaceName,
                     ideWindowIdToRefocus: ideWindowIdToRefocus
                 )
                 return result.map { ChromeLaunchResult(outcome: $0, warnings: warnings) }
-            case .failure(let error):
-                return .failure(error)
-            case .timedOut:
-                break
             }
+            return .failure(.chromeWindowNotDetected(token: windowToken.value))
         }
+    }
 
-        return .failure(.chromeWindowNotDetected(token: windowToken.value))
+    /// Fallback attempt to find the Chrome window in any workspace.
+    /// Used when workspace-specific and focused detection both time out.
+    private func attemptAllWorkspacesFallback(
+        windowToken: ProjectWindowToken,
+        beforeWindowIds: Set<Int>,
+        warningSink: (ChromeLaunchWarning) -> Void
+    ) -> AeroSpaceWindow? {
+        switch aeroSpaceClient.listWindowsAllDecoded() {
+        case .failure:
+            return nil
+        case .success(let allWindows):
+            let matches = allWindows.filter {
+                $0.appBundleId == Self.chromeBundleId &&
+                windowToken.matches(windowTitle: $0.windowTitle) &&
+                !beforeWindowIds.contains($0.windowId)
+            }
+            guard !matches.isEmpty else {
+                return nil
+            }
+            if matches.count > 1 {
+                let ids = matches.map { $0.windowId }.sorted()
+                warningSink(
+                    .multipleWindows(
+                        workspace: "all",
+                        chosenId: ids[0],
+                        extraIds: Array(ids.dropFirst())
+                    )
+                )
+            }
+            return matches.sorted { $0.windowId < $1.windowId }.first
+        }
     }
 
     /// Handles tokened Chrome windows that already exist before creation attempts.
@@ -315,6 +519,24 @@ public struct ChromeLauncher {
         }
     }
 
+    private func listChromeWindowsMatchingNoRetry(
+        token: ProjectWindowToken,
+        workspace: String
+    ) -> Result<[AeroSpaceWindow], ChromeLaunchError> {
+        switch aeroSpaceClient.listWindowsDecodedNoRetry(
+            workspace: workspace,
+            appBundleId: Self.chromeBundleId
+        ) {
+        case .failure(let error):
+            return .failure(.aeroSpaceFailed(error))
+        case .success(let windows):
+            let matches = windows.filter {
+                $0.appBundleId == Self.chromeBundleId && token.matches(windowTitle: $0.windowTitle)
+            }
+            return .success(matches)
+        }
+    }
+
     /// Moves a window into the expected workspace when needed.
     private func moveWindowIfNeeded(
         _ window: AeroSpaceWindow,
@@ -331,100 +553,60 @@ public struct ChromeLauncher {
         }
     }
 
-    /// Polls the expected workspace for a newly created Chrome window.
-    private func pollForChromeWindowInWorkspace(
+    private func attemptChromeWindowInWorkspace(
         windowToken: ProjectWindowToken,
         beforeWindowIds: Set<Int>,
         workspace: String,
-        timeoutMs: Int,
         warningSink: (ChromeLaunchWarning) -> Void
-    ) -> PollOutcome<AeroSpaceWindow, ChromeLaunchError> {
-        guard timeoutMs > 0 else {
-            return .timedOut
-        }
-        let pollOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = Poller.poll(
-            schedule: workspacePollSchedule(),
-            timeoutMs: timeoutMs,
-            sleeper: sleeper
-        ) { () -> PollDecision<AeroSpaceWindow, ChromeLaunchError> in
-            let windowsResult = listChromeWindowsMatching(
-                token: windowToken,
-                workspace: workspace
-            )
-            switch windowsResult {
-            case .failure(let error):
-                if shouldRetryPoll(error) {
-                    return .keepWaiting
-                }
-                return .failure(error)
-            case .success(let windows):
-                let newWindows = windows.filter { !beforeWindowIds.contains($0.windowId) }
-                if newWindows.count == 1, let newWindow = newWindows.first {
-                    return .success(newWindow)
-                }
-                if newWindows.count > 1 {
-                    let ids = newWindows.map { $0.windowId }.sorted()
-                    warningSink(
-                        .multipleWindows(
-                            workspace: workspace,
-                            chosenId: ids[0],
-                            extraIds: Array(ids.dropFirst())
-                        )
-                    )
-                    return .success(newWindows.sorted { $0.windowId < $1.windowId }[0])
-                }
+    ) -> PollDecision<AeroSpaceWindow, ChromeLaunchError> {
+        let windowsResult = listChromeWindowsMatchingNoRetry(
+            token: windowToken,
+            workspace: workspace
+        )
+        switch windowsResult {
+        case .failure(let error):
+            if shouldRetryPoll(error) {
                 return .keepWaiting
             }
-        }
-
-        switch pollOutcome {
-        case .success(let window):
-            return .success(window)
-        case .failure(let error):
             return .failure(error)
-        case .timedOut:
-            return .timedOut
+        case .success(let windows):
+            let newWindows = windows.filter { !beforeWindowIds.contains($0.windowId) }
+            if newWindows.count == 1, let newWindow = newWindows.first {
+                return .success(newWindow)
+            }
+            if newWindows.count > 1 {
+                let ids = newWindows.map { $0.windowId }.sorted()
+                warningSink(
+                    .multipleWindows(
+                        workspace: workspace,
+                        chosenId: ids[0],
+                        extraIds: Array(ids.dropFirst())
+                    )
+                )
+                return .success(newWindows.sorted { $0.windowId < $1.windowId }[0])
+            }
+            return .keepWaiting
         }
     }
 
-    private func pollForFocusedChromeWindow(
-        windowToken: ProjectWindowToken,
-        timeoutMs: Int,
-        schedule: PollSchedule
-    ) -> PollOutcome<AeroSpaceWindow, ChromeLaunchError> {
-        guard timeoutMs > 0 else {
-            return .timedOut
-        }
-        let pollOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = Poller.poll(
-            schedule: schedule,
-            timeoutMs: timeoutMs,
-            sleeper: sleeper
-        ) { () -> PollDecision<AeroSpaceWindow, ChromeLaunchError> in
-            switch aeroSpaceClient.listWindowsFocusedDecoded() {
-            case .failure(let error):
-                if shouldRetryFocusedWindow(error) {
-                    return .keepWaiting
-                }
-                return .failure(.aeroSpaceFailed(error))
-            case .success(let windows):
-                guard let window = windows.first else {
-                    return .keepWaiting
-                }
-                guard window.appBundleId == Self.chromeBundleId,
-                      windowToken.matches(windowTitle: window.windowTitle) else {
-                    return .keepWaiting
-                }
-                return .success(window)
-            }
-        }
-
-        switch pollOutcome {
-        case .success(let window):
-            return .success(window)
+    private func attemptFocusedChromeWindow(
+        windowToken: ProjectWindowToken
+    ) -> PollDecision<AeroSpaceWindow, ChromeLaunchError> {
+        switch aeroSpaceClient.listWindowsFocusedDecodedNoRetry() {
         case .failure(let error):
-            return .failure(error)
-        case .timedOut:
-            return .timedOut
+            if WindowDetectionRetryPolicy.shouldRetryFocusedWindow(error) {
+                return .keepWaiting
+            }
+            return .failure(.aeroSpaceFailed(error))
+        case .success(let windows):
+            guard let window = windows.first else {
+                return .keepWaiting
+            }
+            guard window.appBundleId == Self.chromeBundleId,
+                  windowToken.matches(windowTitle: window.windowTitle) else {
+                return .keepWaiting
+            }
+            return .success(window)
         }
     }
 
@@ -440,6 +622,15 @@ public struct ChromeLauncher {
             return .failure(error)
         }
         return .success(.created(windowId: window.windowId))
+    }
+
+    private func windowDetectionPipeline() -> WindowDetectionPipeline {
+        WindowDetectionPipeline(
+            sleeper: sleeper,
+            workspaceSchedule: workspacePollSchedule(),
+            focusedFastSchedule: focusedFastPollSchedule(),
+            focusedSteadySchedule: focusedSteadyPollSchedule()
+        )
     }
 
     private func launchDetectionTimeouts() -> LaunchDetectionTimeouts {
@@ -506,34 +697,6 @@ public struct ChromeLauncher {
         guard case .aeroSpaceFailed(let aeroError) = error else {
             return false
         }
-        return shouldRetryPoll(aeroError)
+        return WindowDetectionRetryPolicy.shouldRetryPoll(aeroError)
     }
-
-    private func shouldRetryPoll(_ error: AeroSpaceCommandError) -> Bool {
-        switch error {
-        case .timedOut, .notReady:
-            return true
-        case .launchFailed, .decodingFailed, .unexpectedOutput, .nonZeroExit:
-            return false
-        }
-    }
-
-    private func shouldRetryFocusedWindow(_ error: AeroSpaceCommandError) -> Bool {
-        switch error {
-        case .nonZeroExit(let command, _):
-            return command.contains("list-windows --focused")
-        case .unexpectedOutput(let command, _):
-            return command.contains("list-windows --focused")
-        case .timedOut, .notReady:
-            return true
-        case .launchFailed, .decodingFailed:
-            return false
-        }
-    }
-}
-
-private struct LaunchDetectionTimeouts {
-    let workspaceMs: Int
-    let focusedPrimaryMs: Int
-    let focusedSecondaryMs: Int
 }

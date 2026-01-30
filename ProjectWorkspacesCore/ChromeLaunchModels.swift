@@ -36,4 +36,6 @@ public enum ChromeLaunchError: Error, Equatable, Sendable {
     case openFailed(ProcessCommandError)
     /// An AeroSpace command failed during Chrome launch orchestration.
     case aeroSpaceFailed(AeroSpaceCommandError)
+    /// Activation was cancelled by the user.
+    case cancelled
 }

@@ -110,3 +110,38 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Use a short workspace probe before focused-window recovery; treat list-windows timeouts/not-ready as retryable inside poll loops; log per-command start/end timestamps plus duration; treat floating-layout failures as warnings.
     Reason: Reduce perceived activation delay, avoid false failures from transient timeouts, and make activation timing diagnosable without guesswork.
     Tradeoffs: Poll timing is more complex; activation may report success with layout warnings that require manual correction.
+
+- Decision 2026-01-29 5c2b7a: Display mode source and normalized layout space
+    Decision: Define display mode using `CGMainDisplayID()` pixel width and map visible-frame geometry to the matching `NSScreen` display ID; normalized layout rectangles are relative to the visible-frame coordinate space.
+    Reason: Provides deterministic main-display selection while avoiding pixel/point ambiguity in layout math.
+    Tradeoffs: Multi-display behavior is anchored to the menu-bar display even if a focused window lives elsewhere.
+
+- Decision 2026-01-29 7b1c0e: Unified state.json layout persistence
+    Decision: Use a single versioned `state.json` schema that stores managed window IDs plus per-project per-display-mode layouts as normalized rects (`ide`/`chrome`) in visible-frame coordinates; persist via atomic temp-file rename with corruption backups.
+    Reason: Prevents competing writers and keeps layout persistence deterministic across activation and observation.
+    Tradeoffs: Schema changes require migration; corrupted files reset to empty state with a backup.
+
+- Decision 2026-01-29 3d8f9a: AX/AppKit coordinate conversion
+    Decision: Convert AppKit bottom-left frames to AX top-left positions (and back) using the main display height, with round-trip tests.
+    Reason: Avoids Y-axis inversion bugs when applying and persisting AX window geometry.
+    Tradeoffs: Assumes main-display coordinate space; multi-display remains main-display only.
+
+- Decision 2026-01-29 016c408: Switcher dismisses before activation
+    Decision: The switcher dismisses immediately on Enter and activation starts on the next runloop tick; ActivationService owns focus and no UI layer re-asserts focus.
+    Reason: Avoids focus churn while the panel is key and keeps activation semantics consistent across switcher and CLI.
+    Tradeoffs: Switcher no longer shows an in-panel busy state; failures must surface outside the switcher.
+
+- Decision 2026-01-30 3f9c1b2: Switcher stays visible during activation
+    Decision: The switcher remains visible as a non-key HUD during activation; Chrome is ensured before IDE; workspace existence uses `list-workspaces`; window detection timeouts are increased by +5s.
+    Reason: Provide continuous user feedback during slow activations while avoiding focus contention.
+    Tradeoffs: Requires careful HUD focus handling and longer waits before failure; supersedes 2026-01-29 016c408.
+
+- Decision 2026-01-30 fallback: All-workspaces fallback for Chrome detection
+    Decision: Add a last-resort fallback in ChromeLauncher that checks ALL workspaces (`list-windows --all`) for the tokened Chrome window when both workspace-specific and focused-window detection time out.
+    Reason: Chrome may create windows in a workspace other than the focused one and not gain focus, causing detection to fail despite the window existing.
+    Tradeoffs: Adds one global scan as a fallback; still prefers workspace-specific and focused detection first; partially supersedes 2026-01-27 e7c3a1b (no global scans) by allowing a fallback scan on timeout.
+
+- Decision 2026-01-30 parallel: Parallel Chrome/IDE launch with sequential detection
+    Decision: Launch Chrome first (fire and forget), then immediately launch IDE, wait for IDE detection first, then wait for Chrome detection; switcher panel uses `canJoinAllSpaces` behavior and calls `focusWorkspaceAndWindow` after dismiss.
+    Reason: Improves perceived activation speed by launching both apps in parallel while ensuring IDE is detected and focused first; reverts panel behavior to `canJoinAllSpaces` which provides more reliable cross-workspace visibility; adds explicit post-dismiss focus to ensure IDE receives focus after switcher closes.
+    Tradeoffs: Chrome detection happens after IDE detection, so Chrome errors surface later; adds complexity to ChromeLauncher with separate check/launch/detect methods; partially supersedes 2026-01-30 3f9c1b2 (Chrome before IDE sequential) by making launch parallel.

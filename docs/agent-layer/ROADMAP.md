@@ -60,18 +60,18 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Switcher works when invoked from any application (app runs as background agent).
 
 
-## Phase 6 — Layout engine + persistence
+## Phase 6 ✅ — Layout engine + persistence
 
 ### Goal
 - Apply locked default layouts and persist per-project per-display-mode geometry.
 
 ### Tasks
-- [ ] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
-- [ ] Implement locked default layouts for laptop and ultrawide (8-segment split).
-- [ ] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.
-- [ ] Persist layout on window move/resize via Accessibility (AX) APIs, debounced 500ms.
-- [ ] Apply geometry by focusing the target window via AeroSpace, then mutating the system “focused window” via AX.
-- [ ] Add unit tests for layout math and state serialization.
+- [x] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
+- [x] Implement locked default layouts for laptop and ultrawide (8-segment split).
+- [x] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.
+- [x] Persist layout on window move/resize via Accessibility (AX) APIs, debounced 500ms.
+- [x] Apply geometry by focusing the target window via AeroSpace, then mutating the system “focused window” via AX.
+- [x] Add unit tests for layout math and state serialization.
 
 ### Exit criteria
 - User window moves/resizes persist and are restored on next activation for the same display mode.
