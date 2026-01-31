@@ -400,10 +400,10 @@ final class ActivationServiceTests: XCTestCase {
     func testActivationFailsWhenWorkspaceSwitchFails() {
         let responses: AeroSpaceCommandResponses = [
             signature(["workspace", "pw-codex"]): [
-                .failure(.nonZeroExit(
+                .failure(.executionFailed(.nonZeroExit(
                     command: "aerospace workspace pw-codex",
                     result: CommandResult(exitCode: 1, stdout: "", stderr: "workspace error")
-                ))
+                )))
             ],
             // Readiness probe is called when a command fails with nonZeroExit
             signature(["list-workspaces", "--focused", "--count"]): [
@@ -787,10 +787,10 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindowAfterLayout]), stderr: ""))
             ],
             signature(["layout", "--window-id", "12", "floating"]): [
-                .failure(.nonZeroExit(
+                .failure(.executionFailed(.nonZeroExit(
                     command: "aerospace layout --window-id 12 floating",
                     result: CommandResult(exitCode: 1, stdout: "", stderr: "layout failed")
-                ))
+                )))
             ],
             signature(["list-workspaces", "--focused", "--count"]): [
                 .success(CommandResult(exitCode: 0, stdout: "1\n", stderr: ""))
@@ -847,10 +847,10 @@ final class ActivationServiceTests: XCTestCase {
                 .success(CommandResult(exitCode: 0, stdout: windowsJSON([ideWindow]), stderr: ""))
             ],
             signature(["layout", "--window-id", "12", "floating"]): [
-                .failure(.nonZeroExit(
+                .failure(.executionFailed(.nonZeroExit(
                     command: "aerospace layout --window-id 12 floating",
                     result: CommandResult(exitCode: 1, stdout: "", stderr: "layout failed")
-                ))
+                )))
             ],
             signature(["list-workspaces", "--focused", "--count"]): [
                 .success(CommandResult(exitCode: 0, stdout: "1\n", stderr: ""))
@@ -886,10 +886,10 @@ final class ActivationServiceTests: XCTestCase {
             XCTAssertEqual(report.chromeWindowId, 30)
             XCTAssertEqual(
                 warnings,
-                [.layoutFailed(kind: .ide, windowId: 12, error: .nonZeroExit(
+                [.layoutFailed(kind: .ide, windowId: 12, error: .executionFailed(.nonZeroExit(
                     command: "aerospace layout --window-id 12 floating",
                     result: CommandResult(exitCode: 1, stdout: "", stderr: "layout failed")
-                ))]
+                )))]
             )
         }
     }

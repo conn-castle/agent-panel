@@ -549,7 +549,7 @@ final class ChromeLauncherTests: XCTestCase {
         )
         return ChromeLauncher(
             aeroSpaceClient: client,
-            commandRunner: commandRunner,
+            processRunner: ProcessRunner(commandRunner: commandRunner),
             appDiscovery: TestAppDiscovery(bundleIds: [ChromeLauncher.chromeBundleId: chromeAppURL]),
             sleeper: sleeper,
             pollIntervalMs: pollIntervalMs,

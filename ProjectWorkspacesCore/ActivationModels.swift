@@ -444,10 +444,13 @@ extension ActivationError {
 private extension AeroSpaceCommandError {
     var description: String {
         switch self {
-        case .launchFailed(let command, let underlyingError):
-            return "\(command): \(underlyingError)"
-        case .nonZeroExit(let command, let result):
-            return "\(command) exited \(result.exitCode)"
+        case .executionFailed(let error):
+            switch error {
+            case .launchFailed(let command, let underlyingError):
+                return "\(command): \(underlyingError)"
+            case .nonZeroExit(let command, let result):
+                return "\(command) exited \(result.exitCode)"
+            }
         case .timedOut(let command, let timeoutSeconds, _):
             return "\(command) timed out after \(timeoutSeconds)s"
         case .decodingFailed(_, let underlyingError):

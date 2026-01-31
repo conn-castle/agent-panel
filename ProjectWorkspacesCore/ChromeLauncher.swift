@@ -11,13 +11,10 @@ public struct ChromeLauncher {
     public static let defaultRefocusDelayMs = 100
 
     private let aeroSpaceClient: AeroSpaceClient
-    private let commandRunner: CommandRunning
+    private let processRunner: ProcessRunning
     private let appDiscovery: AppDiscovering
     private let sleeper: AeroSpaceSleeping
-    private let pollIntervalMs: Int
-    private let pollTimeoutMs: Int
-    private let workspaceProbeTimeoutMs: Int
-    private let focusedProbeTimeoutMs: Int
+    private let windowDetectionConfiguration: WindowDetectionConfiguration
     private let refocusDelayMs: Int
 
     /// Creates a Chrome launcher.
@@ -32,7 +29,7 @@ public struct ChromeLauncher {
     ) {
         self.init(
             aeroSpaceClient: aeroSpaceClient,
-            commandRunner: commandRunner,
+            processRunner: ProcessRunner(commandRunner: commandRunner),
             appDiscovery: appDiscovery,
             sleeper: SystemAeroSpaceSleeper(),
             pollIntervalMs: Self.defaultPollIntervalMs,
@@ -46,7 +43,7 @@ public struct ChromeLauncher {
     /// Internal initializer for tests and deterministic configuration.
     init(
         aeroSpaceClient: AeroSpaceClient,
-        commandRunner: CommandRunning,
+        processRunner: ProcessRunning,
         appDiscovery: AppDiscovering,
         sleeper: AeroSpaceSleeping,
         pollIntervalMs: Int,
@@ -55,19 +52,18 @@ public struct ChromeLauncher {
         focusedProbeTimeoutMs: Int,
         refocusDelayMs: Int
     ) {
-        precondition(pollIntervalMs > 0, "pollIntervalMs must be positive")
-        precondition(pollTimeoutMs > 0, "pollTimeoutMs must be positive")
-        precondition(workspaceProbeTimeoutMs > 0, "workspaceProbeTimeoutMs must be positive")
-        precondition(focusedProbeTimeoutMs > 0, "focusedProbeTimeoutMs must be positive")
+        let detectionConfiguration = WindowDetectionConfiguration(
+            pollIntervalMs: pollIntervalMs,
+            pollTimeoutMs: pollTimeoutMs,
+            workspaceProbeTimeoutMs: workspaceProbeTimeoutMs,
+            focusedProbeTimeoutMs: focusedProbeTimeoutMs
+        )
         precondition(refocusDelayMs >= 0, "refocusDelayMs must be non-negative")
         self.aeroSpaceClient = aeroSpaceClient
-        self.commandRunner = commandRunner
+        self.processRunner = processRunner
         self.appDiscovery = appDiscovery
         self.sleeper = sleeper
-        self.pollIntervalMs = pollIntervalMs
-        self.pollTimeoutMs = pollTimeoutMs
-        self.workspaceProbeTimeoutMs = workspaceProbeTimeoutMs
-        self.focusedProbeTimeoutMs = focusedProbeTimeoutMs
+        self.windowDetectionConfiguration = detectionConfiguration
         self.refocusDelayMs = refocusDelayMs
     }
 
@@ -197,12 +193,12 @@ public struct ChromeLauncher {
         warningSink: @escaping (ChromeLaunchWarning) -> Void
     ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         var warnings: [ChromeLaunchWarning] = []
-        let timeouts = launchDetectionTimeouts()
-        let pipeline = windowDetectionPipeline()
+        let timeouts = windowDetectionConfiguration.timeouts
+        let pipeline = windowDetectionConfiguration.pipeline(sleeper: sleeper)
         let detectionOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = pipeline.run(
             timeouts: timeouts,
             workspaceAttempt: {
-                if cancellationToken?.isCancelled == true {
+                if isCancelled(cancellationToken) {
                     return .failure(.cancelled)
                 }
                 return self.attemptChromeWindowInWorkspace(
@@ -213,7 +209,7 @@ public struct ChromeLauncher {
                 )
             },
             focusedAttempt: {
-                if cancellationToken?.isCancelled == true {
+                if isCancelled(cancellationToken) {
                     return .failure(.cancelled)
                 }
                 return self.attemptFocusedChromeWindow(windowToken: token.windowToken)
@@ -271,7 +267,7 @@ public struct ChromeLauncher {
         allowExistingWindows: Bool = true,
         cancellationToken: ActivationCancellationToken? = nil
     ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
-        if cancellationToken?.isCancelled == true {
+        if isCancelled(cancellationToken) {
             return .failure(.cancelled)
         }
         var warnings: [ChromeLaunchWarning] = []
@@ -325,7 +321,7 @@ public struct ChromeLauncher {
         }
         openArguments.append(contentsOf: launchUrls)
 
-        if cancellationToken?.isCancelled == true {
+        if isCancelled(cancellationToken) {
             return .failure(.cancelled)
         }
 
@@ -339,12 +335,12 @@ public struct ChromeLauncher {
         }
 
         let beforeIds = Set(existingMatches.map { $0.windowId })
-        let timeouts = launchDetectionTimeouts()
-        let pipeline = windowDetectionPipeline()
+        let timeouts = windowDetectionConfiguration.timeouts
+        let pipeline = windowDetectionConfiguration.pipeline(sleeper: sleeper)
         let detectionOutcome: PollOutcome<AeroSpaceWindow, ChromeLaunchError> = pipeline.run(
             timeouts: timeouts,
             workspaceAttempt: {
-                if cancellationToken?.isCancelled == true {
+                if isCancelled(cancellationToken) {
                     return .failure(.cancelled)
                 }
                 return self.attemptChromeWindowInWorkspace(
@@ -355,7 +351,7 @@ public struct ChromeLauncher {
                 )
             },
             focusedAttempt: {
-                if cancellationToken?.isCancelled == true {
+                if isCancelled(cancellationToken) {
                     return .failure(.cancelled)
                 }
                 return self.attemptFocusedChromeWindow(windowToken: windowToken)
@@ -624,73 +620,17 @@ public struct ChromeLauncher {
         return .success(.created(windowId: window.windowId))
     }
 
-    private func windowDetectionPipeline() -> WindowDetectionPipeline {
-        WindowDetectionPipeline(
-            sleeper: sleeper,
-            workspaceSchedule: workspacePollSchedule(),
-            focusedFastSchedule: focusedFastPollSchedule(),
-            focusedSteadySchedule: focusedSteadyPollSchedule()
-        )
-    }
-
-    private func launchDetectionTimeouts() -> LaunchDetectionTimeouts {
-        let overallTimeoutMs = pollTimeoutMs
-        let workspaceMs = min(workspaceProbeTimeoutMs, max(1, overallTimeoutMs / 2))
-        let remainingMs = max(0, overallTimeoutMs - workspaceMs)
-        let focusedPrimaryMs = min(focusedProbeTimeoutMs, remainingMs)
-        let focusedSecondaryMs = max(0, remainingMs - focusedPrimaryMs)
-        return LaunchDetectionTimeouts(
-            workspaceMs: workspaceMs,
-            focusedPrimaryMs: focusedPrimaryMs,
-            focusedSecondaryMs: focusedSecondaryMs
-        )
-    }
-
-    private func fastPollIntervalMs() -> Int {
-        max(1, pollIntervalMs / 2)
-    }
-
-    private func workspacePollSchedule() -> PollSchedule {
-        PollSchedule(
-            initialIntervalsMs: [fastPollIntervalMs()],
-            steadyIntervalMs: pollIntervalMs
-        )
-    }
-
-    private func focusedFastPollSchedule() -> PollSchedule {
-        PollSchedule(
-            initialIntervalsMs: [],
-            steadyIntervalMs: fastPollIntervalMs()
-        )
-    }
-
-    private func focusedSteadyPollSchedule() -> PollSchedule {
-        PollSchedule(
-            initialIntervalsMs: [],
-            steadyIntervalMs: pollIntervalMs
-        )
-    }
-
     /// Runs a command and converts non-zero exits into `ProcessCommandError`.
     private func runCommand(
         executable: URL,
         arguments: [String]
     ) -> Result<CommandResult, ProcessCommandError> {
-        let commandDescription = ([executable.path] + arguments).joined(separator: " ")
-        do {
-            let result = try commandRunner.run(
-                command: executable,
-                arguments: arguments,
-                environment: nil,
-                workingDirectory: nil
-            )
-            if result.exitCode != 0 {
-                return .failure(.nonZeroExit(command: commandDescription, result: result))
-            }
-            return .success(result)
-        } catch {
-            return .failure(.launchFailed(command: commandDescription, underlyingError: String(describing: error)))
-        }
+        processRunner.run(
+            executable: executable,
+            arguments: arguments,
+            environment: nil,
+            workingDirectory: nil
+        )
     }
 
     private func shouldRetryPoll(_ error: ChromeLaunchError) -> Bool {
@@ -698,5 +638,9 @@ public struct ChromeLauncher {
             return false
         }
         return WindowDetectionRetryPolicy.shouldRetryPoll(aeroError)
+    }
+
+    private func isCancelled(_ token: ActivationCancellationToken?) -> Bool {
+        token?.isCancelled ?? false
     }
 }

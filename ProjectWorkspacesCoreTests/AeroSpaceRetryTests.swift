@@ -51,7 +51,7 @@ final class AeroSpaceRetryTests: XCTestCase {
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
-                    .failure(.nonZeroExit(command: "cmd", result: commandResult))
+                    .failure(.executionFailed(.nonZeroExit(command: "cmd", result: commandResult)))
                 ],
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
                     .success(probeResult)
@@ -82,7 +82,7 @@ final class AeroSpaceRetryTests: XCTestCase {
         case .success:
             XCTFail("Expected failure when probe succeeds")
         case .failure(let error):
-            guard case .nonZeroExit = error else {
+            guard case .executionFailed(.nonZeroExit) = error else {
                 XCTFail("Expected nonZeroExit, got \(error)")
                 return
             }
@@ -100,11 +100,11 @@ final class AeroSpaceRetryTests: XCTestCase {
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
-                    .failure(.nonZeroExit(command: "cmd", result: failedCommand)),
+                    .failure(.executionFailed(.nonZeroExit(command: "cmd", result: failedCommand))),
                     .success(successCommand)
                 ],
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
-                    .failure(.nonZeroExit(command: "probe", result: failedProbe))
+                    .failure(.executionFailed(.nonZeroExit(command: "probe", result: failedProbe)))
                 ]
             ]
         )
@@ -152,12 +152,12 @@ final class AeroSpaceRetryTests: XCTestCase {
         let runner = SequencedAeroSpaceCommandRunner(
             responses: [
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: commandArgs): [
-                    .failure(.nonZeroExit(command: "cmd", result: failedCommand)),
-                    .failure(.nonZeroExit(command: "cmd", result: failedCommand))
+                    .failure(.executionFailed(.nonZeroExit(command: "cmd", result: failedCommand))),
+                    .failure(.executionFailed(.nonZeroExit(command: "cmd", result: failedCommand)))
                 ],
                 AeroSpaceCommandSignature(path: aerospacePath, arguments: probeArgs): [
-                    .failure(.nonZeroExit(command: "probe", result: failedProbe)),
-                    .failure(.nonZeroExit(command: "probe", result: failedProbe))
+                    .failure(.executionFailed(.nonZeroExit(command: "probe", result: failedProbe))),
+                    .failure(.executionFailed(.nonZeroExit(command: "probe", result: failedProbe)))
                 ]
             ]
         )

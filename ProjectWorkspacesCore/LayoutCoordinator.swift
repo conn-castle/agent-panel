@@ -30,14 +30,14 @@ protocol LayoutCoordinating {
 
 /// Default layout coordinator implementation.
 final class LayoutCoordinator: LayoutCoordinating {
-    private let stateStore: StateStore
+    private let stateStore: StateStoring
     private let layoutEngine: LayoutEngine
     private let windowManager: AccessibilityWindowManaging
     private let layoutObserver: LayoutObserving
     private let logger: ProjectWorkspacesLogging
 
     init(
-        stateStore: StateStore = StateStore(),
+        stateStore: StateStoring = StateStore(),
         layoutEngine: LayoutEngine = LayoutEngine(),
         windowManager: AccessibilityWindowManaging = AccessibilityWindowManager(),
         layoutObserver: LayoutObserving = LayoutObserver(),

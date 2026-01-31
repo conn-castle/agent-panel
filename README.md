@@ -10,9 +10,8 @@ ProjectWorkspaces implements two primary actions:
 
 1) **Activate Project**
    - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
-   - Ensure a project IDE window exists (create if missing)
-   - Ensure a project Chrome window exists (create if missing)
-   - Only scan/move windows outside `pw-<projectId>` when they carry a ProjectWorkspaces token (no guessing or fallbacks)
+   - Start Chrome launch if missing (tokened window name); ensure IDE window exists and is detected first, then detect Chrome
+   - Window detection is token-only; workspace scan + focused-window recovery, with a last-resort all-workspaces scan for Chrome on timeout
    - Apply the project’s saved layout for the current display mode
    - End with the IDE focused (Chrome must not steal focus)
 
@@ -308,7 +307,7 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 ### One Chrome window per project (enforced by deterministic token)
 
 The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>` followed by a non-word character or end of string. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
-ProjectWorkspaces enumerates only `pw-<projectId>`. If the window was just launched and doesn’t appear there, it uses focused-window recovery to capture the new Chrome window and move it into the workspace (no global scan).
+ProjectWorkspaces enumerates `pw-<projectId>` first. If the window was just launched and doesn’t appear there, it uses focused-window recovery to capture the new Chrome window and move it into the workspace. If that still fails before timeout, it performs a last-resort, token-only scan across all workspaces to locate the new Chrome window.
 If multiple tokened Chrome windows are found in the workspace, activation warns and chooses the lowest window id deterministically.
 
 ### Tab seeding (creation-only)
@@ -483,5 +482,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace, otherwise fail loudly.
+- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace. For Chrome only, if recovery times out, perform a last-resort token-only `list-windows --all` scan before failing.
 - No silent failures: show user-facing errors + write structured logs.

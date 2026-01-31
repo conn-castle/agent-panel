@@ -7,6 +7,71 @@ struct LaunchDetectionTimeouts: Equatable {
     let focusedSecondaryMs: Int
 }
 
+/// Shared configuration for multi-phase window detection.
+struct WindowDetectionConfiguration {
+    let timeouts: LaunchDetectionTimeouts
+    let workspaceSchedule: PollSchedule
+    let focusedFastSchedule: PollSchedule
+    let focusedSteadySchedule: PollSchedule
+
+    /// Creates a configuration from poll and timeout inputs.
+    /// - Parameters:
+    ///   - pollIntervalMs: Base poll interval in milliseconds.
+    ///   - pollTimeoutMs: Overall timeout in milliseconds.
+    ///   - workspaceProbeTimeoutMs: Workspace-only probe timeout in milliseconds.
+    ///   - focusedProbeTimeoutMs: Initial focused-window probe timeout in milliseconds.
+    init(
+        pollIntervalMs: Int,
+        pollTimeoutMs: Int,
+        workspaceProbeTimeoutMs: Int,
+        focusedProbeTimeoutMs: Int
+    ) {
+        precondition(pollIntervalMs > 0, "pollIntervalMs must be positive")
+        precondition(pollTimeoutMs > 0, "pollTimeoutMs must be positive")
+        precondition(workspaceProbeTimeoutMs > 0, "workspaceProbeTimeoutMs must be positive")
+        precondition(focusedProbeTimeoutMs > 0, "focusedProbeTimeoutMs must be positive")
+
+        // Split the overall timeout into a workspace-first budget and focused-window fallback.
+        // Workspace polling gets up to 50% of the total budget, but never exceeds its explicit cap.
+        let overallTimeoutMs = pollTimeoutMs
+        let workspaceMs = min(workspaceProbeTimeoutMs, max(1, overallTimeoutMs / 2))
+        let remainingMs = max(0, overallTimeoutMs - workspaceMs)
+        let focusedPrimaryMs = min(focusedProbeTimeoutMs, remainingMs)
+        let focusedSecondaryMs = max(0, remainingMs - focusedPrimaryMs)
+        self.timeouts = LaunchDetectionTimeouts(
+            workspaceMs: workspaceMs,
+            focusedPrimaryMs: focusedPrimaryMs,
+            focusedSecondaryMs: focusedSecondaryMs
+        )
+
+        let fastPollIntervalMs = max(1, pollIntervalMs / 2)
+        self.workspaceSchedule = PollSchedule(
+            initialIntervalsMs: [fastPollIntervalMs],
+            steadyIntervalMs: pollIntervalMs
+        )
+        self.focusedFastSchedule = PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: fastPollIntervalMs
+        )
+        self.focusedSteadySchedule = PollSchedule(
+            initialIntervalsMs: [],
+            steadyIntervalMs: pollIntervalMs
+        )
+    }
+
+    /// Creates a detection pipeline with the configured schedules.
+    /// - Parameter sleeper: Sleeper used between polling attempts.
+    /// - Returns: Configured window detection pipeline.
+    func pipeline(sleeper: AeroSpaceSleeping) -> WindowDetectionPipeline {
+        WindowDetectionPipeline(
+            sleeper: sleeper,
+            workspaceSchedule: workspaceSchedule,
+            focusedFastSchedule: focusedFastSchedule,
+            focusedSteadySchedule: focusedSteadySchedule
+        )
+    }
+}
+
 /// Shared multi-phase window detection pipeline.
 struct WindowDetectionPipeline {
     let sleeper: AeroSpaceSleeping
@@ -74,20 +139,25 @@ struct WindowDetectionRetryPolicy {
         switch error {
         case .timedOut, .notReady:
             return true
-        case .launchFailed, .decodingFailed, .unexpectedOutput, .nonZeroExit:
+        case .executionFailed, .decodingFailed, .unexpectedOutput:
             return false
         }
     }
 
     static func shouldRetryFocusedWindow(_ error: AeroSpaceCommandError) -> Bool {
         switch error {
-        case .nonZeroExit(let command, _):
-            return command.contains("list-windows --focused")
+        case .executionFailed(let executionError):
+            switch executionError {
+            case .nonZeroExit(let command, _):
+                return command.contains("list-windows --focused")
+            case .launchFailed:
+                return false
+            }
         case .unexpectedOutput(let command, _):
             return command.contains("list-windows --focused")
         case .timedOut, .notReady:
             return true
-        case .launchFailed, .decodingFailed:
+        case .decodingFailed:
             return false
         }
     }

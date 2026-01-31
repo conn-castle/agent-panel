@@ -181,12 +181,13 @@ Given `projectId`:
 1) Switch to workspace `pw-<projectId>`.
    - Workspace existence is determined via `aerospace list-workspaces`.
    - The switcher must remain visible on the target workspace during activation (AppKit-only; no AeroSpace move for the switcher).
-2) Ensure Chrome window exists **first**.
+2) Start Chrome launch if missing (fire-and-forget), then proceed to IDE.
    - Chrome window is identified by the deterministic token (`PW:<projectId>`) in its title.
    - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
+   - If workspace + focused recovery time out, perform a last-resort token-only scan across all workspaces to locate the new Chrome window.
    - If missing, create it.
    - If multiple matches are found, warn and choose the lowest window id deterministically.
-3) Ensure IDE window exists **second**.
+3) Ensure IDE window exists and is detected first.
    - VS Code window is identified by a deterministic token (`PW:<projectId>`) in its title.
    - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
    - If missing, create it.
@@ -201,7 +202,7 @@ Given `projectId`:
 
 **MUST**
 
-- Activation must avoid global scans. It may inspect only the focused window immediately after launch to recover a newly created tokened window.
+- Activation must avoid global scans except a last-resort token-only scan for Chrome after workspace + focused recovery timeouts.
 - Overall window-detection timeout is **10,000ms** for both Chrome and IDE (existing poll behavior +5s).
 
 **MUST**

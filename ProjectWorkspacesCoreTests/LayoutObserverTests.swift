@@ -105,9 +105,7 @@ final class LayoutObserverTests: XCTestCase {
         let scheduler = TestDebounceScheduler()
         let observer = LayoutObserver(
             windowManager: windowManager,
-            stateStore: StateStore(paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-                                   fileSystem: TestFileSystem(),
-                                   dateProvider: FixedDateProvider()),
+            stateStore: InMemoryStateStore(),
             layoutEngine: LayoutEngine(),
             scheduler: scheduler,
             debounceDelaySeconds: 0.5,

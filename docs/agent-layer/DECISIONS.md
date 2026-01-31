@@ -189,3 +189,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Launch Chrome first (fire and forget), then immediately launch IDE, wait for IDE detection first, then wait for Chrome detection; switcher panel uses `canJoinAllSpaces` behavior and calls `focusWorkspaceAndWindow` after dismiss.
     Reason: Improves perceived activation speed by launching both apps in parallel while ensuring IDE is detected and focused first; reverts panel behavior to `canJoinAllSpaces` which provides more reliable cross-workspace visibility; adds explicit post-dismiss focus to ensure IDE receives focus after switcher closes.
     Tradeoffs: Chrome detection happens after IDE detection, so Chrome errors surface later; adds complexity to ChromeLauncher with separate check/launch/detect methods; partially supersedes 2026-01-30 3f9c1b2 (Chrome before IDE sequential) by making launch parallel.
+
+- Decision 2026-01-31 7c2d4f1: Core/App boundary via WorkspaceManaging facade
+    Decision: App code depends on the Core `WorkspaceManaging` facade for activation and focus operations; AeroSpace focus probing and client creation live behind Core’s `WorkspaceFocusProviding`.
+    Reason: Enforces a minimal, stable interface between App and Core and keeps AeroSpace details out of the UI layer.
+    Tradeoffs: Adds an abstraction layer and centralizes focus behavior in Core, so UI-level tweaks must flow through Core APIs.

@@ -4,7 +4,7 @@ import Foundation
 public struct IdeLauncher {
     private let paths: ProjectWorkspacesPaths
     private let fileSystem: FileSystem
-    private let commandRunner: CommandRunning
+    private let processRunner: ProcessRunning
     private let environmentProvider: EnvironmentProviding
     private let appResolver: IdeAppResolver
     private let workspaceGenerator: VSCodeWorkspaceGenerator
@@ -33,7 +33,7 @@ public struct IdeLauncher {
     ) {
         self.paths = paths
         self.fileSystem = fileSystem
-        self.commandRunner = commandRunner
+        self.processRunner = ProcessRunner(commandRunner: commandRunner)
         self.environmentProvider = environment
         self.appResolver = IdeAppResolver(fileSystem: fileSystem, appDiscovery: appDiscovery)
         self.workspaceGenerator = VSCodeWorkspaceGenerator(paths: paths, fileSystem: fileSystem)
@@ -114,7 +114,7 @@ public struct IdeLauncher {
         var warnings: [IdeLaunchWarning] = []
 
         if hasIdeCommand(project.ideCommand) {
-            let ideCommandResult = runCommand(
+            let ideCommandResult = processRunner.run(
                 executable: URL(fileURLWithPath: "/bin/zsh", isDirectory: false),
                 arguments: ["-lc", project.ideCommand],
                 environment: environment,
@@ -140,7 +140,7 @@ public struct IdeLauncher {
 
         if let launcherURL = agentLayerLauncherURL(for: project),
            project.ideUseAgentLayerLauncher {
-            let launcherResult = runCommand(
+            let launcherResult = processRunner.run(
                 executable: launcherURL,
                 arguments: [],
                 environment: environment,
@@ -235,7 +235,7 @@ public struct IdeLauncher {
         var warnings: [IdeLaunchWarning] = []
 
         if hasIdeCommand(project.ideCommand) {
-            let ideCommandResult = runCommand(
+            let ideCommandResult = processRunner.run(
                 executable: URL(fileURLWithPath: "/bin/zsh", isDirectory: false),
                 arguments: ["-lc", project.ideCommand],
                 environment: environment,
@@ -311,21 +311,12 @@ public struct IdeLauncher {
         environment: [String: String],
         workingDirectory: URL?
     ) -> Result<CommandResult, ProcessCommandError> {
-        let commandDescription = ([executable.path] + arguments).joined(separator: " ")
-        do {
-            let result = try commandRunner.run(
-                command: executable,
-                arguments: arguments,
-                environment: environment,
-                workingDirectory: workingDirectory
-            )
-            if result.exitCode != 0 {
-                return .failure(.nonZeroExit(command: commandDescription, result: result))
-            }
-            return .success(result)
-        } catch {
-            return .failure(.launchFailed(command: commandDescription, underlyingError: String(describing: error)))
-        }
+        processRunner.run(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory
+        )
     }
 
     private func logWarning(_ warning: IdeLaunchWarning) {

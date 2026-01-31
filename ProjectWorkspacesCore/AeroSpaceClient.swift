@@ -81,9 +81,11 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
             try? stdoutPipe.fileHandleForReading.close()
             try? stderrPipe.fileHandleForReading.close()
             return .failure(
-                .launchFailed(
-                    command: commandLabel,
-                    underlyingError: String(describing: error)
+                .executionFailed(
+                    .launchFailed(
+                        command: commandLabel,
+                        underlyingError: String(describing: error)
+                    )
                 )
             )
         }
@@ -143,7 +145,7 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
         }
 
         if result.exitCode != 0 {
-            return .failure(.nonZeroExit(command: commandLabel, result: result))
+            return .failure(.executionFailed(.nonZeroExit(command: commandLabel, result: result)))
         }
 
         return .success(result)
@@ -520,35 +522,40 @@ public struct AeroSpaceClient {
                 return outcome
             case .failure(let error):
                 switch error {
-                case .launchFailed, .timedOut:
-                    return .failure(error)
-                case .nonZeroExit(_, let result):
-                    context.lastCommandResult = result
-                    let probeOutcome = runReadinessProbe()
-                    switch probeOutcome {
-                    case .success:
+                case .executionFailed(let execError):
+                    switch execError {
+                    case .launchFailed:
                         return .failure(error)
-                    case .failure(let probeError):
-                        guard case .nonZeroExit(_, let probeResult) = probeError else {
-                            return .failure(probeError)
+                    case .nonZeroExit(_, let result):
+                        context.lastCommandResult = result
+                        let probeOutcome = runReadinessProbe()
+                        switch probeOutcome {
+                        case .success:
+                            return .failure(error)
+                        case .failure(let probeError):
+                            guard case .executionFailed(.nonZeroExit(_, let probeResult)) = probeError else {
+                                return .failure(probeError)
+                            }
+                            context.lastProbeResult = probeResult
+
+                            if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
+                                return .failure(budgetExceededError)
+                            }
+
+                            let remainingBudget = retryPolicy.totalCapSeconds - clock.now().timeIntervalSince(context.startTime)
+                            let sleepSeconds = min(jitteredDelay(baseDelay: context.delaySeconds), remainingBudget)
+                            sleeper.sleep(seconds: sleepSeconds)
+
+                            if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
+                                return .failure(budgetExceededError)
+                            }
+
+                            context.delaySeconds = min(context.delaySeconds * retryPolicy.backoffMultiplier, retryPolicy.maxDelaySeconds)
+                            context.attempt += 1
                         }
-                        context.lastProbeResult = probeResult
-
-                        if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
-                            return .failure(budgetExceededError)
-                        }
-
-                        let remainingBudget = retryPolicy.totalCapSeconds - clock.now().timeIntervalSince(context.startTime)
-                        let sleepSeconds = min(jitteredDelay(baseDelay: context.delaySeconds), remainingBudget)
-                        sleeper.sleep(seconds: sleepSeconds)
-
-                        if let budgetExceededError = checkBudgetExceeded(context: context, fallbackError: error) {
-                            return .failure(budgetExceededError)
-                        }
-
-                        context.delaySeconds = min(context.delaySeconds * retryPolicy.backoffMultiplier, retryPolicy.maxDelaySeconds)
-                        context.attempt += 1
                     }
+                case .timedOut:
+                    return .failure(error)
                 case .decodingFailed, .notReady, .unexpectedOutput:
                     return .failure(error)
                 }

@@ -105,8 +105,28 @@ Incomplete:
 - Applied geometry via AeroSpace window focus and AX focused-window mutation.
 - Added unit tests for layout math and state serialization.
 
+## Phase 7 ✅ — Architecture cleanup + Core/App boundary
+- Introduced the Core workspace facade (`WorkspaceManaging`) and focus snapshot/restore in Core so the App no longer touches AeroSpace internals.
+- Refactored ActivationService into step-based orchestration with shared window-detection configuration and StateStoring test doubles.
+- Unified command execution/error handling (ProcessRunner + CommandExecutionError) and extracted named switcher timing constants.
 
-## Phase 7 — Close Project (empty the workspace)
+## Phase 8 — Stability refactors for activation, Chrome, and switcher
+
+### Goal
+- Reduce duplication and shrink the remaining monoliths without changing user-facing behavior.
+- Make switcher state transitions explicit and easier to test.
+
+### Tasks
+- [ ] Extract ActivationService steps into named types or methods and move step implementations into dedicated files.
+- [ ] Consolidate ChromeLauncher detection/launch logic into shared helpers and decide on a single public API surface.
+- [ ] Replace SwitcherPanelController’s implicit state machine with explicit state structs/reducer-style updates.
+
+### Exit criteria
+- ActivationService is a small orchestrator (target under ~300 lines) with steps in separate files.
+- ChromeLauncher has one canonical detection/launch flow with no duplicated logic.
+- SwitcherPanelController state transitions are explicit and covered by updated tests.
+
+## Phase 9 — Close Project (empty the workspace)
 
 ### Goal
 - Implement aggressive Close semantics that empties the project workspace and provides a safe fallback workspace.
@@ -123,7 +143,7 @@ Incomplete:
 - Close empties the project workspace and next activation recreates missing windows as needed.
 
 
-## Phase 8 — Packaging + onboarding + documentation polish
+## Phase 10 — Packaging + onboarding + documentation polish
 
 ### Goal
 - Ship a signed/notarized app with clear onboarding and ensure PRD acceptance criteria are met.

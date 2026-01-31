@@ -28,12 +28,17 @@ private enum SwitcherState: Equatable {
     case error(projectId: String, message: String)
 }
 
+private enum SwitcherTiming {
+    static let visibilityCheckDelaySeconds: TimeInterval = 0.15
+    static let postDismissFocusDelaySeconds: TimeInterval = 0.05
+}
+
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
 final class SwitcherPanelController: NSObject {
     private let projectCatalogService: ProjectCatalogService
     private let projectFilter: ProjectFilter
-    private let activationService: ActivationService
     private let logger: ProjectWorkspacesLogging
+    private let workspaceManager: WorkspaceManaging
 
     private let panel: SwitcherPanel
     private let searchField: NSSearchField
@@ -58,8 +63,7 @@ final class SwitcherPanelController: NSObject {
     private var activeProject: ProjectListItem?
     private var activationRequestId: UUID?
     private var activationCancellationToken: ActivationCancellationToken?
-    private var previousFocusSnapshot: SwitcherFocusSnapshot?
-    private let focusProvider: SwitcherAeroSpaceProviding
+    private var previousFocusSnapshot: WorkspaceFocusSnapshot?
 
     /// Creates a switcher panel controller.
     /// - Parameters:
@@ -69,15 +73,13 @@ final class SwitcherPanelController: NSObject {
     init(
         projectCatalogService: ProjectCatalogService = ProjectCatalogService(),
         projectFilter: ProjectFilter = ProjectFilter(),
-        activationService: ActivationService = ActivationService(),
         logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
-        focusProvider: SwitcherAeroSpaceProviding? = nil
+        workspaceManager: WorkspaceManaging? = nil
     ) {
         self.projectCatalogService = projectCatalogService
         self.projectFilter = projectFilter
-        self.activationService = activationService
         self.logger = logger
-        self.focusProvider = focusProvider ?? AeroSpaceSwitcherService(logger: logger)
+        self.workspaceManager = workspaceManager ?? DefaultWorkspaceManager(logger: logger)
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
@@ -435,7 +437,7 @@ final class SwitcherPanelController: NSObject {
     private func scheduleVisibilityCheck(origin: SwitcherPresentationSource) {
         let token = UUID()
         pendingVisibilityCheckToken = token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + SwitcherTiming.visibilityCheckDelaySeconds) { [weak self] in
             self?.verifyPanelVisibility(token: token, origin: origin)
         }
     }
@@ -571,7 +573,7 @@ final class SwitcherPanelController: NSObject {
         let workspaceName = "pw-\(project.id)"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let workspaceExists = self.focusProvider.workspaceExists(workspaceName: workspaceName)
+            let workspaceExists = self.workspaceManager.workspaceExists(name: workspaceName)
             self.logEvent(
                 event: "switcher.workspace.checked",
                 context: [
@@ -602,7 +604,7 @@ final class SwitcherPanelController: NSObject {
         cancellationToken: ActivationCancellationToken
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome = self.activationService.activate(
+            let outcome = self.workspaceManager.activate(
                 projectId: project.id,
                 focusIdeWindow: true,
                 switchWorkspace: true,
@@ -710,7 +712,7 @@ final class SwitcherPanelController: NSObject {
     /// Focuses the workspace and IDE window after the switcher is dismissed.
     /// - Parameter report: Activation report containing workspace and window information.
     private func focusWorkspaceAndIdeAfterDismiss(report: ActivationReport) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + SwitcherTiming.postDismissFocusDelaySeconds) { [weak self] in
             guard let self else { return }
             self.logEvent(
                 event: "switcher.ide.focus.requested",
@@ -720,7 +722,7 @@ final class SwitcherPanelController: NSObject {
                 ]
             )
             DispatchQueue.global(qos: .userInitiated).async {
-                let focusResult = self.activationService.focusWorkspaceAndWindow(report: report)
+                let focusResult = self.workspaceManager.focusWorkspaceAndWindow(report: report)
                 DispatchQueue.main.async {
                     self.handlePostDismissFocusResult(focusResult, report: report)
                 }
@@ -761,7 +763,7 @@ final class SwitcherPanelController: NSObject {
     /// - Parameter completion: Optional completion called on the main thread.
     private func capturePreviousFocusSnapshot(completion: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let snapshot = self.focusProvider.captureSnapshot()
+            let snapshot = self.workspaceManager.captureFocusSnapshot()
             DispatchQueue.main.async {
                 self.previousFocusSnapshot = snapshot
                 completion?()
@@ -775,7 +777,7 @@ final class SwitcherPanelController: NSObject {
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
-            self.focusProvider.restore(snapshot: snapshot)
+            self.workspaceManager.restoreFocusSnapshot(snapshot)
         }
         previousFocusSnapshot = nil
     }
@@ -938,7 +940,7 @@ final class SwitcherPanelController: NSObject {
             ]
         )
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let focusResult = self?.activationService.focusWorkspaceAndWindow(report: report)
+            let focusResult = self?.workspaceManager.focusWorkspaceAndWindow(report: report)
             DispatchQueue.main.async {
                 guard let self else { return }
                 switch focusResult {
@@ -1159,87 +1161,6 @@ final class SwitcherPanel: NSPanel {
     }
 }
 
-struct SwitcherFocusSnapshot: Equatable {
-    let windowId: Int?
-    let workspaceName: String?
-}
-
-protocol SwitcherAeroSpaceProviding {
-    func captureSnapshot() -> SwitcherFocusSnapshot?
-    func restore(snapshot: SwitcherFocusSnapshot)
-    func workspaceExists(workspaceName: String) -> Bool
-}
-
-struct AeroSpaceSwitcherService: SwitcherAeroSpaceProviding {
-    private let logger: ProjectWorkspacesLogging
-    private let timeoutSeconds: TimeInterval
-
-    init(logger: ProjectWorkspacesLogging, timeoutSeconds: TimeInterval = 2) {
-        self.logger = logger
-        self.timeoutSeconds = timeoutSeconds
-    }
-
-    func captureSnapshot() -> SwitcherFocusSnapshot? {
-        guard let client = makeClient() else { return nil }
-
-        if case .success(let windows) = client.listWindowsFocusedDecoded(),
-           let focused = windows.first {
-            return SwitcherFocusSnapshot(windowId: focused.windowId, workspaceName: focused.workspace)
-        }
-
-        if case .success(let workspace) = client.focusedWorkspace() {
-            return SwitcherFocusSnapshot(windowId: nil, workspaceName: workspace)
-        }
-
-        return nil
-    }
-
-    func restore(snapshot: SwitcherFocusSnapshot) {
-        guard let client = makeClient() else { return }
-        if let windowId = snapshot.windowId {
-            if case .success = client.focusWindow(windowId: windowId) {
-                return
-            }
-        }
-        if let workspaceName = snapshot.workspaceName {
-            _ = client.switchWorkspace(workspaceName)
-        }
-    }
-
-    func workspaceExists(workspaceName: String) -> Bool {
-        guard let client = makeClient() else { return false }
-        switch client.workspaceExists(workspaceName) {
-        case .success(let exists):
-            return exists
-        case .failure(let error):
-            _ = logger.log(
-                event: "switcher.workspace.exists.failed",
-                level: .warn,
-                message: "\(error)",
-                context: ["workspace": workspaceName]
-            )
-            return false
-        }
-    }
-
-    private func makeClient() -> AeroSpaceClient? {
-        do {
-            return try AeroSpaceClient(
-                resolver: DefaultAeroSpaceBinaryResolver(),
-                commandRunner: DefaultAeroSpaceCommandRunner(),
-                timeoutSeconds: timeoutSeconds
-            )
-        } catch {
-            _ = logger.log(
-                event: "switcher.aerospace.client.failed",
-                level: .warn,
-                message: "\(error)",
-                context: nil
-            )
-            return nil
-        }
-    }
-}
 
 private final class ProjectRowView: NSTableCellView {
     let swatchView = NSView()

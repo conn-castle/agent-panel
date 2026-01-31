@@ -2,8 +2,8 @@
 
 ## Principles
 - No guessing. Only act on windows that are deterministically identified as ProjectWorkspaces-owned.
-- No fallbacks. If a window cannot be identified with certainty, fail loudly.
-- Steady-state enumeration is scoped to `pw-<projectId>`; launch-time recovery may inspect only the focused window (never `--all`).
+- Steady-state enumeration is scoped to `pw-<projectId>`.
+- Launch-time recovery may inspect the focused window; Chrome has a last-resort token-only `--all` scan after timeouts.
 
 ## Token format
 - `PW:<projectId>`
@@ -31,7 +31,12 @@
     - `app-bundle-id == com.google.Chrome`
     - `window-title` contains the token.
   - Move the focused window into `pw-<projectId>`.
-  - If nothing matches before timeout, fail loudly.
+- **Stage 4 (last-resort all-workspaces fallback):**
+  - If focused recovery times out, scan all workspaces for tokened Chrome:
+    - `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'`
+  - Filter by Chrome bundle id + token; exclude windows that existed before launch.
+  - If multiple matches are found: **WARN + choose lowest window id**.
+  - If nothing matches, fail loudly.
 
 ## IDE (VS Code + Antigravity)
 - Set `window.title` in the generated `.code-workspace` file to include the token.
@@ -60,3 +65,4 @@
 - Verify the Chrome `--window-name` token appears in AeroSpace `list-windows --workspace pw-<projectId>` `window-title` output.
 - Verify VS Code/Antigravity `window.title` tokens appear in AeroSpace `list-windows --workspace pw-<projectId>` output.
 - If workspace polling fails after launch, verify focused-window recovery by inspecting `list-windows --focused` output.
+- If focused recovery times out for Chrome, verify the last-resort all-workspaces scan locates only tokened Chrome windows.

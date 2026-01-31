@@ -27,24 +27,42 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-01-30 3d1e2f: Duplicate command execution logic
+- Issue 2026-01-31 f2a9c1: ChromeLauncher split API duplicates ensureWindow logic
     Priority: Medium. Area: ProjectWorkspacesCore
-    Description: IdeLauncher and ChromeLauncher both implement private `runCommand` methods with identical error handling patterns (converting exit codes to Results).
-    Next Step: Extract a shared `ProcessRunner` helper or extension on `CommandRunning` to centralize this logic.
-    Notes: DRY violation.
+    Description: checkExistingWindow/launchChrome/detectLaunchedWindow duplicates URL resolution, detection pipeline, and fallback logic from ensureWindow.
+    Next Step: Extract shared helpers and decide on a single canonical API; remove or wrap ensureWindow.
+    Notes: DRY violation raises risk of behavior drift.
+
+- Issue 2026-01-31 e3b7d0: SwitcherPanelController hard-wires panel creation
+    Priority: Medium. Area: ProjectWorkspacesApp
+    Description: SwitcherPanelController constructs NSWindow-backed SwitcherPanel in init, making headless tests and dependency injection difficult.
+    Next Step: Introduce a panel factory or allow injecting a panel instance for tests.
+
+- Issue 2026-01-31 d9c4a2: Magic delay in app switcher entrypoint
+    Priority: Low. Area: ProjectWorkspacesApp
+    Description: ProjectWorkspacesApp.openSwitcher uses a fixed 0.05s delay before showing the switcher, which is brittle under load.
+    Next Step: Replace with an event-based trigger or a named constant with documented rationale.
+
+- Issue 2026-01-31 c6b1f8: Blocking sleep in ChromeLauncher refocus
+    Priority: Low. Area: ProjectWorkspacesCore
+    Description: ChromeLauncher.refocusIdeWindow sleeps synchronously, which can block the calling thread and risks UI jank if invoked on main.
+    Next Step: Convert to non-blocking scheduling or document that this must run off the main thread.
+
+- Issue 2026-01-31 b8d3e1: InMemoryStateStore lacks failure injection
+    Priority: Low. Area: ProjectWorkspacesCoreTests
+    Description: InMemoryStateStore only supports the happy path, limiting tests for error and recovery scenarios.
+    Next Step: Add configurable failure injection and optional call tracking for assertions.
+
+- Issue 2026-01-31 a5f2c7: ChromeLauncher ensureWindow likely unused
+    Priority: Low. Area: ProjectWorkspacesCore
+    Description: ActivationService uses the split Chrome API; ensureWindow is unused and may be dead code.
+    Next Step: Confirm call sites; remove ensureWindow or keep only as a wrapper around the canonical path.
 
 - Issue 2026-01-30 4e5f6g: Verbose and brittle ConfigParser
     Priority: Low. Area: ProjectWorkspacesCore
     Description: ConfigParser.swift is over 700 lines of manual, procedural parsing logic. Adding new config fields requires repetitive boilerplate, increasing the risk of inconsistent validation or defaults.
     Next Step: Consider a more declarative parsing strategy or a helper builder pattern to reduce boilerplate, while keeping the dependency constraint (TOMLDecoder only).
     Notes: High maintenance cost for config changes.
-
-- Issue 2026-01-30 8a2f1b: Inefficient AeroSpace client creation in Switcher
-
-    Priority: High. Area: ProjectWorkspacesApp
-    Description: AeroSpaceSwitcherService resolves the binary and creates a new AeroSpaceClient on every interaction (snapshot, restore, check), causing unnecessary filesystem/shell overhead and UI latency.
-    Next Step: Refactor AeroSpaceSwitcherService to resolve the binary once at initialization and reuse a single AeroSpaceClient instance.
-    Notes: Critical for switcher responsiveness.
 
 - Issue 2026-01-30 9c3d4e: Global window scan in Chrome launcher fallback
     Priority: Medium. Area: ProjectWorkspacesCore
@@ -76,59 +94,23 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Next Step: Replace the fixed delay with event-based observation (e.g., NSWindow.didBecomeKeyNotification) or document the limitation.
     Notes: Currently affects diagnostics only, not user functionality.
 
-- Issue 2026-01-30 745e6a4: Duplicated window detection pipeline configuration
-    Priority: Medium. Area: ProjectWorkspacesCore
-    Description: ActivationService and ChromeLauncher both contain identical private methods for creating WindowDetectionPipeline, PollSchedule, and LaunchDetectionTimeouts (~90 lines of duplicated code across windowDetectionPipeline, launchDetectionTimeouts, fastPollIntervalMs, workspacePollSchedule, focusedFastPollSchedule, focusedSteadyPollSchedule).
-    Next Step: Extract a shared WindowDetectionConfiguration factory that both services can use.
-    Notes: WindowDetection.swift defines the shared types but not a shared configuration factory.
-
-- Issue 2026-01-30 745e6a5: Unused ensureChromeWindow method in ActivationService
-    Priority: Low. Area: ProjectWorkspacesCore
-    Description: The ensureChromeWindow method (ActivationService.swift lines 771-823) is dead code after the parallel launch refactor introduced in Decision 2026-01-30 parallel.
-    Next Step: Remove the unused method.
-    Notes: Superseded by checkExistingWindow/launchChrome/detectLaunchedWindow pattern.
-
 - Issue 2026-01-30 745e6a6: Inconsistent cancellation check patterns
     Priority: Low. Area: ProjectWorkspacesCore
     Description: Cancellation is checked inconsistently: context.isCancelled (computed property), cancellationToken?.isCancelled == true (direct token access), and inline checks in poll closures. This creates maintenance burden and potential for inconsistent behavior.
     Next Step: Standardize on a single pattern (prefer context.isCancelled style). For ChromeLauncher, consider passing a () -> Bool cancellation check closure.
     Notes: Does not affect correctness; code hygiene.
 
-- Issue 2026-01-30 745e6a7: Magic numbers in UI timing constants
-    Priority: Low. Area: ProjectWorkspacesApp
-    Description: SwitcherPanelController uses hardcoded timing values (0.15s for visibility check at line 438, 0.05s for post-dismiss focus at line 713) without named constants, making the code harder to understand and tune.
-    Next Step: Extract named constants (e.g., SwitcherTiming.visibilityCheckDelay, SwitcherTiming.postDismissFocusDelay).
-    Notes: Related to Issue b7v1s3 but broader in scope.
-
-- Issue 2026-01-30 a1b2c3: Monolithic ActivationService (God object)
+- Issue 2026-01-30 a1b2c3: ActivationService still centralizes too much
     Priority: High. Area: ProjectWorkspacesCore
-    Description: ActivationService.swift is 1185 lines with ~30 private functions handling config loading, AeroSpace resolution, IDE launching, Chrome launching, window detection, layout coordination, focus management, and logging. The main runActivation() function is 182 lines with deeply nested control flow.
-    Next Step: Extract step-based orchestration pattern with separate types (LoadConfigStep, ResolveIdeStep, LaunchIdeStep, etc.) that implement a common ActivationStep protocol. Target: reduce orchestration to 20-30 lines.
-    Notes: Root cause of several other issues (0e5f6a mutable state, 745e6a4 duplication). Fixing this enables other improvements.
-
-- Issue 2026-01-30 a1b2c4: Missing StateStoring protocol
-    Priority: High. Area: ProjectWorkspacesCore
-    Description: StateStore is a concrete class without a protocol abstraction. Used directly in LayoutCoordinator (line 33) and ActivationService (line 80). Cannot be mocked for testing or swapped for alternative implementations (in-memory, database, cloud).
-    Next Step: Extract StateStoring protocol with load() and save() methods. Update LayoutCoordinator and any other consumers to depend on the protocol.
-    Notes: Testability and abstraction improvement. LayoutEngine has the same issue but is lower priority.
-
-- Issue 2026-01-30 a1b2c5: App layer leaky abstraction with AeroSpace
-    Priority: High. Area: ProjectWorkspacesApp
-    Description: SwitcherPanelController.swift lines 1167-1242 define AeroSpaceSwitcherService which constructs AeroSpaceClient directly using DefaultAeroSpaceBinaryResolver and DefaultAeroSpaceCommandRunner. The App layer should not know about these low-level Core types.
-    Next Step: Create a WorkspaceManagement facade protocol in Core (captureCurrentFocus, restoreFocus, workspaceExists) and provide it to App layer. Move AeroSpaceSwitcherService implementation to Core.
-    Notes: Extends Issue 8a2f1b. Proper layering would also solve the repeated client creation problem.
+    Description: ActivationService.swift remains over 1100 lines and still owns config loading, launches, window detection, layout, focus, and logging; step-based orchestration exists but steps are inline closures.
+    Next Step: Extract step types/services into separate files and slim ActivationService to orchestration only (target sub-300 lines).
+    Notes: Still the root of the mutable-context issue (0e5f6a) and constructor coupling (a1b2c9).
 
 - Issue 2026-01-30 a1b2c6: SwitcherPanelController implicit state machine
     Priority: Medium. Area: ProjectWorkspacesApp
     Description: SwitcherPanelController has 16 mutable state variables (allProjects, filteredProjects, catalogErrorMessage, switcherSessionId, sessionOrigin, lastFilterQuery, lastStatusMessage, lastStatusLevel, expectsVisible, pendingVisibilityCheckToken, isActivating, state, activeProject, activationRequestId, activationCancellationToken, previousFocusSnapshot) with complex interdependencies. State transitions are implicit across method calls.
     Next Step: Consolidate into explicit state machine with 1-2 state enums. Consider a reducer pattern where all state changes flow through a single update function.
     Notes: High complexity; increases risk of bugs when modifying switcher behavior.
-
-- Issue 2026-01-30 a1b2c7: Duplicate error enum cases
-    Priority: Medium. Area: ProjectWorkspacesCore
-    Description: ProcessCommandError (IdeLaunchModels.swift lines 31-34) and AeroSpaceCommandError (AeroSpaceErrors.swift lines 5-6) both define identical cases: launchFailed(command:underlyingError:) and nonZeroExit(command:result:). This violates DRY and means error handling logic is duplicated.
-    Next Step: Extract a unified CommandExecutionError enum that both can use, or have ProcessCommandError extend/wrap AeroSpaceCommandError.
-    Notes: Related to Issue 3d1e2f (duplicate runCommand logic). Fixing errors first would make the runCommand extraction cleaner.
 
 - Issue 2026-01-30 a1b2c8: Public API exposes internal error types
     Priority: Medium. Area: ProjectWorkspacesCore

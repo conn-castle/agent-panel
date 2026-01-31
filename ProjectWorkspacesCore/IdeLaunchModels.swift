@@ -28,7 +28,4 @@ public struct IdeLaunchSuccess: Equatable, Sendable {
 }
 
 /// Errors returned when executing external commands.
-public enum ProcessCommandError: Error, Equatable, Sendable {
-    case launchFailed(command: String, underlyingError: String)
-    case nonZeroExit(command: String, result: CommandResult)
-}
+public typealias ProcessCommandError = CommandExecutionError

@@ -73,7 +73,7 @@ struct DispatchDebounceScheduler: DebounceScheduling {
 /// Observes window move/resize and persists layout changes.
 final class LayoutObserver: LayoutObserving {
     private let windowManager: AccessibilityWindowManaging
-    private let stateStore: StateStore
+    private let stateStore: StateStoring
     private let layoutEngine: LayoutEngine
     private let scheduler: DebounceScheduling
     private let debounceDelaySeconds: TimeInterval
@@ -83,7 +83,7 @@ final class LayoutObserver: LayoutObserving {
 
     init(
         windowManager: AccessibilityWindowManaging = AccessibilityWindowManager(),
-        stateStore: StateStore = StateStore(),
+        stateStore: StateStoring = StateStore(),
         layoutEngine: LayoutEngine = LayoutEngine(),
         scheduler: DebounceScheduling = DispatchDebounceScheduler(),
         debounceDelaySeconds: TimeInterval = 0.5,

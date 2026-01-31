@@ -121,23 +121,31 @@ private struct CommandOutcome {
 private extension AeroSpaceCommandError {
     var commandResult: CommandResult? {
         switch self {
-        case .nonZeroExit(_, let result):
-            return result
+        case .executionFailed(let error):
+            switch error {
+            case .nonZeroExit(_, let result):
+                return result
+            case .launchFailed:
+                return nil
+            }
         case .timedOut(_, _, let result):
             return result
         case .notReady(let notReady):
             return notReady.lastCommand
-        case .launchFailed, .decodingFailed, .unexpectedOutput:
+        case .decodingFailed, .unexpectedOutput:
             return nil
         }
     }
 
     var summary: String {
         switch self {
-        case .launchFailed(let command, let underlyingError):
-            return "\(command): \(underlyingError)"
-        case .nonZeroExit(let command, let result):
-            return "\(command) exited \(result.exitCode)"
+        case .executionFailed(let error):
+            switch error {
+            case .launchFailed(let command, let underlyingError):
+                return "\(command): \(underlyingError)"
+            case .nonZeroExit(let command, let result):
+                return "\(command) exited \(result.exitCode)"
+            }
         case .timedOut(let command, let timeoutSeconds, _):
             return "\(command) timed out after \(timeoutSeconds)s"
         case .decodingFailed(_, let underlyingError):

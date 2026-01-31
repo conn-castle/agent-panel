@@ -2,8 +2,7 @@ import Foundation
 
 /// Errors surfaced when executing AeroSpace CLI commands.
 public enum AeroSpaceCommandError: Error, Equatable, Sendable {
-    case launchFailed(command: String, underlyingError: String)
-    case nonZeroExit(command: String, result: CommandResult)
+    case executionFailed(CommandExecutionError)
     case timedOut(command: String, timeoutSeconds: TimeInterval, result: CommandResult)
     case decodingFailed(payload: String, underlyingError: String)
     case unexpectedOutput(command: String, detail: String)
@@ -14,10 +13,13 @@ extension AeroSpaceCommandError {
     /// User-facing summary for CLI output.
     public var userFacingMessage: String {
         switch self {
-        case .launchFailed(let command, let underlyingError):
-            return "Failed to launch AeroSpace command: \(command). \(underlyingError)"
-        case .nonZeroExit(let command, let result):
-            return "Command exited with code \(result.exitCode): \(command)"
+        case .executionFailed(let error):
+            switch error {
+            case .launchFailed(let command, let underlyingError):
+                return "Failed to launch AeroSpace command: \(command). \(underlyingError)"
+            case .nonZeroExit(let command, let result):
+                return "Command exited with code \(result.exitCode): \(command)"
+            }
         case .timedOut(let command, let timeoutSeconds, _):
             return """
             Timed out after \(timeoutSeconds)s while running: \(command).

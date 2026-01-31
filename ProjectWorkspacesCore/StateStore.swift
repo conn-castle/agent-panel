@@ -15,8 +15,19 @@ enum StateStoreError: Error, Equatable {
     case backupFailed(String)
 }
 
+/// Persists and retrieves the ProjectWorkspaces layout state.
+protocol StateStoring {
+    /// Loads the state file if present.
+    /// - Returns: Load outcome or a structured error.
+    func load() -> Result<StateStoreLoadOutcome, StateStoreError>
+    /// Saves the provided state payload atomically.
+    /// - Parameter state: State payload to persist.
+    /// - Returns: Success or a structured error.
+    func save(_ state: LayoutState) -> Result<Void, StateStoreError>
+}
+
 /// Provides serialized access to the ProjectWorkspaces state file.
-final class StateStore {
+final class StateStore: StateStoring {
     private let paths: ProjectWorkspacesPaths
     private let fileSystem: FileSystem
     private let dateProvider: DateProviding

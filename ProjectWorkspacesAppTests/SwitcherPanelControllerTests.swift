@@ -16,7 +16,7 @@ final class SwitcherPanelControllerTests: XCTestCase {
         let controller = SwitcherPanelController(
             projectCatalogService: catalogService,
             logger: NoopLogger(),
-            focusProvider: TestSwitcherFocusProvider()
+            workspaceManager: TestWorkspaceManager()
         )
 
         let behavior = controller.panelCollectionBehaviorForTesting()
@@ -37,7 +37,7 @@ final class SwitcherPanelControllerTests: XCTestCase {
         let controller = SwitcherPanelController(
             projectCatalogService: catalogService,
             logger: NoopLogger(),
-            focusProvider: TestSwitcherFocusProvider()
+            workspaceManager: TestWorkspaceManager()
         )
 
         let expectation = expectation(description: "Switcher panel becomes visible")
@@ -63,11 +63,11 @@ final class SwitcherPanelControllerTests: XCTestCase {
             paths: .defaultPaths(),
             fileSystem: MissingConfigFileSystem()
         )
-        let focusProvider = BlockingFocusProvider()
+        let workspaceManager = BlockingWorkspaceManager()
         let controller = SwitcherPanelController(
             projectCatalogService: catalogService,
             logger: NoopLogger(),
-            focusProvider: focusProvider
+            workspaceManager: workspaceManager
         )
 
         let expectation = expectation(description: "Switcher panel becomes visible after snapshot")
@@ -78,7 +78,7 @@ final class SwitcherPanelControllerTests: XCTestCase {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             XCTAssertFalse(controller.isPanelVisibleForTesting())
-            focusProvider.release()
+            workspaceManager.release()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -98,7 +98,7 @@ final class SwitcherPanelControllerTests: XCTestCase {
         let controller = SwitcherPanelController(
             projectCatalogService: catalogService,
             logger: NoopLogger(),
-            focusProvider: TestSwitcherFocusProvider()
+            workspaceManager: TestWorkspaceManager()
         )
 
         XCTAssertTrue(controller.shouldRestoreFocus(reason: .toggle))
@@ -175,29 +175,59 @@ private struct NoopLogger: ProjectWorkspacesLogging {
     }
 }
 
-private struct TestSwitcherFocusProvider: SwitcherAeroSpaceProviding {
-    func captureSnapshot() -> SwitcherFocusSnapshot? {
-        nil
+private struct TestWorkspaceManager: WorkspaceManaging {
+    var snapshotProvider: () -> WorkspaceFocusSnapshot? = { nil }
+
+    func activate(
+        projectId _: String,
+        focusIdeWindow _: Bool,
+        switchWorkspace _: Bool,
+        progress _: ((ActivationProgress) -> Void)?,
+        cancellationToken _: ActivationCancellationToken?
+    ) -> ActivationOutcome {
+        .failure(error: .cancelled)
     }
 
-    func restore(snapshot _: SwitcherFocusSnapshot) {}
+    func focusWorkspaceAndWindow(report _: ActivationReport) -> Result<Void, ActivationError> {
+        .success(())
+    }
 
-    func workspaceExists(workspaceName _: String) -> Bool {
+    func captureFocusSnapshot() -> WorkspaceFocusSnapshot? {
+        snapshotProvider()
+    }
+
+    func restoreFocusSnapshot(_: WorkspaceFocusSnapshot) {}
+
+    func workspaceExists(name _: String) -> Bool {
         false
     }
 }
 
-private final class BlockingFocusProvider: SwitcherAeroSpaceProviding {
+private final class BlockingWorkspaceManager: WorkspaceManaging {
     private let semaphore = DispatchSemaphore(value: 0)
 
-    func captureSnapshot() -> SwitcherFocusSnapshot? {
+    func activate(
+        projectId _: String,
+        focusIdeWindow _: Bool,
+        switchWorkspace _: Bool,
+        progress _: ((ActivationProgress) -> Void)?,
+        cancellationToken _: ActivationCancellationToken?
+    ) -> ActivationOutcome {
+        .failure(error: .cancelled)
+    }
+
+    func focusWorkspaceAndWindow(report _: ActivationReport) -> Result<Void, ActivationError> {
+        .success(())
+    }
+
+    func captureFocusSnapshot() -> WorkspaceFocusSnapshot? {
         _ = semaphore.wait(timeout: .now() + 1.0)
         return nil
     }
 
-    func restore(snapshot _: SwitcherFocusSnapshot) {}
+    func restoreFocusSnapshot(_: WorkspaceFocusSnapshot) {}
 
-    func workspaceExists(workspaceName _: String) -> Bool {
+    func workspaceExists(name _: String) -> Bool {
         false
     }
 
