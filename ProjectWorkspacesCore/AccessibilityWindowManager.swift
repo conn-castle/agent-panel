@@ -145,11 +145,13 @@ struct AccessibilityWindowManager: AccessibilityWindowManaging {
             // Core Graphics uses top-left origin, AX uses top-left origin too
             let axBounds = CGRect(origin: position, size: size)
 
-            // Check if bounds match (allowing small tolerance for rounding)
-            if abs(axBounds.origin.x - cgBounds.origin.x) < 2 &&
-               abs(axBounds.origin.y - cgBounds.origin.y) < 2 &&
-               abs(axBounds.width - cgBounds.width) < 2 &&
-               abs(axBounds.height - cgBounds.height) < 2 {
+            // A small tolerance is necessary because Core Graphics and Accessibility APIs may have
+            // minor rounding differences in frame geometry, especially on scaled displays.
+            let boundsMatchingTolerance: CGFloat = 2.0
+            if abs(axBounds.origin.x - cgBounds.origin.x) < boundsMatchingTolerance &&
+               abs(axBounds.origin.y - cgBounds.origin.y) < boundsMatchingTolerance &&
+               abs(axBounds.width - cgBounds.width) < boundsMatchingTolerance &&
+               abs(axBounds.height - cgBounds.height) < boundsMatchingTolerance {
                 return .success(axWindow)
             }
         }

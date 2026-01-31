@@ -128,16 +128,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 
 Defaults (applied if keys are missing):
 
-| Key                                | Default                       | Doctor severity when omitted |
-| ---------------------------------- | ----------------------------- | ---------------------------- |
-| `global.defaultIde`                | `"vscode"`                    | WARN                         |
-| `global.globalChromeUrls`          | `[]`                          | WARN                         |
-| `display.ultrawideMinWidthPx`      | `5000`                        | WARN                         |
-| `project.ide`                      | inherit `global.defaultIde`   | WARN                         |
-| `project.chromeUrls`               | `[]`                          | OK                           |
-| `project.chromeProfileDirectory`   | unset                         | OK                           |
-| `project.ideUseAgentLayerLauncher` | `true`                        | OK                           |
-| `project.ideCommand`               | `""`                          | OK                           |
+> **Note:** See `README.md` for the authoritative table of defaults and Doctor severity levels.
 
 ### PR-010 — Global switcher UI
 

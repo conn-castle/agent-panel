@@ -2,6 +2,43 @@
 
 Note: This is an agent-layer memory file. It is primarily for agent use.
 
+## Purpose
+A phased plan of work that guides architecture decisions and sequencing. The roadmap is the “what next” reference; the backlog holds unscheduled items.
+
+## Format
+- The roadmap is a single list of numbered phases under `<!-- PHASES START -->`.
+- Do not renumber completed phases (phases marked with ✅).
+- You may renumber incomplete phases when updating the roadmap (e.g., to insert a new phase).
+- Incomplete phases include **Goal**, **Tasks** (checkbox list), and **Exit criteria** sections.
+- When a phase is complete:
+  - update the heading to: `## Phase N ✅ — <phase name>`
+  - replace the phase content with a short bullet summary of what was accomplished (no checkbox list).
+
+### Phase templates
+
+Completed:
+```markdown
+## Phase N ✅ — <phase name>
+- <Accomplishment summary bullet>
+- <Accomplishment summary bullet>
+```
+
+Incomplete:
+```markdown
+## Phase N — <phase name>
+
+### Goal
+- <What success looks like for this phase, in 1–3 bullet points.>
+
+### Tasks
+- [ ] <Concrete deliverable-oriented task>
+- [ ] <Concrete deliverable-oriented task>
+
+### Exit criteria
+- <Objective condition that must be true to call the phase complete.>
+- <Prefer testable statements: “X exists”, “Y passes”, “Z is documented”.>
+```
+
 ## Phases
 
 <!-- PHASES START -->
@@ -61,20 +98,12 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 
 
 ## Phase 6 ✅ — Layout engine + persistence
-
-### Goal
-- Apply locked default layouts and persist per-project per-display-mode geometry.
-
-### Tasks
-- [x] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
-- [x] Implement locked default layouts for laptop and ultrawide (8-segment split).
-- [x] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.
-- [x] Persist layout on window move/resize via Accessibility (AX) APIs, debounced 500ms.
-- [x] Apply geometry by focusing the target window via AeroSpace, then mutating the system “focused window” via AX.
-- [x] Add unit tests for layout math and state serialization.
-
-### Exit criteria
-- User window moves/resizes persist and are restored on next activation for the same display mode.
+- Implemented display mode detection for laptop and ultrawide modes.
+- Implemented default layouts (maximized for laptop, 8-segment split for ultrawide).
+- Implemented versioned `state.json` cache for layout persistence with atomic writes.
+- Persisted geometry on window move/resize via Accessibility (AX) APIs with 500ms debounce.
+- Applied geometry via AeroSpace window focus and AX focused-window mutation.
+- Added unit tests for layout math and state serialization.
 
 
 ## Phase 7 — Close Project (empty the workspace)

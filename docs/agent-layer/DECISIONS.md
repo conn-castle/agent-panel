@@ -2,6 +2,26 @@
 
 Note: This is an agent-layer memory file. It is primarily for agent use.
 
+## Purpose
+A rolling log of important, non-obvious decisions that materially affect future work (constraints, deferrals, irreversible tradeoffs). Only record decisions that future developers/agents would not learn just by reading the code.
+
+## Format
+- Keep entries brief and durable (avoid restating obvious defaults).
+- Keep the oldest decisions near the top and add new entries at the bottom.
+- Insert entries under `<!-- ENTRIES START -->`.
+- Line 1 starts with `- Decision YYYY-MM-DD <id>:` and a short title.
+- Lines 2–4 are indented by **4 spaces** and use `Key: Value`.
+- Keep **exactly one blank line** between entries.
+- If a decision is superseded, add a new entry describing the change (do not delete history unless explicitly asked).
+
+### Entry template
+```text
+- Decision YYYY-MM-DD abcdef: Short title
+    Decision: <what was chosen>
+    Reason: <why it was chosen>
+    Tradeoffs: <what is gained and what is lost>
+```
+
 ## Decision Log
 
 <!-- ENTRIES START -->
@@ -120,6 +140,30 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
     Decision: Use a single versioned `state.json` schema that stores managed window IDs plus per-project per-display-mode layouts as normalized rects (`ide`/`chrome`) in visible-frame coordinates; persist via atomic temp-file rename with corruption backups.
     Reason: Prevents competing writers and keeps layout persistence deterministic across activation and observation.
     Tradeoffs: Schema changes require migration; corrupted files reset to empty state with a backup.
+    Schema Example:
+    ```json
+    {
+      "version": 1,
+      "projects": {
+        "codex": {
+          "managed": {
+            "ideWindowId": 400373,
+            "chromeWindowId": 400375
+          },
+          "layouts": {
+            "laptop": {
+              "ide": {"x": 0, "y": 0, "width": 1, "height": 1},
+              "chrome": {"x": 0, "y": 0, "width": 1, "height": 1}
+            },
+            "ultrawide": {
+              "ide": {"x": 0.25, "y": 0, "width": 0.375, "height": 1},
+              "chrome": {"x": 0.625, "y": 0, "width": 0.375, "height": 1}
+            }
+          }
+        }
+      }
+    }
+    ```
 
 - Decision 2026-01-29 3d8f9a: AX/AppKit coordinate conversion
     Decision: Convert AppKit bottom-left frames to AX top-left positions (and back) using the main display height, with round-trip tests.
