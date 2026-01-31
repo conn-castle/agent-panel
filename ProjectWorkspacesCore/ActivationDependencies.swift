@@ -20,15 +20,41 @@ public protocol ChromeLaunching {
     ///   - project: Project configuration providing repo and project URLs.
     ///   - ideWindowIdToRefocus: IDE window id to refocus after Chrome creation.
     ///   - allowExistingWindows: Whether existing Chrome windows should satisfy the request.
-    /// - Returns: Launch outcome or a structured error.
+    ///   - cancellationToken: Optional token to cancel window detection.
+    /// - Returns: Launch result with warnings or a structured error.
     func ensureWindow(
         expectedWorkspaceName: String,
         windowToken: ProjectWindowToken,
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
+        allowExistingWindows: Bool,
+        cancellationToken: ActivationCancellationToken?
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError>
+
+    /// Checks for existing Chrome windows matching the token.
+    func checkExistingWindow(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
         allowExistingWindows: Bool
-    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError>
+    ) -> ChromeLauncher.ExistingWindowCheck
+
+    /// Launches Chrome without waiting for window detection.
+    func launchChrome(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        globalChromeUrls: [String],
+        project: ProjectConfig,
+        existingIds: Set<Int>,
+        ideWindowIdToRefocus: Int?
+    ) -> Result<ChromeLauncher.ChromeLaunchToken, ChromeLaunchError>
+
+    /// Detects a Chrome window after launch.
+    func detectLaunchedWindow(
+        token: ChromeLauncher.ChromeLaunchToken,
+        cancellationToken: ActivationCancellationToken?,
+        warningSink: @escaping (ChromeLaunchWarning) -> Void
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError>
 }
 
 extension IdeLauncher: IdeLaunching {}

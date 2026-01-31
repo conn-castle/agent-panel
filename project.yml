@@ -18,6 +18,7 @@ targets:
       - path: ProjectWorkspacesApp
     dependencies:
       - target: ProjectWorkspacesCore
+      - package: TOMLDecoder
     settings:
       base:
         PRODUCT_NAME: ProjectWorkspaces
@@ -42,6 +43,7 @@ targets:
       - path: pwctl
     dependencies:
       - target: ProjectWorkspacesCore
+      - package: TOMLDecoder
 
   ProjectWorkspacesCoreTests:
     type: bundle.unit-test
@@ -52,9 +54,25 @@ targets:
       - path: ProjectWorkspacesCoreTests/Fixtures
     dependencies:
       - target: ProjectWorkspacesCore
+      - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+
+  ProjectWorkspacesAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ProjectWorkspacesAppTests
+    dependencies:
+      - target: ProjectWorkspacesApp
+      - target: ProjectWorkspacesCore
+      - package: TOMLDecoder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ProjectWorkspaces.app/Contents/MacOS/ProjectWorkspaces"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:
   ProjectWorkspaces:
@@ -65,3 +83,4 @@ schemes:
     test:
       targets:
         - ProjectWorkspacesCoreTests
+        - ProjectWorkspacesAppTests

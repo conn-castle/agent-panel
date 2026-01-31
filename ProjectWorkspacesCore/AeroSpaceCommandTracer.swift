@@ -27,19 +27,29 @@ struct TracingAeroSpaceCommandRunner: AeroSpaceCommandRunning {
         arguments: [String],
         timeoutSeconds: TimeInterval
     ) -> Result<CommandResult, AeroSpaceCommandError> {
+        let startedAt = Date()
         let result = wrapped.run(
             executable: executable,
             arguments: arguments,
             timeoutSeconds: timeoutSeconds
         )
-        traceSink(buildLog(executable: executable, arguments: arguments, result: result))
+        let endedAt = Date()
+        traceSink(buildLog(
+            executable: executable,
+            arguments: arguments,
+            result: result,
+            startedAt: startedAt,
+            endedAt: endedAt
+        ))
         return result
     }
 
     private func buildLog(
         executable: URL,
         arguments: [String],
-        result: Result<CommandResult, AeroSpaceCommandError>
+        result: Result<CommandResult, AeroSpaceCommandError>,
+        startedAt: Date,
+        endedAt: Date
     ) -> AeroSpaceCommandLog {
         let command = executable.path
         let isListWindows = arguments.first == "list-windows"
@@ -52,7 +62,11 @@ struct TracingAeroSpaceCommandRunner: AeroSpaceCommandRunning {
             stdout = outcome.stdout
         }
 
+        let durationMs = max(0, Int(endedAt.timeIntervalSince(startedAt) * 1000))
         return AeroSpaceCommandLog(
+            startedAt: makeTimestamp(startedAt),
+            endedAt: makeTimestamp(endedAt),
+            durationMs: durationMs,
             command: command,
             arguments: arguments,
             exitCode: outcome.exitCode,
@@ -72,6 +86,13 @@ struct TracingAeroSpaceCommandRunner: AeroSpaceCommandRunning {
             let byteCount = json.utf8.count
             return "decodeFailed(bytes=\(byteCount))"
         }
+    }
+
+    private func makeTimestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
     }
 }
 

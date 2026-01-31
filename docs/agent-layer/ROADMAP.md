@@ -2,6 +2,43 @@
 
 Note: This is an agent-layer memory file. It is primarily for agent use.
 
+## Purpose
+A phased plan of work that guides architecture decisions and sequencing. The roadmap is the “what next” reference; the backlog holds unscheduled items.
+
+## Format
+- The roadmap is a single list of numbered phases under `<!-- PHASES START -->`.
+- Do not renumber completed phases (phases marked with ✅).
+- You may renumber incomplete phases when updating the roadmap (e.g., to insert a new phase).
+- Incomplete phases include **Goal**, **Tasks** (checkbox list), and **Exit criteria** sections.
+- When a phase is complete:
+  - update the heading to: `## Phase N ✅ — <phase name>`
+  - replace the phase content with a short bullet summary of what was accomplished (no checkbox list).
+
+### Phase templates
+
+Completed:
+```markdown
+## Phase N ✅ — <phase name>
+- <Accomplishment summary bullet>
+- <Accomplishment summary bullet>
+```
+
+Incomplete:
+```markdown
+## Phase N — <phase name>
+
+### Goal
+- <What success looks like for this phase, in 1–3 bullet points.>
+
+### Tasks
+- [ ] <Concrete deliverable-oriented task>
+- [ ] <Concrete deliverable-oriented task>
+
+### Exit criteria
+- <Objective condition that must be true to call the phase complete.>
+- <Prefer testable statements: “X exists”, “Y passes”, “Z is documented”.>
+```
+
 ## Phases
 
 <!-- PHASES START -->
@@ -53,36 +90,20 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 - Added unit coverage for idempotence, missing-window recovery, and edge cases in activation orchestration.
 
 
-## Phase 5 — Switcher UI + global hotkey
+## Phase 5 ✅ — Switcher UI + global hotkey
 
-### Goal
-- Provide the keyboard-first switcher UX with Activate and Close actions.
-
-### Tasks
-- [ ] Implement global hotkey ⌘⇧Space to open the switcher using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
-- [ ] Implement type-to-filter list with color swatch + name; Enter activates; Esc dismisses.
-- [ ] Implement Close Project shortcut ⌘W to close the selected project.
-- [ ] Ensure the switcher works when invoked from any application (app runs as background agent).
-
-### Exit criteria
-- Switcher is usable entirely from the keyboard and reliably invoked from any app.
+- Implemented global hotkey ⌘⇧Space using Carbon `RegisterEventHotKey` (Apple-only; no third-party hotkey libraries).
+- Implemented type-to-filter switcher list with color swatch + name; Enter activates; Esc dismisses.
+- Switcher works when invoked from any application (app runs as background agent).
 
 
-## Phase 6 — Layout engine + persistence
-
-### Goal
-- Apply locked default layouts and persist per-project per-display-mode geometry.
-
-### Tasks
-- [ ] Implement display mode detection using main display width and `display.ultrawideMinWidthPx`.
-- [ ] Implement locked default layouts for laptop and ultrawide (8-segment split).
-- [ ] Implement `state.json` read/write (versioned) as a cache; missing state must be safe and explicit.
-- [ ] Persist layout on window move/resize via Accessibility (AX) APIs, debounced 500ms.
-- [ ] Apply geometry by focusing the target window via AeroSpace, then mutating the system “focused window” via AX.
-- [ ] Add unit tests for layout math and state serialization.
-
-### Exit criteria
-- User window moves/resizes persist and are restored on next activation for the same display mode.
+## Phase 6 ✅ — Layout engine + persistence
+- Implemented display mode detection for laptop and ultrawide modes.
+- Implemented default layouts (maximized for laptop, 8-segment split for ultrawide).
+- Implemented versioned `state.json` cache for layout persistence with atomic writes.
+- Persisted geometry on window move/resize via Accessibility (AX) APIs with 500ms debounce.
+- Applied geometry via AeroSpace window focus and AX focused-window mutation.
+- Added unit tests for layout math and state serialization.
 
 
 ## Phase 7 — Close Project (empty the workspace)
@@ -93,6 +114,7 @@ Note: This is an agent-layer memory file. It is primarily for agent use.
 ### Tasks
 - [ ] Implement `Close(projectId)` algorithm: enumerate windows in `pw-<projectId>` and close each (sorted ascending by id).
 - [ ] When closing the focused project workspace, switch to fallback workspace `pw-inbox`.
+- [ ] Implement Close Project shortcut ⌘W to close the selected project.
 - [ ] Surface close in both switcher (⌘W) and `pwctl close <projectId>`.
 - [ ] Ensure per-window close failures are WARN; overall command fails only on AeroSpace execution failure.
 - [ ] Log every close action with timestamp, projectId, workspaceName, AeroSpace command stdout/stderr, and final outcome (success/warn/fail).

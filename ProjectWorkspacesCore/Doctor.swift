@@ -24,6 +24,7 @@ public struct Doctor {
     ///   - appDiscovery: App discovery implementation.
     ///   - hotkeyChecker: Hotkey availability checker.
     ///   - accessibilityChecker: Accessibility permission checker.
+    ///   - hotkeyStatusProvider: Optional provider for the current hotkey registration status.
     ///   - aerospaceBinaryResolver: Resolver for the AeroSpace CLI executable.
     ///   - commandRunner: Command runner used for CLI checks.
     ///   - environment: Environment provider for XDG config resolution.
@@ -35,6 +36,7 @@ public struct Doctor {
         hotkeyChecker: HotkeyChecking = CarbonHotkeyChecker(),
         accessibilityChecker: AccessibilityChecking = DefaultAccessibilityChecker(),
         runningApplicationChecker: RunningApplicationChecking = DefaultRunningApplicationChecker(),
+        hotkeyStatusProvider: HotkeyRegistrationStatusProviding? = nil,
         commandRunner: CommandRunning = DefaultCommandRunner(),
         aerospaceBinaryResolver: AeroSpaceBinaryResolving? = nil,
         environment: EnvironmentProviding = ProcessEnvironment(),
@@ -61,7 +63,8 @@ public struct Doctor {
         self.permissionsChecker = PermissionsChecker(
             accessibilityChecker: accessibilityChecker,
             hotkeyChecker: hotkeyChecker,
-            runningApplicationChecker: runningApplicationChecker
+            runningApplicationChecker: runningApplicationChecker,
+            hotkeyStatusProvider: hotkeyStatusProvider
         )
         self.appDiscoveryChecker = AppDiscoveryChecker(
             paths: paths,

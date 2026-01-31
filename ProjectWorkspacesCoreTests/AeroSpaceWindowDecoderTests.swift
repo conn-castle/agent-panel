@@ -38,7 +38,8 @@ final class AeroSpaceWindowDecoderTests: XCTestCase {
                     workspace: "1",
                     appBundleId: "net.kovidgoyal.kitty",
                     appName: "kitty",
-                    windowTitle: "aerospace"
+                    windowTitle: "aerospace",
+                    windowLayout: ""
                 )
             )
             XCTAssertEqual(windows[1].windowTitle, "")

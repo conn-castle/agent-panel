@@ -60,7 +60,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 3) **No Chrome pinned tabs** and no Chrome extension
 4) **No enforced Chrome Profiles** per project
 5) No multi-monitor orchestration as a product requirement
-   - If multiple displays exist, behavior is best-effort and must warn in logs
+   - If multiple displays exist, ProjectWorkspaces uses the main display only and must warn in logs
 
 ---
 
@@ -128,16 +128,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 
 Defaults (applied if keys are missing):
 
-| Key                                | Default                       | Doctor severity when omitted |
-| ---------------------------------- | ----------------------------- | ---------------------------- |
-| `global.defaultIde`                | `"vscode"`                    | WARN                         |
-| `global.globalChromeUrls`          | `[]`                          | WARN                         |
-| `display.ultrawideMinWidthPx`      | `5000`                        | WARN                         |
-| `project.ide`                      | inherit `global.defaultIde`   | WARN                         |
-| `project.chromeUrls`               | `[]`                          | OK                           |
-| `project.chromeProfileDirectory`   | unset                         | OK                           |
-| `project.ideUseAgentLayerLauncher` | `true`                        | OK                           |
-| `project.ideCommand`               | `""`                          | OK                           |
+> **Note:** See `README.md` for the authoritative table of defaults and Doctor severity levels.
 
 ### PR-010 — Global switcher UI
 
@@ -152,6 +143,30 @@ Defaults (applied if keys are missing):
 - Switcher displays project identity:
   - color swatch
   - name
+- Switcher ordering and filtering:
+  - Preserve config file order by default.
+  - Filter is case-insensitive substring match on project `id` or `name`.
+  - After each query change, selection resets to the first match.
+  - If there are no matches, show a “No matches” row/label and Enter does nothing.
+- Switcher states:
+  - **Browsing**: list + search; switcher is key for typing.
+  - **Loading(projectId, step)**: switcher remains visible as a HUD but must **not** be key/focused; inputs disabled except Esc after the user re-focuses the switcher via hotkey.
+  - **Error(projectId, message)**: switcher is key and shows Retry + Cancel.
+- Hotkey behavior:
+  - In **Browsing**, ⌘⇧Space dismisses the switcher (same as Esc).
+  - In **Loading**, ⌘⇧Space focuses the switcher (does **not** dismiss).
+- Activation UX:
+  - On Enter, switcher transitions to **Loading**, stays visible, and is forced non-key.
+  - Capture the previously focused AeroSpace window (best effort) when opening the switcher:
+    - `aerospace list-windows --focused --json --format '%{window-id} %{workspace}'`
+    - Store `prevFocusedWindowId` and `prevWorkspaceName` if available.
+  - If the switcher exits without selecting a project, restore focus best-effort:
+    - If `prevFocusedWindowId` exists: `aerospace focus --window-id <id>`
+    - Else if `prevWorkspaceName` exists: `aerospace workspace <name>`
+  - On activation success, focus IDE and close switcher.
+  - On activation error, switcher becomes key and shows Retry/Cancel.
+  - Cancel during Loading stops further launches, closes the switcher, and restores previous focus best-effort; any windows already opened remain open.
+- If the hotkey cannot be registered, the menu bar must show a persistent “Hotkey unavailable” warning and provide **Open Switcher...** to access the switcher manually.
 
 **MUST (Close)**
 
@@ -164,25 +179,30 @@ Defaults (applied if keys are missing):
 Given `projectId`:
 
 1) Switch to workspace `pw-<projectId>`.
-2) Ensure IDE window exists.
+   - Workspace existence is determined via `aerospace list-workspaces`.
+   - The switcher must remain visible on the target workspace during activation (AppKit-only; no AeroSpace move for the switcher).
+2) Ensure Chrome window exists **first**.
+   - Chrome window is identified by the deterministic token (`PW:<projectId>`) in its title.
+   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
+   - If missing, create it.
+   - If multiple matches are found, warn and choose the lowest window id deterministically.
+3) Ensure IDE window exists **second**.
    - VS Code window is identified by a deterministic token (`PW:<projectId>`) in its title.
-   - If found in another workspace, move it into `pw-<projectId>`.
+   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
    - If missing, create it.
-   - If multiple matches are found, fail (no guessing).
-3) Ensure Chrome window exists.
-   - Chrome window is identified by the same token in its title.
-   - If found in another workspace, move it into `pw-<projectId>`.
-   - If missing, create it.
-   - If multiple matches are found, fail (no guessing).
+   - If multiple matches are found, warn and choose the lowest window id deterministically.
 4) Force IDE and Chrome windows to floating mode (to allow deterministic geometry).
 5) Apply layout for the current display mode:
    - use persisted layout if available
-   - otherwise use defaults
+   - if no persisted layout exists and the windows already existed, capture current frames and persist them (do not apply defaults)
+   - if no persisted layout exists and the windows were created during activation, apply defaults and persist them
+   - if multiple displays exist, warn and apply/persist only for windows on the main display
 6) End with IDE focused.
 
 **MUST**
 
-- Activation may scan across workspaces **only** to find windows carrying the deterministic project token. It must never guess or adopt windows without that token.
+- Activation must avoid global scans. It may inspect only the focused window immediately after launch to recover a newly created tokened window.
+- Overall window-detection timeout is **10,000ms** for both Chrome and IDE (existing poll behavior +5s).
 
 **MUST**
 
@@ -279,7 +299,7 @@ Per project, IDE launch priority is:
   - Chrome installed
   - VS Code installed (and Antigravity if configured)
   - global hotkey ⌘⇧Space can be registered (FAIL if registration fails due to conflict / OS denial)
-  - if the agent app is running, Doctor must skip the hotkey registration check and report PASS with a note that the hotkey is managed by the agent
+  - if the agent app is running, Doctor must use the app-reported hotkey status when available; otherwise skip the hotkey registration check and report PASS with a note that the hotkey is managed by the agent
   - config parses and is valid
   - project paths exist
   - required directories are writable
@@ -435,6 +455,7 @@ Step 6 — Emergency action (panic button)
   - timestamp
   - projectId
   - workspaceName
+  - per-command start/end timestamps + durationMs
   - AeroSpace command invocations and stdout/stderr
   - final result (success/warn/fail)
 - No silent failures.

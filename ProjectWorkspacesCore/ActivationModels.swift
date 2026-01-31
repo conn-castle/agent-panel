@@ -1,7 +1,7 @@
 import Foundation
 
 /// Identifies the kind of window managed during activation.
-public enum ActivationWindowKind: String, Sendable {
+public enum ActivationWindowKind: String, Hashable, Sendable {
     case ide
     case chrome
 }
@@ -12,6 +12,7 @@ public struct ActivationReport: Equatable, Sendable {
     public let workspaceName: String
     public let ideWindowId: Int
     public let chromeWindowId: Int
+    public let ideBundleId: String?
 
     /// Creates an activation report.
     /// - Parameters:
@@ -23,12 +24,14 @@ public struct ActivationReport: Equatable, Sendable {
         projectId: String,
         workspaceName: String,
         ideWindowId: Int,
-        chromeWindowId: Int
+        chromeWindowId: Int,
+        ideBundleId: String? = nil
     ) {
         self.projectId = projectId
         self.workspaceName = workspaceName
         self.ideWindowId = ideWindowId
         self.chromeWindowId = chromeWindowId
+        self.ideBundleId = ideBundleId
     }
 }
 
@@ -36,9 +39,85 @@ public struct ActivationReport: Equatable, Sendable {
 public enum ActivationWarning: Equatable, Sendable {
     case configWarning(DoctorFinding)
     case ideLaunchWarning(IdeLaunchWarning)
+    case chromeLaunchWarning(ChromeLaunchWarning)
     case multipleWindows(kind: ActivationWindowKind, workspace: String, chosenId: Int, extraIds: [Int])
+    case layoutFailed(kind: ActivationWindowKind, windowId: Int, error: AeroSpaceCommandError)
     case moveFailed(kind: ActivationWindowKind, windowId: Int, workspace: String, error: AeroSpaceCommandError)
     case stateRecovered(backupPath: String)
+    case stateLoadFailed(detail: String)
+    case multipleDisplaysDetected(count: Int)
+    case windowOffMainDisplay(kind: ActivationWindowKind, windowId: Int)
+    case layoutApplyFailed(kind: ActivationWindowKind, windowId: Int, detail: String)
+    case layoutPersistFailed(detail: String)
+    case layoutObserverFailed(kind: ActivationWindowKind, windowId: Int, detail: String)
+    case layoutSkipped(reason: String)
+
+    /// User-friendly message describing this warning.
+    public var userMessage: String {
+        switch self {
+        case .chromeLaunchWarning(let chromeLaunchWarning):
+            return "Chrome: \(chromeLaunchWarning)"
+        case .ideLaunchWarning(let ideLaunchWarning):
+            return "IDE: \(ideLaunchWarning)"
+        case .configWarning(let doctorFinding):
+            return "Config: \(doctorFinding.title)"
+        case .multipleWindows(let kind, let workspace, _, let extraIds):
+            return "\(kind) has \(extraIds.count) extra windows in \(workspace)"
+        case .layoutFailed(let kind, let windowId, let error):
+            return "\(kind) layout failed (window \(windowId)): \(error)"
+        case .moveFailed(let kind, let windowId, let workspace, let error):
+            return "\(kind) move failed (window \(windowId) to \(workspace)): \(error)"
+        case .stateRecovered(let backupPath):
+            return "State recovered from backup: \(backupPath)"
+        case .stateLoadFailed(let detail):
+            return "State load failed: \(detail)"
+        case .multipleDisplaysDetected(let count):
+            return "Multiple displays detected (\(count))"
+        case .windowOffMainDisplay(let kind, let windowId):
+            return "\(kind) window \(windowId) is off main display"
+        case .layoutApplyFailed(let kind, let windowId, let detail):
+            return "\(kind) layout apply failed (window \(windowId)): \(detail)"
+        case .layoutPersistFailed(let detail):
+            return "Layout persist failed: \(detail)"
+        case .layoutObserverFailed(let kind, let windowId, let detail):
+            return "\(kind) layout observer failed (window \(windowId)): \(detail)"
+        case .layoutSkipped(let reason):
+            return "Layout skipped: \(reason)"
+        }
+    }
+}
+
+/// Progress milestones during activation.
+public enum ActivationProgress: Equatable, Sendable {
+    case switchingWorkspace(String)
+    case switchedWorkspace(String)
+    case ensuringChrome
+    case ensuringIde
+    case applyingLayout
+    case finishing
+}
+
+/// Cancellation token for aborting activation.
+public final class ActivationCancellationToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    public init() {}
+
+    /// Marks activation as cancelled.
+    public func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+
+    /// Returns true if cancellation was requested.
+    public var isCancelled: Bool {
+        lock.lock()
+        let value = cancelled
+        lock.unlock()
+        return value
+    }
 }
 
 /// Activation error outcomes.
@@ -54,6 +133,7 @@ public enum ActivationError: Error, Equatable, Sendable {
     case ideWindowTokenAmbiguous(token: String, windowIds: [Int])
     case chromeLaunchFailed(ChromeLaunchError)
     case logWriteFailed(LogWriteError)
+    case cancelled
 }
 
 /// Outcome of an activation attempt.
@@ -64,6 +144,9 @@ public enum ActivationOutcome: Equatable, Sendable {
 
 /// Summary of a traced AeroSpace command for activation logs.
 struct AeroSpaceCommandLog: Codable, Equatable, Sendable {
+    let startedAt: String
+    let endedAt: String
+    let durationMs: Int
     let command: String
     let arguments: [String]
     let exitCode: Int32?
@@ -80,6 +163,15 @@ struct ActivationLogPayload: Codable, Equatable, Sendable {
     let ideWindowId: Int?
     let chromeWindowId: Int?
     let warnings: [String]
+    let aeroSpaceCommands: [AeroSpaceCommandLog]
+}
+
+/// Serialized focus log payload stored inside the logger context.
+struct ActivationFocusLogPayload: Codable, Equatable, Sendable {
+    let projectId: String
+    let workspaceName: String
+    let windowId: Int
+    let outcome: String
     let aeroSpaceCommands: [AeroSpaceCommandLog]
 }
 
@@ -106,12 +198,29 @@ extension ActivationWarning {
                     fix: "Fix the launcher script or disable ideUseAgentLayerLauncher."
                 )
             }
+        case .chromeLaunchWarning(let warning):
+            switch warning {
+            case .multipleWindows(let workspace, let chosenId, let extraIds):
+                return DoctorFinding(
+                    severity: .warn,
+                    title: "Multiple Chrome windows found",
+                    detail: "Workspace \(workspace): chose \(chosenId), ignored \(extraIds.map(String.init).joined(separator: ", "))",
+                    fix: "Close extra Chrome windows in this workspace."
+                )
+            }
         case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
             return DoctorFinding(
                 severity: .warn,
                 title: "Multiple \(kind.rawValue) windows found in \(workspace)",
                 detail: "Chose window \(chosenId). Extra windows: \(extraIds.sorted()).",
                 fix: "Close extra \(kind.rawValue) windows if this is unintended."
+            )
+        case .layoutFailed(let kind, let windowId, let error):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Failed to set \(kind.rawValue) window \(windowId) to floating",
+                detail: "\(error)",
+                fix: "Window placement may be incorrect; try re-activating the project."
             )
         case .moveFailed(let kind, let windowId, let workspace, let error):
             return DoctorFinding(
@@ -126,6 +235,55 @@ extension ActivationWarning {
                 title: "State file was corrupted and recovered",
                 detail: "Corrupted state backed up to: \(backupPath)",
                 fix: "Previous managed window IDs were lost. Activation will create fresh state."
+            )
+        case .stateLoadFailed(let detail):
+            return DoctorFinding(
+                severity: .warn,
+                title: "State file could not be loaded",
+                detail: detail,
+                fix: "Layout persistence may be unavailable; retry activation."
+            )
+        case .multipleDisplaysDetected(let count):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Multiple displays detected",
+                detail: "display_count=\(count)",
+                fix: "ProjectWorkspaces uses the main display only in v1."
+            )
+        case .windowOffMainDisplay(let kind, let windowId):
+            return DoctorFinding(
+                severity: .warn,
+                title: "\(kind.rawValue) window is off the main display",
+                detail: "window_id=\(windowId)",
+                fix: "Move the window to the main display to enable layout persistence."
+            )
+        case .layoutApplyFailed(let kind, let windowId, let detail):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Failed to apply layout for \(kind.rawValue) window",
+                detail: "window_id=\(windowId); \(detail)",
+                fix: "Layout may be incorrect; try re-activating the project."
+            )
+        case .layoutPersistFailed(let detail):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Failed to persist layout",
+                detail: detail,
+                fix: "Layout changes may not be saved; try re-activating the project."
+            )
+        case .layoutObserverFailed(let kind, let windowId, let detail):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Failed to observe \(kind.rawValue) window for layout changes",
+                detail: "window_id=\(windowId); \(detail)",
+                fix: "Layout changes may not be persisted; try re-activating the project."
+            )
+        case .layoutSkipped(let reason):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Layout application skipped",
+                detail: reason,
+                fix: "Resolve the warning and retry activation."
             )
         }
     }
@@ -142,12 +300,33 @@ extension ActivationWarning {
             case .launcherFailed(let command, _):
                 return "launcherFailed: \(command)"
             }
+        case .chromeLaunchWarning(let warning):
+            switch warning {
+            case .multipleWindows(let workspace, let chosenId, let extraIds):
+                return "chromeLaunchWarning: multipleWindows in \(workspace), chose \(chosenId), extras \(extraIds.sorted())"
+            }
         case .multipleWindows(let kind, let workspace, let chosenId, let extraIds):
             return "multipleWindows(\(kind.rawValue)): \(workspace) chose \(chosenId), extras \(extraIds.sorted())"
+        case .layoutFailed(let kind, let windowId, let error):
+            return "layoutFailed(\(kind.rawValue)): window \(windowId), error: \(error)"
         case .moveFailed(let kind, let windowId, let workspace, let error):
             return "moveFailed(\(kind.rawValue)): window \(windowId) to \(workspace), error: \(error)"
         case .stateRecovered(let backupPath):
             return "stateRecovered: \(backupPath)"
+        case .stateLoadFailed(let detail):
+            return "stateLoadFailed: \(detail)"
+        case .multipleDisplaysDetected(let count):
+            return "multipleDisplaysDetected: \(count)"
+        case .windowOffMainDisplay(let kind, let windowId):
+            return "windowOffMainDisplay(\(kind.rawValue)): window \(windowId)"
+        case .layoutApplyFailed(let kind, let windowId, let detail):
+            return "layoutApplyFailed(\(kind.rawValue)): window \(windowId), detail: \(detail)"
+        case .layoutPersistFailed(let detail):
+            return "layoutPersistFailed: \(detail)"
+        case .layoutObserverFailed(let kind, let windowId, let detail):
+            return "layoutObserverFailed(\(kind.rawValue)): window \(windowId), detail: \(detail)"
+        case .layoutSkipped(let reason):
+            return "layoutSkipped: \(reason)"
         }
     }
 }
@@ -249,6 +428,15 @@ extension ActivationError {
                     fix: "Check log directory permissions and retry."
                 )
             ]
+        case .cancelled:
+            return [
+                DoctorFinding(
+                    severity: .warn,
+                    title: "Activation cancelled",
+                    detail: "Activation was cancelled by the user.",
+                    fix: "Retry activation when ready."
+                )
+            ]
         }
     }
 }
@@ -285,6 +473,8 @@ private extension ChromeLaunchError {
             return "\(error)"
         case .aeroSpaceFailed(let error):
             return error.description
+        case .cancelled:
+            return "Activation cancelled."
         }
     }
 
@@ -300,6 +490,8 @@ private extension ChromeLaunchError {
             return "Ensure Chrome is installed and accessible."
         case .aeroSpaceFailed:
             return "Ensure AeroSpace is running and the CLI is available."
+        case .cancelled:
+            return "Retry activation when ready."
         }
     }
 }

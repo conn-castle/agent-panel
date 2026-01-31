@@ -37,16 +37,19 @@ and provides a keyboard-first switcher that brings you to the right context quic
 - No macOS Spaces pinning. AeroSpace workspaces are the only container.
 - No Chrome pinned tabs and no Chrome extension.
 - No enforced Chrome profile isolation.
-- No multi-monitor orchestration (best-effort warning only).
+- No multi-monitor orchestration; ProjectWorkspaces uses the main display only and warns when multiple displays are present.
 
 ## User workflow
 
 ### Global switcher
 
-- Hotkey: **⌘⇧Space**
+- Hotkey: **⌘⇧Space** (press again to dismiss when browsing; during loading it focuses the switcher)
 - Type to filter projects
-- Press **Enter** to Activate
+- Press **Enter** to Activate (switcher stays visible while loading)
+- Press **Esc** to dismiss when browsing; during loading, press ⌘⇧Space to focus the switcher, then Esc cancels
 - Press **⌘W** to Close the selected project
+- During activation, the switcher is a non-key HUD with a loading indicator; on success it closes and IDE is focused
+- If the hotkey is unavailable, the menu bar shows **Hotkey unavailable** and **Open Switcher...** opens it manually.
 
 ### Day-to-day
 
@@ -100,7 +103,7 @@ ProjectWorkspaces will be distributed as a signed + notarized `.app` via:
 - Homebrew cask (recommended) — planned
 - Direct download (`.zip` or `.dmg`) — planned
 
-**Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` Phase 8 for status.
+**Note:** Distribution is not yet available. See `docs/agent-layer/ROADMAP.md` for status.
 
 ### Grant Accessibility permission
 
@@ -223,7 +226,7 @@ Doctor FAIL if missing/invalid:
 - AeroSpace config is ambiguous (found in more than one location)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
 - Accessibility permission not granted (required for layout)
-- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor skips this check and reports PASS with a note.
+- Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor uses the app-reported hotkey status when available, otherwise it skips this check and reports PASS with a note.
 
 Doctor WARN if present:
 - `global.switcherHotkey` (ignored; hotkey is fixed to ⌘⇧Space)
@@ -286,6 +289,8 @@ If step 1 or 2 exits non-zero, the app logs WARN and falls back to the same “o
 - `PW_COLOR_HEX`
 - `PW_IDE` (`vscode` or `antigravity`)
 - `OPEN_VSCODE_NO_CLOSE=1`
+- `PW_VSCODE_CONFIG_APP_PATH` (if configured)
+- `PW_VSCODE_CONFIG_BUNDLE_ID` (if configured)
 
 #### Ensuring the workspace file (and colors) take effect
 
@@ -303,8 +308,8 @@ When the app runs any `ideCommand` or agent-layer launcher it prepends this shim
 ### One Chrome window per project (enforced by deterministic token)
 
 The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>` followed by a non-word character or end of string. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
-ProjectWorkspaces only scans across workspaces to find windows with that token, and will move a matched window into `pw-<projectId>` when needed.
-If zero or multiple tokened Chrome windows are found, activation fails (no guessing or fallbacks).
+ProjectWorkspaces enumerates only `pw-<projectId>`. If the window was just launched and doesn’t appear there, it uses focused-window recovery to capture the new Chrome window and move it into the workspace (no global scan).
+If multiple tokened Chrome windows are found in the workspace, activation warns and chooses the lowest window id deterministically.
 
 ### Tab seeding (creation-only)
 
@@ -386,9 +391,9 @@ Exit codes:
 
 - Primary supported use case is one display at a time.
 - If multiple displays are detected, the app must:
-  1) apply layout on the display containing the focused window,
-  2) log a WARN,
-  3) continue without attempting cross-display moves.
+  1) warn once that ProjectWorkspaces uses the main display only,
+  2) apply/persist layouts only for windows already on the main display,
+  3) skip layout for off-main windows without attempting cross-display moves.
 
 ## Logging
 
@@ -400,6 +405,7 @@ Exit codes:
   - timestamp
   - projectId
   - workspaceName
+  - per-command start/end timestamps + durationMs
   - AeroSpace stdout/stderr for each command
   - final outcome (success/warn/fail)
 
@@ -477,5 +483,5 @@ Optional:
 - Apply geometry using:
   1) `aerospace focus --window-id <id>`
   2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --all --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}'` output; fail on zero or multiple matches.
+- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace, otherwise fail loudly.
 - No silent failures: show user-facing errors + write structured logs.

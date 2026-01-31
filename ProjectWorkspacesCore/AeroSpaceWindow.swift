@@ -8,6 +8,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
     public let appBundleId: String
     public let appName: String
     public let windowTitle: String
+    public let windowLayout: String
 
     /// Creates a window model.
     /// - Parameters:
@@ -16,18 +17,21 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
     ///   - appBundleId: App bundle identifier.
     ///   - appName: App display name.
     ///   - windowTitle: Window title (may be empty).
+    ///   - windowLayout: Window layout (may be empty).
     public init(
         windowId: Int,
         workspace: String,
         appBundleId: String,
         appName: String,
-        windowTitle: String
+        windowTitle: String,
+        windowLayout: String
     ) {
         self.windowId = windowId
         self.workspace = workspace
         self.appBundleId = appBundleId
         self.appName = appName
         self.windowTitle = windowTitle
+        self.windowLayout = windowLayout
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -36,6 +40,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         case appBundleId = "app-bundle-id"
         case appName = "app-name"
         case windowTitle = "window-title"
+        case windowLayout = "window-layout"
     }
 
     public init(from decoder: Decoder) throws {
@@ -45,6 +50,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         appBundleId = try container.decode(String.self, forKey: .appBundleId)
         appName = try container.decodeIfPresent(String.self, forKey: .appName) ?? ""
         windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle) ?? ""
+        windowLayout = try container.decodeIfPresent(String.self, forKey: .windowLayout) ?? ""
     }
 }
 

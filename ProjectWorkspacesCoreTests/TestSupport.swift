@@ -64,6 +64,7 @@ struct WindowPayload: Encodable {
     let appBundleId: String
     let appName: String
     let windowTitle: String
+    let windowLayout: String
 
     enum CodingKeys: String, CodingKey {
         case windowId = "window-id"
@@ -71,6 +72,7 @@ struct WindowPayload: Encodable {
         case appBundleId = "app-bundle-id"
         case appName = "app-name"
         case windowTitle = "window-title"
+        case windowLayout = "window-layout"
     }
 }
 
@@ -79,13 +81,19 @@ struct WindowPayload: Encodable {
 ///   - id: Window ID.
 ///   - workspace: Workspace name.
 /// - Returns: Window payload configured as a Chrome window.
-func chromeWindowPayload(id: Int, workspace: String, windowTitle: String = "Chrome") -> WindowPayload {
+func chromeWindowPayload(
+    id: Int,
+    workspace: String,
+    windowTitle: String = "Chrome",
+    windowLayout: String = "tiling"
+) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: ChromeLauncher.chromeBundleId,
         appName: "Google Chrome",
-        windowTitle: windowTitle
+        windowTitle: windowTitle,
+        windowLayout: windowLayout
     )
 }
 
@@ -101,14 +109,16 @@ func windowPayload(
     workspace: String,
     bundleId: String,
     appName: String,
-    windowTitle: String = ""
+    windowTitle: String = "",
+    windowLayout: String = "tiling"
 ) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
         appBundleId: bundleId,
         appName: appName,
-        windowTitle: windowTitle
+        windowTitle: windowTitle,
+        windowLayout: windowLayout
     )
 }
 
@@ -388,22 +398,28 @@ final class TestIdeLauncher: IdeLaunching {
 
 /// Configurable Chrome launcher for testing.
 final class TestChromeLauncher: ChromeLaunching {
-    private let result: Result<ChromeLaunchOutcome, ChromeLaunchError>
+    private let result: Result<ChromeLaunchResult, ChromeLaunchError>
     private(set) var callCount: Int = 0
     private(set) var lastWorkspaceName: String?
     private(set) var lastWindowToken: ProjectWindowToken?
     private(set) var lastIdeWindowIdToRefocus: Int?
+    /// Whether checkExistingWindow should return "found" (true) or "notFound" (false)
+    var existingWindowFound: Bool = true
 
-    init(result: Result<ChromeLaunchOutcome, ChromeLaunchError>) {
+    init(result: Result<ChromeLaunchResult, ChromeLaunchError>) {
         self.result = result
     }
 
     static func created(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(.created(windowId: windowId)))
+        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .created(windowId: windowId), warnings: [])))
+        launcher.existingWindowFound = false
+        return launcher
     }
 
     static func existing(windowId: Int) -> TestChromeLauncher {
-        TestChromeLauncher(result: .success(.existing(windowId: windowId)))
+        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .existing(windowId: windowId), warnings: [])))
+        launcher.existingWindowFound = true
+        return launcher
     }
 
     static func failure(_ error: ChromeLaunchError) -> TestChromeLauncher {
@@ -416,12 +432,62 @@ final class TestChromeLauncher: ChromeLaunching {
         globalChromeUrls: [String],
         project: ProjectConfig,
         ideWindowIdToRefocus: Int?,
-        allowExistingWindows: Bool
-    ) -> Result<ChromeLaunchOutcome, ChromeLaunchError> {
+        allowExistingWindows: Bool,
+        cancellationToken _: ActivationCancellationToken?
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         callCount += 1
         lastWorkspaceName = expectedWorkspaceName
         lastWindowToken = windowToken
         lastIdeWindowIdToRefocus = ideWindowIdToRefocus
+        return result
+    }
+
+    func checkExistingWindow(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        allowExistingWindows: Bool
+    ) -> ChromeLauncher.ExistingWindowCheck {
+        callCount += 1
+        lastWorkspaceName = expectedWorkspaceName
+        lastWindowToken = windowToken
+        switch result {
+        case .success(let launchResult):
+            if existingWindowFound {
+                return .found(launchResult)
+            } else {
+                return .notFound(existingIds: [])
+            }
+        case .failure(let error):
+            return .error(error)
+        }
+    }
+
+    func launchChrome(
+        expectedWorkspaceName: String,
+        windowToken: ProjectWindowToken,
+        globalChromeUrls: [String],
+        project: ProjectConfig,
+        existingIds: Set<Int>,
+        ideWindowIdToRefocus: Int?
+    ) -> Result<ChromeLauncher.ChromeLaunchToken, ChromeLaunchError> {
+        callCount += 1
+        lastWorkspaceName = expectedWorkspaceName
+        lastWindowToken = windowToken
+        lastIdeWindowIdToRefocus = ideWindowIdToRefocus
+        // Return a token that can be used for detection
+        return .success(ChromeLauncher.ChromeLaunchToken(
+            windowToken: windowToken,
+            expectedWorkspaceName: expectedWorkspaceName,
+            beforeIds: existingIds,
+            ideWindowIdToRefocus: ideWindowIdToRefocus
+        ))
+    }
+
+    func detectLaunchedWindow(
+        token: ChromeLauncher.ChromeLaunchToken,
+        cancellationToken: ActivationCancellationToken?,
+        warningSink: @escaping (ChromeLaunchWarning) -> Void
+    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
         return result
     }
 }
@@ -460,7 +526,7 @@ final class TestLogger: ProjectWorkspacesLogging {
 /// Common test constants.
 enum TestConstants {
     static let aerospacePath = "/opt/homebrew/bin/aerospace"
-    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title}"
+    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
     static let vscodeBundleId = "com.microsoft.VSCode"
     static let vscodeAppURL = URL(fileURLWithPath: "/Applications/Visual Studio Code.app", isDirectory: true)
     static let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)
