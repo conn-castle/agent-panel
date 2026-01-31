@@ -231,6 +231,11 @@ private final class ExecutableOnlyFileSystem: FileSystem {
     func syncFile(at url: URL) throws {
         throw NSError(domain: "ExecutableOnlyFileSystem", code: 8)
     }
+
+    @discardableResult
+    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
+        throw NSError(domain: "ExecutableOnlyFileSystem", code: 9)
+    }
 }
 
 private struct AeroSpaceClientCommandCall: Equatable {

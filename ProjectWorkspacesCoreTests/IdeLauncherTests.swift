@@ -397,6 +397,11 @@ private final class IdeTestFileSystem: FileSystem {
     func syncFile(at url: URL) throws {
         throw NSError(domain: "IdeTestFileSystem", code: 5)
     }
+
+    @discardableResult
+    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
+        throw NSError(domain: "IdeTestFileSystem", code: 6)
+    }
 }
 
 private struct IdeTestAppDiscovery: AppDiscovering {

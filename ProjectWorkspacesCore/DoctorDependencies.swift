@@ -56,6 +56,15 @@ public protocol FileSystem {
     /// Flushes file contents to disk.
     /// - Parameter url: File URL to synchronize.
     func syncFile(at url: URL) throws
+
+    /// Replaces the item at the destination with the item at the source atomically.
+    /// Uses Foundation's `replaceItemAt` which handles the case where destination already exists.
+    /// - Parameters:
+    ///   - originalURL: Destination URL to replace.
+    ///   - newItemURL: Source URL containing the new content.
+    /// - Returns: The resulting URL (may differ from originalURL on some file systems).
+    @discardableResult
+    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL?
 }
 
 /// Default file system implementation backed by `FileManager`.
@@ -159,6 +168,16 @@ public struct DefaultFileSystem: FileSystem {
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         try handle.synchronize()
+    }
+
+    /// Replaces the item at the destination with the item at the source atomically.
+    /// - Parameters:
+    ///   - originalURL: Destination URL to replace.
+    ///   - newItemURL: Source URL containing the new content.
+    /// - Returns: The resulting URL (may differ from originalURL on some file systems).
+    @discardableResult
+    public func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
+        try fileManager.replaceItemAt(originalURL, withItemAt: newItemURL)
     }
 }
 

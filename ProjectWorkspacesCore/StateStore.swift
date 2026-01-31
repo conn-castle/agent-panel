@@ -107,12 +107,18 @@ final class StateStore: StateStoring {
                 return .failure(.writeFailed("Failed to encode state: \(error)"))
             }
 
-            // Write atomically: write to temp file, sync, then atomic move to prevent corruption
+            // Write atomically: write to temp file, sync, then atomic replace to prevent corruption
             let tempURL = stateURL.deletingLastPathComponent().appendingPathComponent("state.\(UUID().uuidString).tmp")
             do {
                 try fileSystem.writeFile(at: tempURL, data: data)
                 try fileSystem.syncFile(at: tempURL)
-                try fileSystem.moveItem(at: tempURL, to: stateURL)
+                if fileSystem.fileExists(at: stateURL) {
+                    // Use replaceItemAt for atomic replacement when destination exists
+                    try fileSystem.replaceItemAt(stateURL, withItemAt: tempURL)
+                } else {
+                    // Use moveItem for first-time save when destination doesn't exist
+                    try fileSystem.moveItem(at: tempURL, to: stateURL)
+                }
             } catch {
                 // Clean up the temporary file if any step fails
                 _ = try? fileSystem.removeItem(at: tempURL)

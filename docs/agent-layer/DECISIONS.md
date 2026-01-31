@@ -191,6 +191,16 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: Chrome detection happens after IDE detection, so Chrome errors surface later; adds complexity to ChromeLauncher with separate check/launch/detect methods; partially supersedes 2026-01-30 3f9c1b2 (Chrome before IDE sequential) by making launch parallel.
 
 - Decision 2026-01-31 7c2d4f1: Core/App boundary via WorkspaceManaging facade
-    Decision: App code depends on the Core `WorkspaceManaging` facade for activation and focus operations; AeroSpace focus probing and client creation live behind Core’s `WorkspaceFocusProviding`.
+    Decision: App code depends on the Core `WorkspaceManaging` facade for activation and focus operations; AeroSpace focus probing and client creation live behind Core's `WorkspaceFocusProviding`.
     Reason: Enforces a minimal, stable interface between App and Core and keeps AeroSpace details out of the UI layer.
     Tradeoffs: Adds an abstraction layer and centralizes focus behavior in Core, so UI-level tweaks must flow through Core APIs.
+
+- Decision 2026-01-31 8f3a2b: AeroSpace list-workspaces requires explicit scope flag
+    Decision: `AeroSpaceClient.listWorkspaces()` uses `--all` flag; upstream AeroSpace requires one of `--all`, `--focused`, or `--monitor` for `list-workspaces`.
+    Reason: AeroSpace CLI contract requires explicit scope; omitting the flag causes command failure.
+    Tradeoffs: Cross-monitor enumeration by default; if focused-monitor scoping is needed, add a scope parameter.
+
+- Decision 2026-01-31 9e4b3c: State file atomic replacement uses replaceItemAt
+    Decision: StateStore.save() uses `FileManager.replaceItemAt` when the destination file exists, falling back to `moveItem` for first-time saves.
+    Reason: `moveItem` fails if the destination exists; `replaceItemAt` handles atomic replacement correctly.
+    Tradeoffs: Adds a conditional path for first-time vs subsequent saves; `replaceItemAt` is the correct Foundation API for atomic replacement.

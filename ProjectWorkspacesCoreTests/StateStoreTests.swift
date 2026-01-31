@@ -67,6 +67,39 @@ final class StateStoreTests: XCTestCase {
         XCTAssertEqual(decoded, state)
     }
 
+    func testConsecutiveSavesSucceed() throws {
+        let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
+        let fileSystem = TestFileSystem()
+        let store = StateStore(paths: paths, fileSystem: fileSystem, dateProvider: FixedDateProvider())
+
+        // First save
+        let state1 = try makeState(projectId: "first-project")
+        let result1 = store.save(state1)
+        switch result1 {
+        case .success:
+            break
+        case .failure(let error):
+            XCTFail("First save failed: \(error)")
+        }
+
+        // Second save (should succeed with replaceItemAt)
+        let state2 = try makeState(projectId: "second-project")
+        let result2 = store.save(state2)
+        switch result2 {
+        case .success:
+            break
+        case .failure(let error):
+            XCTFail("Second save failed: \(error)")
+        }
+
+        // Verify the file contains the second state
+        let data = try XCTUnwrap(fileSystem.fileData(atPath: paths.stateFile.path))
+        let decoded = try JSONDecoder().decode(LayoutState.self, from: data)
+        XCTAssertEqual(decoded, state2)
+        XCTAssertNotNil(decoded.projects["second-project"])
+        XCTAssertNil(decoded.projects["first-project"])
+    }
+
     func testProjectLayoutUsesIdeAndChromeKeys() throws {
         let layout = ProjectLayout(
             ideRect: try NormalizedRect(x: 0, y: 0, width: 1, height: 1),

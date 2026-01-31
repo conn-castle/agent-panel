@@ -155,6 +155,11 @@ private struct MissingConfigFileSystem: FileSystem {
         throw missingFileError(url)
     }
 
+    @discardableResult
+    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
+        throw missingFileError(originalURL)
+    }
+
     private func missingFileError(_ url: URL) -> NSError {
         NSError(
             domain: "MissingConfigFileSystem",

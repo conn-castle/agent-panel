@@ -282,10 +282,10 @@ public struct AeroSpaceClient {
         }
     }
 
-    /// Lists all workspace names.
+    /// Lists all workspace names across all monitors.
     /// - Returns: Workspace names or a structured error.
     public func listWorkspaces() -> Result<[String], AeroSpaceCommandError> {
-        switch runCommand(arguments: ["list-workspaces"]) {
+        switch runCommand(arguments: ["list-workspaces", "--all"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):

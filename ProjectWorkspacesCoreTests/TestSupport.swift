@@ -212,6 +212,15 @@ final class TestFileSystem: FileSystem {
         }
     }
 
+    @discardableResult
+    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
+        guard let data = files.removeValue(forKey: newItemURL.path) else {
+            throw NSError(domain: "TestFileSystem", code: 5, userInfo: [NSLocalizedDescriptionKey: "Source file not found"])
+        }
+        files[originalURL.path] = data
+        return originalURL
+    }
+
     /// Adds a file to the test file system.
     func addFile(at path: String, data: Data) {
         files[path] = data
