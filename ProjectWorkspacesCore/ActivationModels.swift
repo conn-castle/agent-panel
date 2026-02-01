@@ -51,6 +51,8 @@ public enum ActivationWarning: Equatable, Sendable {
     case layoutPersistFailed(detail: String)
     case layoutObserverFailed(kind: ActivationWindowKind, windowId: Int, detail: String)
     case layoutSkipped(reason: String)
+    case workspaceNotFocused(expected: String, lastFocused: String?)
+    case workspaceFocusFailed(detail: String)
 
     /// User-friendly message describing this warning.
     public var userMessage: String {
@@ -83,6 +85,13 @@ public enum ActivationWarning: Equatable, Sendable {
             return "\(kind) layout observer failed (window \(windowId)): \(detail)"
         case .layoutSkipped(let reason):
             return "Layout skipped: \(reason)"
+        case .workspaceNotFocused(let expected, let lastFocused):
+            if let lastFocused, !lastFocused.isEmpty {
+                return "Workspace not focused (expected \(expected), last \(lastFocused))"
+            }
+            return "Workspace not focused (expected \(expected))"
+        case .workspaceFocusFailed(let detail):
+            return "Workspace focus check failed: \(detail)"
         }
     }
 }
@@ -285,6 +294,21 @@ extension ActivationWarning {
                 detail: reason,
                 fix: "Resolve the warning and retry activation."
             )
+        case .workspaceNotFocused(let expected, let lastFocused):
+            let detail = lastFocused.map { "expected=\(expected) last=\($0)" } ?? "expected=\(expected)"
+            return DoctorFinding(
+                severity: .warn,
+                title: "Workspace did not become focused",
+                detail: detail,
+                fix: "Retry activation after ensuring AeroSpace can focus the workspace."
+            )
+        case .workspaceFocusFailed(let detail):
+            return DoctorFinding(
+                severity: .warn,
+                title: "Workspace focus check failed",
+                detail: detail,
+                fix: "Retry activation after ensuring AeroSpace is running."
+            )
         }
     }
 
@@ -327,6 +351,11 @@ extension ActivationWarning {
             return "layoutObserverFailed(\(kind.rawValue)): window \(windowId), detail: \(detail)"
         case .layoutSkipped(let reason):
             return "layoutSkipped: \(reason)"
+        case .workspaceNotFocused(let expected, let lastFocused):
+            let last = lastFocused ?? "unknown"
+            return "workspaceNotFocused: expected \(expected), last \(last)"
+        case .workspaceFocusFailed(let detail):
+            return "workspaceFocusFailed: \(detail)"
         }
     }
 }

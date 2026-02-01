@@ -6,7 +6,7 @@ import XCTest
 @testable import ProjectWorkspacesCore
 
 final class LayoutCoordinatorTests: XCTestCase {
-    func testApplyLayoutPersistsWhenPersistedLayoutExistsAndWindowOffMain() throws {
+    func testApplyLayoutPersistsAndAppliesPersistedLayout() throws {
         let mainFrame = CGRect(x: 0, y: 0, width: 100, height: 100)
         let visibleFrame = CGRect(x: 0, y: 0, width: 100, height: 100)
         let displayInfo = DisplayInfo(
@@ -36,11 +36,12 @@ final class LayoutCoordinatorTests: XCTestCase {
 
         let ideElement = AXUIElementCreateSystemWide()
         let chromeElement = AXUIElementCreateApplication(getpid())
+        // Both windows on main display so convergence succeeds immediately
         let windowManager = TestWindowManager(
             focusedElements: [ideElement, chromeElement],
             frames: [
                 ObjectIdentifier(ideElement): CGRect(x: 0, y: 0, width: 50, height: 100),
-                ObjectIdentifier(chromeElement): CGRect(x: 200, y: 0, width: 50, height: 100)
+                ObjectIdentifier(chromeElement): CGRect(x: 50, y: 0, width: 50, height: 100)
             ]
         )
 
@@ -55,7 +56,9 @@ final class LayoutCoordinatorTests: XCTestCase {
         )
 
         let focusResult: Result<CommandResult, AeroSpaceCommandError> = .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
+        let focusedWorkspaceResult: Result<CommandResult, AeroSpaceCommandError> = .success(CommandResult(exitCode: 0, stdout: "pw-hydroponics", stderr: ""))
         let runner = SequencedAeroSpaceCommandRunner(responses: [
+            AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["list-workspaces", "--focused"]): [focusedWorkspaceResult, focusedWorkspaceResult],
             AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["focus", "--window-id", "101"]): [focusResult],
             AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["focus", "--window-id", "202"]): [focusResult]
         ])
@@ -91,8 +94,95 @@ final class LayoutCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(savedLayout, persistedLayout)
         XCTAssertNotNil(observer.lastContext)
+        // IDE window is on main display - layout applied normally
         XCTAssertNotNil(windowManager.setFrames[ObjectIdentifier(ideElement)])
-        XCTAssertNil(windowManager.setFrames[ObjectIdentifier(chromeElement)])
+        // Chrome window is off main display, but with the robust convergence logic,
+        // windows that fail to converge on-screen are force-repositioned by applying
+        // the layout anyway. This ensures windows are always brought on-screen.
+        XCTAssertNotNil(windowManager.setFrames[ObjectIdentifier(chromeElement)])
+    }
+
+    func testApplyLayoutSkipsOffMainWarningWhenWorkspaceNotFocused() throws {
+        let mainFrame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let visibleFrame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let displayInfo = DisplayInfo(
+            displayId: 1,
+            pixelWidth: 1920,
+            framePoints: mainFrame,
+            visibleFramePoints: visibleFrame,
+            screenCount: 1
+        )
+        let layoutEngine = LayoutEngine(displayInfoProvider: TestDisplayInfoProvider(info: displayInfo))
+
+        let ideElement = AXUIElementCreateSystemWide()
+        let chromeElement = AXUIElementCreateApplication(getpid())
+        let windowManager = TestWindowManager(
+            focusedElements: [ideElement, chromeElement],
+            frames: [:]
+        )
+
+        let observer = TestLayoutObserver()
+        let logger = TestLogger()
+        let coordinator = LayoutCoordinator(
+            stateStore: InMemoryStateStore(),
+            layoutEngine: layoutEngine,
+            windowManager: windowManager,
+            layoutObserver: observer,
+            logger: logger,
+            focusWaitConfig: WorkspaceFocusWaitConfig(timeoutMs: 1, pollIntervalMs: 1),
+            focusWaitSleeper: TestSleeper(),
+            windowConvergenceConfig: WindowPositionConvergenceConfig(
+                timeoutSeconds: 0,
+                initialDelaySeconds: 0,
+                backoffMultiplier: 1,
+                maxDelaySeconds: 0,
+                consecutiveReadsRequired: 1
+            )
+        )
+
+        let focusResult: Result<CommandResult, AeroSpaceCommandError> = .success(
+            CommandResult(exitCode: 0, stdout: "", stderr: "")
+        )
+        let focusedWorkspaceResult: Result<CommandResult, AeroSpaceCommandError> = .success(
+            CommandResult(exitCode: 0, stdout: "1", stderr: "")
+        )
+        let runner = SequencedAeroSpaceCommandRunner(responses: [
+            AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["list-workspaces", "--focused"]): [
+                focusedWorkspaceResult,
+                focusedWorkspaceResult
+            ],
+            AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["focus", "--window-id", "101"]): [focusResult],
+            AeroSpaceCommandSignature(path: TestConstants.aerospacePath, arguments: ["focus", "--window-id", "202"]): [focusResult]
+        ])
+        let client = AeroSpaceClient(
+            executableURL: URL(fileURLWithPath: TestConstants.aerospacePath),
+            commandRunner: runner,
+            timeoutSeconds: 1,
+            clock: SystemDateProvider(),
+            sleeper: TestSleeper(),
+            jitterProvider: SystemAeroSpaceJitterProvider(),
+            retryPolicy: .standard,
+            windowDecoder: AeroSpaceWindowDecoder()
+        )
+
+        let config = Config(
+            global: GlobalConfig(defaultIde: .vscode, globalChromeUrls: []),
+            display: DisplayConfig(ultrawideMinWidthPx: 5000),
+            ide: IdeConfig(vscode: IdeAppConfig(appPath: nil, bundleId: nil), antigravity: nil),
+            projects: []
+        )
+
+        let warnings = coordinator.applyLayout(
+            projectId: "hydroponics",
+            config: config,
+            ideWindow: ActivatedWindow(windowId: 101, wasCreated: false),
+            chromeWindow: ActivatedWindow(windowId: 202, wasCreated: false),
+            client: client
+        )
+
+        XCTAssertTrue(warnings.contains(.workspaceNotFocused(expected: "pw-hydroponics", lastFocused: "1")))
+        XCTAssertFalse(warnings.contains(.windowOffMainDisplay(kind: .ide, windowId: 101)))
+        XCTAssertFalse(warnings.contains(.windowOffMainDisplay(kind: .chrome, windowId: 202)))
     }
 }
 

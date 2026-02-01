@@ -7,6 +7,117 @@ struct ActivatedWindow: Equatable {
     let wasCreated: Bool
 }
 
+// MARK: - Window Position Convergence
+
+/// Result of waiting for a window's AX position to converge on-screen.
+enum WindowPositionConvergenceResult {
+    /// Window position converged to on-screen within timeout.
+    case converged(frame: CGRect)
+    /// Window position did not converge within timeout; last observed frame provided.
+    case timedOut(lastFrame: CGRect)
+    /// Failed to read window frame from AX.
+    case readFailed(error: AccessibilityWindowError)
+}
+
+/// Configuration for window position convergence waiting.
+struct WindowPositionConvergenceConfig {
+    /// Maximum time to wait for convergence (seconds).
+    let timeoutSeconds: TimeInterval
+    /// Initial delay between polls (seconds).
+    let initialDelaySeconds: TimeInterval
+    /// Multiplier for exponential backoff.
+    let backoffMultiplier: Double
+    /// Maximum delay between polls (seconds).
+    let maxDelaySeconds: TimeInterval
+    /// Number of consecutive on-screen reads required for stability.
+    let consecutiveReadsRequired: Int
+
+    /// Default configuration: 1.5s timeout, 20ms initial delay, 2x backoff, 200ms max delay, 2 consecutive reads.
+    static let `default` = WindowPositionConvergenceConfig(
+        timeoutSeconds: 1.5,
+        initialDelaySeconds: 0.02,
+        backoffMultiplier: 2.0,
+        maxDelaySeconds: 0.2,
+        consecutiveReadsRequired: 2
+    )
+}
+
+/// Configuration for waiting on the expected workspace to become focused.
+struct WorkspaceFocusWaitConfig {
+    /// Maximum time to wait for workspace focus (milliseconds).
+    let timeoutMs: Int
+    /// Poll interval for focused workspace checks (milliseconds).
+    let pollIntervalMs: Int
+
+    /// Default configuration: 2000ms timeout with 50ms polling.
+    static let `default` = WorkspaceFocusWaitConfig(
+        timeoutMs: 2000,
+        pollIntervalMs: 50
+    )
+}
+
+/// Waits for a window's AX-reported position to converge on-screen.
+///
+/// AeroSpace positions windows off-screen when they're on non-focused workspaces.
+/// After a workspace switch, there's a delay before the Accessibility API reports
+/// the window's new on-screen position. This function polls with exponential backoff
+/// until the position stabilizes on-screen or a timeout is reached.
+///
+/// - Parameters:
+///   - element: AX element for the window.
+///   - mainFramePoints: Main display frame in points (used for on-screen check).
+///   - mainDisplayHeightPoints: Main display height for coordinate conversion.
+///   - windowManager: Accessibility window manager for reading frames.
+///   - layoutEngine: Layout engine for on-screen check.
+///   - config: Convergence configuration.
+/// - Returns: Convergence result indicating success, timeout, or failure.
+func waitForWindowPositionConvergence(
+    element: AXUIElement,
+    mainFramePoints: CGRect,
+    mainDisplayHeightPoints: CGFloat,
+    windowManager: AccessibilityWindowManaging,
+    layoutEngine: LayoutEngine,
+    config: WindowPositionConvergenceConfig = .default
+) -> WindowPositionConvergenceResult {
+    let startTime = CFAbsoluteTimeGetCurrent()
+    var currentDelay = config.initialDelaySeconds
+    var consecutiveOnScreenCount = 0
+    var lastFrame: CGRect = .zero
+
+    while true {
+        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+        if elapsed >= config.timeoutSeconds {
+            return .timedOut(lastFrame: lastFrame)
+        }
+
+        let frameResult = windowManager.frame(of: element, mainDisplayHeightPoints: mainDisplayHeightPoints)
+        switch frameResult {
+        case .failure(let error):
+            return .readFailed(error: error)
+        case .success(let frame):
+            lastFrame = frame
+            let isOnScreen = layoutEngine.isFrameOnMainDisplay(frame, mainFramePoints: mainFramePoints)
+
+            if isOnScreen {
+                consecutiveOnScreenCount += 1
+                if consecutiveOnScreenCount >= config.consecutiveReadsRequired {
+                    return .converged(frame: frame)
+                }
+            } else {
+                consecutiveOnScreenCount = 0
+            }
+        }
+
+        // Calculate remaining time and sleep with backoff
+        let remainingTime = config.timeoutSeconds - (CFAbsoluteTimeGetCurrent() - startTime)
+        let sleepTime = min(currentDelay, remainingTime, config.maxDelaySeconds)
+        if sleepTime > 0 {
+            usleep(UInt32(sleepTime * 1_000_000))
+        }
+        currentDelay = min(currentDelay * config.backoffMultiplier, config.maxDelaySeconds)
+    }
+}
+
 /// Coordinates layout application and observation during activation.
 protocol LayoutCoordinating {
     /// Stops any active layout observers.
@@ -35,19 +146,28 @@ final class LayoutCoordinator: LayoutCoordinating {
     private let windowManager: AccessibilityWindowManaging
     private let layoutObserver: LayoutObserving
     private let logger: ProjectWorkspacesLogging
+    private let focusWaitConfig: WorkspaceFocusWaitConfig
+    private let focusWaitSleeper: AeroSpaceSleeping
+    private let windowConvergenceConfig: WindowPositionConvergenceConfig
 
     init(
         stateStore: StateStoring = StateStore(),
         layoutEngine: LayoutEngine = LayoutEngine(),
         windowManager: AccessibilityWindowManaging = AccessibilityWindowManager(),
         layoutObserver: LayoutObserving = LayoutObserver(),
-        logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger()
+        logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
+        focusWaitConfig: WorkspaceFocusWaitConfig = .default,
+        focusWaitSleeper: AeroSpaceSleeping = SystemAeroSpaceSleeper(),
+        windowConvergenceConfig: WindowPositionConvergenceConfig = .default
     ) {
         self.stateStore = stateStore
         self.layoutEngine = layoutEngine
         self.windowManager = windowManager
         self.layoutObserver = layoutObserver
         self.logger = logger
+        self.focusWaitConfig = focusWaitConfig
+        self.focusWaitSleeper = focusWaitSleeper
+        self.windowConvergenceConfig = windowConvergenceConfig
     }
 
     func stopObserving() {
@@ -84,6 +204,13 @@ final class LayoutCoordinator: LayoutCoordinating {
             warnings.append(.multipleDisplaysDetected(count: environment.screenCount))
         }
 
+        let workspaceName = "pw-\(projectId)"
+        let focusStatus = waitForFocusedWorkspace(
+            workspaceName: workspaceName,
+            client: client,
+            warnings: &warnings
+        )
+
         let loadResult = stateStore.load()
         var state: LayoutState
         var canPersistState = true
@@ -119,6 +246,7 @@ final class LayoutCoordinator: LayoutCoordinating {
             windowId: ideWindow.windowId,
             client: client,
             environment: environment,
+            focusStatus: focusStatus,
             warnings: &warnings
         )
         let chromeContext = resolveWindowContext(
@@ -126,16 +254,24 @@ final class LayoutCoordinator: LayoutCoordinating {
             windowId: chromeWindow.windowId,
             client: client,
             environment: environment,
+            focusStatus: focusStatus,
             warnings: &warnings
         )
 
         var ideRectToPersist: NormalizedRect?
         var chromeRectToPersist: NormalizedRect?
 
+        // Helper to check if layout should be applied to a window context.
+        // Apply if window is on main display OR requires forced repositioning.
+        func shouldApplyLayout(_ context: WindowContext?) -> Bool {
+            guard let context else { return false }
+            return context.isOnMainDisplay || context.requiresRepositioning
+        }
+
         if let persistedLayout {
             ideRectToPersist = persistedLayout.ideRect
             chromeRectToPersist = persistedLayout.chromeRect
-            if let ideContext, ideContext.isOnMainDisplay {
+            if let ideContext, shouldApplyLayout(ideContext) {
                 applyLayoutRect(
                     persistedLayout.ideRect,
                     context: ideContext,
@@ -143,7 +279,7 @@ final class LayoutCoordinator: LayoutCoordinating {
                     warnings: &warnings
                 )
             }
-            if let chromeContext, chromeContext.isOnMainDisplay {
+            if let chromeContext, shouldApplyLayout(chromeContext) {
                 applyLayoutRect(
                     persistedLayout.chromeRect,
                     context: chromeContext,
@@ -153,7 +289,7 @@ final class LayoutCoordinator: LayoutCoordinating {
             }
         } else {
             if ideWindow.wasCreated {
-                if let ideContext, ideContext.isOnMainDisplay {
+                if let ideContext, shouldApplyLayout(ideContext) {
                     applyLayoutRect(
                         defaultLayout.ideRect,
                         context: ideContext,
@@ -163,16 +299,27 @@ final class LayoutCoordinator: LayoutCoordinating {
                     ideRectToPersist = defaultLayout.ideRect
                 }
             } else if let ideContext, ideContext.isOnMainDisplay {
+                // Only normalize existing frame if window is actually on-screen
+                // (don't normalize off-screen coordinates)
                 ideRectToPersist = normalizeFrame(
                     ideContext.frame,
                     visibleFrame: environment.visibleFramePoints,
                     windowId: ideContext.windowId,
                     warnings: &warnings
                 )
+            } else if let ideContext, ideContext.requiresRepositioning {
+                // Window needs repositioning - apply default layout and persist that
+                applyLayoutRect(
+                    defaultLayout.ideRect,
+                    context: ideContext,
+                    environment: environment,
+                    warnings: &warnings
+                )
+                ideRectToPersist = defaultLayout.ideRect
             }
 
             if chromeWindow.wasCreated {
-                if let chromeContext, chromeContext.isOnMainDisplay {
+                if let chromeContext, shouldApplyLayout(chromeContext) {
                     applyLayoutRect(
                         defaultLayout.chromeRect,
                         context: chromeContext,
@@ -182,12 +329,22 @@ final class LayoutCoordinator: LayoutCoordinating {
                     chromeRectToPersist = defaultLayout.chromeRect
                 }
             } else if let chromeContext, chromeContext.isOnMainDisplay {
+                // Only normalize existing frame if window is actually on-screen
                 chromeRectToPersist = normalizeFrame(
                     chromeContext.frame,
                     visibleFrame: environment.visibleFramePoints,
                     windowId: chromeContext.windowId,
                     warnings: &warnings
                 )
+            } else if let chromeContext, chromeContext.requiresRepositioning {
+                // Window needs repositioning - apply default layout and persist that
+                applyLayoutRect(
+                    defaultLayout.chromeRect,
+                    context: chromeContext,
+                    environment: environment,
+                    warnings: &warnings
+                )
+                chromeRectToPersist = defaultLayout.chromeRect
             }
         }
 
@@ -236,8 +393,10 @@ final class LayoutCoordinator: LayoutCoordinating {
         windowId: Int,
         client: AeroSpaceClient,
         environment: LayoutEnvironment,
+        focusStatus: WorkspaceFocusStatus,
         warnings: inout [ActivationWarning]
     ) -> WindowContext? {
+        // Step 1: Focus the window via AeroSpace.
         switch client.focusWindow(windowId: windowId) {
         case .failure(let error):
             warnings.append(.layoutApplyFailed(kind: kind, windowId: windowId, detail: "Focus failed: \(error)"))
@@ -246,7 +405,7 @@ final class LayoutCoordinator: LayoutCoordinating {
             break
         }
 
-        // Get the accessibility element directly by window ID instead of waiting for the focus attribute to update.
+        // Step 2: Get the accessibility element directly by window ID.
         // This avoids the race condition where the system's focused window attribute lags behind AeroSpace focus changes.
         let elementResult = windowManager.element(for: windowId)
         guard case .success(let element) = elementResult else {
@@ -256,17 +415,62 @@ final class LayoutCoordinator: LayoutCoordinating {
             return nil
         }
 
-        let frameResult = windowManager.frame(of: element, mainDisplayHeightPoints: environment.mainDisplayHeightPoints)
-        guard case .success(let frame) = frameResult else {
-            if case .failure(let error) = frameResult {
-                warnings.append(.layoutApplyFailed(kind: kind, windowId: windowId, detail: "Frame read failed: \(error)"))
-            }
-            return nil
-        }
+        let frame: CGRect
+        let isOnMainDisplay: Bool
+        let requiresRepositioning: Bool
 
-        let isOnMain = layoutEngine.isFrameOnMainDisplay(frame, mainFramePoints: environment.mainFramePoints)
-        if !isOnMain {
-            warnings.append(.windowOffMainDisplay(kind: kind, windowId: windowId))
+        if focusStatus.isFocused {
+            // Step 3: Wait for window position to converge on-screen.
+            // AeroSpace positions windows off-screen when they're on non-focused workspaces.
+            // After a workspace switch, the AX coordinates may lag behind the actual repositioning.
+            // We use timeout-based polling with exponential backoff and require consecutive on-screen
+            // reads for stability.
+            let convergenceResult = waitForWindowPositionConvergence(
+                element: element,
+                mainFramePoints: environment.mainFramePoints,
+                mainDisplayHeightPoints: environment.mainDisplayHeightPoints,
+                windowManager: windowManager,
+                layoutEngine: layoutEngine,
+                config: windowConvergenceConfig
+            )
+
+            switch convergenceResult {
+            case .converged(let convergedFrame):
+                // Window position converged on-screen within timeout
+                frame = convergedFrame
+                isOnMainDisplay = true
+                requiresRepositioning = false
+
+            case .timedOut(let lastFrame):
+                // Window did not converge within timeout - treat as needing forced repositioning.
+                // This could be AX lag exceeding our timeout, or a genuinely off-screen window.
+                // Either way, we'll force-reposition it to bring it on-screen.
+                frame = lastFrame
+                isOnMainDisplay = false
+                requiresRepositioning = true
+                warnings.append(.windowOffMainDisplay(kind: kind, windowId: windowId))
+
+            case .readFailed(let error):
+                // Failed to read frame from AX - cannot proceed
+                warnings.append(.layoutApplyFailed(kind: kind, windowId: windowId, detail: "Frame read failed: \(error)"))
+                return nil
+            }
+        } else {
+            // Workspace is not focused; skip AX frame reads and reposition deterministically.
+            frame = .zero
+            isOnMainDisplay = false
+            requiresRepositioning = true
+            _ = logger.log(
+                event: "layout.window.hidden",
+                level: .info,
+                message: "Skipping AX convergence because workspace is not focused.",
+                context: [
+                    "kind": kind.rawValue,
+                    "window_id": "\(windowId)",
+                    "workspace_expected": focusStatus.expectedWorkspace,
+                    "workspace_last_focused": focusStatus.lastFocusedWorkspace ?? "unknown"
+                ]
+            )
         }
 
         return WindowContext(
@@ -274,8 +478,69 @@ final class LayoutCoordinator: LayoutCoordinating {
             windowId: windowId,
             element: element,
             frame: frame,
-            isOnMainDisplay: isOnMain
+            isOnMainDisplay: isOnMainDisplay,
+            requiresRepositioning: requiresRepositioning
         )
+    }
+
+    /// Outcome of waiting for the expected workspace to become focused.
+    private struct WorkspaceFocusStatus {
+        let expectedWorkspace: String
+        let lastFocusedWorkspace: String?
+        let isFocused: Bool
+    }
+
+    /// Waits for the expected workspace to become focused before proceeding with AX checks.
+    /// - Parameters:
+    ///   - workspaceName: Expected workspace name (e.g., pw-<projectId>).
+    ///   - client: AeroSpace client used to query focus.
+    ///   - warnings: Accumulates non-fatal activation warnings.
+    /// - Returns: Focus status used to gate off-screen warnings.
+    private func waitForFocusedWorkspace(
+        workspaceName: String,
+        client: AeroSpaceClient,
+        warnings: inout [ActivationWarning]
+    ) -> WorkspaceFocusStatus {
+        var lastFocused: String? = nil
+        let outcome: PollOutcome<Void, AeroSpaceCommandError> = Poller.poll(
+            intervalMs: focusWaitConfig.pollIntervalMs,
+            timeoutMs: focusWaitConfig.timeoutMs,
+            sleeper: focusWaitSleeper
+        ) {
+            switch client.focusedWorkspace() {
+            case .success(let focused):
+                lastFocused = focused
+                return focused == workspaceName ? .success(()) : .keepWaiting
+            case .failure(let error):
+                if WindowDetectionRetryPolicy.shouldRetryPoll(error) {
+                    return .keepWaiting
+                }
+                return .failure(error)
+            }
+        }
+
+        switch outcome {
+        case .success:
+            return WorkspaceFocusStatus(
+                expectedWorkspace: workspaceName,
+                lastFocusedWorkspace: lastFocused ?? workspaceName,
+                isFocused: true
+            )
+        case .timedOut:
+            warnings.append(.workspaceNotFocused(expected: workspaceName, lastFocused: lastFocused))
+            return WorkspaceFocusStatus(
+                expectedWorkspace: workspaceName,
+                lastFocusedWorkspace: lastFocused,
+                isFocused: false
+            )
+        case .failure(let error):
+            warnings.append(.workspaceFocusFailed(detail: "\(error)"))
+            return WorkspaceFocusStatus(
+                expectedWorkspace: workspaceName,
+                lastFocusedWorkspace: lastFocused,
+                isFocused: false
+            )
+        }
     }
 
     private func applyLayoutRect(
@@ -284,7 +549,11 @@ final class LayoutCoordinator: LayoutCoordinating {
         environment: LayoutEnvironment,
         warnings: inout [ActivationWarning]
     ) {
-        guard context.isOnMainDisplay else { return }
+        // Apply layout if:
+        // 1. Window is on main display (normal case), OR
+        // 2. Window requires repositioning (force-recenter after timeout)
+        guard context.isOnMainDisplay || context.requiresRepositioning else { return }
+
         let frame = denormalize(rect, in: environment.visibleFramePoints)
         let result = windowManager.setFrame(
             frame,
@@ -319,4 +588,6 @@ private struct WindowContext {
     let element: AXUIElement
     let frame: CGRect
     let isOnMainDisplay: Bool
+    /// True if the window was off-screen after AX convergence timeout and needs forced repositioning.
+    let requiresRepositioning: Bool
 }

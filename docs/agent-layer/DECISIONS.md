@@ -204,3 +204,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: StateStore.save() uses `FileManager.replaceItemAt` when the destination file exists, falling back to `moveItem` for first-time saves.
     Reason: `moveItem` fails if the destination exists; `replaceItemAt` handles atomic replacement correctly.
     Tradeoffs: Adds a conditional path for first-time vs subsequent saves; `replaceItemAt` is the correct Foundation API for atomic replacement.
+
+- Decision 2026-01-31 5c0d7a1: Layout waits for focused workspace before AX convergence
+    Decision: LayoutCoordinator waits up to 2s for the expected workspace to become focused before reading AX geometry; if focus does not settle, it skips AX convergence, applies layout deterministically, and suppresses off-main-display warnings.
+    Reason: AeroSpace hides inactive workspace windows off-screen; waiting for focus avoids false off-screen warnings and reduces layout churn.
+    Tradeoffs: Adds a short focus wait and new warnings when focus does not settle; layout may proceed without AX frame reads in that case.

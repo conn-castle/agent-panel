@@ -179,22 +179,39 @@ final class LayoutObserver: LayoutObserving {
             windowId = context.chromeWindowId
         }
 
-        let frameResult = windowManager.frame(
-            of: element,
-            mainDisplayHeightPoints: context.environment.mainDisplayHeightPoints
+        // Wait for window position to converge on-screen with timeout and backoff.
+        // After workspace switches, AX coordinates may lag behind actual repositioning.
+        // Use shorter timeout for observer (triggered by user interactions) than for initial layout.
+        let observerConfig = WindowPositionConvergenceConfig(
+            timeoutSeconds: 0.5,  // Shorter timeout for observer - user is interacting
+            initialDelaySeconds: 0.02,
+            backoffMultiplier: 2.0,
+            maxDelaySeconds: 0.1,
+            consecutiveReadsRequired: 2
         )
-        guard case .success(let frame) = frameResult else {
-            if case .failure(let error) = frameResult {
-                session.warningSink(.layoutPersistFailed(detail: "Failed to read frame for window \(windowId): \(error)"))
-            }
-            return
-        }
 
-        if !layoutEngine.isFrameOnMainDisplay(frame, mainFramePoints: context.environment.mainFramePoints) {
+        let convergenceResult = waitForWindowPositionConvergence(
+            element: element,
+            mainFramePoints: context.environment.mainFramePoints,
+            mainDisplayHeightPoints: context.environment.mainDisplayHeightPoints,
+            windowManager: windowManager,
+            layoutEngine: layoutEngine,
+            config: observerConfig
+        )
+
+        let frame: CGRect
+        switch convergenceResult {
+        case .converged(let convergedFrame):
+            frame = convergedFrame
+        case .timedOut:
+            // Window still off-screen after timeout - don't persist off-screen coordinates
             if !session.warnedOffMain.contains(kind) {
                 session.warnedOffMain.insert(kind)
                 session.warningSink(.windowOffMainDisplay(kind: kind, windowId: windowId))
             }
+            return
+        case .readFailed(let error):
+            session.warningSink(.layoutPersistFailed(detail: "Failed to read frame for window \(windowId): \(error)"))
             return
         }
 
