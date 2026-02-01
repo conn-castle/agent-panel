@@ -24,7 +24,7 @@ public protocol WorkspaceManaging {
     ///   - switchWorkspace: Whether to switch to the project workspace during activation.
     ///   - progress: Optional progress sink for activation milestones.
     ///   - cancellationToken: Optional token used to cancel activation.
-    /// - Returns: Activation outcome with warnings or failure.
+    /// - Returns: Activation outcome or failure.
     func activate(
         projectId: String,
         focusIdeWindow: Bool,
@@ -59,15 +59,24 @@ public struct DefaultWorkspaceManager: WorkspaceManaging {
 
     /// Creates the default workspace manager.
     /// - Parameters:
+    ///   - screenMetricsProvider: Provider for visible screen width.
     ///   - activationService: Activation service implementation.
     ///   - logger: Logger used for focus provider diagnostics.
     ///   - focusTimeoutSeconds: Timeout for focus provider commands.
     public init(
-        activationService: ActivationService = ActivationService(),
+        screenMetricsProvider: ScreenMetricsProviding,
+        activationService: ActivationService? = nil,
         logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
         focusTimeoutSeconds: TimeInterval = 2
     ) {
-        self.activationService = activationService
+        if let activationService {
+            self.activationService = activationService
+        } else {
+            self.activationService = ActivationService(
+                screenMetricsProvider: screenMetricsProvider,
+                logger: logger
+            )
+        }
         self.focusProvider = AeroSpaceWorkspaceFocusProvider(
             logger: logger,
             timeoutSeconds: focusTimeoutSeconds
@@ -159,7 +168,7 @@ private final class AeroSpaceWorkspaceFocusProvider: WorkspaceFocusProviding {
             }
         }
         if let workspaceName = snapshot.workspaceName {
-            _ = client.switchWorkspace(workspaceName)
+            _ = client.summonWorkspace(workspaceName)
         }
     }
 
@@ -188,7 +197,7 @@ private final class AeroSpaceWorkspaceFocusProvider: WorkspaceFocusProviding {
             }
             let client = try AeroSpaceClient(
                 resolver: DefaultAeroSpaceBinaryResolver(),
-                commandRunner: DefaultAeroSpaceCommandRunner(),
+                commandRunner: AeroSpaceCommandExecutor.shared,
                 timeoutSeconds: timeoutSeconds
             )
             cachedClient = client

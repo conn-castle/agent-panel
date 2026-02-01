@@ -18,7 +18,8 @@ final class PwctlServiceTests: XCTestCase {
 
         let service = PwctlService(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-            fileSystem: fileSystem
+            fileSystem: fileSystem,
+            screenMetricsProvider: TestScreenMetricsProvider(widthsByIndex: [1: 1200])
         )
 
         switch service.listProjects() {
@@ -36,7 +37,8 @@ final class PwctlServiceTests: XCTestCase {
         let fileSystem = TestFileSystem(files: [:])
         let service = PwctlService(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-            fileSystem: fileSystem
+            fileSystem: fileSystem,
+            screenMetricsProvider: TestScreenMetricsProvider(widthsByIndex: [1: 1200])
         )
 
         switch service.listProjects() {
@@ -62,7 +64,8 @@ final class PwctlServiceTests: XCTestCase {
 
         let service = PwctlService(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-            fileSystem: fileSystem
+            fileSystem: fileSystem,
+            screenMetricsProvider: TestScreenMetricsProvider(widthsByIndex: [1: 1200])
         )
 
         switch service.listProjects() {
@@ -86,7 +89,8 @@ final class PwctlServiceTests: XCTestCase {
 
         let service = PwctlService(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-            fileSystem: fileSystem
+            fileSystem: fileSystem,
+            screenMetricsProvider: TestScreenMetricsProvider(widthsByIndex: [1: 1200])
         )
 
         switch service.tailLogs(lines: 2) {
@@ -102,7 +106,8 @@ final class PwctlServiceTests: XCTestCase {
         let fileSystem = TestFileSystem(files: [:])
         let service = PwctlService(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
-            fileSystem: fileSystem
+            fileSystem: fileSystem,
+            screenMetricsProvider: TestScreenMetricsProvider(widthsByIndex: [1: 1200])
         )
 
         switch service.tailLogs(lines: 5) {

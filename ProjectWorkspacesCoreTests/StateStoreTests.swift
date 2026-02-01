@@ -17,7 +17,7 @@ final class StateStoreTests: XCTestCase {
     func testLoadReturnsDecodedState() throws {
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let fileSystem = TestFileSystem()
-        let state = try makeState(projectId: "hydroponics")
+        let state = makeState(projectId: "hydroponics")
         let data = try JSONEncoder().encode(state)
         fileSystem.addFile(at: paths.stateFile.path, data: data)
 
@@ -53,7 +53,7 @@ final class StateStoreTests: XCTestCase {
         let paths = ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true))
         let fileSystem = TestFileSystem()
         let store = StateStore(paths: paths, fileSystem: fileSystem, dateProvider: FixedDateProvider())
-        let state = try makeState(projectId: "hydroponics")
+        let state = makeState(projectId: "hydroponics")
 
         let result = store.save(state)
         switch result {
@@ -63,7 +63,7 @@ final class StateStoreTests: XCTestCase {
             XCTFail("Expected success, got failure: \(error)")
         }
         let data = try XCTUnwrap(fileSystem.fileData(atPath: paths.stateFile.path))
-        let decoded = try JSONDecoder().decode(LayoutState.self, from: data)
+        let decoded = try JSONDecoder().decode(BindingState.self, from: data)
         XCTAssertEqual(decoded, state)
     }
 
@@ -72,8 +72,7 @@ final class StateStoreTests: XCTestCase {
         let fileSystem = TestFileSystem()
         let store = StateStore(paths: paths, fileSystem: fileSystem, dateProvider: FixedDateProvider())
 
-        // First save
-        let state1 = try makeState(projectId: "first-project")
+        let state1 = makeState(projectId: "first-project")
         let result1 = store.save(state1)
         switch result1 {
         case .success:
@@ -82,8 +81,7 @@ final class StateStoreTests: XCTestCase {
             XCTFail("First save failed: \(error)")
         }
 
-        // Second save (should succeed with replaceItemAt)
-        let state2 = try makeState(projectId: "second-project")
+        let state2 = makeState(projectId: "second-project")
         let result2 = store.save(state2)
         switch result2 {
         case .success:
@@ -92,49 +90,30 @@ final class StateStoreTests: XCTestCase {
             XCTFail("Second save failed: \(error)")
         }
 
-        // Verify the file contains the second state
         let data = try XCTUnwrap(fileSystem.fileData(atPath: paths.stateFile.path))
-        let decoded = try JSONDecoder().decode(LayoutState.self, from: data)
+        let decoded = try JSONDecoder().decode(BindingState.self, from: data)
         XCTAssertEqual(decoded, state2)
         XCTAssertNotNil(decoded.projects["second-project"])
         XCTAssertNil(decoded.projects["first-project"])
     }
 
-    func testProjectLayoutUsesIdeAndChromeKeys() throws {
-        let layout = ProjectLayout(
-            ideRect: try NormalizedRect(x: 0, y: 0, width: 1, height: 1),
-            chromeRect: try NormalizedRect(x: 0, y: 0, width: 1, height: 1)
+    private func makeState(projectId: String) -> BindingState {
+        let ideBinding = WindowBinding(
+            windowId: 101,
+            appBundleId: TestConstants.vscodeBundleId,
+            role: .ide,
+            titleAtBindTime: "PW:\(projectId)"
         )
-
-        let data = try JSONEncoder().encode(layout)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-
-        XCTAssertNotNil(json["ide"])
-        XCTAssertNotNil(json["chrome"])
-        XCTAssertNil(json["ideRect"])
-        XCTAssertNil(json["chromeRect"])
-    }
-
-    private func makeState(projectId: String) throws -> LayoutState {
-        let ideRect = try NormalizedRect(x: 0, y: 0, width: 0.5, height: 1)
-        let chromeRect = try NormalizedRect(x: 0.5, y: 0, width: 0.5, height: 1)
-        let layout = ProjectLayout(ideRect: ideRect, chromeRect: chromeRect)
-        let projectState = ProjectState(
-            managed: ManagedWindowState(ideWindowId: 101, chromeWindowId: 202),
-            layouts: LayoutsByDisplayMode(laptop: layout, ultrawide: nil)
+        let chromeBinding = WindowBinding(
+            windowId: 202,
+            appBundleId: ChromeApp.bundleId,
+            role: .chrome,
+            titleAtBindTime: "PW:\(projectId)"
         )
-        return LayoutState(projects: [projectId: projectState])
-    }
-}
-
-private struct FixedDateProvider: DateProviding {
-    let date: Date
-
-    init(date: Date = Date(timeIntervalSince1970: 0)) {
-        self.date = date
-    }
-
-    func now() -> Date {
-        date
+        let projectState = ProjectBindings(
+            ideBindings: [ideBinding],
+            chromeBindings: [chromeBinding]
+        )
+        return BindingState(projects: [projectId: projectState])
     }
 }

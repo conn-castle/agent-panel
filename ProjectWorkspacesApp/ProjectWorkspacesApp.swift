@@ -234,7 +234,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates a Doctor instance with the current hotkey status provider.
     private func makeDoctor() -> Doctor {
-        Doctor(hotkeyStatusProvider: hotkeyManager)
+        Doctor(
+            accessibilityChecker: AppKitAccessibilityChecker(),
+            runningApplicationChecker: AppKitRunningApplicationChecker(),
+            hotkeyStatusProvider: hotkeyManager
+        )
     }
 
     /// Runs Doctor and presents the report in a modal-style panel.

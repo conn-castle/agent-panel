@@ -9,15 +9,21 @@ It creates and manages a lightweight "virtual workspace" per project using **Aer
 ProjectWorkspaces implements two primary actions:
 
 1) **Activate Project**
-   - Switch to the project’s AeroSpace workspace (`pw-<projectId>`)
-   - Start Chrome launch if missing (tokened window name); ensure IDE window exists and is detected first, then detect Chrome
-   - Window detection is token-only; workspace scan + focused-window recovery, with a last-resort all-workspaces scan for Chrome on timeout
-   - Apply the project’s saved layout for the current display mode
+   - Summon the project’s AeroSpace workspace (`pw-<projectId>`)
+   - Confirm the focused workspace via `list-workspaces --focused`
+   - Load the project’s window bindings (one IDE, one Chrome)
+     - Stale bindings are pruned when the window id is missing or mismatched
+     - If a role has no binding, activation opens a new window and binds it
+   - Move **only bound windows** to the project workspace (unbound windows are untouched)
+   - If no bound windows were already on the workspace, reset layout (flatten, balance, `h_tiles`) and resize IDE to a deterministic width
    - End with the IDE focused (Chrome must not steal focus)
+   - Activation fails if workspace focus cannot be confirmed or a required window cannot be opened/detected
 
 2) **Close Project**
    - Close **every window** in the project’s AeroSpace workspace (i.e., empty the workspace)
    - If a window belongs to an app configured as “show on all desktops,” closing it may close it globally; this is acceptable.
+
+Activation is CLI-only; it never uses Accessibility geometry or on-screen checks.
 
 The app is designed to be reliable on a fresh machine with explicit setup steps and a `doctor` command.
 
@@ -26,8 +32,10 @@ The app is designed to be reliable on a fresh machine with explicit setup steps 
 When you work on multiple active projects, window sprawl creates disorientation and slows context switching.
 This tool enforces a consistent “project workspace” shape:
 
-- 1 IDE window (VS Code or Antigravity)
-- 1 dedicated Chrome window
+- 1 managed IDE window (VS Code or Antigravity)
+- 1 managed Chrome window
+
+Additional IDE/Chrome windows can exist, but they are **unmanaged** unless explicitly bound and are never moved or resized by activation.
 
 and provides a keyboard-first switcher that brings you to the right context quickly.
 
@@ -36,7 +44,7 @@ and provides a keyboard-first switcher that brings you to the right context quic
 - No macOS Spaces pinning. AeroSpace workspaces are the only container.
 - No Chrome pinned tabs and no Chrome extension.
 - No enforced Chrome profile isolation.
-- No multi-monitor orchestration; ProjectWorkspaces uses the main display only and warns when multiple displays are present.
+- No multi-monitor orchestration; activation targets the focused monitor for workspace focus and sizing, and it does not manage unbound windows across displays.
 
 ## User workflow
 
@@ -52,25 +60,21 @@ and provides a keyboard-first switcher that brings you to the right context quic
 
 ### Day-to-day
 
-- If you close the IDE or Chrome window, the next Activate recreates it.
-- If you resize windows, the layout is saved and restored for that project in that display mode.
+- If a bound IDE or Chrome window is closed, activation opens a new window and binds it.
+- Activation only reapplies the canonical layout when the workspace is newly opened (no bound windows present); otherwise your existing layout is preserved.
 
-## Display modes and layouts
+## Canonical layout
 
-The app supports exactly two display modes:
+When activation opens a workspace with no bound windows present, it resets the layout and applies a deterministic split:
 
-1) **Laptop mode**
-   - Both IDE and Chrome are “maximized” (not macOS fullscreen)
-   - IDE ends focused
+- `flatten-workspace-tree` then `balance-sizes`
+- `layout h_tiles` anchored on the IDE window
+- IDE width is 60% of the focused monitor’s visible width
+  - min IDE 800, min Chrome 500
+  - if the screen is too narrow, use 55% of visible width
+- IDE ends focused
 
-2) **Ultrawide mode** (5120×1440)
-   - The screen is split into 8 equal vertical segments:
-     - segments 0–1: empty
-     - segments 2–4: IDE
-     - segments 5–7: Chrome
-   - IDE ends focused
-
-Layouts are persisted **per project per display mode**.
+If the workspace already contains bound windows, activation keeps the current layout and sizes.
 
 ## Installation
 
@@ -159,8 +163,8 @@ If the safe config was installed by ProjectWorkspaces, Doctor offers **Uninstall
 ### Paths
 
 - Config: `~/.config/project-workspaces/config.toml`
-- Generated VS Code workspace files: `~/.local/state/project-workspaces/vscode/*.code-workspace`
-- State: `~/.local/state/project-workspaces/state.json`
+- Logs (active): `~/.local/state/project-workspaces/logs/workspaces.log`
+- Logs (rotated): `~/.local/state/project-workspaces/logs/workspaces.log.1` … `workspaces.log.5`
 
 ### Config schema (locked)
 
@@ -171,17 +175,7 @@ Switcher hotkey is fixed to ⌘⇧Space and is not configurable. If `global.swit
 ```toml
 [global]
 defaultIde = "vscode"                 # optional; default "vscode" ("vscode" | "antigravity")
-
-# Tabs opened only when a project Chrome window is created
-globalChromeUrls = [
-  "https://chatgpt.com/",
-  "https://gemini.google.com/",
-  "https://claude.ai/",
-  "https://todoist.com/app"
-]
-
-[display]
-ultrawideMinWidthPx = 5000            # optional; default 5000
+globalChromeUrls = []                 # optional; URLs opened when a new project Chrome window is created
 
 [ide.vscode]
 appPath = "/Applications/Visual Studio Code.app"  # optional; omit to auto-discover via Launch Services
@@ -196,25 +190,22 @@ id = "codex"
 name = "Codex"
 path = "/Users/nick/src/codex"
 colorHex = "#7C3AED"
-repoUrl = "https://github.com/ORG/REPO"  # optional
 
 # optional per-project override; defaults to global.defaultIde (Doctor WARN when omitted)
 ide = "vscode"
 
-# IDE launching
-ideUseAgentLayerLauncher = true           # optional; default true
-ideCommand = ""                           # optional; default ""
+# optional; URLs opened when a new Chrome window is created for this project
+chromeUrls = []
 
-# Additional Chrome tabs (only used when Chrome window is created)
-chromeUrls = []                           # optional; default []
-chromeProfileDirectory = "Profile 2"      # optional; Chrome profile directory (see `pwctl doctor`)
+# optional; Chrome profile directory to use when opening a new Chrome window
+chromeProfileDirectory = "Profile 2"
 ```
 
 ### Defaults and doctor severity (locked)
 
 Defaults are required so the tool is easy to configure on a fresh machine. Only structural/safety-critical omissions are Doctor FAIL; everything else uses a deterministic default and is surfaced as Doctor WARN/OK.
 
-Config parsing tolerates unknown keys (at minimum: `global.switcherHotkey`) so Doctor can WARN and ignore removed/unsupported keys.
+Config parsing tolerates unknown keys (for example: `global.switcherHotkey`, `display.*`) so Doctor can WARN and ignore removed/unsupported keys.
 
 Doctor FAIL if missing/invalid:
 - Config file missing or TOML parse error
@@ -224,7 +215,7 @@ Doctor FAIL if missing/invalid:
 - AeroSpace config missing (no config in either supported location)
 - AeroSpace config is ambiguous (found in more than one location)
 - Required apps not discoverable for the effective IDE selection(s) or Chrome (using Launch Services discovery if config values are omitted)
-- Accessibility permission not granted (required for layout)
+- Accessibility permission not granted
 - Unable to register the global hotkey ⌘⇧Space (conflict / OS denial); if the agent app is running, Doctor uses the app-reported hotkey status when available, otherwise it skips this check and reports PASS with a note.
 
 Doctor WARN if present:
@@ -236,12 +227,8 @@ Defaults (applied if keys are missing):
 | ---------------------------------- | --------------------------- | ---------------------------- |
 | `global.defaultIde`                | `"vscode"`                  | WARN                         |
 | `global.globalChromeUrls`          | `[]`                        | WARN                         |
-| `display.ultrawideMinWidthPx`      | `5000`                      | WARN                         |
 | `project.ide`                      | inherit `global.defaultIde` | WARN                         |
-| `project.chromeUrls`               | `[]`                        | OK                           |
-| `project.chromeProfileDirectory`   | unset                       | OK                           |
-| `project.ideUseAgentLayerLauncher` | `true`                      | OK                           |
-| `project.ideCommand`               | `""`                        | OK                           |
+| `project.chromeUrls`               | `[]`                        | WARN                         |
 
 ### Workspace naming (locked)
 
@@ -256,83 +243,15 @@ Defaults (applied if keys are missing):
 - Visual Studio Code (default)
 - Antigravity (VS Code fork)
 
-### How IDE launching works (deterministic)
+### IDE resolution (CLI-only activation)
 
-For each project, the app generates a centralized VS Code workspace file:
-
-- `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`
-
-This file:
-
-- opens the repo folder
-- applies project visual identity via `workbench.colorCustomizations` (title/status/activity bars)
-- sets `window.title` to include a deterministic token (`PW:<projectId>`) for window identification
-
-Launch priority (no ambiguity):
-
-1) If `project.ideCommand` is non-empty: run it in the project root via `/bin/zsh -lc`.
-2) Else if `project.ideUseAgentLayerLauncher=true` and `<repo>/.agent-layer/open-vscode.command` exists: run that script.
-3) Else open the effective IDE:
-   - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
-   - Antigravity: `open -a <Antigravity.appPath> <generatedWorkspaceFile>`
-
-If step 1 or 2 exits non-zero, the app logs WARN and falls back to the same “open” command for the effective IDE. If the fallback open fails, activation fails with an actionable error.
-
-`ideCommand`/launcher environment (always exported):
-
-- `PW_PROJECT_ID`
-- `PW_PROJECT_NAME`
-- `PW_PROJECT_PATH`
-- `PW_WORKSPACE_FILE`
-- `PW_REPO_URL`
-- `PW_COLOR_HEX`
-- `PW_IDE` (`vscode` or `antigravity`)
-- `OPEN_VSCODE_NO_CLOSE=1`
-- `PW_VSCODE_CONFIG_APP_PATH` (if configured)
-- `PW_VSCODE_CONFIG_BUNDLE_ID` (if configured)
-
-#### Ensuring the workspace file (and colors) take effect
-
-Custom launch scripts may open VS Code with the folder path, not the `.code-workspace`. To make project colors deterministic, after any VS Code launch the app runs VS Code CLI in reuse mode against the generated workspace file.
-
-To avoid relying on the user having installed `code` into PATH, the app installs and uses a tool-owned `code` shim:
-
-- Shim path: `~/.local/share/project-workspaces/bin/code`
-- The shim invokes VS Code’s bundled CLI inside the VS Code app bundle.
-
-When the app runs any `ideCommand` or agent-layer launcher it prepends this shim directory to PATH.
+Activation resolves the IDE identity (bundle id + app name) using config and Launch Services. It uses the project’s bound IDE window if present. If no bound IDE window exists (or the binding is stale), activation launches a new IDE window and binds it. Unbound IDE windows are never moved or resized.
 
 ## Chrome handling
 
-### One Chrome window per project (enforced by deterministic token)
+### Chrome resolution (CLI-only activation)
 
-The “project Chrome window” is the Chrome window whose title contains the token `PW:<projectId>` followed by a non-word character or end of string. ProjectWorkspaces launches Chrome with a deterministic window name (and optional profile directory).
-ProjectWorkspaces enumerates `pw-<projectId>` first. If the window was just launched and doesn’t appear there, it uses focused-window recovery to capture the new Chrome window and move it into the workspace. If that still fails before timeout, it performs a last-resort, token-only scan across all workspaces to locate the new Chrome window.
-If multiple tokened Chrome windows are found in the workspace, activation warns and chooses the lowest window id deterministically.
-
-### Tab seeding (creation-only)
-
-Tabs are opened **only when the project Chrome window is created/recreated**:
-
-1) `global.globalChromeUrls`
-2) `project.repoUrl` (if set)
-3) `project.chromeUrls`
-
-Duplicate URLs are deduped by exact string match, preserving first occurrence order.
-
-If the computed URL list is empty, ProjectWorkspaces opens a single `about:blank` tab to make window creation deterministic.
-
-If the Chrome window already exists, the app does not modify tabs.
-
-### Chrome profile selection (optional)
-
-If you set `project.chromeProfileDirectory`, ProjectWorkspaces launches Chrome with:
-
-```
-open -na "Google Chrome" --args --new-window --window-name="PW:<projectId>" --profile-directory="<profileDir>"
-```
-
-Use `pwctl doctor` to list available Chrome profile directory names from Chrome's Local State file.
+Activation uses the project’s bound Chrome window if present. If no bound Chrome window exists (or the binding is stale), activation opens a new Chrome window and binds it. Optional `global.globalChromeUrls` and `project.chromeUrls` are opened only when a new window is created. Unbound Chrome windows are never moved or resized.
 
 ### Focus behavior
 
@@ -348,7 +267,7 @@ Important note: if you keep a window “show on all desktops” (e.g., Messages)
 
 ## Security and permissions
 
-- Accessibility permission is required for window geometry control.
+- Accessibility permission is required by Doctor checks.
 - No SIP disabling is required or allowed.
 - Running `pwctl doctor` will prompt for Accessibility permission if it is missing.
 
@@ -381,18 +300,19 @@ Exit codes:
 - Closing the active project switches to `pw-inbox`.
 - `pw-inbox` is hard-coded and reserved; `projectId="inbox"` is invalid.
 
+### CLI compatibility gate
+
+- Activation verifies required AeroSpace commands (`list-workspaces --focused`, `list-windows --all --json`, `focus --help`, `move-node-to-workspace --help`, `summon-workspace --help`). If any fail, activation stops with a compatibility error.
+
 ### Chrome tabs
 
-- Tabs are seeded only when the project Chrome window is created.
-- Existing Chrome windows are not mutated.
+- Activation only opens URLs when it creates a **new** Chrome window; existing Chrome windows/tabs are not mutated.
 
 ### Multi-display behavior
 
-- Primary supported use case is one display at a time.
-- If multiple displays are detected, the app must:
-  1) warn once that ProjectWorkspaces uses the main display only,
-  2) apply/persist layouts only for windows already on the main display,
-  3) skip layout for off-main windows without attempting cross-display moves.
+- Activation targets the focused monitor for workspace focus and sizing.
+- Bound windows can originate on any monitor; they are moved to the project workspace.
+- Unbound windows on other monitors are untouched.
 
 ## Logging
 
@@ -419,16 +339,10 @@ Exit codes:
 
 - Run `pwctl doctor` and fix any FAIL items.
 - Confirm AeroSpace is running and `aerospace` CLI is resolvable.
-- Check logs for IDE/Chrome launch failures.
+- Ensure the IDE and Chrome apps can launch (activation will open and bind a window if needed).
+- Check logs for workspace focus or window detection errors.
 
 ### VS Code opens but color identity does not apply
-
-- Ensure the generated `.code-workspace` exists under `~/.local/state/project-workspaces/vscode/`.
-- Ensure `colorHex` is valid `#RRGGBB`.
-
-### Custom IDE command fails
-
-- The app logs stdout/stderr and falls back to opening the generated workspace file.
 
 ### Chrome steals focus
 
@@ -467,20 +381,19 @@ Optional:
 
 ### Testing (required)
 
-- Unit tests (CI-required): TOML parsing + defaults/validation, state read/write, AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks
+- Unit tests (CI-required): TOML parsing + defaults/validation, AeroSpace JSON decoding and CLI wrapper behavior using fixtures/mocks
 - Integration tests (local-only): gated behind `RUN_AEROSPACE_IT=1` (real AeroSpace + window/session constraints are not CI-friendly)
 - Manual integration checks:
-  - activation idempotence (no duplicate IDE/Chrome windows)
-  - Chrome recreation after manual close (verify tabs open in order: global -> repoUrl -> project)
-  - layout persistence per display mode
+  - activation succeeds when bound windows exist, or opens and binds one IDE + one Chrome window when missing
+  - unbound IDE/Chrome windows are never moved or resized
+  - layout resets to `h_tiles` only when the workspace is newly opened; IDE width is ~60% of visible width
 
 ### Engineering implementation notes (locked)
 
 - Third-party Swift dependencies are allowed only for TOML parsing (SwiftPM, version pinned). No other runtime dependencies in v1.
 - Global hotkey implementation uses Carbon `RegisterEventHotKey` (no third-party hotkey libraries).
-- Geometry/persistence uses Accessibility (AX) APIs.
-- Apply geometry using:
-  1) `aerospace focus --window-id <id>`
-  2) read/write the system-wide focused window via AX
-- Detect newly created IDE/Chrome windows by matching deterministic tokens in `aerospace list-windows --workspace pw-<projectId> --json --format '%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}'` output; warn+choose lowest id on multiple matches; if none appear after launch, attempt focused-window recovery via `list-windows --focused` and move into the workspace. For Chrome only, if recovery times out, perform a last-resort token-only `list-windows --all` scan before failing.
+- Activation uses the AeroSpace CLI only (no Accessibility geometry in Core).
+- Window discovery uses read-only `list-windows --all --json`; window actions always target explicit `--window-id`.
+- All AeroSpace commands execute through a single serialized executor.
+- Canonical layout is enforced only when the project workspace is newly opened (no bound windows present).
 - No silent failures: show user-facing errors + write structured logs.

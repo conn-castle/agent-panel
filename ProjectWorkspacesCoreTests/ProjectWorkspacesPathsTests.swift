@@ -9,17 +9,9 @@ final class ProjectWorkspacesPathsTests: XCTestCase {
 
         XCTAssertEqual(paths.configFile.path, "/Users/tester/.config/project-workspaces/config.toml")
         XCTAssertEqual(paths.vscodeWorkspaceDirectory.path, "/Users/tester/.local/state/project-workspaces/vscode")
-        XCTAssertEqual(
-            paths.vscodeWorkspaceFile(projectId: "codex").path,
-            "/Users/tester/.local/state/project-workspaces/vscode/codex.code-workspace"
-        )
+        XCTAssertEqual(paths.vscodeWorkspaceFile(projectId: "codex").path, "/Users/tester/.local/state/project-workspaces/vscode/codex.code-workspace")
         XCTAssertEqual(paths.stateFile.path, "/Users/tester/.local/state/project-workspaces/state.json")
         XCTAssertEqual(paths.logsDirectory.path, "/Users/tester/.local/state/project-workspaces/logs")
         XCTAssertEqual(paths.primaryLogFile.path, "/Users/tester/.local/state/project-workspaces/logs/workspaces.log")
-        XCTAssertEqual(paths.codeShimPath.path, "/Users/tester/.local/share/project-workspaces/bin/code")
-        XCTAssertEqual(
-            paths.chromeLocalStateFile.path,
-            "/Users/tester/Library/Application Support/Google/Chrome/Local State"
-        )
     }
 }

@@ -35,9 +35,11 @@ public struct PwctlService {
     /// - Parameters:
     ///   - paths: File system paths for ProjectWorkspaces.
     ///   - fileSystem: File system accessor.
+    ///   - screenMetricsProvider: Provider for visible screen width.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
         fileSystem: FileSystem = DefaultFileSystem(),
+        screenMetricsProvider: ScreenMetricsProviding,
         activationService: ActivationService? = nil
     ) {
         self.paths = paths
@@ -46,7 +48,11 @@ public struct PwctlService {
         if let activationService {
             self.activationService = activationService
         } else {
-            self.activationService = ActivationService(paths: paths, fileSystem: fileSystem)
+            self.activationService = ActivationService(
+                paths: paths,
+                fileSystem: fileSystem,
+                screenMetricsProvider: screenMetricsProvider
+            )
         }
     }
 
@@ -125,9 +131,94 @@ public struct PwctlService {
 
     /// Activates the project workspace for the provided project id.
     /// - Parameter projectId: Project identifier.
-    /// - Returns: Activation outcome with warnings or failure.
+    /// - Returns: Activation outcome or failure.
     public func activate(projectId: String) -> ActivationOutcome {
         activationService.activate(projectId: projectId)
+    }
+
+    /// Closes all windows in the project's AeroSpace workspace.
+    /// - Parameter projectId: Project identifier.
+    /// - Returns: Success with warnings or failure findings.
+    public func closeProject(projectId: String) -> PwctlOutcome<Void> {
+        let configOutcome = configLoader.load()
+        switch configOutcome {
+        case .failure(let findings):
+            return .failure(findings: findings)
+        case .success(let outcome, _):
+            guard let config = outcome.config else {
+                return .failure(findings: outcome.findings)
+            }
+            guard config.projects.contains(where: { $0.id == projectId }) else {
+                return .failure(findings: [
+                    DoctorFinding(
+                        severity: .fail,
+                        title: "Project not found",
+                        detail: "projectId=\(projectId)",
+                        fix: "Use `pwctl list` to see configured project IDs."
+                    )
+                ])
+            }
+
+            let resolver = DefaultAeroSpaceBinaryResolver(
+                fileSystem: fileSystem,
+                commandRunner: DefaultCommandRunner()
+            )
+            let executableURL: URL
+            switch resolver.resolve() {
+            case .failure(let error):
+                return .failure(findings: [
+                    DoctorFinding(
+                        severity: .fail,
+                        title: "AeroSpace CLI could not be resolved",
+                        detail: error.detail,
+                        fix: error.fix
+                    )
+                ])
+            case .success(let url):
+                executableURL = url
+            }
+
+            let client = AeroSpaceClient(
+                executableURL: executableURL,
+                commandRunner: AeroSpaceCommandExecutor.shared,
+                timeoutSeconds: 2
+            )
+
+            let workspaceName = "pw-\(projectId)"
+            let windows: [AeroSpaceWindow]
+            switch client.listWindowsDecoded(workspace: workspaceName) {
+            case .failure(let error):
+                return .failure(findings: [
+                    DoctorFinding(
+                        severity: .fail,
+                        title: "Failed to list workspace windows",
+                        detail: error.userFacingMessage,
+                        fix: "Ensure AeroSpace is running and retry."
+                    )
+                ])
+            case .success(let result):
+                windows = result
+            }
+
+            var warnings: [DoctorFinding] = []
+            for window in windows {
+                switch client.closeWindow(windowId: window.windowId) {
+                case .success:
+                    continue
+                case .failure(let error):
+                    warnings.append(
+                        DoctorFinding(
+                            severity: .warn,
+                            title: "Failed to close window",
+                            detail: "window_id=\(window.windowId), error=\(error.userFacingMessage)",
+                            fix: "Retry close if the window remains open."
+                        )
+                    )
+                }
+            }
+
+            return .success(output: (), warnings: warnings)
+        }
     }
 
     /// Returns the last N lines from a log string.

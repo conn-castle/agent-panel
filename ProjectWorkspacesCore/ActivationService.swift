@@ -1,94 +1,66 @@
 import Foundation
 
-/// Implements Activate(Project) behavior with no window hijacking.
+/// Implements Activate(Project) behavior using AeroSpace CLI only.
 public struct ActivationService {
     private let configLoader: ConfigLoader
     private let aeroSpaceBinaryResolver: AeroSpaceBinaryResolving
     private let aeroSpaceCommandRunner: AeroSpaceCommandRunning
     private let aeroSpaceTimeoutSeconds: TimeInterval
-    private let ideLauncher: IdeLaunching
-    private let chromeLauncherFactory: (AeroSpaceClient) -> ChromeLaunching
+    private let commandRunner: CommandRunning
     private let ideAppResolver: IdeAppResolver
-    private let layoutCoordinator: LayoutCoordinating
+    private let appDiscovery: AppDiscovering
+    private let workspaceGenerator: VSCodeWorkspaceGenerator
+    private let stateStore: StateStoring
+    private let screenMetricsProvider: ScreenMetricsProviding
     private let logger: ProjectWorkspacesLogging
     private let sleeper: AeroSpaceSleeping
-    private let windowDetectionConfiguration: WindowDetectionConfiguration
+    private let clock: DateProviding
+    private let focusTiming: WorkspaceFocusTiming
+    private let windowDetectionTiming: WindowDetectionTiming
 
     /// Creates an activation service with default dependencies.
     /// - Parameters:
     ///   - paths: File system paths for ProjectWorkspaces.
     ///   - fileSystem: File system accessor.
     ///   - appDiscovery: Application discovery provider.
-    ///   - commandRunner: Command runner used for IDE/Chrome launches and CLI resolution.
-    ///   - aeroSpaceCommandRunner: Runner used for AeroSpace CLI commands.
+    ///   - aeroSpaceCommandRunner: Serialized runner used for AeroSpace CLI commands.
     ///   - aeroSpaceBinaryResolver: Optional resolver for the AeroSpace CLI.
+    ///   - screenMetricsProvider: Provider for visible screen width.
     ///   - logger: Logger for activation events.
-    ///   - pollIntervalMs: Polling interval for IDE window detection.
-    ///   - pollTimeoutMs: Polling timeout for IDE window detection.
-    ///   - workspaceProbeTimeoutMs: Short workspace-only probe timeout after launch.
-    ///   - focusedProbeTimeoutMs: Initial focused-window probe timeout after launch.
     ///   - aeroSpaceTimeoutSeconds: Timeout for individual AeroSpace commands.
     public init(
         paths: ProjectWorkspacesPaths = .defaultPaths(),
         fileSystem: FileSystem = DefaultFileSystem(),
         appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
         commandRunner: CommandRunning = DefaultCommandRunner(),
-        aeroSpaceCommandRunner: AeroSpaceCommandRunning = DefaultAeroSpaceCommandRunner(),
+        aeroSpaceCommandRunner: AeroSpaceCommandRunning = AeroSpaceCommandExecutor.shared,
         aeroSpaceBinaryResolver: AeroSpaceBinaryResolving? = nil,
+        screenMetricsProvider: ScreenMetricsProviding,
         logger: ProjectWorkspacesLogging = ProjectWorkspacesLogger(),
-        pollIntervalMs: Int = 200,
-        pollTimeoutMs: Int = 10000,
-        workspaceProbeTimeoutMs: Int = 800,
-        focusedProbeTimeoutMs: Int = 1000,
         aeroSpaceTimeoutSeconds: TimeInterval = 2
     ) {
-        let detectionConfiguration = WindowDetectionConfiguration(
-            pollIntervalMs: pollIntervalMs,
-            pollTimeoutMs: pollTimeoutMs,
-            workspaceProbeTimeoutMs: workspaceProbeTimeoutMs,
-            focusedProbeTimeoutMs: focusedProbeTimeoutMs
-        )
         self.configLoader = ConfigLoader(paths: paths, fileSystem: fileSystem)
         if let aeroSpaceBinaryResolver {
             self.aeroSpaceBinaryResolver = aeroSpaceBinaryResolver
         } else {
             self.aeroSpaceBinaryResolver = DefaultAeroSpaceBinaryResolver(
                 fileSystem: fileSystem,
-                commandRunner: commandRunner
+                commandRunner: DefaultCommandRunner()
             )
         }
         self.aeroSpaceCommandRunner = aeroSpaceCommandRunner
         self.aeroSpaceTimeoutSeconds = aeroSpaceTimeoutSeconds
-        self.ideLauncher = IdeLauncher(
-            paths: paths,
-            fileSystem: fileSystem,
-            commandRunner: commandRunner,
-            environment: ProcessEnvironment(),
-            appDiscovery: appDiscovery,
-            permissions: DefaultFilePermissions(),
-            logger: logger
-        )
-        self.chromeLauncherFactory = { client in
-            ChromeLauncher(
-                aeroSpaceClient: client,
-                commandRunner: commandRunner,
-                appDiscovery: appDiscovery
-            )
-        }
+        self.commandRunner = commandRunner
+        self.appDiscovery = appDiscovery
         self.ideAppResolver = IdeAppResolver(fileSystem: fileSystem, appDiscovery: appDiscovery)
-        let resolvedStateStore = StateStore(paths: paths, fileSystem: fileSystem)
-        let layoutEngine = LayoutEngine()
-        let layoutObserver = LayoutObserver(stateStore: resolvedStateStore, layoutEngine: layoutEngine)
-        self.layoutCoordinator = LayoutCoordinator(
-            stateStore: resolvedStateStore,
-            layoutEngine: layoutEngine,
-            windowManager: AccessibilityWindowManager(),
-            layoutObserver: layoutObserver,
-            logger: logger
-        )
+        self.workspaceGenerator = VSCodeWorkspaceGenerator(paths: paths, fileSystem: fileSystem)
+        self.stateStore = StateStore(paths: paths, fileSystem: fileSystem)
+        self.screenMetricsProvider = screenMetricsProvider
         self.logger = logger
         self.sleeper = SystemAeroSpaceSleeper()
-        self.windowDetectionConfiguration = detectionConfiguration
+        self.clock = SystemDateProvider()
+        self.focusTiming = .fixed
+        self.windowDetectionTiming = .standard
     }
 
     /// Internal initializer for tests.
@@ -97,34 +69,33 @@ public struct ActivationService {
         aeroSpaceBinaryResolver: AeroSpaceBinaryResolving,
         aeroSpaceCommandRunner: AeroSpaceCommandRunning,
         aeroSpaceTimeoutSeconds: TimeInterval,
-        ideLauncher: IdeLaunching,
-        chromeLauncherFactory: @escaping (AeroSpaceClient) -> ChromeLaunching,
+        commandRunner: CommandRunning,
         ideAppResolver: IdeAppResolver,
-        layoutCoordinator: LayoutCoordinating,
+        appDiscovery: AppDiscovering,
+        workspaceGenerator: VSCodeWorkspaceGenerator,
+        stateStore: StateStoring,
+        screenMetricsProvider: ScreenMetricsProviding,
         logger: ProjectWorkspacesLogging,
         sleeper: AeroSpaceSleeping,
-        pollIntervalMs: Int,
-        pollTimeoutMs: Int,
-        workspaceProbeTimeoutMs: Int,
-        focusedProbeTimeoutMs: Int
+        clock: DateProviding,
+        focusTiming: WorkspaceFocusTiming,
+        windowDetectionTiming: WindowDetectionTiming
     ) {
-        let detectionConfiguration = WindowDetectionConfiguration(
-            pollIntervalMs: pollIntervalMs,
-            pollTimeoutMs: pollTimeoutMs,
-            workspaceProbeTimeoutMs: workspaceProbeTimeoutMs,
-            focusedProbeTimeoutMs: focusedProbeTimeoutMs
-        )
         self.configLoader = configLoader
         self.aeroSpaceBinaryResolver = aeroSpaceBinaryResolver
         self.aeroSpaceCommandRunner = aeroSpaceCommandRunner
         self.aeroSpaceTimeoutSeconds = aeroSpaceTimeoutSeconds
-        self.ideLauncher = ideLauncher
-        self.chromeLauncherFactory = chromeLauncherFactory
+        self.commandRunner = commandRunner
         self.ideAppResolver = ideAppResolver
-        self.layoutCoordinator = layoutCoordinator
+        self.appDiscovery = appDiscovery
+        self.workspaceGenerator = workspaceGenerator
+        self.stateStore = stateStore
+        self.screenMetricsProvider = screenMetricsProvider
         self.logger = logger
         self.sleeper = sleeper
-        self.windowDetectionConfiguration = detectionConfiguration
+        self.clock = clock
+        self.focusTiming = focusTiming
+        self.windowDetectionTiming = windowDetectionTiming
     }
 
     /// Activates the project workspace for the given project id.
@@ -134,7 +105,7 @@ public struct ActivationService {
     ///   - switchWorkspace: Whether to switch to the project workspace during activation.
     ///   - progress: Optional progress sink for activation milestones.
     ///   - cancellationToken: Optional token used to cancel activation.
-    /// - Returns: Activation outcome with warnings or failure.
+    /// - Returns: Activation outcome.
     public func activate(
         projectId: String,
         focusIdeWindow: Bool = true,
@@ -164,13 +135,27 @@ public struct ActivationService {
         case .failure(let error):
             focusResult = .failure(error)
         case .success(let client):
-            switch client.switchWorkspace(report.workspaceName) {
+            let switchArgs = ["summon-workspace", report.workspaceName]
+            switch client.summonWorkspace(report.workspaceName) {
             case .failure(let error):
-                focusResult = .failure(.aeroSpaceFailed(error))
+                focusResult = .failure(
+                    commandFailed(
+                        command: client.executableURL.path,
+                        arguments: switchArgs,
+                        error: error
+                    )
+                )
             case .success:
+                let focusArgs = ["focus", "--window-id", String(report.ideWindowId)]
                 switch client.focusWindow(windowId: report.ideWindowId) {
                 case .failure(let error):
-                    focusResult = .failure(.aeroSpaceFailed(error))
+                    focusResult = .failure(
+                        commandFailed(
+                            command: client.executableURL.path,
+                            arguments: focusArgs,
+                            error: error
+                        )
+                    )
                 case .success:
                     focusResult = .success(())
                 }
@@ -201,220 +186,190 @@ public struct ActivationService {
 
     /// Runs the activation pipeline and returns the final outcome.
     private func runActivation(_ context: ActivationContext) -> ActivationOutcome {
-        layoutCoordinator.stopObserving()
-        var state = ActivationState()
-        let steps: [ActivationStep] = [
-            ActivationStep(name: "resolve-aerospace") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = resolveAeroSpaceClient(context) else { return false }
-                state.client = client
-                state.chromeLauncher = chromeLauncherFactory(client)
-                return true
-            },
-            ActivationStep(name: "load-config") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let (config, project) = loadConfigAndProject(context) else { return false }
-                state.config = config
-                state.project = project
-                return true
-            },
-            ActivationStep(name: "switch-workspace") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = state.client else {
-                    preconditionFailure("ActivationState missing AeroSpace client")
-                }
-                if context.shouldSwitchWorkspace {
-                    context.reportProgress(.switchingWorkspace(context.workspaceName))
-                    guard switchToWorkspace(client: client, context: context) else { return false }
-                    context.reportProgress(.switchedWorkspace(context.workspaceName))
-                }
-                return true
-            },
-            ActivationStep(name: "resolve-ide-identity") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let config = state.config, let project = state.project else {
-                    preconditionFailure("ActivationState missing config or project")
-                }
-                guard let ideIdentity = resolveIdeIdentity(project: project, ideConfig: config.ide, context: context) else {
-                    return false
-                }
-                state.ideIdentity = ideIdentity
-                return true
-            },
-            ActivationStep(name: "prepare-chrome") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let config = state.config,
-                      let project = state.project,
-                      let chromeLauncher = state.chromeLauncher else {
-                    preconditionFailure("ActivationState missing config, project, or chrome launcher")
-                }
-                context.reportProgress(.ensuringChrome)
-                let chromeCheck = chromeLauncher.checkExistingWindow(
-                    expectedWorkspaceName: context.workspaceName,
-                    windowToken: context.windowToken,
-                    allowExistingWindows: true
-                )
-                var chromeState = ChromeLaunchState()
-                switch chromeCheck {
-                case .found(let result):
-                    switch result.outcome {
-                    case .existing(let windowId), .created(let windowId):
-                        chromeState.existingWindow = ActivatedWindow(windowId: windowId, wasCreated: false)
-                    }
-                    context.warnings.append(contentsOf: result.warnings.map { .chromeLaunchWarning($0) })
-                case .notFound(let existingIds):
-                    switch chromeLauncher.launchChrome(
-                        expectedWorkspaceName: context.workspaceName,
-                        windowToken: context.windowToken,
-                        globalChromeUrls: config.global.globalChromeUrls,
-                        project: project,
-                        existingIds: existingIds,
-                        ideWindowIdToRefocus: nil
-                    ) {
-                    case .success(let token):
-                        chromeState.launchToken = token
-                    case .failure(let error):
-                        context.outcome = .failure(error: .chromeLaunchFailed(error))
-                        return false
-                    }
-                case .error(let error):
-                    context.outcome = .failure(error: .chromeLaunchFailed(error))
-                    return false
-                }
-                state.chromeLaunchState = chromeState
-                return true
-            },
-            ActivationStep(name: "ensure-ide") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = state.client,
-                      let project = state.project,
-                      let config = state.config,
-                      let ideIdentity = state.ideIdentity else {
-                    preconditionFailure("ActivationState missing IDE prerequisites")
-                }
-                context.reportProgress(.ensuringIde)
-                guard let ideWindow = ensureIdeWindow(
-                    client: client,
-                    project: project,
-                    ideConfig: config.ide,
-                    ideIdentity: ideIdentity,
-                    context: context
-                ) else {
-                    return false
-                }
-                context.ideWindowId = ideWindow.windowId
-                state.ideWindow = ideWindow
-                return true
-            },
-            ActivationStep(name: "detect-chrome") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let chromeState = state.chromeLaunchState,
-                      let chromeLauncher = state.chromeLauncher else {
-                    preconditionFailure("ActivationState missing Chrome launch state")
-                }
-                let chromeWindow: ActivatedWindow
-                if let existing = chromeState.existingWindow {
-                    chromeWindow = existing
-                } else if let token = chromeState.launchToken {
-                    context.reportProgress(.ensuringChrome)
-                    var chromeWarnings: [ChromeLaunchWarning] = []
-                    let detectResult = chromeLauncher.detectLaunchedWindow(
-                        token: token,
-                        cancellationToken: context.cancellationToken,
-                        warningSink: { chromeWarnings.append($0) }
-                    )
-                    switch detectResult {
-                    case .success(let result):
-                        switch result.outcome {
-                        case .existing(let windowId), .created(let windowId):
-                            chromeWindow = ActivatedWindow(windowId: windowId, wasCreated: true)
-                        }
-                        context.warnings.append(contentsOf: chromeWarnings.map { .chromeLaunchWarning($0) })
-                    case .failure(let error):
-                        context.outcome = .failure(error: .chromeLaunchFailed(error))
-                        return false
-                    }
-                } else {
-                    context.outcome = .failure(error: .chromeLaunchFailed(.chromeNotFound))
-                    return false
-                }
-                context.chromeWindowId = chromeWindow.windowId
-                state.chromeWindow = chromeWindow
-                return true
-            },
-            ActivationStep(name: "float-layouts") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = state.client,
-                      let ideWindow = state.ideWindow,
-                      let chromeWindow = state.chromeWindow else {
-                    preconditionFailure("ActivationState missing windows for floating layout")
-                }
-                return setFloatingLayouts(
-                    client: client,
-                    ideWindowId: ideWindow.windowId,
-                    chromeWindowId: chromeWindow.windowId,
-                    context: context
-                )
-            },
-            ActivationStep(name: "apply-layout") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = state.client,
-                      let ideWindow = state.ideWindow,
-                      let chromeWindow = state.chromeWindow,
-                      let config = state.config,
-                      let project = state.project else {
-                    preconditionFailure("ActivationState missing layout prerequisites")
-                }
-                context.reportProgress(.applyingLayout)
-                let layoutWarnings = layoutCoordinator.applyLayout(
-                    projectId: project.id,
-                    config: config,
-                    ideWindow: ideWindow,
-                    chromeWindow: chromeWindow,
-                    client: client
-                )
-                if !layoutWarnings.isEmpty {
-                    context.warnings.append(contentsOf: layoutWarnings)
-                }
-                return true
-            },
-            ActivationStep(name: "focus-ide") { context, state in
-                guard context.ensureNotCancelled() else { return false }
-                guard let client = state.client,
-                      let ideWindow = state.ideWindow else {
-                    preconditionFailure("ActivationState missing IDE window")
-                }
-                if context.shouldFocusIdeWindow {
-                    context.reportProgress(.finishing)
-                    guard focusIdeWindow(client: client, ideWindowId: ideWindow.windowId, context: context) else {
-                        return false
-                    }
-                }
-                return true
-            },
-            ActivationStep(name: "finalize") { context, state in
-                guard let ideWindow = state.ideWindow,
-                      let chromeWindow = state.chromeWindow else {
-                    preconditionFailure("ActivationState missing windows for final report")
-                }
-                let report = ActivationReport(
-                    projectId: context.projectId,
-                    workspaceName: context.workspaceName,
-                    ideWindowId: ideWindow.windowId,
-                    chromeWindowId: chromeWindow.windowId,
-                    ideBundleId: context.ideBundleId
-                )
-                context.outcome = .success(report: report, warnings: context.warnings)
-                return true
-            }
-        ]
+        guard context.ensureNotCancelled() else {
+            return context.finalize(logger: logger)
+        }
 
-        for step in steps {
-            if !step.run(context, &state) {
+        guard let client = resolveAeroSpaceClient(context) else {
+            return context.finalize(logger: logger)
+        }
+
+        if !ensureAeroSpaceCompatibility(client: client, context: context) {
+            return context.finalize(logger: logger)
+        }
+
+        guard let (config, project) = loadConfigAndProject(context) else {
+            return context.finalize(logger: logger)
+        }
+
+        guard let ideIdentity = resolveIdeIdentity(project: project, ideConfig: config.ide, context: context) else {
+            return context.finalize(logger: logger)
+        }
+
+        let ideBundleId = ideIdentity.bundleId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if ideBundleId.isEmpty {
+            context.outcome = .failure(
+                error: .commandFailed(
+                    command: "ide.resolve",
+                    arguments: [],
+                    exitCode: nil,
+                    stderr: "",
+                    detail: "IDE bundle identifier is missing."
+                )
+            )
+            return context.finalize(logger: logger)
+        }
+        let chromeBundleId = ChromeApp.bundleId
+
+        if context.shouldSwitchWorkspace {
+            context.reportProgress(.switchingWorkspace(context.workspaceName))
+            if !switchWorkspaceAndConfirm(client: client, context: context) {
                 return context.finalize(logger: logger)
             }
         }
 
+        guard var bindingState = loadBindingState(context) else {
+            return context.finalize(logger: logger)
+        }
+
+        var projectBindings = bindingState.projects[project.id] ?? ProjectBindings()
+
+        guard let allWindows = listAllWindows(client: client, context: context) else {
+            return context.finalize(logger: logger)
+        }
+        var windowMap = Dictionary(uniqueKeysWithValues: allWindows.map { ($0.windowId, $0) })
+
+        let prunedBindings = pruneBindings(projectBindings, windowMap: windowMap)
+        projectBindings = normalizeBindings(prunedBindings)
+
+        let hadBoundWindowInWorkspace = hasBoundWindowInWorkspace(
+            bindings: projectBindings,
+            windowMap: windowMap,
+            workspaceName: context.workspaceName
+        )
+
+        context.reportProgress(.movingWindows)
+        if !moveBoundWindows(
+            bindings: projectBindings,
+            windowMap: &windowMap,
+            workspaceName: context.workspaceName,
+            client: client,
+            context: context
+        ) {
+            return context.finalize(logger: logger)
+        }
+
+        context.reportProgress(.resolvingWindows)
+        if projectBindings.ideBindings.isEmpty {
+            guard let newIdeWindow = launchIdeWindow(
+                client: client,
+                project: project,
+                ideIdentity: ideIdentity,
+                beforeWindowIds: Set(windowMap.keys),
+                context: context
+            ) else {
+                return context.finalize(logger: logger)
+            }
+            let binding = WindowBinding(
+                windowId: newIdeWindow.windowId,
+                appBundleId: ideBundleId,
+                role: .ide,
+                titleAtBindTime: newIdeWindow.windowTitle
+            )
+            projectBindings.ideBindings.insert(binding, at: 0)
+            windowMap[newIdeWindow.windowId] = newIdeWindow
+        }
+
+        if projectBindings.chromeBindings.isEmpty {
+            guard let newChromeWindow = launchChromeWindow(
+                client: client,
+                project: project,
+                globalChromeUrls: config.global.globalChromeUrls,
+                beforeWindowIds: Set(windowMap.keys),
+                context: context
+            ) else {
+                return context.finalize(logger: logger)
+            }
+            let binding = WindowBinding(
+                windowId: newChromeWindow.windowId,
+                appBundleId: chromeBundleId,
+                role: .chrome,
+                titleAtBindTime: newChromeWindow.windowTitle
+            )
+            projectBindings.chromeBindings.insert(binding, at: 0)
+            windowMap[newChromeWindow.windowId] = newChromeWindow
+        }
+
+        if !moveBoundWindows(
+            bindings: projectBindings,
+            windowMap: &windowMap,
+            workspaceName: context.workspaceName,
+            client: client,
+            context: context
+        ) {
+            return context.finalize(logger: logger)
+        }
+
+        if !confirmWorkspaceFocusedAfterMove(client: client, context: context) {
+            return context.finalize(logger: logger)
+        }
+
+        guard let primaryIdeId = projectBindings.ideBindings.first?.windowId,
+              let primaryChromeId = projectBindings.chromeBindings.first?.windowId else {
+            context.outcome = .failure(error: .requiredWindowMissing(appBundleId: ideBundleId))
+            return context.finalize(logger: logger)
+        }
+
+        context.ideWindowId = primaryIdeId
+        context.chromeWindowId = primaryChromeId
+        context.ideBundleId = ideBundleId
+
+        if !hadBoundWindowInWorkspace {
+            guard let ideWindow = windowMap[primaryIdeId] else {
+                context.outcome = .failure(error: .requiredWindowMissing(appBundleId: ideBundleId))
+                return context.finalize(logger: logger)
+            }
+            context.reportProgress(.applyingLayout)
+            if !applyCanonicalLayout(
+                workspace: context.workspaceName,
+                ideWindowId: ideWindow.windowId,
+                client: client,
+                context: context
+            ) {
+                return context.finalize(logger: logger)
+            }
+
+            context.reportProgress(.resizingIde)
+            if !resizeIdeWindow(
+                ideWindow: ideWindow,
+                client: client,
+                context: context
+            ) {
+                return context.finalize(logger: logger)
+            }
+        }
+
+        if context.shouldFocusIdeWindow {
+            context.reportProgress(.focusingIde)
+            if !focusIdeWindow(client: client, ideWindowId: primaryIdeId, context: context) {
+                return context.finalize(logger: logger)
+            }
+        }
+
+        bindingState.projects[project.id] = projectBindings
+        if !saveBindingState(bindingState, context: context) {
+            return context.finalize(logger: logger)
+        }
+
+        context.reportProgress(.finishing)
+        let report = ActivationReport(
+            projectId: context.projectId,
+            workspaceName: context.workspaceName,
+            ideWindowId: primaryIdeId,
+            chromeWindowId: primaryChromeId,
+            ideBundleId: ideBundleId
+        )
+        context.outcome = .success(report: report)
         return context.finalize(logger: logger)
     }
 
@@ -491,12 +446,11 @@ public struct ActivationService {
         case .failure(let findings):
             context.outcome = .failure(error: .configFailed(findings: findings))
             return nil
-        case .success(let outcome, let configWarnings):
+        case .success(let outcome, _):
             guard let config = outcome.config else {
                 context.outcome = .failure(error: .configFailed(findings: outcome.findings))
                 return nil
             }
-            context.warnings.append(contentsOf: configWarnings.map { .configWarning($0) })
 
             guard let project = config.projects.first(where: { $0.id == context.projectId }) else {
                 context.outcome = .failure(
@@ -511,19 +465,193 @@ public struct ActivationService {
         }
     }
 
-    // MARK: - Step 3: Workspace Switch
+    // MARK: - Step 3: Compatibility Gate
 
-    private func switchToWorkspace(client: AeroSpaceClient, context: ActivationContext) -> Bool {
-        switch client.switchWorkspace(context.workspaceName) {
+    /// Ensures the installed AeroSpace CLI supports the required commands.
+    /// - Parameters:
+    ///   - client: Resolved AeroSpace client.
+    ///   - context: Activation context for failure reporting.
+    /// - Returns: True when compatibility checks succeed.
+    private func ensureAeroSpaceCompatibility(
+        client: AeroSpaceClient,
+        context: ActivationContext
+    ) -> Bool {
+        let tracingRunner = TracingAeroSpaceCommandRunner(
+            wrapped: aeroSpaceCommandRunner,
+            traceSink: { context.commandLogs.append($0) }
+        )
+
+        let checks: [[String]] = [
+            ["list-workspaces", "--focused"],
+            ["list-windows", "--all", "--json"],
+            ["focus", "--help"],
+            ["move-node-to-workspace", "--help"],
+            ["summon-workspace", "--help"]
+        ]
+
+        for arguments in checks {
+            let commandLabel = ([client.executableURL.path] + arguments).joined(separator: " ")
+            let result = tracingRunner.run(
+                executable: client.executableURL,
+                arguments: arguments,
+                timeoutSeconds: aeroSpaceTimeoutSeconds
+            )
+            if case .failure(let error) = result {
+                let details = commandFailureDetails(from: error)
+                let stderr = details.stderr.isEmpty ? (details.detail ?? "") : details.stderr
+                context.outcome = .failure(
+                    error: .aeroSpaceIncompatible(
+                        failingCommand: commandLabel,
+                        stderr: stderr
+                    )
+                )
+                return false
+            }
+        }
+
+        return true
+    }
+
+    // MARK: - Step 4: State Loading
+
+    /// Loads the persisted binding state or returns a failure outcome.
+    /// - Parameter context: Activation context for failure reporting.
+    /// - Returns: Loaded state when successful.
+    private func loadBindingState(_ context: ActivationContext) -> BindingState? {
+        switch stateStore.load() {
         case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
-            return false
-        case .success:
-            return true
+            context.outcome = .failure(error: .stateLoadFailed(detail: String(describing: error)))
+            return nil
+        case .success(let outcome):
+            switch outcome {
+            case .missing:
+                return BindingState.empty()
+            case .loaded(let state):
+                return state
+            case .recovered(let state, let backupPath):
+                _ = logger.log(
+                    event: "activation.state.recovered",
+                    level: .warn,
+                    message: "Recovered corrupt state file",
+                    context: ["backup_path": backupPath]
+                )
+                return state
+            }
         }
     }
 
-    // MARK: - Step 5: IDE Identity Resolution
+    /// Saves binding state and records a failure outcome on error.
+    /// - Parameters:
+    ///   - state: State payload to persist.
+    ///   - context: Activation context for failure reporting.
+    /// - Returns: True when the save succeeds.
+    private func saveBindingState(_ state: BindingState, context: ActivationContext) -> Bool {
+        switch stateStore.save(state) {
+        case .success:
+            return true
+        case .failure(let error):
+            context.outcome = .failure(error: .stateSaveFailed(detail: String(describing: error)))
+            return false
+        }
+    }
+
+    // MARK: - Step 5: Workspace Switch
+
+    private func switchWorkspaceAndConfirm(client: AeroSpaceClient, context: ActivationContext) -> Bool {
+        let switchArgs = ["summon-workspace", context.workspaceName]
+        switch client.summonWorkspace(context.workspaceName) {
+        case .failure(let error):
+            context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: switchArgs, error: error))
+            return false
+        case .success:
+            context.reportProgress(.confirmingWorkspace(context.workspaceName))
+            return confirmWorkspaceFocused(client: client, context: context)
+        }
+    }
+
+    private func confirmWorkspaceFocused(client: AeroSpaceClient, context: ActivationContext) -> Bool {
+        let startTime = clock.now()
+        var lastFocused = ""
+        var didReissue = false
+
+        while true {
+            if context.isCancelled {
+                context.outcome = .failure(error: .cancelled)
+                return false
+            }
+
+            let elapsedMs = Int(clock.now().timeIntervalSince(startTime) * 1000)
+            if elapsedMs >= focusTiming.deadlineMs {
+                context.outcome = .failure(
+                    error: .workspaceNotFocused(
+                        expected: context.workspaceName,
+                        observed: lastFocused,
+                        elapsedMs: elapsedMs
+                    )
+                )
+                return false
+            }
+
+            switch client.focusedWorkspace() {
+            case .failure(let error):
+                let args = ["list-workspaces", "--focused", "--format", "%{workspace}"]
+                context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: args, error: error))
+                return false
+            case .success(let focused):
+                lastFocused = focused
+                if focused == context.workspaceName {
+                    return true
+                }
+            }
+
+            if !didReissue, elapsedMs >= focusTiming.reissueSwitchAfterMs {
+                didReissue = true
+                _ = client.summonWorkspace(context.workspaceName)
+            }
+
+            sleeper.sleep(seconds: TimeInterval(focusTiming.pollIntervalMs) / 1000.0)
+        }
+    }
+
+    private func confirmWorkspaceFocusedAfterMove(client: AeroSpaceClient, context: ActivationContext) -> Bool {
+        let startTime = clock.now()
+        var lastFocused = ""
+
+        while true {
+            if context.isCancelled {
+                context.outcome = .failure(error: .cancelled)
+                return false
+            }
+
+            let elapsedMs = Int(clock.now().timeIntervalSince(startTime) * 1000)
+            if elapsedMs >= focusTiming.postMoveDeadlineMs {
+                context.outcome = .failure(
+                    error: .workspaceNotFocusedAfterMove(
+                        expected: context.workspaceName,
+                        observed: lastFocused,
+                        elapsedMs: elapsedMs
+                    )
+                )
+                return false
+            }
+
+            switch client.focusedWorkspace() {
+            case .failure(let error):
+                let args = ["list-workspaces", "--focused", "--format", "%{workspace}"]
+                context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: args, error: error))
+                return false
+            case .success(let focused):
+                lastFocused = focused
+                if focused == context.workspaceName {
+                    return true
+                }
+            }
+
+            sleeper.sleep(seconds: TimeInterval(focusTiming.pollIntervalMs) / 1000.0)
+        }
+    }
+
+    // MARK: - Step 6: IDE Identity
 
     private func resolveIdeIdentity(
         project: ProjectConfig,
@@ -533,440 +661,587 @@ public struct ActivationService {
         let resolutionResult = ideAppResolver.resolve(ide: project.ide, config: ideConfig.config(for: project.ide))
         switch resolutionResult {
         case .failure(let error):
-            context.outcome = .failure(error: .ideLaunchFailed(.appResolutionFailed(ide: project.ide, error: error)))
+            context.outcome = .failure(error: .commandFailed(
+                command: "ide.resolve",
+                arguments: [],
+                exitCode: nil,
+                stderr: "",
+                detail: String(describing: error)
+            ))
             return nil
         case .success(let resolution):
             let appName = resolution.appURL.deletingPathExtension().lastPathComponent
-            return IdeIdentity(bundleId: resolution.bundleId, appName: appName)
+            return IdeIdentity(bundleId: resolution.bundleId, appName: appName, appURL: resolution.appURL)
         }
     }
 
-    // MARK: - Step 6: IDE Window
+    // MARK: - Step 7: Window Enumeration + Pruning
 
-    private func ensureIdeWindow(
+    /// Lists all windows across all workspaces.
+    /// - Parameters:
+    ///   - client: AeroSpace client used for the query.
+    ///   - context: Activation context for failure reporting.
+    /// - Returns: Window list when successful.
+    private func listAllWindows(
         client: AeroSpaceClient,
-        project: ProjectConfig,
-        ideConfig: IdeConfig,
-        ideIdentity: IdeIdentity,
         context: ActivationContext
-    ) -> ActivatedWindow? {
-        guard context.ensureNotCancelled() else { return nil }
-        context.ideBundleId = ideIdentity.bundleId
-        return ensureTokenIdeWindow(
-            client: client,
-            project: project,
-            ideConfig: ideConfig,
-            ideIdentity: ideIdentity,
-            context: context
-        )
-    }
-
-    private func ensureTokenIdeWindow(
-        client: AeroSpaceClient,
-        project: ProjectConfig,
-        ideConfig: IdeConfig,
-        ideIdentity: IdeIdentity,
-        context: ActivationContext
-    ) -> ActivatedWindow? {
-        let token = context.windowToken
-        let existingMatchesResult = listTokenIdeWindows(
-            client: client,
-            token: token,
-            identity: ideIdentity,
-            workspace: context.workspaceName
-        )
-        let existingMatches: [AeroSpaceWindow]
-        switch existingMatchesResult {
-        case .failure(let error):
-            context.outcome = .failure(error: error)
-            return nil
-        case .success(let matches):
-            existingMatches = matches
-        }
-
-        if !existingMatches.isEmpty {
-            let ids = existingMatches.map { $0.windowId }
-            let selection = selectWindowId(
-                from: ids,
-                kind: .ide,
-                workspace: context.workspaceName
-            )
-            if let warning = selection.warning {
-                context.warnings.append(warning)
-            }
-            guard let selectedWindow = existingMatches.first(where: { $0.windowId == selection.selectedId }) else {
-                context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
-                return nil
-            }
-            context.ideWindowLayout = selectedWindow.windowLayout
-            if !moveWindowIfNeeded(
-                client: client,
-                windowId: selectedWindow.windowId,
-                currentWorkspace: selectedWindow.workspace,
-                targetWorkspace: context.workspaceName,
-                context: context
-            ) {
-                return nil
-            }
-            return ActivatedWindow(windowId: selectedWindow.windowId, wasCreated: false)
-        }
-
-        switch ideLauncher.launch(project: project, ideConfig: ideConfig) {
-        case .failure(let error):
-            context.outcome = .failure(error: .ideLaunchFailed(error))
-            return nil
-        case .success(let success):
-            context.warnings.append(contentsOf: success.warnings.map { .ideLaunchWarning($0) })
-        }
-
-        guard let newWindowId = detectNewTokenIdeWindow(
-            client: client,
-            token: token,
-            identity: ideIdentity,
-            beforeIds: Set(existingMatches.map { $0.windowId }),
-            context: context
-        ) else {
+    ) -> [AeroSpaceWindow]? {
+        if context.isCancelled {
+            context.outcome = .failure(error: .cancelled)
             return nil
         }
 
-        return ActivatedWindow(windowId: newWindowId, wasCreated: true)
-    }
-
-    private func listTokenIdeWindows(
-        client: AeroSpaceClient,
-        token: ProjectWindowToken,
-        identity: IdeIdentity,
-        workspace: String
-    ) -> Result<[AeroSpaceWindow], ActivationError> {
-        let appBundleId = identity.bundleId?.isEmpty == false ? identity.bundleId : nil
-        switch client.listWindowsDecoded(workspace: workspace, appBundleId: appBundleId) {
-        case .failure(let error):
-            return .failure(.aeroSpaceFailed(error))
+        switch client.listWindowsAllDecoded() {
         case .success(let windows):
-            let matches = windows.filter { window in
-                token.matches(windowTitle: window.windowTitle) && matchesIdentity(window, identity: identity)
-            }
-            return .success(matches)
+            return windows
+        case .failure(let error):
+            let args = ["list-windows", "--all", "--json"]
+            context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: args, error: error))
+            return nil
         }
     }
 
-    private func detectNewTokenIdeWindow(
-        client: AeroSpaceClient,
-        token: ProjectWindowToken,
-        identity: IdeIdentity,
-        beforeIds: Set<Int>,
-        context: ActivationContext
-    ) -> Int? {
-        guard context.ensureNotCancelled() else { return nil }
-        let timeouts = windowDetectionConfiguration.timeouts
-        let pipeline = windowDetectionConfiguration.pipeline(sleeper: sleeper)
-        let detectionOutcome: PollOutcome<AeroSpaceWindow, ActivationError> = pipeline.run(
-            timeouts: timeouts,
-            workspaceAttempt: {
-                self.attemptTokenIdeWindowInWorkspace(
-                    client: client,
-                    token: token,
-                    identity: identity,
-                    beforeIds: beforeIds,
-                    workspaceName: context.workspaceName,
-                    context: context
-                )
-            },
-            focusedAttempt: {
-                self.attemptFocusedTokenIdeWindow(
-                    client: client,
-                    token: token,
-                    identity: identity,
-                    context: context
-                )
-            }
-        )
+    /// Normalizes bindings by enforcing role consistency, removing duplicate window ids,
+    /// and limiting each role to a single primary binding.
+    /// - Parameter bindings: Bindings to normalize.
+    /// - Returns: Normalized bindings.
+    private func normalizeBindings(_ bindings: ProjectBindings) -> ProjectBindings {
+        var seen: Set<Int> = []
+        var ide: [WindowBinding] = []
+        for binding in bindings.ideBindings {
+            guard binding.role == .ide else { continue }
+            guard !seen.contains(binding.windowId) else { continue }
+            seen.insert(binding.windowId)
+            ide.append(binding)
+            break
+        }
 
-        switch detectionOutcome {
+        var chrome: [WindowBinding] = []
+        for binding in bindings.chromeBindings {
+            guard binding.role == .chrome else { continue }
+            guard !seen.contains(binding.windowId) else { continue }
+            seen.insert(binding.windowId)
+            chrome.append(binding)
+            break
+        }
+
+        return ProjectBindings(ideBindings: ide, chromeBindings: chrome)
+    }
+
+    /// Removes stale bindings when the window id is missing or app bundle ids differ.
+    /// - Parameters:
+    ///   - bindings: Current bindings.
+    ///   - windowMap: Map of window id to current window record.
+    /// - Returns: Pruned bindings.
+    private func pruneBindings(
+        _ bindings: ProjectBindings,
+        windowMap: [Int: AeroSpaceWindow]
+    ) -> ProjectBindings {
+        let ide = bindings.ideBindings.filter { binding in
+            guard let window = windowMap[binding.windowId] else { return false }
+            return window.appBundleId == binding.appBundleId
+        }
+        let chrome = bindings.chromeBindings.filter { binding in
+            guard let window = windowMap[binding.windowId] else { return false }
+            return window.appBundleId == binding.appBundleId
+        }
+        return ProjectBindings(ideBindings: ide, chromeBindings: chrome)
+    }
+
+    /// Returns true if any bound window already resides in the target workspace.
+    /// - Parameters:
+    ///   - bindings: Current bindings.
+    ///   - windowMap: Map of window id to current window record.
+    ///   - workspaceName: Target workspace name.
+    /// - Returns: True if any bound window is already in the target workspace.
+    private func hasBoundWindowInWorkspace(
+        bindings: ProjectBindings,
+        windowMap: [Int: AeroSpaceWindow],
+        workspaceName: String
+    ) -> Bool {
+        let allBindings = bindings.ideBindings + bindings.chromeBindings
+        for binding in allBindings {
+            if let window = windowMap[binding.windowId],
+               window.workspace == workspaceName {
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - Step 8: Window Moves
+
+    /// Moves all bound windows to the target workspace when needed.
+    /// - Parameters:
+    ///   - bindings: Current bindings.
+    ///   - windowMap: Map of window id to current window record.
+    ///   - workspaceName: Target workspace name.
+    ///   - client: AeroSpace client for move commands.
+    ///   - context: Activation context for failure reporting.
+    /// - Returns: True when all moves succeed.
+    private func moveBoundWindows(
+        bindings: ProjectBindings,
+        windowMap: inout [Int: AeroSpaceWindow],
+        workspaceName: String,
+        client: AeroSpaceClient,
+        context: ActivationContext
+    ) -> Bool {
+        if context.isCancelled {
+            context.outcome = .failure(error: .cancelled)
+            return false
+        }
+
+        let orderedBindings = bindings.ideBindings + bindings.chromeBindings
+        for binding in orderedBindings {
+            guard var window = windowMap[binding.windowId] else { continue }
+            if window.workspace == workspaceName {
+                continue
+            }
+            switch client.moveWindowToWorkspace(windowId: window.windowId, workspace: workspaceName) {
+            case .success:
+                window = updatedWindow(window, workspace: workspaceName)
+                windowMap[window.windowId] = window
+            case .failure(let error):
+                if let moveError = moveFailed(windowId: window.windowId, workspace: workspaceName, error: error) {
+                    context.outcome = .failure(error: moveError)
+                } else {
+                    let args = ["move-node-to-workspace", "--window-id", String(window.windowId), workspaceName]
+                    context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: args, error: error))
+                }
+                return false
+            }
+        }
+        return true
+    }
+
+    // MARK: - Step 9: Window Launch + Detection
+
+    /// Launches the IDE for a project and detects the new window.
+    private func launchIdeWindow(
+        client: AeroSpaceClient,
+        project: ProjectConfig,
+        ideIdentity: IdeIdentity,
+        beforeWindowIds: Set<Int>,
+        context: ActivationContext
+    ) -> AeroSpaceWindow? {
+        let workspaceURLResult = workspaceGenerator.writeWorkspace(for: project)
+        let workspaceURL: URL
+        switch workspaceURLResult {
+        case .failure(let error):
+            context.outcome = .failure(
+                error: .commandFailed(
+                    command: "ide.workspace",
+                    arguments: [],
+                    exitCode: nil,
+                    stderr: "",
+                    detail: String(describing: error)
+                )
+            )
+            return nil
+        case .success(let url):
+            workspaceURL = url
+        }
+
+        let openURL = URL(fileURLWithPath: "/usr/bin/open", isDirectory: false)
+        let openArgs = ["-n", "-a", ideIdentity.appURL.path, workspaceURL.path]
+        if !runOpenCommand(executable: openURL, arguments: openArgs, context: context) {
+            return nil
+        }
+
+        let token = ProjectWindowToken(projectId: project.id)
+        return detectNewWindow(
+            client: client,
+            appBundleId: ideIdentity.bundleId ?? "",
+            token: token,
+            beforeWindowIds: beforeWindowIds,
+            context: context
+        )
+    }
+
+    /// Launches Chrome for a project and detects the new window.
+    private func launchChromeWindow(
+        client: AeroSpaceClient,
+        project: ProjectConfig,
+        globalChromeUrls: [String],
+        beforeWindowIds: Set<Int>,
+        context: ActivationContext
+    ) -> AeroSpaceWindow? {
+        guard let chromeAppURL = resolveChromeAppURL() else {
+            context.outcome = .failure(
+                error: .commandFailed(
+                    command: "chrome.resolve",
+                    arguments: [],
+                    exitCode: nil,
+                    stderr: "",
+                    detail: "Google Chrome could not be resolved."
+                )
+            )
+            return nil
+        }
+
+        let token = ProjectWindowToken(projectId: project.id)
+        var openArgs = [
+            "-n",
+            "-a",
+            chromeAppURL.path,
+            "--args",
+            "--new-window",
+            "--window-name=\(token.value)"
+        ]
+        if let profileDirectory = project.chromeProfileDirectory {
+            openArgs.append("--profile-directory=\(profileDirectory)")
+        }
+        let launchUrls = globalChromeUrls + project.chromeUrls
+        if !launchUrls.isEmpty {
+            openArgs.append(contentsOf: launchUrls)
+        }
+
+        let openURL = URL(fileURLWithPath: "/usr/bin/open", isDirectory: false)
+        if !runOpenCommand(executable: openURL, arguments: openArgs, context: context) {
+            return nil
+        }
+
+        return detectNewWindow(
+            client: client,
+            appBundleId: ChromeApp.bundleId,
+            token: token,
+            beforeWindowIds: beforeWindowIds,
+            context: context
+        )
+    }
+
+    private func resolveChromeAppURL() -> URL? {
+        if let appURL = appDiscovery.applicationURL(bundleIdentifier: ChromeApp.bundleId) {
+            return appURL
+        }
+        return appDiscovery.applicationURL(named: "Google Chrome")
+    }
+
+    /// Runs the `open` command and records failures in the activation context.
+    private func runOpenCommand(
+        executable: URL,
+        arguments: [String],
+        context: ActivationContext
+    ) -> Bool {
+        do {
+            let result = try commandRunner.run(
+                command: executable,
+                arguments: arguments,
+                environment: nil,
+                workingDirectory: nil
+            )
+            if result.exitCode != 0 {
+                context.outcome = .failure(
+                    error: .commandFailed(
+                        command: executable.path,
+                        arguments: arguments,
+                        exitCode: Int(result.exitCode),
+                        stderr: result.stderr,
+                        detail: result.stdout.isEmpty ? nil : result.stdout
+                    )
+                )
+                return false
+            }
+            return true
+        } catch {
+            context.outcome = .failure(
+                error: .commandFailed(
+                    command: executable.path,
+                    arguments: arguments,
+                    exitCode: nil,
+                    stderr: "",
+                    detail: String(describing: error)
+                )
+            )
+            return false
+        }
+    }
+
+    /// Detects a newly launched window using a token and bundle id filter.
+    private func detectNewWindow(
+        client: AeroSpaceClient,
+        appBundleId: String,
+        token: ProjectWindowToken,
+        beforeWindowIds: Set<Int>,
+        context: ActivationContext
+    ) -> AeroSpaceWindow? {
+        let schedule = PollSchedule(initialIntervalsMs: [], steadyIntervalMs: windowDetectionTiming.pollIntervalMs)
+        let outcome: PollOutcome<AeroSpaceWindow, ActivationError> = Poller.poll(
+            schedule: schedule,
+            timeoutMs: windowDetectionTiming.timeoutMs,
+            sleeper: sleeper
+        ) {
+            if context.isCancelled {
+                return .failure(.cancelled)
+            }
+            switch client.listWindowsAllDecoded() {
+            case .failure(let error):
+                if WindowDetectionRetryPolicy.shouldRetryPoll(error) {
+                    return .keepWaiting
+                }
+                let args = ["list-windows", "--all", "--json"]
+                return .failure(commandFailed(command: client.executableURL.path, arguments: args, error: error))
+            case .success(let windows):
+                let matches = windows.filter { window in
+                    window.appBundleId == appBundleId &&
+                        token.matches(windowTitle: window.windowTitle) &&
+                        !beforeWindowIds.contains(window.windowId)
+                }
+                if matches.count == 1, let window = matches.first {
+                    return .success(window)
+                }
+                if matches.count > 1 {
+                    return .failure(.ambiguousWindows(appBundleId: appBundleId, count: matches.count))
+                }
+                return .keepWaiting
+            }
+        }
+
+        switch outcome {
         case .success(let window):
-            return finalizeIdeWindow(window, client: client, context: context)
+            return window
         case .failure(let error):
             context.outcome = .failure(error: error)
             return nil
         case .timedOut:
-            break
-        }
-
-        if context.outcome == nil {
-            context.outcome = .failure(error: .ideWindowTokenNotDetected(token: token.value))
-        }
-        return nil
-    }
-
-    private func attemptTokenIdeWindowInWorkspace(
-        client: AeroSpaceClient,
-        token: ProjectWindowToken,
-        identity: IdeIdentity,
-        beforeIds: Set<Int>,
-        workspaceName: String,
-        context: ActivationContext
-    ) -> PollDecision<AeroSpaceWindow, ActivationError> {
-        if context.isCancelled {
-            return .failure(.cancelled)
-        }
-        let appBundleId = identity.bundleId?.isEmpty == false ? identity.bundleId : nil
-        switch client.listWindowsDecodedNoRetry(
-            workspace: workspaceName,
-            appBundleId: appBundleId
-        ) {
-        case .failure(let error):
-            if WindowDetectionRetryPolicy.shouldRetryPoll(error) {
-                return .keepWaiting
-            }
-            return .failure(.aeroSpaceFailed(error))
-        case .success(let windows):
-            let matches = windows.filter { window in
-                token.matches(windowTitle: window.windowTitle) && matchesIdentity(window, identity: identity)
-            }
-            let newMatches = matches.filter { !beforeIds.contains($0.windowId) }
-            if newMatches.count == 1, let window = newMatches.first {
-                return .success(window)
-            }
-            if newMatches.count > 1 {
-                let ids = newMatches.map { $0.windowId }
-                let selection = selectWindowId(
-                    from: ids,
-                    kind: .ide,
-                    workspace: workspaceName
-                )
-                if let warning = selection.warning {
-                    context.warnings.append(warning)
-                }
-                let selected = newMatches.sorted { $0.windowId < $1.windowId }[0]
-                return .success(selected)
-            }
-            return .keepWaiting
-        }
-    }
-
-    private func attemptFocusedTokenIdeWindow(
-        client: AeroSpaceClient,
-        token: ProjectWindowToken,
-        identity: IdeIdentity,
-        context: ActivationContext
-    ) -> PollDecision<AeroSpaceWindow, ActivationError> {
-        if context.isCancelled {
-            return .failure(.cancelled)
-        }
-        switch client.listWindowsFocusedDecodedNoRetry() {
-        case .failure(let error):
-            if WindowDetectionRetryPolicy.shouldRetryFocusedWindow(error) {
-                return .keepWaiting
-            }
-            return .failure(.aeroSpaceFailed(error))
-        case .success(let windows):
-            guard let window = windows.first else {
-                return .keepWaiting
-            }
-            guard token.matches(windowTitle: window.windowTitle),
-                  matchesIdentity(window, identity: identity) else {
-                return .keepWaiting
-            }
-            return .success(window)
-        }
-    }
-
-    private func finalizeIdeWindow(
-        _ window: AeroSpaceWindow,
-        client: AeroSpaceClient,
-        context: ActivationContext
-    ) -> Int? {
-        context.ideWindowLayout = window.windowLayout
-        if !moveWindowIfNeeded(
-            client: client,
-            windowId: window.windowId,
-            currentWorkspace: window.workspace,
-            targetWorkspace: context.workspaceName,
-            context: context
-        ) {
+            context.outcome = .failure(error: .requiredWindowMissing(appBundleId: appBundleId))
             return nil
         }
-        return window.windowId
     }
 
-    // MARK: - Step 7: Floating Layout
+    private func updatedWindow(_ window: AeroSpaceWindow, workspace: String) -> AeroSpaceWindow {
+        AeroSpaceWindow(
+            windowId: window.windowId,
+            workspace: workspace,
+            appBundleId: window.appBundleId,
+            appName: window.appName,
+            windowTitle: window.windowTitle,
+            windowLayout: window.windowLayout,
+            monitorAppkitNSScreenScreensId: window.monitorAppkitNSScreenScreensId
+        )
+    }
 
-    private func setFloatingLayouts(
-        client: AeroSpaceClient,
+    // MARK: - Step 7: Layout
+
+    private func applyCanonicalLayout(
+        workspace: String,
         ideWindowId: Int,
-        chromeWindowId: Int,
+        client: AeroSpaceClient,
         context: ActivationContext
     ) -> Bool {
-        ensureFloatingLayout(
-            client: client,
-            windowId: ideWindowId,
-            kind: .ide,
-            workspaceName: context.workspaceName,
-            appBundleId: context.ideBundleId,
-            currentLayout: context.ideWindowLayout,
-            context: context
-        )
-        ensureFloatingLayout(
-            client: client,
-            windowId: chromeWindowId,
-            kind: .chrome,
-            workspaceName: context.workspaceName,
-            appBundleId: ChromeLauncher.chromeBundleId,
-            currentLayout: context.chromeWindowLayout,
-            context: context
-        )
-        return true
+        if context.isCancelled {
+            context.outcome = .failure(error: .cancelled)
+            return false
+        }
+
+        switch client.flattenWorkspaceTree(workspace: workspace) {
+        case .success:
+            break
+        case .failure(let error):
+            context.outcome = .failure(error: layoutFailed(error: error))
+            return false
+        }
+
+        switch client.balanceSizes(workspace: workspace) {
+        case .success:
+            break
+        case .failure(let error):
+            context.outcome = .failure(error: layoutFailed(error: error))
+            return false
+        }
+
+        switch client.setLayout(windowId: ideWindowId, layout: .hTiles) {
+        case .success:
+            return true
+        case .failure(let error):
+            context.outcome = .failure(error: layoutFailed(error: error))
+            return false
+        }
     }
 
-    // MARK: - Step 9: Focus IDE
+    private func resizeIdeWindow(
+        ideWindow: AeroSpaceWindow,
+        client: AeroSpaceClient,
+        context: ActivationContext
+    ) -> Bool {
+        if context.isCancelled {
+            context.outcome = .failure(error: .cancelled)
+            return false
+        }
+
+        guard let screenIndex = ideWindow.monitorAppkitNSScreenScreensId else {
+            context.outcome = .failure(
+                error: .screenMetricsUnavailable(
+                    screenIndex: 0,
+                    detail: "Missing monitor-appkit-nsscreen-screens-id"
+                )
+            )
+            return false
+        }
+
+        switch screenMetricsProvider.visibleWidth(screenIndex1Based: screenIndex) {
+        case .failure(let error):
+            context.outcome = .failure(
+                error: .screenMetricsUnavailable(
+                    screenIndex: screenIndex,
+                    detail: String(describing: error)
+                )
+            )
+            return false
+        case .success(let visibleWidth):
+            guard visibleWidth > 0 else {
+                context.outcome = .failure(
+                    error: .screenMetricsUnavailable(
+                        screenIndex: screenIndex,
+                        detail: "Visible width must be positive"
+                    )
+                )
+                return false
+            }
+
+            let ideWidth = computeIdeWidth(visibleWidth: visibleWidth)
+            switch client.resizeWidth(windowId: ideWindow.windowId, width: ideWidth) {
+            case .success:
+                return true
+            case .failure(let error):
+                context.outcome = .failure(error: resizeFailed(error: error))
+                return false
+            }
+        }
+    }
+
+    private func computeIdeWidth(visibleWidth: Double) -> Int {
+        let minIde = 800.0
+        let minChrome = 500.0
+        let target = (0.60 * visibleWidth).rounded()
+        let maxIde = visibleWidth - minChrome
+
+        let width: Double
+        if maxIde < minIde {
+            width = (0.55 * visibleWidth).rounded()
+        } else {
+            width = min(max(target, minIde), maxIde)
+        }
+
+        return max(1, Int(width))
+    }
 
     private func focusIdeWindow(client: AeroSpaceClient, ideWindowId: Int, context: ActivationContext) -> Bool {
         switch client.focusWindow(windowId: ideWindowId) {
-        case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
-            return false
-        case .success:
-            return true
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func matchesIdentity(_ window: AeroSpaceWindow, identity: IdeIdentity) -> Bool {
-        if let bundleId = identity.bundleId, !bundleId.isEmpty {
-            return window.appBundleId == bundleId
-        }
-        return window.appName == identity.appName
-    }
-
-    private func moveWindowIfNeeded(
-        client: AeroSpaceClient,
-        windowId: Int,
-        currentWorkspace: String,
-        targetWorkspace: String,
-        context: ActivationContext
-    ) -> Bool {
-        guard currentWorkspace != targetWorkspace else {
-            return true
-        }
-        switch client.moveWindow(windowId: windowId, to: targetWorkspace) {
         case .success:
             return true
         case .failure(let error):
-            context.outcome = .failure(error: .aeroSpaceFailed(error))
+            let args = ["focus", "--window-id", String(ideWindowId)]
+            context.outcome = .failure(error: commandFailed(command: client.executableURL.path, arguments: args, error: error))
             return false
         }
     }
 
-    /// Ensures a window uses floating layout, warning only if the layout remains non-floating.
-    private func ensureFloatingLayout(
-        client: AeroSpaceClient,
-        windowId: Int,
-        kind: ActivationWindowKind,
-        workspaceName: String,
-        appBundleId: String?,
-        currentLayout: String?,
-        context: ActivationContext
-    ) {
-        let initialLayout = currentLayout ?? lookupWindowLayout(
-            client: client,
-            windowId: windowId,
-            workspaceName: workspaceName,
-            appBundleId: appBundleId
+    // MARK: - Error Helpers
+
+    private func commandFailed(
+        command: String,
+        arguments: [String],
+        error: AeroSpaceCommandError
+    ) -> ActivationError {
+        let details = commandFailureDetails(from: error)
+        return .commandFailed(
+            command: command,
+            arguments: arguments,
+            exitCode: details.exitCode,
+            stderr: details.stderr,
+            detail: details.detail
         )
-        if let layout = initialLayout, isFloatingLayout(layout) {
-            return
-        }
-
-        let layoutOutcome = client.setFloatingLayout(windowId: windowId)
-        switch layoutOutcome {
-        case .success:
-            return
-        case .failure(let error):
-            let updatedLayout = lookupWindowLayout(
-                client: client,
-                windowId: windowId,
-                workspaceName: workspaceName,
-                appBundleId: appBundleId
-            )
-            if let layout = updatedLayout, isFloatingLayout(layout) {
-                return
-            }
-            context.warnings.append(.layoutFailed(kind: kind, windowId: windowId, error: error))
-        }
     }
 
-    /// Looks up the layout string for a specific window id in a workspace.
-    private func lookupWindowLayout(
-        client: AeroSpaceClient,
+    private func moveFailed(
         windowId: Int,
-        workspaceName: String,
-        appBundleId: String?
-    ) -> String? {
-        switch client.listWindowsDecoded(workspace: workspaceName, appBundleId: appBundleId) {
-        case .failure:
+        workspace: String,
+        error: AeroSpaceCommandError
+    ) -> ActivationError? {
+        let details = commandFailureDetails(from: error)
+        guard let exitCode = details.exitCode else {
             return nil
-        case .success(let windows):
-            return windows.first(where: { $0.windowId == windowId })?.windowLayout
+        }
+        return .moveFailed(windowId: windowId, workspace: workspace, exitCode: exitCode, stderr: details.stderr)
+    }
+
+    private func layoutFailed(error: AeroSpaceCommandError) -> ActivationError {
+        let details = commandFailureDetails(from: error)
+        let exitCode = details.exitCode ?? -1
+        return .layoutFailed(exitCode: exitCode, stderr: details.stderr)
+    }
+
+    private func resizeFailed(error: AeroSpaceCommandError) -> ActivationError {
+        let details = commandFailureDetails(from: error)
+        let exitCode = details.exitCode ?? -1
+        return .resizeFailed(exitCode: exitCode, stderr: details.stderr)
+    }
+
+    private func commandFailureDetails(from error: AeroSpaceCommandError) -> CommandFailureDetails {
+        switch error {
+        case .executionFailed(let execError):
+            switch execError {
+            case .launchFailed(_, let underlyingError):
+                return CommandFailureDetails(exitCode: nil, stderr: "", detail: underlyingError)
+            case .nonZeroExit(_, let result):
+                return CommandFailureDetails(exitCode: Int(result.exitCode), stderr: result.stderr, detail: nil)
+            }
+        case .timedOut(_, let timeoutSeconds, let result):
+            return CommandFailureDetails(
+                exitCode: Int(result.exitCode),
+                stderr: result.stderr,
+                detail: "Timed out after \(timeoutSeconds)s"
+            )
+        case .decodingFailed(_, let underlyingError):
+            return CommandFailureDetails(exitCode: nil, stderr: "", detail: "Decoding failed: \(underlyingError)")
+        case .unexpectedOutput(_, let detail):
+            return CommandFailureDetails(exitCode: nil, stderr: "", detail: detail)
+        case .notReady(let payload):
+            return CommandFailureDetails(
+                exitCode: Int(payload.lastCommand.exitCode),
+                stderr: payload.lastCommand.stderr,
+                detail: "AeroSpace not ready after \(payload.timeoutSeconds)s"
+            )
         }
     }
-
-    private func isFloatingLayout(_ layout: String) -> Bool {
-        layout.lowercased() == "floating"
-    }
-
-    /// Selects the lowest window id and emits a multiple-windows warning when needed.
-    /// - Parameters:
-    ///   - windowIds: Window IDs to consider (must be non-empty).
-    ///   - kind: Window kind for warning context.
-    ///   - workspace: Workspace name for warning context.
-    /// - Returns: Selected window id with an optional warning.
-    private func selectWindowId(
-        from windowIds: [Int],
-        kind: ActivationWindowKind,
-        workspace: String
-    ) -> (selectedId: Int, warning: ActivationWarning?) {
-        precondition(!windowIds.isEmpty, "windowIds must not be empty")
-        let sortedIds = windowIds.sorted()
-        let selectedId = sortedIds[0]
-        let warningValue = sortedIds.count > 1
-            ? ActivationWarning.multipleWindows(
-                kind: kind,
-                workspace: workspace,
-                chosenId: selectedId,
-                extraIds: Array(sortedIds.dropFirst())
-            )
-            : nil
-        return (selectedId, warningValue)
-    }
 }
 
-// MARK: - Internal Types
+struct WorkspaceFocusTiming {
+    let pollIntervalMs: Int
+    let reissueSwitchAfterMs: Int
+    let deadlineMs: Int
+    let postMoveDeadlineMs: Int
 
-private struct ActivationStep {
-    let name: String
-    let run: (ActivationContext, inout ActivationState) -> Bool
+    static let fixed = WorkspaceFocusTiming(
+        pollIntervalMs: 50,
+        reissueSwitchAfterMs: 750,
+        deadlineMs: 5000,
+        postMoveDeadlineMs: 1000
+    )
 }
 
-private struct ChromeLaunchState {
-    var existingWindow: ActivatedWindow?
-    var launchToken: ChromeLauncher.ChromeLaunchToken?
+/// Polling configuration for detecting newly launched windows.
+struct WindowDetectionTiming {
+    let pollIntervalMs: Int
+    let timeoutMs: Int
+
+    static let standard = WindowDetectionTiming(
+        pollIntervalMs: 200,
+        timeoutMs: 10_000
+    )
 }
 
-private struct ActivationState {
-    var client: AeroSpaceClient?
-    var chromeLauncher: ChromeLaunching?
-    var config: Config?
-    var project: ProjectConfig?
-    var ideIdentity: IdeIdentity?
-    var chromeLaunchState: ChromeLaunchState?
-    var ideWindow: ActivatedWindow?
-    var chromeWindow: ActivatedWindow?
+private struct CommandFailureDetails {
+    let exitCode: Int?
+    let stderr: String
+    let detail: String?
 }
 
 private struct IdeIdentity: Equatable, Sendable {
     let bundleId: String?
     let appName: String
+    let appURL: URL
 }
 
 /// Mutable activation state passed through orchestration steps.
@@ -978,26 +1253,11 @@ private final class ActivationContext {
     let shouldSwitchWorkspace: Bool
     let progressSink: ((ActivationProgress) -> Void)?
     let cancellationToken: ActivationCancellationToken?
-    var windowToken: ProjectWindowToken {
-        ProjectWindowToken(projectId: projectId)
-    }
-    var warnings: [ActivationWarning] = []
     let commandLogs: CommandLogAccumulator = CommandLogAccumulator()
     var ideWindowId: Int?
     var chromeWindowId: Int?
-    var ideWindowLayout: String?
-    var chromeWindowLayout: String?
     var ideBundleId: String?
     var outcome: ActivationOutcome?
-
-    init(projectId: String, shouldFocusIdeWindow: Bool, shouldSwitchWorkspace: Bool) {
-        self.projectId = projectId
-        self.workspaceName = "pw-\(projectId)"
-        self.shouldFocusIdeWindow = shouldFocusIdeWindow
-        self.shouldSwitchWorkspace = shouldSwitchWorkspace
-        self.progressSink = nil
-        self.cancellationToken = nil
-    }
 
     init(
         projectId: String,
@@ -1073,15 +1333,21 @@ extension ActivationContext {
         }
 
         let outcomeLabel: String
+        let errorCode: String?
+        let errorContext: [String: String]?
         switch outcome {
-        case .success(_, let warnings):
-            outcomeLabel = warnings.isEmpty ? "success" : "warn"
+        case .success:
+            outcomeLabel = "success"
+            errorCode = nil
+            errorContext = nil
         case .failure(let error):
             if case .cancelled = error {
                 outcomeLabel = "cancelled"
             } else {
                 outcomeLabel = "fail"
             }
+            errorCode = error.code
+            errorContext = error.logContext
         }
 
         let payload = ActivationLogPayload(
@@ -1090,7 +1356,8 @@ extension ActivationContext {
             outcome: outcomeLabel,
             ideWindowId: ideWindowId,
             chromeWindowId: chromeWindowId,
-            warnings: warnings.map { $0.logSummary() },
+            errorCode: errorCode,
+            errorContext: errorContext,
             aeroSpaceCommands: commandLogs.allLogs
         )
 
@@ -1108,7 +1375,7 @@ extension ActivationContext {
         switch outcomeLabel {
         case "fail":
             level = .error
-        case "warn", "cancelled":
+        case "cancelled":
             level = .warn
         default:
             level = .info

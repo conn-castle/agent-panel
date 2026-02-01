@@ -65,6 +65,7 @@ struct WindowPayload: Encodable {
     let appName: String
     let windowTitle: String
     let windowLayout: String
+    let monitorAppkitNSScreenScreensId: Int?
 
     enum CodingKeys: String, CodingKey {
         case windowId = "window-id"
@@ -73,6 +74,7 @@ struct WindowPayload: Encodable {
         case appName = "app-name"
         case windowTitle = "window-title"
         case windowLayout = "window-layout"
+        case monitorAppkitNSScreenScreensId = "monitor-appkit-nsscreen-screens-id"
     }
 }
 
@@ -85,15 +87,17 @@ func chromeWindowPayload(
     id: Int,
     workspace: String,
     windowTitle: String = "Chrome",
-    windowLayout: String = "tiling"
+    windowLayout: String = "tiling",
+    monitorAppkitNSScreenScreensId: Int? = 1
 ) -> WindowPayload {
     WindowPayload(
         windowId: id,
         workspace: workspace,
-        appBundleId: ChromeLauncher.chromeBundleId,
+        appBundleId: ChromeApp.bundleId,
         appName: "Google Chrome",
         windowTitle: windowTitle,
-        windowLayout: windowLayout
+        windowLayout: windowLayout,
+        monitorAppkitNSScreenScreensId: monitorAppkitNSScreenScreensId
     )
 }
 
@@ -110,7 +114,8 @@ func windowPayload(
     bundleId: String,
     appName: String,
     windowTitle: String = "",
-    windowLayout: String = "tiling"
+    windowLayout: String = "tiling",
+    monitorAppkitNSScreenScreensId: Int? = 1
 ) -> WindowPayload {
     WindowPayload(
         windowId: id,
@@ -118,7 +123,8 @@ func windowPayload(
         appBundleId: bundleId,
         appName: appName,
         windowTitle: windowTitle,
-        windowLayout: windowLayout
+        windowLayout: windowLayout,
+        monitorAppkitNSScreenScreensId: monitorAppkitNSScreenScreensId
     )
 }
 
@@ -131,6 +137,21 @@ func windowsJSON(_ windows: [WindowPayload]) -> String {
         return "[]"
     }
     return json
+}
+
+// MARK: - Date Provider
+
+/// Fixed date provider for deterministic tests.
+struct FixedDateProvider: DateProviding {
+    let date: Date
+
+    init(date: Date = Date(timeIntervalSince1970: 0)) {
+        self.date = date
+    }
+
+    func now() -> Date {
+        date
+    }
 }
 
 // MARK: - Test File System
@@ -304,6 +325,58 @@ final class TestSleeper: AeroSpaceSleeping {
     }
 }
 
+// MARK: - Test Clock
+
+/// Controllable clock for timing-sensitive tests.
+final class TestClock: DateProviding {
+    private var current: Date
+
+    init(start: Date = Date(timeIntervalSince1970: 0)) {
+        self.current = start
+    }
+
+    func now() -> Date {
+        current
+    }
+
+    func advance(seconds: TimeInterval) {
+        current = current.addingTimeInterval(seconds)
+    }
+}
+
+/// Sleeper that advances a test clock instead of blocking.
+final class AdvancingSleeper: AeroSpaceSleeping {
+    private let clock: TestClock
+    private(set) var sleepCalls: [TimeInterval] = []
+
+    init(clock: TestClock) {
+        self.clock = clock
+    }
+
+    func sleep(seconds: TimeInterval) {
+        sleepCalls.append(seconds)
+        clock.advance(seconds: seconds)
+    }
+}
+
+// MARK: - Test Screen Metrics
+
+/// Screen metrics provider for tests.
+struct TestScreenMetricsProvider: ScreenMetricsProviding {
+    let widthsByIndex: [Int: Double]
+
+    init(widthsByIndex: [Int: Double]) {
+        self.widthsByIndex = widthsByIndex
+    }
+
+    func visibleWidth(screenIndex1Based: Int) -> Result<Double, ScreenMetricsError> {
+        guard let width = widthsByIndex[screenIndex1Based] else {
+            return .failure(.invalidScreenIndex(screenIndex1Based))
+        }
+        return .success(width)
+    }
+}
+
 // MARK: - Test Command Runner
 
 /// Signature for matching stubbed open command responses.
@@ -374,133 +447,6 @@ final class TestBinaryResolver: AeroSpaceBinaryResolving {
     }
 }
 
-// MARK: - Test IDE Launcher
-
-/// Configurable IDE launcher for testing.
-final class TestIdeLauncher: IdeLaunching {
-    private let result: Result<IdeLaunchSuccess, IdeLaunchError>
-    private(set) var callCount: Int = 0
-    private(set) var lastProject: ProjectConfig?
-    private(set) var lastIdeConfig: IdeConfig?
-
-    init(result: Result<IdeLaunchSuccess, IdeLaunchError>) {
-        self.result = result
-    }
-
-    static func success(warnings: [IdeLaunchWarning] = []) -> TestIdeLauncher {
-        TestIdeLauncher(result: .success(IdeLaunchSuccess(warnings: warnings)))
-    }
-
-    static func failure(_ error: IdeLaunchError) -> TestIdeLauncher {
-        TestIdeLauncher(result: .failure(error))
-    }
-
-    func launch(project: ProjectConfig, ideConfig: IdeConfig) -> Result<IdeLaunchSuccess, IdeLaunchError> {
-        callCount += 1
-        lastProject = project
-        lastIdeConfig = ideConfig
-        return result
-    }
-}
-
-// MARK: - Test Chrome Launcher
-
-/// Configurable Chrome launcher for testing.
-final class TestChromeLauncher: ChromeLaunching {
-    private let result: Result<ChromeLaunchResult, ChromeLaunchError>
-    private(set) var callCount: Int = 0
-    private(set) var lastWorkspaceName: String?
-    private(set) var lastWindowToken: ProjectWindowToken?
-    private(set) var lastIdeWindowIdToRefocus: Int?
-    /// Whether checkExistingWindow should return "found" (true) or "notFound" (false)
-    var existingWindowFound: Bool = true
-
-    init(result: Result<ChromeLaunchResult, ChromeLaunchError>) {
-        self.result = result
-    }
-
-    static func created(windowId: Int) -> TestChromeLauncher {
-        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .created(windowId: windowId), warnings: [])))
-        launcher.existingWindowFound = false
-        return launcher
-    }
-
-    static func existing(windowId: Int) -> TestChromeLauncher {
-        let launcher = TestChromeLauncher(result: .success(ChromeLaunchResult(outcome: .existing(windowId: windowId), warnings: [])))
-        launcher.existingWindowFound = true
-        return launcher
-    }
-
-    static func failure(_ error: ChromeLaunchError) -> TestChromeLauncher {
-        TestChromeLauncher(result: .failure(error))
-    }
-
-    func ensureWindow(
-        expectedWorkspaceName: String,
-        windowToken: ProjectWindowToken,
-        globalChromeUrls: [String],
-        project: ProjectConfig,
-        ideWindowIdToRefocus: Int?,
-        allowExistingWindows: Bool,
-        cancellationToken _: ActivationCancellationToken?
-    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
-        callCount += 1
-        lastWorkspaceName = expectedWorkspaceName
-        lastWindowToken = windowToken
-        lastIdeWindowIdToRefocus = ideWindowIdToRefocus
-        return result
-    }
-
-    func checkExistingWindow(
-        expectedWorkspaceName: String,
-        windowToken: ProjectWindowToken,
-        allowExistingWindows: Bool
-    ) -> ChromeLauncher.ExistingWindowCheck {
-        callCount += 1
-        lastWorkspaceName = expectedWorkspaceName
-        lastWindowToken = windowToken
-        switch result {
-        case .success(let launchResult):
-            if existingWindowFound {
-                return .found(launchResult)
-            } else {
-                return .notFound(existingIds: [])
-            }
-        case .failure(let error):
-            return .error(error)
-        }
-    }
-
-    func launchChrome(
-        expectedWorkspaceName: String,
-        windowToken: ProjectWindowToken,
-        globalChromeUrls: [String],
-        project: ProjectConfig,
-        existingIds: Set<Int>,
-        ideWindowIdToRefocus: Int?
-    ) -> Result<ChromeLauncher.ChromeLaunchToken, ChromeLaunchError> {
-        callCount += 1
-        lastWorkspaceName = expectedWorkspaceName
-        lastWindowToken = windowToken
-        lastIdeWindowIdToRefocus = ideWindowIdToRefocus
-        // Return a token that can be used for detection
-        return .success(ChromeLauncher.ChromeLaunchToken(
-            windowToken: windowToken,
-            expectedWorkspaceName: expectedWorkspaceName,
-            beforeIds: existingIds,
-            ideWindowIdToRefocus: ideWindowIdToRefocus
-        ))
-    }
-
-    func detectLaunchedWindow(
-        token: ChromeLauncher.ChromeLaunchToken,
-        cancellationToken: ActivationCancellationToken?,
-        warningSink: @escaping (ChromeLaunchWarning) -> Void
-    ) -> Result<ChromeLaunchResult, ChromeLaunchError> {
-        return result
-    }
-}
-
 // MARK: - Test Logger
 
 /// Logger that captures log entries for testing.
@@ -535,10 +481,9 @@ final class TestLogger: ProjectWorkspacesLogging {
 /// Common test constants.
 enum TestConstants {
     static let aerospacePath = "/opt/homebrew/bin/aerospace"
-    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
+    static let listWindowsFormat = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout} %{monitor-appkit-nsscreen-screens-id}"
     static let vscodeBundleId = "com.microsoft.VSCode"
     static let vscodeAppURL = URL(fileURLWithPath: "/Applications/Visual Studio Code.app", isDirectory: true)
-    static let chromeAppURL = URL(fileURLWithPath: "/Applications/Google Chrome.app", isDirectory: true)
 }
 
 // MARK: - Test Config Helpers
@@ -558,9 +503,6 @@ func validConfigTOML(
     [global]
     defaultIde = "vscode"
     globalChromeUrls = []
-
-    [display]
-    ultrawideMinWidthPx = 5000
 
     [ide.vscode]
     bundleId = "com.microsoft.VSCode"

@@ -47,12 +47,11 @@ struct ConfigParser {
 
         unknownKeyPaths.append(contentsOf: collectUnknownKeys(
             in: table,
-            allowedKeys: ["global", "display", "ide", "project"],
+            allowedKeys: ["global", "ide", "project"],
             prefix: nil
         ))
 
         let globalOutcome = parseGlobal(table: table, findings: &findings, unknownKeyPaths: &unknownKeyPaths)
-        let displayOutcome = parseDisplay(table: table, findings: &findings, unknownKeyPaths: &unknownKeyPaths)
         let ideOutcome = parseIdeConfig(table: table, findings: &findings, unknownKeyPaths: &unknownKeyPaths)
 
         let projectOutcomes = parseProjects(
@@ -88,16 +87,14 @@ struct ConfigParser {
         if validationFailed {
             config = nil
         } else {
-            guard let global = globalOutcome.config,
-                  let display = displayOutcome.config
-            else {
+            guard let global = globalOutcome.config else {
                 config = nil
                 findings.append(
                     DoctorFinding(
                         severity: .fail,
                         title: "Config defaults incomplete",
-                        detail: "Global or display defaults could not be resolved.",
-                        fix: "Ensure global.defaultIde and display.ultrawideMinWidthPx are valid."
+                        detail: "Global defaults could not be resolved.",
+                        fix: "Ensure global.defaultIde is valid."
                     )
                 )
                 return ConfigParseOutcome(
@@ -111,7 +108,6 @@ struct ConfigParser {
 
             config = Config(
                 global: global,
-                display: display,
                 ide: ideOutcome,
                 projects: parsedProjects
             )
@@ -129,11 +125,6 @@ struct ConfigParser {
     private struct GlobalOutcome {
         let config: GlobalConfig?
         let defaultIde: IdeKind?
-        let switcherHotkeyPresent: Bool
-    }
-
-    private struct DisplayOutcome {
-        let config: DisplayConfig?
     }
 
     private struct ProjectOutcome {
@@ -156,7 +147,6 @@ struct ConfigParser {
     ) -> GlobalOutcome {
         var defaultIde: IdeKind?
         var globalChromeUrls: [String]?
-        var switcherHotkeyPresent = false
 
         if table.contains(key: "global") {
             guard let globalTable = try? table.table(forKey: "global") else {
@@ -167,7 +157,7 @@ struct ConfigParser {
                         fix: "Replace global with a TOML table: [global]"
                     )
                 )
-                return GlobalOutcome(config: nil, defaultIde: nil, switcherHotkeyPresent: false)
+                return GlobalOutcome(config: nil, defaultIde: nil)
             }
 
             unknownKeyPaths.append(contentsOf: collectUnknownKeys(
@@ -176,8 +166,7 @@ struct ConfigParser {
                 prefix: "global"
             ))
 
-            switcherHotkeyPresent = globalTable.contains(key: "switcherHotkey")
-            if switcherHotkeyPresent {
+            if globalTable.contains(key: "switcherHotkey") {
                 findings.append(
                     DoctorFinding(
                         severity: .warn,
@@ -213,7 +202,12 @@ struct ConfigParser {
                 break
             }
 
-            switch readStringArrayField(from: globalTable, key: "globalChromeUrls", keyPath: "global.globalChromeUrls", findings: &findings) {
+            switch readStringArrayField(
+                from: globalTable,
+                key: "globalChromeUrls",
+                keyPath: "global.globalChromeUrls",
+                findings: &findings
+            ) {
             case .value(let urls):
                 globalChromeUrls = urls
             case .missing:
@@ -228,12 +222,12 @@ struct ConfigParser {
             }
         } else {
             defaultIde = .vscode
-            globalChromeUrls = []
             findings.append(defaultFinding(
                 severity: .warn,
                 title: "Default applied: global.defaultIde = \"vscode\"",
                 fix: "Add [global] with defaultIde to config.toml to make the default explicit."
             ))
+            globalChromeUrls = []
             findings.append(defaultFinding(
                 severity: .warn,
                 title: "Default applied: global.globalChromeUrls = []",
@@ -248,75 +242,7 @@ struct ConfigParser {
             config = nil
         }
 
-        return GlobalOutcome(config: config, defaultIde: defaultIde, switcherHotkeyPresent: switcherHotkeyPresent)
-    }
-
-    /// Parses the display config table and emits findings.
-    private func parseDisplay(
-        table: TOMLTable,
-        findings: inout [DoctorFinding],
-        unknownKeyPaths: inout [String]
-    ) -> DisplayOutcome {
-        var ultrawideMinWidthPx: Int?
-
-        if table.contains(key: "display") {
-            guard let displayTable = try? table.table(forKey: "display") else {
-                findings.append(
-                    DoctorFinding(
-                        severity: .fail,
-                        title: "display must be a table",
-                        fix: "Replace display with a TOML table: [display]"
-                    )
-                )
-                return DisplayOutcome(config: nil)
-            }
-
-            unknownKeyPaths.append(contentsOf: collectUnknownKeys(
-                in: displayTable,
-                allowedKeys: ["ultrawideMinWidthPx"],
-                prefix: "display"
-            ))
-
-            switch readIntField(from: displayTable, key: "ultrawideMinWidthPx", keyPath: "display.ultrawideMinWidthPx", findings: &findings) {
-            case .value(let rawWidth):
-                if rawWidth > 0 {
-                    ultrawideMinWidthPx = rawWidth
-                } else {
-                    findings.append(
-                        DoctorFinding(
-                            severity: .fail,
-                            title: "display.ultrawideMinWidthPx must be positive",
-                            fix: "Set display.ultrawideMinWidthPx to a positive integer."
-                        )
-                    )
-                }
-            case .missing:
-                ultrawideMinWidthPx = 5000
-                findings.append(defaultFinding(
-                    severity: .warn,
-                    title: "Default applied: display.ultrawideMinWidthPx = 5000",
-                    fix: "Add display.ultrawideMinWidthPx to config.toml to make the default explicit."
-                ))
-            case .invalid:
-                break
-            }
-        } else {
-            ultrawideMinWidthPx = 5000
-            findings.append(defaultFinding(
-                severity: .warn,
-                title: "Default applied: display.ultrawideMinWidthPx = 5000",
-                fix: "Add [display] with ultrawideMinWidthPx to config.toml to make the default explicit."
-            ))
-        }
-
-        let config: DisplayConfig?
-        if let ultrawideMinWidthPx {
-            config = DisplayConfig(ultrawideMinWidthPx: ultrawideMinWidthPx)
-        } else {
-            config = nil
-        }
-
-        return DisplayOutcome(config: config)
+        return GlobalOutcome(config: config, defaultIde: defaultIde)
     }
 
     /// Parses the IDE config table.
@@ -465,10 +391,7 @@ struct ConfigParser {
                     "name",
                     "path",
                     "colorHex",
-                    "repoUrl",
                     "ide",
-                    "ideUseAgentLayerLauncher",
-                    "ideCommand",
                     "chromeUrls",
                     "chromeProfileDirectory"
                 ],
@@ -479,13 +402,10 @@ struct ConfigParser {
             let nameResult = readStringField(from: projectTable, key: "name", keyPath: "project[\(index)].name", findings: &findings)
             let pathResult = readStringField(from: projectTable, key: "path", keyPath: "project[\(index)].path", findings: &findings)
             let colorHexResult = readStringField(from: projectTable, key: "colorHex", keyPath: "project[\(index)].colorHex", findings: &findings)
-            let repoUrlResult = readStringField(from: projectTable, key: "repoUrl", keyPath: "project[\(index)].repoUrl", findings: &findings)
-
             let id = valueOrNil(idResult)
             let name = valueOrNil(nameResult)
             let path = valueOrNil(pathResult)
             let colorHex = valueOrNil(colorHexResult)
-            let repoUrl = valueOrNil(repoUrlResult)
 
             enum IdeResolutionStatus {
                 case resolved(IdeKind)
@@ -532,44 +452,19 @@ struct ConfigParser {
                 resolvedIde = nil
             }
 
-            let ideUseAgentLayerLauncher: Bool?
-            switch readBoolField(from: projectTable, key: "ideUseAgentLayerLauncher", keyPath: "project[\(index)].ideUseAgentLayerLauncher", findings: &findings) {
-            case .value(let launcher):
-                ideUseAgentLayerLauncher = launcher
-            case .missing:
-                ideUseAgentLayerLauncher = true
-                findings.append(defaultFinding(
-                    severity: .pass,
-                    title: "Default applied: project[\(index)].ideUseAgentLayerLauncher = true",
-                    fix: "Add project.ideUseAgentLayerLauncher to config.toml if you want to override."
-                ))
-            case .invalid:
-                ideUseAgentLayerLauncher = nil
-            }
-
-            let ideCommand: String?
-            switch readStringField(from: projectTable, key: "ideCommand", keyPath: "project[\(index)].ideCommand", findings: &findings) {
-            case .value(let command):
-                ideCommand = command
-            case .missing:
-                ideCommand = ""
-                findings.append(defaultFinding(
-                    severity: .pass,
-                    title: "Default applied: project[\(index)].ideCommand = \"\"",
-                    fix: "Add project.ideCommand to config.toml if you want to override."
-                ))
-            case .invalid:
-                ideCommand = nil
-            }
-
             let chromeUrls: [String]?
-            switch readStringArrayField(from: projectTable, key: "chromeUrls", keyPath: "project[\(index)].chromeUrls", findings: &findings) {
+            switch readStringArrayField(
+                from: projectTable,
+                key: "chromeUrls",
+                keyPath: "project[\(index)].chromeUrls",
+                findings: &findings
+            ) {
             case .value(let urls):
                 chromeUrls = urls
             case .missing:
                 chromeUrls = []
                 findings.append(defaultFinding(
-                    severity: .pass,
+                    severity: .warn,
                     title: "Default applied: project[\(index)].chromeUrls = []",
                     fix: "Add project.chromeUrls to config.toml if you want to override."
                 ))
@@ -743,9 +638,10 @@ struct ConfigParser {
                 projectIsValid = false
             }
 
-            if ideUseAgentLayerLauncher == nil || ideCommand == nil || chromeUrls == nil {
+            if chromeUrls == nil {
                 projectIsValid = false
             }
+
             if !chromeProfileDirectoryIsValid {
                 projectIsValid = false
             }
@@ -756,18 +652,13 @@ struct ConfigParser {
                let path,
                let colorHex,
                let resolvedIde,
-               let ideUseAgentLayerLauncher,
-               let ideCommand,
                let chromeUrls {
                 let projectConfig = ProjectConfig(
                     id: id,
                     name: name,
                     path: path,
                     colorHex: colorHex,
-                    repoUrl: repoUrl,
                     ide: resolvedIde,
-                    ideUseAgentLayerLauncher: ideUseAgentLayerLauncher,
-                    ideCommand: ideCommand,
                     chromeUrls: chromeUrls,
                     chromeProfileDirectory: chromeProfileDirectory
                 )
@@ -825,71 +716,6 @@ struct ConfigParser {
                     title: "\(keyPath) must be a string",
                     detail: String(describing: error),
                     fix: "Set \(keyPath) to a TOML string."
-                )
-            )
-            return .invalid
-        }
-    }
-
-    /// Parses an optional boolean field from a TOML table.
-    /// - Returns: Field result for the requested key.
-    private func readBoolField(
-        from table: TOMLTable,
-        key: String,
-        keyPath: String,
-        findings: inout [DoctorFinding]
-    ) -> FieldResult<Bool> {
-        guard table.contains(key: key) else {
-            return .missing
-        }
-
-        do {
-            return .value(try table.bool(forKey: key))
-        } catch {
-            findings.append(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "\(keyPath) must be a boolean",
-                    detail: String(describing: error),
-                    fix: "Set \(keyPath) to true or false."
-                )
-            )
-            return .invalid
-        }
-    }
-
-    /// Parses an optional integer field from a TOML table.
-    /// - Returns: Field result for the requested key.
-    private func readIntField(
-        from table: TOMLTable,
-        key: String,
-        keyPath: String,
-        findings: inout [DoctorFinding]
-    ) -> FieldResult<Int> {
-        guard table.contains(key: key) else {
-            return .missing
-        }
-
-        do {
-            let value = try table.integer(forKey: key)
-            if value > Int64(Int.max) || value < Int64(Int.min) {
-                findings.append(
-                    DoctorFinding(
-                        severity: .fail,
-                        title: "\(keyPath) is out of range",
-                        fix: "Set \(keyPath) to a reasonable integer value."
-                    )
-                )
-                return .invalid
-            }
-            return .value(Int(value))
-        } catch {
-            findings.append(
-                DoctorFinding(
-                    severity: .fail,
-                    title: "\(keyPath) must be an integer",
-                    detail: String(describing: error),
-                    fix: "Set \(keyPath) to an integer value."
                 )
             )
             return .invalid

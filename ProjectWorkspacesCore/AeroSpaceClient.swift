@@ -162,10 +162,17 @@ public struct DefaultAeroSpaceCommandRunner: AeroSpaceCommandRunning {
     }
 }
 
+/// Supported AeroSpace window layouts.
+public enum AeroSpaceWindowLayout: String, Sendable {
+    case floating = "floating"
+    case hTiles = "h_tiles"
+}
+
 /// Typed wrapper around AeroSpace CLI command execution.
 public struct AeroSpaceClient {
     private static let listWindowsFormat =
-        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
+        "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout} %{monitor-appkit-nsscreen-screens-id}"
+    private static let focusedWorkspaceFormat = "%{workspace}"
 
     private static let readinessProbeArguments = ["list-workspaces", "--focused", "--count"]
 
@@ -185,7 +192,7 @@ public struct AeroSpaceClient {
     ///   - timeoutSeconds: Maximum time allowed for each command.
     public init(
         executableURL: URL,
-        commandRunner: AeroSpaceCommandRunning = DefaultAeroSpaceCommandRunner(),
+        commandRunner: AeroSpaceCommandRunning = AeroSpaceCommandExecutor.shared,
         timeoutSeconds: TimeInterval
     ) {
         self.init(
@@ -239,7 +246,7 @@ public struct AeroSpaceClient {
     /// - Throws: AeroSpaceBinaryResolutionError when resolution fails.
     public init(
         resolver: AeroSpaceBinaryResolving = DefaultAeroSpaceBinaryResolver(),
-        commandRunner: AeroSpaceCommandRunning = DefaultAeroSpaceCommandRunner(),
+        commandRunner: AeroSpaceCommandRunning = AeroSpaceCommandExecutor.shared,
         timeoutSeconds: TimeInterval
     ) throws {
         let resolution = resolver.resolve()
@@ -262,10 +269,17 @@ public struct AeroSpaceClient {
         runCommand(arguments: ["workspace", name])
     }
 
+    /// Summons the provided workspace onto the focused monitor.
+    /// - Parameter name: Workspace name to summon.
+    /// - Returns: Command result or a structured error.
+    public func summonWorkspace(_ name: String) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["summon-workspace", name])
+    }
+
     /// Returns the currently focused workspace name.
     /// - Returns: Focused workspace name or a structured error.
     public func focusedWorkspace() -> Result<String, AeroSpaceCommandError> {
-        switch runCommand(arguments: ["list-workspaces", "--focused"]) {
+        switch runCommand(arguments: ["list-workspaces", "--focused", "--format", Self.focusedWorkspaceFormat]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -273,7 +287,7 @@ public struct AeroSpaceClient {
             guard !workspace.isEmpty else {
                 return .failure(
                     .unexpectedOutput(
-                        command: describeCommand(arguments: ["list-workspaces", "--focused"]),
+                        command: describeCommand(arguments: ["list-workspaces", "--focused", "--format", Self.focusedWorkspaceFormat]),
                         detail: "Focused workspace output was empty."
                     )
                 )
@@ -457,6 +471,28 @@ public struct AeroSpaceClient {
         }
     }
 
+    /// Lists windows on the focused monitor filtered by bundle id.
+    /// - Parameter appBundleId: Bundle identifier to filter windows.
+    /// - Returns: Decoded windows or a structured error.
+    public func listWindowsOnFocusedMonitor(appBundleId: String) -> Result<[AeroSpaceWindow], AeroSpaceCommandError> {
+        let arguments = [
+            "list-windows",
+            "--monitor",
+            "focused",
+            "--app-bundle-id",
+            appBundleId,
+            "--json",
+            "--format",
+            Self.listWindowsFormat
+        ]
+        switch runCommand(arguments: arguments) {
+        case .success(let result):
+            return windowDecoder.decodeWindows(from: result.stdout)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
     /// Focuses a window by id.
     /// - Parameter windowId: AeroSpace window id to focus.
     /// - Returns: Command result or a structured error.
@@ -470,14 +506,19 @@ public struct AeroSpaceClient {
     ///   - workspace: Destination workspace name.
     /// - Returns: Command result or a structured error.
     public func moveWindow(windowId: Int, to workspace: String) -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(arguments: ["move-node-to-workspace", "--window-id", String(windowId), workspace])
+        moveWindowToWorkspace(windowId: windowId, workspace: workspace)
     }
 
-    /// Sets a window to floating layout mode.
-    /// - Parameter windowId: AeroSpace window id to update.
+    /// Moves a window into the provided workspace.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window id to move.
+    ///   - workspace: Destination workspace name.
     /// - Returns: Command result or a structured error.
-    public func setFloatingLayout(windowId: Int) -> Result<CommandResult, AeroSpaceCommandError> {
-        runCommand(arguments: ["layout", "--window-id", String(windowId), "floating"])
+    public func moveWindowToWorkspace(
+        windowId: Int,
+        workspace: String
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["move-node-to-workspace", "--window-id", String(windowId), workspace])
     }
 
     /// Closes a window by id.
@@ -485,6 +526,51 @@ public struct AeroSpaceClient {
     /// - Returns: Command result or a structured error.
     public func closeWindow(windowId: Int) -> Result<CommandResult, AeroSpaceCommandError> {
         runCommand(arguments: ["close", "--window-id", String(windowId)])
+    }
+
+    /// Flattens the workspace tree to a single level.
+    /// - Parameter workspace: Workspace name to flatten.
+    /// - Returns: Command result or a structured error.
+    public func flattenWorkspaceTree(workspace: String) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["flatten-workspace-tree", "--workspace", workspace])
+    }
+
+    /// Balances node sizes in the workspace.
+    /// - Parameter workspace: Workspace name to balance.
+    /// - Returns: Command result or a structured error.
+    public func balanceSizes(workspace: String) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["balance-sizes", "--workspace", workspace])
+    }
+
+    /// Sets a window's layout mode.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window id to update.
+    ///   - layout: Layout to apply.
+    /// - Returns: Command result or a structured error.
+    public func setLayout(
+        windowId: Int,
+        layout: AeroSpaceWindowLayout
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["layout", "--window-id", String(windowId), layout.rawValue])
+    }
+
+    /// Sets a window to floating layout mode.
+    /// - Parameter windowId: AeroSpace window id to update.
+    /// - Returns: Command result or a structured error.
+    public func setFloatingLayout(windowId: Int) -> Result<CommandResult, AeroSpaceCommandError> {
+        setLayout(windowId: windowId, layout: .floating)
+    }
+
+    /// Resizes a window to an absolute width in points.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window id to resize.
+    ///   - width: Width in points (no +/- prefix).
+    /// - Returns: Command result or a structured error.
+    public func resizeWidth(
+        windowId: Int,
+        width: Int
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        runCommand(arguments: ["resize", "--window-id", String(windowId), "width", String(width)])
     }
 
     /// Executes an AeroSpace CLI command with the configured timeout.

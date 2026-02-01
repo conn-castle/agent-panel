@@ -9,6 +9,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
     public let appName: String
     public let windowTitle: String
     public let windowLayout: String
+    public let monitorAppkitNSScreenScreensId: Int?
 
     /// Creates a window model.
     /// - Parameters:
@@ -24,7 +25,8 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         appBundleId: String,
         appName: String,
         windowTitle: String,
-        windowLayout: String
+        windowLayout: String,
+        monitorAppkitNSScreenScreensId: Int? = nil
     ) {
         self.windowId = windowId
         self.workspace = workspace
@@ -32,6 +34,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         self.appName = appName
         self.windowTitle = windowTitle
         self.windowLayout = windowLayout
+        self.monitorAppkitNSScreenScreensId = monitorAppkitNSScreenScreensId
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -41,6 +44,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         case appName = "app-name"
         case windowTitle = "window-title"
         case windowLayout = "window-layout"
+        case monitorAppkitNSScreenScreensId = "monitor-appkit-nsscreen-screens-id"
     }
 
     public init(from decoder: Decoder) throws {
@@ -51,6 +55,7 @@ public struct AeroSpaceWindow: Decodable, Equatable, Sendable {
         appName = try container.decodeIfPresent(String.self, forKey: .appName) ?? ""
         windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle) ?? ""
         windowLayout = try container.decodeIfPresent(String.self, forKey: .windowLayout) ?? ""
+        monitorAppkitNSScreenScreensId = try container.decodeIfPresent(Int.self, forKey: .monitorAppkitNSScreenScreensId)
     }
 }
 

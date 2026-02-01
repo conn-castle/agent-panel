@@ -19,7 +19,7 @@ final class AeroSpaceIntegrationTests: XCTestCase {
             executableURL = url
         }
 
-        let runner = DefaultAeroSpaceCommandRunner()
+        let runner = AeroSpaceCommandExecutor.shared
         let previousWorkspace = try focusedWorkspace(executableURL: executableURL, runner: runner)
         defer {
             let restoreOutcome = AeroSpaceClient(
@@ -74,23 +74,17 @@ final class AeroSpaceIntegrationTests: XCTestCase {
 
     private func focusedWorkspace(
         executableURL: URL,
-        runner: DefaultAeroSpaceCommandRunner
+        runner: AeroSpaceCommandRunning
     ) throws -> String {
-        let outcome = runner.run(
-            executable: executableURL,
-            arguments: ["list-workspaces", "--focused"],
+        let client = AeroSpaceClient(
+            executableURL: executableURL,
+            commandRunner: runner,
             timeoutSeconds: 2
         )
-        switch outcome {
+        switch client.focusedWorkspace() {
         case .failure(let error):
             throw error
-        case .success(let result):
-            let workspace = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            if workspace.isEmpty {
-                throw NSError(domain: "AeroSpaceIntegrationTests", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Focused workspace output was empty."
-                ])
-            }
+        case .success(let workspace):
             return workspace
         }
     }

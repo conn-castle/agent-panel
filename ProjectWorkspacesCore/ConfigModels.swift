@@ -9,24 +9,20 @@ public enum IdeKind: String, CaseIterable, Equatable, Sendable {
 /// Full parsed configuration for ProjectWorkspaces.
 public struct Config: Equatable, Sendable {
     public let global: GlobalConfig
-    public let display: DisplayConfig
     public let ide: IdeConfig
     public let projects: [ProjectConfig]
 
     /// Creates a configuration container.
     /// - Parameters:
     ///   - global: Global configuration values.
-    ///   - display: Display configuration values.
     ///   - ide: IDE configuration values.
     ///   - projects: Project definitions.
     public init(
         global: GlobalConfig,
-        display: DisplayConfig,
         ide: IdeConfig,
         projects: [ProjectConfig]
     ) {
         self.global = global
-        self.display = display
         self.ide = ide
         self.projects = projects
     }
@@ -44,17 +40,6 @@ public struct GlobalConfig: Equatable, Sendable {
     public init(defaultIde: IdeKind, globalChromeUrls: [String]) {
         self.defaultIde = defaultIde
         self.globalChromeUrls = globalChromeUrls
-    }
-}
-
-/// Display-specific configuration values.
-public struct DisplayConfig: Equatable, Sendable {
-    public let ultrawideMinWidthPx: Int
-
-    /// Creates display configuration values.
-    /// - Parameter ultrawideMinWidthPx: Minimum width in pixels to treat a display as ultrawide.
-    public init(ultrawideMinWidthPx: Int) {
-        self.ultrawideMinWidthPx = ultrawideMinWidthPx
     }
 }
 
@@ -94,10 +79,7 @@ public struct ProjectConfig: Equatable, Sendable {
     public let name: String
     public let path: String
     public let colorHex: String
-    public let repoUrl: String?
     public let ide: IdeKind
-    public let ideUseAgentLayerLauncher: Bool
-    public let ideCommand: String
     public let chromeUrls: [String]
     public let chromeProfileDirectory: String?
 
@@ -107,10 +89,7 @@ public struct ProjectConfig: Equatable, Sendable {
     ///   - name: Human-readable project name.
     ///   - path: Path to the project directory.
     ///   - colorHex: Project color in `#RRGGBB` format.
-    ///   - repoUrl: Optional repository URL.
     ///   - ide: IDE selection for this project.
-    ///   - ideUseAgentLayerLauncher: Whether to use the agent-layer launcher when present.
-    ///   - ideCommand: Optional command used to launch the IDE.
     ///   - chromeUrls: Chrome URLs to open when the project Chrome window is created.
     ///   - chromeProfileDirectory: Optional Chrome profile directory name used for the project.
     public init(
@@ -118,10 +97,7 @@ public struct ProjectConfig: Equatable, Sendable {
         name: String,
         path: String,
         colorHex: String,
-        repoUrl: String?,
         ide: IdeKind,
-        ideUseAgentLayerLauncher: Bool,
-        ideCommand: String,
         chromeUrls: [String],
         chromeProfileDirectory: String?
     ) {
@@ -129,10 +105,7 @@ public struct ProjectConfig: Equatable, Sendable {
         self.name = name
         self.path = path
         self.colorHex = colorHex
-        self.repoUrl = repoUrl
         self.ide = ide
-        self.ideUseAgentLayerLauncher = ideUseAgentLayerLauncher
-        self.ideCommand = ideCommand
         self.chromeUrls = chromeUrls
         self.chromeProfileDirectory = chromeProfileDirectory
     }

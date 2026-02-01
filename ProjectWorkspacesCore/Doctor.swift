@@ -27,6 +27,7 @@ public struct Doctor {
     ///   - hotkeyStatusProvider: Optional provider for the current hotkey registration status.
     ///   - aerospaceBinaryResolver: Resolver for the AeroSpace CLI executable.
     ///   - commandRunner: Command runner used for CLI checks.
+    ///   - aeroSpaceCommandRunner: Serialized runner for AeroSpace CLI commands.
     ///   - environment: Environment provider for XDG config resolution.
     ///   - dateProvider: Date provider for timestamps.
     public init(
@@ -34,11 +35,12 @@ public struct Doctor {
         fileSystem: FileSystem = DefaultFileSystem(),
         appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
         hotkeyChecker: HotkeyChecking = CarbonHotkeyChecker(),
-        accessibilityChecker: AccessibilityChecking = DefaultAccessibilityChecker(),
-        runningApplicationChecker: RunningApplicationChecking = DefaultRunningApplicationChecker(),
+        accessibilityChecker: AccessibilityChecking,
+        runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyRegistrationStatusProviding? = nil,
         commandRunner: CommandRunning = DefaultCommandRunner(),
         aerospaceBinaryResolver: AeroSpaceBinaryResolving? = nil,
+        aeroSpaceCommandRunner: AeroSpaceCommandRunning = AeroSpaceCommandExecutor.shared,
         environment: EnvironmentProviding = ProcessEnvironment(),
         dateProvider: DateProviding = SystemDateProvider()
     ) {
@@ -67,7 +69,6 @@ public struct Doctor {
             hotkeyStatusProvider: hotkeyStatusProvider
         )
         self.appDiscoveryChecker = AppDiscoveryChecker(
-            paths: paths,
             fileSystem: fileSystem,
             appDiscovery: appDiscovery
         )
@@ -76,6 +77,7 @@ public struct Doctor {
             fileSystem: fileSystem,
             commandRunner: commandRunner,
             aerospaceBinaryResolver: self.aerospaceBinaryResolver,
+            aeroSpaceCommandRunner: aeroSpaceCommandRunner,
             environment: environment,
             dateProvider: dateProvider
         )
@@ -244,6 +246,7 @@ public struct Doctor {
             findings.append(contentsOf: serverStatus.findings)
 
             if serverStatus.isConnected {
+                findings.append(contentsOf: aeroSpaceChecker.checkAeroSpaceCompatibility(executable: cliURL))
                 findings.append(contentsOf: aeroSpaceChecker.checkAerospaceWorkspaceSwitch(executable: cliURL))
             }
         }

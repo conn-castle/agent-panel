@@ -166,7 +166,7 @@ private func renderFindings(_ findings: [DoctorFinding]) -> String {
 
 let args = Array(CommandLine.arguments.dropFirst())
 let parser = PwctlArgumentParser()
-let pwctlService = PwctlService()
+let pwctlService = PwctlService(screenMetricsProvider: AppKitScreenMetricsProvider())
 
 switch parser.parse(arguments: args) {
 case .success(let command):
@@ -175,7 +175,10 @@ case .success(let command):
         print(usageText(for: topic))
         exit(PwctlExitCode.ok.rawValue)
     case .doctor:
-        let report = Doctor().run()
+        let report = Doctor(
+            accessibilityChecker: AppKitAccessibilityChecker(),
+            runningApplicationChecker: AppKitRunningApplicationChecker()
+        ).run()
         logCommand("doctor", result: report.hasFailures ? .fail : .ok)
         print(report.rendered())
         exit(report.hasFailures ? PwctlExitCode.failure.rawValue : PwctlExitCode.ok.rawValue)
@@ -202,20 +205,27 @@ case .success(let command):
             logCommand("activate", result: .fail)
             printStderr(renderFindings(error.asFindings()))
             exit(PwctlExitCode.failure.rawValue)
-        case .success(let report, let warnings):
-            if !warnings.isEmpty {
-                let findings = warnings.map { $0.asFinding() }
-                printStderr(renderFindings(findings))
-            }
-            let resultLog: PwctlLogResult = warnings.isEmpty ? .ok : .warn
-            logCommand("activate", result: resultLog)
+        case .success(let report):
+            logCommand("activate", result: .ok)
             print("Activated \(report.projectId) (IDE: \(report.ideWindowId), Chrome: \(report.chromeWindowId))")
             exit(PwctlExitCode.ok.rawValue)
         }
     case .close(let projectId):
-        logCommand("close", result: .notImplemented)
-        printStderr("error: `pwctl close \(projectId)` is not implemented yet")
-        exit(PwctlExitCode.failure.rawValue)
+        switch pwctlService.closeProject(projectId: projectId) {
+        case .failure(let findings):
+            logCommand("close", result: .fail)
+            printStderr(renderFindings(findings))
+            exit(PwctlExitCode.failure.rawValue)
+        case .success(_, let warnings):
+            if !warnings.isEmpty {
+                printStderr(renderFindings(warnings))
+                logCommand("close", result: .warn)
+            } else {
+                logCommand("close", result: .ok)
+            }
+            print("Closed project \(projectId)")
+            exit(PwctlExitCode.ok.rawValue)
+        }
     case .logs(let tail):
         switch pwctlService.tailLogs(lines: tail) {
         case .failure(let findings):

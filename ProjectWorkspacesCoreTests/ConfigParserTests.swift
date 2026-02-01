@@ -16,8 +16,7 @@ final class ConfigParserTests: XCTestCase {
 
         XCTAssertNotNil(outcome.config)
         XCTAssertEqual(outcome.config?.global.defaultIde, .vscode)
-        XCTAssertEqual(outcome.config?.global.globalChromeUrls ?? [], [])
-        XCTAssertEqual(outcome.config?.display.ultrawideMinWidthPx, 5000)
+        XCTAssertEqual(outcome.config?.global.globalChromeUrls, [])
 
         guard let project = outcome.config?.projects.first else {
             XCTFail("Expected at least one project")
@@ -26,24 +25,18 @@ final class ConfigParserTests: XCTestCase {
 
         XCTAssertEqual(project.ide, .vscode)
         XCTAssertEqual(project.chromeUrls, [])
-        XCTAssertEqual(project.ideUseAgentLayerLauncher, true)
-        XCTAssertEqual(project.ideCommand, "")
         XCTAssertTrue(outcome.effectiveIdeKinds.contains(.vscode))
 
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: global.defaultIde = \"vscode\"")
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: global.globalChromeUrls = []")
-        assertFinding(outcome.findings, severity: .warn, title: "Default applied: display.ultrawideMinWidthPx = 5000")
         assertFinding(outcome.findings, severity: .warn, title: "Default applied: project[0].ide = \"vscode\"")
-        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].ideUseAgentLayerLauncher = true")
-        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].ideCommand = \"\"")
-        assertFinding(outcome.findings, severity: .pass, title: "Default applied: project[0].chromeUrls = []")
+        assertFinding(outcome.findings, severity: .warn, title: "Default applied: project[0].chromeUrls = []")
     }
 
     func testUnknownKeysAreReported() {
         let toml = """
         [global]
         defaultIde = "vscode"
-        globalChromeUrls = []
         extra = "nope"
 
         [[project]]
@@ -82,9 +75,6 @@ final class ConfigParserTests: XCTestCase {
         let toml = """
         [global]
         defaultIde = "vscode"
-        globalChromeUrls = []
-        [display]
-        ultrawideMinWidthPx = 5000
         """
 
         let outcome = ConfigParser().parse(toml: toml)
@@ -142,26 +132,6 @@ final class ConfigParserTests: XCTestCase {
 
         XCTAssertNil(outcome.config)
         assertFinding(outcome.findings, severity: .fail, title: "project[0].colorHex is invalid")
-    }
-
-    func testChromeProfileDirectoryParses() {
-        let toml = """
-        [[project]]
-        id = "codex"
-        name = "Codex"
-        path = "/Users/tester/src/codex"
-        colorHex = "#7C3AED"
-        chromeProfileDirectory = "Profile 2"
-        """
-
-        let outcome = ConfigParser().parse(toml: toml)
-
-        guard let project = outcome.config?.projects.first else {
-            XCTFail("Expected project config")
-            return
-        }
-
-        XCTAssertEqual(project.chromeProfileDirectory, "Profile 2")
     }
 
     private func assertFinding(

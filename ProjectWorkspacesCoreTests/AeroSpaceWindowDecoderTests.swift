@@ -11,7 +11,8 @@ final class AeroSpaceWindowDecoderTests: XCTestCase {
             "workspace": "1",
             "app-bundle-id": "net.kovidgoyal.kitty",
             "app-name": "kitty",
-            "window-title": "aerospace"
+            "window-title": "aerospace",
+            "monitor-appkit-nsscreen-screens-id": 2
           },
           {
             "window-id": 1337,
@@ -39,7 +40,8 @@ final class AeroSpaceWindowDecoderTests: XCTestCase {
                     appBundleId: "net.kovidgoyal.kitty",
                     appName: "kitty",
                     windowTitle: "aerospace",
-                    windowLayout: ""
+                    windowLayout: "",
+                    monitorAppkitNSScreenScreensId: 2
                 )
             )
             XCTAssertEqual(windows[1].windowTitle, "")

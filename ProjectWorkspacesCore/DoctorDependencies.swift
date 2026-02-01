@@ -1,6 +1,5 @@
-import AppKit
-import ApplicationServices
 import Carbon
+import CoreServices
 import Foundation
 
 /// File system access needed by Doctor checks.
@@ -354,7 +353,11 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
     /// - Parameter bundleIdentifier: Bundle identifier to resolve.
     /// - Returns: Application URL if found.
     public func applicationURL(bundleIdentifier: String) -> URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+        guard let unmanaged = LSCopyApplicationURLsForBundleIdentifier(bundleIdentifier as CFString, nil) else {
+            return nil
+        }
+        let urls = unmanaged.takeRetainedValue() as NSArray
+        return urls.firstObject as? URL
     }
 
     /// Resolves an application URL for a human-readable app name.
@@ -524,34 +527,9 @@ public protocol AccessibilityChecking {
     func isProcessTrusted() -> Bool
 }
 
-/// Default Accessibility checker using `AXIsProcessTrustedWithOptions`.
-public struct DefaultAccessibilityChecker: AccessibilityChecking {
-    /// Creates an Accessibility checker.
-    public init() {}
-
-    /// Returns true when the current process is trusted for accessibility.
-    public func isProcessTrusted() -> Bool {
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [promptKey: true] as CFDictionary
-        return AXIsProcessTrustedWithOptions(options)
-    }
-}
-
 /// Running application lookup interface for Doctor policies.
 public protocol RunningApplicationChecking {
     /// Returns true when an application with the given bundle identifier is running.
     /// - Parameter bundleIdentifier: Bundle identifier to check.
     func isApplicationRunning(bundleIdentifier: String) -> Bool
-}
-
-/// Default running application checker backed by AppKit.
-public struct DefaultRunningApplicationChecker: RunningApplicationChecking {
-    /// Creates a running application checker.
-    public init() {}
-
-    /// Returns true when an application with the given bundle identifier is running.
-    /// - Parameter bundleIdentifier: Bundle identifier to check.
-    public func isApplicationRunning(bundleIdentifier: String) -> Bool {
-        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
-    }
 }

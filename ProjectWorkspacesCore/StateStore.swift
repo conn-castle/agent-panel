@@ -1,10 +1,84 @@
 import Foundation
 
+/// Current schema version for the persisted window binding state.
+enum BindingStateVersion: Int, Codable, Equatable {
+    case v2 = 2
+
+    static let current: BindingStateVersion = .v2
+}
+
+/// Root state payload stored in `state.json`.
+struct BindingState: Codable, Equatable {
+    let version: BindingStateVersion
+    var projects: [String: ProjectBindings]
+
+    /// Creates a binding state payload.
+    /// - Parameters:
+    ///   - version: Schema version.
+    ///   - projects: Project binding map keyed by project id.
+    init(version: BindingStateVersion = .current, projects: [String: ProjectBindings] = [:]) {
+        self.version = version
+        self.projects = projects
+    }
+
+    /// Returns an empty binding state payload.
+    static func empty() -> BindingState {
+        BindingState()
+    }
+}
+
+/// Stored bindings for a single project.
+struct ProjectBindings: Codable, Equatable {
+    var ideBindings: [WindowBinding]
+    var chromeBindings: [WindowBinding]
+
+    /// Creates a project binding entry.
+    /// - Parameters:
+    ///   - ideBindings: IDE bindings (at most one; index 0 is primary when present).
+    ///   - chromeBindings: Chrome bindings (at most one; index 0 is primary when present).
+    init(ideBindings: [WindowBinding] = [], chromeBindings: [WindowBinding] = []) {
+        self.ideBindings = ideBindings
+        self.chromeBindings = chromeBindings
+    }
+
+    /// Returns true when no bindings are stored.
+    var isEmpty: Bool {
+        ideBindings.isEmpty && chromeBindings.isEmpty
+    }
+}
+
+/// Roles supported for a bound window.
+enum WindowBindingRole: String, Codable, Equatable, Sendable {
+    case ide
+    case chrome
+}
+
+/// Persisted window binding for a project.
+struct WindowBinding: Codable, Equatable, Sendable {
+    let windowId: Int
+    let appBundleId: String
+    let role: WindowBindingRole
+    let titleAtBindTime: String?
+
+    /// Creates a window binding.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window identifier.
+    ///   - appBundleId: App bundle identifier.
+    ///   - role: Window role (IDE or Chrome).
+    ///   - titleAtBindTime: Optional window title captured at bind time.
+    init(windowId: Int, appBundleId: String, role: WindowBindingRole, titleAtBindTime: String?) {
+        self.windowId = windowId
+        self.appBundleId = appBundleId
+        self.role = role
+        self.titleAtBindTime = titleAtBindTime
+    }
+}
+
 /// Result of loading the state file.
 enum StateStoreLoadOutcome: Equatable {
     case missing
-    case loaded(LayoutState)
-    case recovered(LayoutState, backupPath: String)
+    case loaded(BindingState)
+    case recovered(BindingState, backupPath: String)
 }
 
 /// Errors surfaced by state load/save operations.
@@ -15,7 +89,7 @@ enum StateStoreError: Error, Equatable {
     case backupFailed(String)
 }
 
-/// Persists and retrieves the ProjectWorkspaces layout state.
+/// Persists and retrieves the ProjectWorkspaces binding state.
 protocol StateStoring {
     /// Loads the state file if present.
     /// - Returns: Load outcome or a structured error.
@@ -23,7 +97,7 @@ protocol StateStoring {
     /// Saves the provided state payload atomically.
     /// - Parameter state: State payload to persist.
     /// - Returns: Success or a structured error.
-    func save(_ state: LayoutState) -> Result<Void, StateStoreError>
+    func save(_ state: BindingState) -> Result<Void, StateStoreError>
 }
 
 /// Provides serialized access to the ProjectWorkspaces state file.
@@ -67,7 +141,7 @@ final class StateStore: StateStoring {
 
             let decoder = JSONDecoder()
             do {
-                let state = try decoder.decode(LayoutState.self, from: data)
+                let state = try decoder.decode(BindingState.self, from: data)
                 guard state.version == .current else {
                     return recoverCorruptState(
                         stateURL: stateURL,
@@ -84,7 +158,7 @@ final class StateStore: StateStoring {
     /// Saves the provided state payload atomically.
     /// - Parameter state: State payload to persist.
     /// - Returns: Success or a structured error.
-    func save(_ state: LayoutState) -> Result<Void, StateStoreError> {
+    func save(_ state: BindingState) -> Result<Void, StateStoreError> {
         queue.sync {
             let stateURL = paths.stateFile
             let directoryURL = stateURL.deletingLastPathComponent()
@@ -107,20 +181,18 @@ final class StateStore: StateStoring {
                 return .failure(.writeFailed("Failed to encode state: \(error)"))
             }
 
-            // Write atomically: write to temp file, sync, then atomic replace to prevent corruption
-            let tempURL = stateURL.deletingLastPathComponent().appendingPathComponent("state.\(UUID().uuidString).tmp")
+            let tempURL = stateURL
+                .deletingLastPathComponent()
+                .appendingPathComponent("state.\(UUID().uuidString).tmp")
             do {
                 try fileSystem.writeFile(at: tempURL, data: data)
                 try fileSystem.syncFile(at: tempURL)
                 if fileSystem.fileExists(at: stateURL) {
-                    // Use replaceItemAt for atomic replacement when destination exists
                     try fileSystem.replaceItemAt(stateURL, withItemAt: tempURL)
                 } else {
-                    // Use moveItem for first-time save when destination doesn't exist
                     try fileSystem.moveItem(at: tempURL, to: stateURL)
                 }
             } catch {
-                // Clean up the temporary file if any step fails
                 _ = try? fileSystem.removeItem(at: tempURL)
                 return .failure(.writeFailed("Failed to write state: \(error)"))
             }
@@ -139,7 +211,7 @@ final class StateStore: StateStoring {
                 try fileSystem.removeItem(at: backupURL)
             }
             try fileSystem.moveItem(at: stateURL, to: backupURL)
-            let emptyState = LayoutState.empty()
+            let emptyState = BindingState.empty()
             return .success(.recovered(emptyState, backupPath: backupURL.path))
         } catch {
             return .failure(.backupFailed("Failed to back up corrupt state: \(reason); \(error)"))

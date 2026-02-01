@@ -43,6 +43,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: false),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -89,6 +90,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -137,6 +139,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -186,6 +189,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: true),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -234,6 +238,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -280,6 +285,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -333,6 +339,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -385,6 +392,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -423,7 +431,7 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        var results: [DoctorCommandSignature: [CommandResult]] = [
             DoctorCommandSignature(path: aerospacePath, arguments: ["reload-config", "--no-gui"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
@@ -432,16 +440,19 @@ final class DoctorTests: XCTestCase {
             ],
             DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: "")
             ],
-            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["summon-workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["summon-workspace", "pw-codex"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
-        ])
+        ]
+        addCompatibilityStubs(results: &results, executablePath: aerospacePath)
+        let commandRunner = TestCommandRunner(results: results)
 
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
@@ -451,6 +462,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:]),
             dateProvider: TestDateProvider(date: fixedDate)
         )
@@ -504,6 +516,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -540,6 +553,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -587,6 +601,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -622,21 +637,24 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        var results: [DoctorCommandSignature: [CommandResult]] = [
             DoctorCommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
             DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: "")
             ],
-            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["summon-workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ],
-            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-codex"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["summon-workspace", "pw-codex"]): [
                 CommandResult(exitCode: 1, stdout: "", stderr: "restore failed")
             ]
-        ])
+        ]
+        addCompatibilityStubs(results: &results, executablePath: aerospacePath)
+        let commandRunner = TestCommandRunner(results: results)
 
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
@@ -646,6 +664,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -682,18 +701,21 @@ final class DoctorTests: XCTestCase {
             ]
         )
 
-        let commandRunner = TestCommandRunner(results: [
+        var results: [DoctorCommandSignature: [CommandResult]] = [
             DoctorCommandSignature(path: aerospacePath, arguments: ["config", "--config-path"]): [
                 CommandResult(exitCode: 0, stdout: "/Users/tester/.aerospace.toml\n", stderr: "")
             ],
             DoctorCommandSignature(path: aerospacePath, arguments: ["list-workspaces", "--focused"]): [
                 CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
+                CommandResult(exitCode: 0, stdout: "pw-codex\n", stderr: ""),
                 CommandResult(exitCode: 0, stdout: "pw-other\n", stderr: "")
             ],
-            DoctorCommandSignature(path: aerospacePath, arguments: ["workspace", "pw-inbox"]): [
+            DoctorCommandSignature(path: aerospacePath, arguments: ["summon-workspace", "pw-inbox"]): [
                 CommandResult(exitCode: 0, stdout: "", stderr: "")
             ]
-        ])
+        ]
+        addCompatibilityStubs(results: &results, executablePath: aerospacePath)
+        let commandRunner = TestCommandRunner(results: results)
 
         let doctor = Doctor(
             paths: ProjectWorkspacesPaths(homeDirectory: URL(fileURLWithPath: "/Users/tester", isDirectory: true)),
@@ -703,6 +725,7 @@ final class DoctorTests: XCTestCase {
             accessibilityChecker: TestAccessibilityChecker(isTrusted: true),
             runningApplicationChecker: TestRunningApplicationChecker(isRunning: false),
             commandRunner: commandRunner,
+            aeroSpaceCommandRunner: commandRunner,
             environment: TestEnvironment(values: [:])
         )
 
@@ -722,7 +745,7 @@ private struct DoctorCommandSignature: Hashable {
     let arguments: [String]
 }
 
-private final class TestCommandRunner: CommandRunning {
+private final class TestCommandRunner: CommandRunning, AeroSpaceCommandRunning {
     private var results: [DoctorCommandSignature: [CommandResult]]
 
     init(results: [DoctorCommandSignature: [CommandResult]]) {
@@ -753,6 +776,25 @@ private final class TestCommandRunner: CommandRunning {
         results[signature] = queue
         return result
     }
+
+    func run(
+        executable: URL,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) -> Result<CommandResult, AeroSpaceCommandError> {
+        let _ = timeoutSeconds
+        let signature = DoctorCommandSignature(path: executable.path, arguments: arguments)
+        guard var queue = results[signature], !queue.isEmpty else {
+            preconditionFailure("Missing stubbed response for \(signature.path) \(signature.arguments).")
+        }
+        let result = queue.removeFirst()
+        results[signature] = queue
+        if result.exitCode != 0 {
+            let commandLabel = ([executable.path] + arguments).joined(separator: " ")
+            return .failure(.executionFailed(.nonZeroExit(command: commandLabel, result: result)))
+        }
+        return .success(result)
+    }
 }
 
 /// Builds a valid TOML config fixture.
@@ -763,10 +805,7 @@ private func makeValidConfig(includeSwitcherHotkey: Bool = false) -> String {
     return """
     [global]
     defaultIde = "vscode"
-    globalChromeUrls = []
     \(switcherLine)
-    [display]
-    ultrawideMinWidthPx = 5000
 
     [[project]]
     id = "codex"
@@ -790,19 +829,47 @@ private func makePassingCommandRunner(executablePath: String, previousWorkspace:
     let focusedKey = DoctorCommandSignature(path: executablePath, arguments: ["list-workspaces", "--focused"])
     results[focusedKey] = [
         CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: ""),
+        CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: ""),
         CommandResult(exitCode: 0, stdout: "pw-inbox\n", stderr: ""),
         CommandResult(exitCode: 0, stdout: "\(previousWorkspace)\n", stderr: "")
     ]
 
-    let switchInboxKey = DoctorCommandSignature(path: executablePath, arguments: ["workspace", "pw-inbox"])
+    let switchInboxKey = DoctorCommandSignature(path: executablePath, arguments: ["summon-workspace", "pw-inbox"])
     results[switchInboxKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
 
     if previousWorkspace != "pw-inbox" {
-        let restoreKey = DoctorCommandSignature(path: executablePath, arguments: ["workspace", previousWorkspace])
+        let restoreKey = DoctorCommandSignature(path: executablePath, arguments: ["summon-workspace", previousWorkspace])
         results[restoreKey] = [CommandResult(exitCode: 0, stdout: "", stderr: "")]
     }
 
+    addCompatibilityStubs(results: &results, executablePath: executablePath)
     return TestCommandRunner(results: results)
+}
+
+private func addCompatibilityStubs(
+    results: inout [DoctorCommandSignature: [CommandResult]],
+    executablePath: String
+) {
+    let listWindowsKey = DoctorCommandSignature(
+        path: executablePath,
+        arguments: ["list-windows", "--all", "--json"]
+    )
+    results[listWindowsKey] = [CommandResult(exitCode: 0, stdout: "[]", stderr: "")]
+
+    let focusHelpKey = DoctorCommandSignature(path: executablePath, arguments: ["focus", "--help"])
+    results[focusHelpKey] = [CommandResult(exitCode: 0, stdout: "help", stderr: "")]
+
+    let moveHelpKey = DoctorCommandSignature(
+        path: executablePath,
+        arguments: ["move-node-to-workspace", "--help"]
+    )
+    results[moveHelpKey] = [CommandResult(exitCode: 0, stdout: "help", stderr: "")]
+
+    let summonHelpKey = DoctorCommandSignature(
+        path: executablePath,
+        arguments: ["summon-workspace", "--help"]
+    )
+    results[summonHelpKey] = [CommandResult(exitCode: 0, stdout: "help", stderr: "")]
 }
 
 private func makeSafeAeroSpaceConfigData() -> Data {

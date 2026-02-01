@@ -15,7 +15,6 @@ enum SwitcherDismissReason: String {
     case escape
     case activationRequested
     case activationSucceeded
-    case activationWarning
     case windowClose
     case unknown
 }
@@ -24,7 +23,6 @@ enum SwitcherDismissReason: String {
 private enum SwitcherState: Equatable {
     case browsing
     case loading(projectId: String, step: String)
-    case warning(projectId: String, message: String)
     case error(projectId: String, message: String)
 }
 
@@ -79,7 +77,10 @@ final class SwitcherPanelController: NSObject {
         self.projectCatalogService = projectCatalogService
         self.projectFilter = projectFilter
         self.logger = logger
-        self.workspaceManager = workspaceManager ?? DefaultWorkspaceManager(logger: logger)
+        self.workspaceManager = workspaceManager ?? DefaultWorkspaceManager(
+            screenMetricsProvider: AppKitScreenMetricsProvider(),
+            logger: logger
+        )
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
@@ -111,7 +112,7 @@ final class SwitcherPanelController: NSObject {
             switch state {
             case .loading:
                 focusPanelForCancel()
-            case .browsing, .error, .warning:
+            case .browsing, .error:
                 dismiss(reason: .toggle)
             }
         } else {
@@ -635,14 +636,19 @@ final class SwitcherPanelController: NSObject {
         switch progress {
         case .switchingWorkspace(_):
             updateLoadingStep(project: project, step: "Switching workspace…")
-        case .switchedWorkspace(_):
+        case .confirmingWorkspace(_):
             panel.orderFront(nil)
-        case .ensuringChrome:
-            updateLoadingStep(project: project, step: "Opening Chrome…")
-        case .ensuringIde:
-            updateLoadingStep(project: project, step: "Opening VS Code…")
+            updateLoadingStep(project: project, step: "Confirming workspace…")
+        case .resolvingWindows:
+            updateLoadingStep(project: project, step: "Resolving windows…")
+        case .movingWindows:
+            updateLoadingStep(project: project, step: "Moving windows…")
         case .applyingLayout:
             updateLoadingStep(project: project, step: "Applying layout…")
+        case .resizingIde:
+            updateLoadingStep(project: project, step: "Resizing IDE…")
+        case .focusingIde:
+            updateLoadingStep(project: project, step: "Focusing IDE…")
         case .finishing:
             updateLoadingStep(project: project, step: "Finishing…")
         }
@@ -665,40 +671,20 @@ final class SwitcherPanelController: NSObject {
         ]
 
         switch outcome {
-        case .success(let report, let warnings):
-            if warnings.isEmpty {
-                logEvent(
-                    event: "switcher.activate.success",
-                    level: .info,
-                    message: nil,
-                    context: projectContext
-                )
-                dismiss(reason: .activationSucceeded)
-                focusWorkspaceAndIdeAfterDismiss(report: report)
-            } else {
-                let warningDetails = warnings.map { $0.userMessage }.joined(separator: " | ")
-                logEvent(
-                    event: "switcher.activate.success",
-                    level: .warn,
-                    message: "Activation completed with warnings.",
-                    context: projectContext.merging(
-                        [
-                            "warning_count": "\(warnings.count)",
-                            "warnings": warningDetails
-                        ],
-                        uniquingKeysWith: { current, _ in current }
-                    )
-                )
-                // Show warning to user without auto-dismiss; focus IDE in background
-                enterWarningState(project: project, message: "Activated with warnings. See logs.")
-                focusWorkspaceAndIdeInBackground(report: report)
-            }
+        case .success(let report):
+            logEvent(
+                event: "switcher.activate.success",
+                level: .info,
+                message: nil,
+                context: projectContext
+            )
+            dismiss(reason: .activationSucceeded)
+            focusWorkspaceAndIdeAfterDismiss(report: report)
         case .failure(let error):
             if case .cancelled = error {
                 return
             }
-            let finding = error.asFindings().first
-            let message = finding?.title ?? "Activation failed"
+            let message = activationErrorMessage(error)
             logEvent(
                 event: "switcher.activate.failure",
                 level: .error,
@@ -745,7 +731,7 @@ final class SwitcherPanelController: NSObject {
                 ]
             )
         case .failure(let error):
-            let detail = error.asFindings().first?.title ?? "Focus failed"
+            let detail = activationErrorMessage(error)
             logEvent(
                 event: "switcher.ide.focus.failed",
                 level: .warn,
@@ -755,6 +741,58 @@ final class SwitcherPanelController: NSObject {
                     "window_id": "\(report.ideWindowId)"
                 ]
             )
+        }
+    }
+
+    /// Maps activation errors to user-facing messages.
+    private func activationErrorMessage(_ error: ActivationError) -> String {
+        switch error {
+        case .aeroSpaceIncompatible:
+            return "AeroSpace CLI is incompatible. Run Doctor for details."
+        case .configFailed:
+            return "Configuration failed. Run Doctor for details."
+        case .projectNotFound:
+            return "Project not found."
+        case .workspaceNotFocused(let expected, let observed, _):
+            return "Workspace not focused (expected \(expected), observed \(observed))."
+        case .workspaceNotFocusedAfterMove(let expected, let observed, _):
+            return "Workspace focus changed after move (expected \(expected), observed \(observed))."
+        case .requiredWindowMissing(let appBundleId):
+            return "Required window not detected: \(appBundleId)."
+        case .ambiguousWindows(let appBundleId, let count):
+            return "Multiple windows matched for \(appBundleId) (\(count))."
+        case .moveFailed(let windowId, let workspace, _, _):
+            return "Failed to move window \(windowId) to \(workspace)."
+        case .layoutFailed:
+            return "Failed to apply layout."
+        case .resizeFailed:
+            return "Failed to resize IDE window."
+        case .screenMetricsUnavailable(let screenIndex, _):
+            return "Screen metrics unavailable for screen \(screenIndex)."
+        case .commandFailed(let command, _, _, _, let detail):
+            if command == "ide.resolve" {
+                return "IDE app could not be resolved."
+            }
+            if command == "chrome.resolve" {
+                return "Chrome could not be resolved."
+            }
+            if command == "ide.workspace" {
+                return "IDE workspace file could not be created."
+            }
+            if let detail, !detail.isEmpty {
+                return "AeroSpace command failed: \(detail)"
+            }
+            return "AeroSpace command failed."
+        case .stateLoadFailed:
+            return "State file could not be loaded."
+        case .stateSaveFailed:
+            return "State file could not be saved."
+        case .aeroSpaceResolutionFailed:
+            return "AeroSpace CLI could not be resolved."
+        case .logWriteFailed:
+            return "Activation log write failed."
+        case .cancelled:
+            return "Activation cancelled."
         }
     }
 
@@ -858,14 +896,6 @@ final class SwitcherPanelController: NSObject {
             searchField.isEditable = false
             tableView.isEnabled = false
             setStatus(message: step, level: .info)
-        case .warning(_, let message):
-            progressIndicator.stopAnimation(nil)
-            progressIndicator.isHidden = true
-            retryButton.isHidden = true
-            cancelButton.isHidden = false // Show cancel/dismiss button
-            searchField.isEditable = false
-            tableView.isEnabled = false
-            setStatus(message: message, level: .warning)
         case .error(_, let message):
             progressIndicator.stopAnimation(nil)
             progressIndicator.isHidden = true
@@ -915,63 +945,6 @@ final class SwitcherPanelController: NSObject {
         panel.makeFirstResponder(searchField)
     }
 
-    /// Enters warning state and makes the panel key to show the warning.
-    /// - Parameters:
-    ///   - project: Project that activated with warnings.
-    ///   - message: Warning message to display.
-    private func enterWarningState(project: ProjectListItem, message: String) {
-        panel.allowsKeyWindow = true
-        let formatted = "\(project.name) — \(message)"
-        setState(.warning(projectId: project.id, message: formatted))
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(searchField)
-    }
-
-    /// Focuses the workspace and IDE window in the background without dismissing.
-    /// Used when activation succeeds with warnings.
-    /// - Parameter report: Activation report containing workspace and window information.
-    private func focusWorkspaceAndIdeInBackground(report: ActivationReport) {
-        logEvent(
-            event: "switcher.ide.focus.requested",
-            context: [
-                "workspace": report.workspaceName,
-                "window_id": "\(report.ideWindowId)",
-                "mode": "background"
-            ]
-        )
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let focusResult = self?.workspaceManager.focusWorkspaceAndWindow(report: report)
-            DispatchQueue.main.async {
-                guard let self else { return }
-                switch focusResult {
-                case .success:
-                    self.logEvent(
-                        event: "switcher.ide.focus.completed",
-                        context: [
-                            "workspace": report.workspaceName,
-                            "window_id": "\(report.ideWindowId)",
-                            "mode": "background"
-                        ]
-                    )
-                case .failure(let error):
-                    let detail = error.asFindings().first?.title ?? "Focus failed"
-                    self.logEvent(
-                        event: "switcher.ide.focus.failed",
-                        level: .warn,
-                        message: detail,
-                        context: [
-                            "workspace": report.workspaceName,
-                            "window_id": "\(report.ideWindowId)",
-                            "mode": "background"
-                        ]
-                    )
-                case .none:
-                    break
-                }
-            }
-        }
-    }
-
     /// Focuses the panel while loading so the user can cancel with Escape.
     private func focusPanelForCancel() {
         panel.allowsKeyWindow = true
@@ -1015,7 +988,7 @@ final class SwitcherPanelController: NSObject {
         switch reason {
         case .toggle, .escape, .windowClose:
             return true
-        case .activationRequested, .activationSucceeded, .activationWarning, .unknown:
+        case .activationRequested, .activationSucceeded, .unknown:
             return false
         }
     }
@@ -1037,7 +1010,7 @@ extension SwitcherPanelController: NSWindowDelegate {
         switch state {
         case .loading:
             cancelActivation()
-        case .browsing, .error, .warning:
+        case .browsing, .error:
             dismiss(reason: .windowClose)
         }
     }
@@ -1126,8 +1099,6 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
                 cancelActivation()
             case .error:
                 cancelActivation()
-            case .warning:
-                dismiss(reason: .activationWarning)
             }
             return true
         }

@@ -19,8 +19,10 @@ When working on many concurrent projects, window sprawl causes disorientation an
 
 ProjectWorkspaces provides **project-first switching** by giving each project a stable, isolated “virtual workspace” containing:
 
-- **One IDE window** (VS Code by default; Antigravity supported)
-- **One dedicated Chrome window** for the project
+- **One managed IDE window** (VS Code by default; Antigravity supported)
+- **One managed Chrome window** for the project
+
+Additional IDE/Chrome windows are allowed but are **unmanaged** unless explicitly bound.
 
 ---
 
@@ -34,9 +36,9 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
    - one IDE window
    - one Chrome window
 4) **IDE ends focused** after activation (Chrome must not steal focus)
-5) Support two display modes with persistent per-project layout:
-   - laptop mode
-   - ultrawide mode (5120×1440)
+5) Apply a canonical deterministic layout **when the workspace is newly opened** (no bound windows present):
+   - reset tree + balance sizes
+   - `h_tiles` layout with a deterministic IDE width based on the focused monitor
 6) Repeatable installation and recovery on a fresh machine with:
    - explicit macOS permission requirements
    - a `doctor` command
@@ -60,7 +62,7 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 3) **No Chrome pinned tabs** and no Chrome extension
 4) **No enforced Chrome Profiles** per project
 5) No multi-monitor orchestration as a product requirement
-   - If multiple displays exist, ProjectWorkspaces uses the main display only and must warn in logs
+   - Activation targets the focused monitor for workspace focus and sizing; unbound windows are never moved across displays
 
 ---
 
@@ -68,13 +70,10 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 
 - **Project**: a configured unit of work (usually a local repo), identified by a stable `projectId`.
 - **Workspace**: an **AeroSpace workspace** named `pw-<projectId>`.
-- **Activate(Project)**: switch to the project workspace and ensure its core windows exist.
+- **Activate(Project)**: switch to the project workspace, ensure bound IDE/Chrome windows exist (opening new ones if needed), and move bound windows into the workspace.
 - **Close(Project)**: close every window in the project workspace.
 - **AeroSpace config locations**: `~/.aerospace.toml` and `${XDG_CONFIG_HOME:-~/.config}/aerospace/aerospace.toml`.
 - **Safe AeroSpace config**: a ProjectWorkspaces-managed config that floats all windows and defines no keybindings.
-- **Display mode**:
-  - `laptop`: any main display width < `ultrawideMinWidthPx`
-  - `ultrawide`: any main display width ≥ `ultrawideMinWidthPx`
 
 ---
 
@@ -91,8 +90,6 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
 ### 5.3 Files
 
 - Config (source of truth): `~/.config/project-workspaces/config.toml`
-- Generated VS Code workspace files: `~/.local/state/project-workspaces/vscode/<projectId>.code-workspace`
-- Runtime state (cache): `~/.local/state/project-workspaces/state.json`
 - Logs (active): `~/.local/state/project-workspaces/logs/workspaces.log`
 - Logs (rotated): `~/.local/state/project-workspaces/logs/workspaces.log.1` … `~/.local/state/project-workspaces/logs/workspaces.log.5`
 
@@ -119,13 +116,11 @@ ProjectWorkspaces provides **project-first switching** by giving each project a 
   - no `[[project]]` entries
   - any project has missing/invalid `id`, `name`, `path`, or `colorHex` (per PR-001)
   - required apps are not discoverable for the effective IDE selection(s) or Chrome
-  - Accessibility permission is not granted (required for layout)
+  - Accessibility permission is not granted
 - If `ide.*.appPath` / `bundleId` are omitted, Doctor must attempt app discovery via Launch Services.
 - Doctor must print discovered values as a copy/paste config snippet and must not auto-edit `config.toml`.
 - Config parsing must tolerate unknown keys so that unsupported keys can be surfaced as WARN instead of becoming a parse failure (at minimum: tolerate `global.switcherHotkey` so it can be WARNed + ignored).
 - If `global.switcherHotkey` is present, Doctor must WARN (“Hotkey is fixed to ⌘⇧Space; key is ignored; remove it.”) and runtime must ignore it.
-- Doctor should list available Chrome profile directories (directory name + display name) when Chrome metadata is available, and WARN when the profile list is unavailable.
-
 Defaults (applied if keys are missing):
 
 > **Note:** See `README.md` for the authoritative table of defaults and Doctor severity levels.
@@ -162,7 +157,7 @@ Defaults (applied if keys are missing):
     - Store `prevFocusedWindowId` and `prevWorkspaceName` if available.
   - If the switcher exits without selecting a project, restore focus best-effort:
     - If `prevFocusedWindowId` exists: `aerospace focus --window-id <id>`
-    - Else if `prevWorkspaceName` exists: `aerospace workspace <name>`
+    - Else if `prevWorkspaceName` exists: `aerospace summon-workspace <name>`
   - On activation success, focus IDE and close switcher.
   - On activation error, switcher becomes key and shows Retry/Cancel.
   - Cancel during Loading stops further launches, closes the switcher, and restores previous focus best-effort; any windows already opened remain open.
@@ -178,37 +173,30 @@ Defaults (applied if keys are missing):
 
 Given `projectId`:
 
-1) Switch to workspace `pw-<projectId>`.
-   - Workspace existence is determined via `aerospace list-workspaces`.
+1) Summon workspace `pw-<projectId>`.
+   - `aerospace summon-workspace <workspace>`
+   - Confirm focused workspace using `aerospace list-workspaces --focused`.
    - The switcher must remain visible on the target workspace during activation (AppKit-only; no AeroSpace move for the switcher).
-2) Start Chrome launch if missing (fire-and-forget), then proceed to IDE.
-   - Chrome window is identified by the deterministic token (`PW:<projectId>`) in its title.
-   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
-   - If workspace + focused recovery time out, perform a last-resort token-only scan across all workspaces to locate the new Chrome window.
-   - If missing, create it.
-   - If multiple matches are found, warn and choose the lowest window id deterministically.
-3) Ensure IDE window exists and is detected first.
-   - VS Code window is identified by a deterministic token (`PW:<projectId>`) in its title.
-   - If the newly launched window appears outside `pw-<projectId>`, capture it via focused-window recovery and move it into `pw-<projectId>`.
-   - If missing, create it.
-   - If multiple matches are found, warn and choose the lowest window id deterministically.
-4) Force IDE and Chrome windows to floating mode (to allow deterministic geometry).
-5) Apply layout for the current display mode:
-   - use persisted layout if available
-   - if no persisted layout exists and the windows already existed, capture current frames and persist them (do not apply defaults)
-   - if no persisted layout exists and the windows were created during activation, apply defaults and persist them
-   - if multiple displays exist, warn and apply/persist only for windows on the main display
-6) End with IDE focused.
+2) Load project bindings (IDE + Chrome) and prune stale ones using a read-only window snapshot:
+   - `aerospace list-windows --all --json`
+   - Stale bindings (missing window id or mismatched bundle id) are removed.
+3) Move bound windows to `pw-<projectId>` (only by window id).
+4) If a role has no binding after pruning, open a new window for that role and bind it (one per role).
+5) Re-confirm focused workspace.
+6) Apply canonical layout **only if no bound windows were already on the workspace**:
+   - `flatten-workspace-tree --workspace <workspace>`
+   - `balance-sizes --workspace <workspace>`
+   - `layout --window-id <ideId> h_tiles`
+   - Resize IDE width to a deterministic value based on focused monitor visible width.
+7) End with IDE focused.
 
 **MUST**
 
-- Activation must avoid global scans except a last-resort token-only scan for Chrome after workspace + focused recovery timeouts.
-- Overall window-detection timeout is **10,000ms** for both Chrome and IDE (existing poll behavior +5s).
-
-**MUST**
-
-- Activation is **idempotent**:
-  - running it repeatedly must not create additional IDE/Chrome windows when the expected windows already exist.
+- Activation is CLI-only (no Accessibility geometry).
+- All AeroSpace commands execute via a serialized executor.
+- Activation fails if workspace focus cannot be confirmed or a required window cannot be opened/detected.
+- Activation must fail fast with a compatibility error if required AeroSpace commands are unsupported.
+- Stale bindings are pruned and logged; unbound windows are never moved.
 
 ### PR-030 — Close(Project) behavior (“close the workspace”)
 
@@ -225,13 +213,10 @@ Given `projectId`:
 
 **MUST**
 
-- Exactly one Chrome window per project workspace.
-- Chrome remains logged in normally; per-project profile directories are optional and opt-in.
-- Tabs are seeded only when the project Chrome window is created/recreated:
-  1) `global.globalChromeUrls`
-  2) `project.repoUrl` (if set)
-  3) `project.chromeUrls`
-- After Chrome creation, the app must refocus the IDE.
+- Activation uses the project’s bound Chrome window if present.
+- If no bound Chrome window exists, activation opens a new Chrome window and binds it (one per role).
+- Optional URLs may be opened only when creating a **new** Chrome window; existing Chrome windows/tabs are not mutated.
+- Unbound Chrome windows are never moved or resized.
 
 ### PR-050 — IDE behavior
 
@@ -239,54 +224,26 @@ Given `projectId`:
 
 - Supported IDEs: VS Code and Antigravity.
 - Global default IDE exists with per-project override.
+- Activation resolves IDE identity (bundle id + app name) from config and Launch Services.
+- Activation uses the project’s bound IDE window if present.
+- If no bound IDE window exists, activation opens a new IDE window and binds it (one per role).
+- Unbound IDE windows are never moved or resized.
 
-**MUST (custom launch)**
-
-Per project, IDE launch priority is:
-
-1) If `ideCommand` is non-empty: execute it in project root.
-2) Else if `ideUseAgentLayerLauncher=true` and `./.agent-layer/open-vscode.command` exists: execute it in project root.
-3) Else: open the effective IDE:
-   - VS Code: `open -a <VSCode.appPath> <generatedWorkspaceFile>`
-   - Antigravity: `open -a <Antigravity.appPath> <generatedWorkspaceFile>`
-
-**MUST (fallback behavior)**
-
-- If `ideCommand`/launcher exits non-zero, log WARN and fall back to the effective IDE open command.
-- If the fallback open fails, activation must FAIL with an actionable error.
-
-**MUST (deterministic project identity in IDE)**
-
-- The tool must generate a centralized `.code-workspace` file that applies project identity via VS Code workspace settings.
-- The `.code-workspace` file must set `window.title` to include a deterministic token (`PW:<projectId>`).
-- If a custom launcher opens VS Code by folder, the tool must follow up by opening the generated workspace file in **reuse-window** mode so colors/settings apply.
-
-**MUST (no assumptions about preconfigured CLIs)**
-
-- The tool must not require users to manually install `code` into PATH.
-- The tool must provide a tool-owned `code` shim when it needs to invoke VS Code CLI.
-
-### PR-060 — Layout defaults
+### PR-060 — Canonical layout
 
 **MUST**
 
-- Laptop mode:
-  - IDE and Chrome are “maximized” (same visible frame; not macOS fullscreen)
-  - IDE ends focused
-
-- Ultrawide mode (5120×1440):
-  - split visible frame into 8 equal vertical segments
-  - segments 0–1 empty
-  - segments 2–4 IDE
-  - segments 5–7 Chrome
-  - IDE ends focused
+- Reset workspace layout **only when the workspace is newly opened** (no bound windows present):
+  - `flatten-workspace-tree` then `balance-sizes`
+  - `layout h_tiles` anchored on the IDE window
+  - resize IDE width to a deterministic value derived from focused monitor visible width
+- IDE ends focused.
 
 ### PR-070 — Layout persistence
 
-**MUST**
+**MUST (current)**
 
-- Persist layout per project per display mode.
-- If user resizes/moves IDE/Chrome, it must be saved (debounced) and restored on next Activate.
+- No explicit layout persistence. If the workspace is already open with bound windows, activation preserves the current layout.
 
 ### PR-080 — Diagnostics and repeatability
 
@@ -427,7 +384,7 @@ Step 5 — Connectivity / disruption check (pw-inbox switch)
 - PASS: `PASS  AeroSpace workspace switch succeeded (pw-inbox)`
 - PASS: `PASS  Restored previous workspace: <prev>`
 - WARN: `WARN  Could not restore previous workspace automatically.`
-  - `Fix: Run: aerospace workspace <prev>`
+  - `Fix: Run: aerospace summon-workspace <prev>`
 - FAIL: `FAIL  AeroSpace workspace switching failed. ProjectWorkspaces cannot operate safely.`
 
 Step 6 — Emergency action (panic button)
@@ -507,26 +464,20 @@ Step 6 — Emergency action (panic button)
 
 The product is acceptable when all tests below pass:
 
-1) **Activate creates missing windows**
-   - Starting from an empty workspace, Activate(Project) opens IDE and Chrome and ends with IDE focused.
+1) **Activate succeeds with required windows**
+   - If bound windows exist, Activate(Project) succeeds and ends with IDE focused.
+   - If bound windows are missing, activation opens and binds one IDE + one Chrome window.
 
-2) **Activate is idempotent**
-   - Re-running Activate does not create additional IDE/Chrome windows.
+2) **Activate fails on hard errors**
+   - Workspace focus cannot be confirmed, or a required window cannot be opened/detected.
 
-3) **Chrome focus rule**
-   - After activation, IDE is focused even if Chrome was launched.
+3) **Canonical layout applied**
+   - When the workspace is newly opened, activation resets layout to `h_tiles` and sets IDE width to ~60% of visible width (with clamps).
 
-4) **Ultrawide layout default**
-   - On 5120×1440, default layout uses the 2/8 empty + 3/8 IDE + 3/8 Chrome split.
-
-5) **Layout persistence**
-   - After user resizes, activation restores the custom geometry.
-
-6) **Close empties the workspace**
+4) **Close empties the workspace**
    - Close(Project) closes every window in that project workspace.
-   - Next Activate recreates missing windows.
 
-7) **Doctor works**
+5) **Doctor works**
    - On a fresh macOS machine, following README + Doctor results in a working system.
 
 ---

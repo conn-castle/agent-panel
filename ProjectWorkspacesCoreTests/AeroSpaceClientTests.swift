@@ -45,7 +45,7 @@ final class AeroSpaceClientTests: XCTestCase {
         let runner = RecordingAeroSpaceCommandRunner(
             result: .success(CommandResult(exitCode: 0, stdout: "", stderr: ""))
         )
-        let format = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout}"
+        let format = "%{window-id} %{workspace} %{app-bundle-id} %{app-name} %{window-title} %{window-layout} %{monitor-appkit-nsscreen-screens-id}"
         let client = AeroSpaceClient(
             executableURL: URL(fileURLWithPath: "/opt/homebrew/bin/aerospace"),
             commandRunner: runner,
@@ -53,17 +53,40 @@ final class AeroSpaceClientTests: XCTestCase {
         )
 
         _ = client.switchWorkspace("pw-codex")
+        _ = client.summonWorkspace("pw-codex")
+        _ = client.focusedWorkspace()
+        _ = client.listWorkspaces()
         _ = client.listWindows(workspace: "pw-codex")
         _ = client.listWindowsAll()
+        _ = client.listWindowsOnFocusedMonitor(appBundleId: "com.example.app")
         _ = client.focusWindow(windowId: 42)
         _ = client.moveWindow(windowId: 42, to: "pw-codex")
+        _ = client.flattenWorkspaceTree(workspace: "pw-codex")
+        _ = client.balanceSizes(workspace: "pw-codex")
+        _ = client.setLayout(windowId: 42, layout: .hTiles)
         _ = client.setFloatingLayout(windowId: 42)
+        _ = client.resizeWidth(windowId: 42, width: 900)
         _ = client.closeWindow(windowId: 42)
 
         let expected = [
             AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
                 arguments: ["workspace", "pw-codex"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["summon-workspace", "pw-codex"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["list-workspaces", "--focused", "--format", "%{workspace}"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["list-workspaces", "--all"],
                 timeoutSeconds: 2
             ),
             AeroSpaceClientCommandCall(
@@ -78,6 +101,11 @@ final class AeroSpaceClientTests: XCTestCase {
             ),
             AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
+                arguments: ["list-windows", "--monitor", "focused", "--app-bundle-id", "com.example.app", "--json", "--format", format],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
                 arguments: ["focus", "--window-id", "42"],
                 timeoutSeconds: 2
             ),
@@ -88,7 +116,27 @@ final class AeroSpaceClientTests: XCTestCase {
             ),
             AeroSpaceClientCommandCall(
                 path: "/opt/homebrew/bin/aerospace",
+                arguments: ["flatten-workspace-tree", "--workspace", "pw-codex"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["balance-sizes", "--workspace", "pw-codex"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["layout", "--window-id", "42", "h_tiles"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
                 arguments: ["layout", "--window-id", "42", "floating"],
+                timeoutSeconds: 2
+            ),
+            AeroSpaceClientCommandCall(
+                path: "/opt/homebrew/bin/aerospace",
+                arguments: ["resize", "--window-id", "42", "width", "900"],
                 timeoutSeconds: 2
             ),
             AeroSpaceClientCommandCall(

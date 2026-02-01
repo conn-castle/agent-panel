@@ -51,23 +51,6 @@ public struct ProjectWorkspacesPaths: Sendable {
         logsDirectory.appendingPathComponent("workspaces.log", isDirectory: false)
     }
 
-    /// Returns `~/.local/share/project-workspaces/bin/code`.
-    public var codeShimPath: URL {
-        sharedToolsDirectory
-            .appendingPathComponent("bin", isDirectory: true)
-            .appendingPathComponent("code", isDirectory: false)
-    }
-
-    /// Returns `~/Library/Application Support/Google/Chrome/Local State`.
-    public var chromeLocalStateFile: URL {
-        homeDirectory
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Application Support", isDirectory: true)
-            .appendingPathComponent("Google", isDirectory: true)
-            .appendingPathComponent("Chrome", isDirectory: true)
-            .appendingPathComponent("Local State", isDirectory: false)
-    }
-
     private var configDirectory: URL {
         homeDirectory
             .appendingPathComponent(".config", isDirectory: true)
@@ -78,13 +61,6 @@ public struct ProjectWorkspacesPaths: Sendable {
         homeDirectory
             .appendingPathComponent(".local", isDirectory: true)
             .appendingPathComponent("state", isDirectory: true)
-            .appendingPathComponent("project-workspaces", isDirectory: true)
-    }
-
-    private var sharedToolsDirectory: URL {
-        homeDirectory
-            .appendingPathComponent(".local", isDirectory: true)
-            .appendingPathComponent("share", isDirectory: true)
             .appendingPathComponent("project-workspaces", isDirectory: true)
     }
 }

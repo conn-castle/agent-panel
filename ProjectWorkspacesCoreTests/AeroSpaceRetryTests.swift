@@ -59,7 +59,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = ClockAdvancingTestSleeper(clock: clock)
+        let sleeper = AdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let client = makeClient(
             runner: runner,
@@ -88,7 +88,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             }
         }
         XCTAssertEqual(runner.invocations.map(\.arguments), [commandArgs, probeArgs])
-        XCTAssertTrue(sleeper.slept.isEmpty)
+        XCTAssertTrue(sleeper.sleepCalls.isEmpty)
     }
 
     func testRetriesWhenProbeFailsThenSucceeds() {
@@ -109,7 +109,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = ClockAdvancingTestSleeper(clock: clock)
+        let sleeper = AdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let policy = AeroSpaceRetryPolicy(
             maxAttempts: 3,
@@ -136,8 +136,8 @@ final class AeroSpaceRetryTests: XCTestCase {
             XCTAssertEqual(result.exitCode, 0)
         }
         XCTAssertEqual(runner.invocations.map(\.arguments), [commandArgs, probeArgs, commandArgs])
-        XCTAssertEqual(sleeper.slept.count, 1)
-        guard let firstSleep = sleeper.slept.first else {
+        XCTAssertEqual(sleeper.sleepCalls.count, 1)
+        guard let firstSleep = sleeper.sleepCalls.first else {
             XCTFail("Expected a recorded sleep delay.")
             return
         }
@@ -162,7 +162,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = ClockAdvancingTestSleeper(clock: clock)
+        let sleeper = AdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let policy = AeroSpaceRetryPolicy(
             maxAttempts: 2,
@@ -214,7 +214,7 @@ final class AeroSpaceRetryTests: XCTestCase {
             ]
         )
         let clock = TestClock()
-        let sleeper = ClockAdvancingTestSleeper(clock: clock)
+        let sleeper = AdvancingSleeper(clock: clock)
         let jitter = TestJitterProvider(value: 0.5)
         let client = makeClient(
             runner: runner,
@@ -233,36 +233,6 @@ final class AeroSpaceRetryTests: XCTestCase {
             XCTAssertEqual(received, error)
         }
         XCTAssertEqual(runner.invocations.map(\.arguments), [commandArgs])
-    }
-}
-
-private final class TestClock: DateProviding {
-    private var current: Date
-
-    init(start: Date = Date(timeIntervalSince1970: 0)) {
-        self.current = start
-    }
-
-    func now() -> Date {
-        current
-    }
-
-    func advance(by seconds: TimeInterval) {
-        current = current.addingTimeInterval(seconds)
-    }
-}
-
-private final class ClockAdvancingTestSleeper: AeroSpaceSleeping {
-    private let clock: TestClock
-    private(set) var slept: [TimeInterval] = []
-
-    init(clock: TestClock) {
-        self.clock = clock
-    }
-
-    func sleep(seconds: TimeInterval) {
-        slept.append(seconds)
-        clock.advance(by: seconds)
     }
 }
 

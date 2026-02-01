@@ -209,3 +209,33 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: LayoutCoordinator waits up to 2s for the expected workspace to become focused before reading AX geometry; if focus does not settle, it skips AX convergence, applies layout deterministically, and suppresses off-main-display warnings.
     Reason: AeroSpace hides inactive workspace windows off-screen; waiting for focus avoids false off-screen warnings and reduces layout churn.
     Tradeoffs: Adds a short focus wait and new warnings when focus does not settle; layout may proceed without AX frame reads in that case.
+
+- Decision 2026-02-01 6a1f4c2: CLI-only AeroSpace activation and deterministic layout
+    Decision: Activation uses the AeroSpace CLI as the sole source of truth (no AX geometry), confirms focus via `list-workspaces --focused`, resolves exactly one IDE + Chrome window on the focused monitor, moves them to the target workspace, and always reapplies the canonical layout (flatten, balance, h_tiles) with deterministic IDE width computed from the focused monitor's visible width; all AeroSpace commands are serialized; activation failures are hard errors with no warning state.
+    Reason: Aligns with AeroSpace's hidden-window model and removes noisy geometry-based warnings while making activation deterministic and debuggable.
+    Tradeoffs: Stricter activation that fails on ambiguity; increased reliance on AeroSpace CLI availability and app-provided screen metrics; supersedes prior AX-based layout and window-detection decisions.
+
+- Decision 2026-02-01 4d9b7e1: StateStore saves always use replaceItemAt
+    Decision: StateStore writes always replace the destination using `FileManager.replaceItemAt`, even on first write, via the FileSystem abstraction.
+    Reason: `replaceItemAt` provides atomic replacement and avoids the error-prone `moveItem` path.
+    Tradeoffs: Relies on `replaceItemAt` behavior for non-existent destinations; supersedes the earlier conditional move/replace decision.
+
+- Decision 2026-02-01 2b7d9e0: Remove legacy launch + layout persistence pipeline
+    Decision: Removed the legacy IDE/Chrome launch pipeline, token-based window detection, layout defaults/persistence, and StateStore; activation is CLI-only and requires pre-opened IDE/Chrome windows.
+    Reason: Those paths are unused in the CLI-only activation flow and were creating dead code and stale docs.
+    Tradeoffs: Configuration keys remain but are unused; reintroducing launch automation or layout persistence will require new dedicated work; supersedes 2026-01-28 c3f1a9/c3f1aa/8e2d6bf and 2026-01-29 7b1c0e/3d8f9a plus 2026-01-31 9e4b3c and 2026-02-01 4d9b7e1.
+
+- Decision 2026-02-01 d2e9f4a: Remove legacy launch config keys and discovery
+    Decision: Removed legacy IDE/Chrome launch config keys and discovery (global Chrome URL lists, repo URL seeding, display ultrawide config, IDE launch overrides, Chrome URL/profile settings), along with Chrome profile discovery and unused state/workspace path helpers; config schema now only includes `global.defaultIde`, `ide.*` app discovery values, and per-project `id/name/path/colorHex/ide`.
+    Reason: CLI-only activation relies on pre-existing windows and explicit AeroSpace layout steps; keeping unused launch keys and discovery logic is misleading and increases maintenance surface.
+    Tradeoffs: Users can no longer specify launch-time IDE/Chrome options; the prior "keys remain but unused" tradeoff is superseded by removal.
+
+- Decision 2026-02-01 b8c2f6a: Binding-based activation with auto-open windows
+    Decision: Activation now uses per-project bindings (one IDE + one Chrome), prunes stale bindings using `list-windows --all --json`, opens a new window for any missing role, moves only bound windows, and focuses the IDE; workspace focus uses `summon-workspace` and canonical layout is applied only when the workspace had no bound windows present.
+    Reason: Supports multiple IDE/Chrome windows in the system while keeping activation deterministic and ensuring unbound windows are untouched.
+    Tradeoffs: Requires binding state persistence and token-based detection for newly opened windows; supersedes the earlier "pre-opened windows only" requirement in 2026-02-01 6a1f4c2/2b7d9e0, workspace-only enumeration in 2026-01-27 a6d2f1b/e7c3a1b, and the launch-key removal in 2026-02-01 d2e9f4a.
+
+- Decision 2026-02-01 9a7c1de: Remove unused display config
+    Decision: Drop `display.ultrawideMinWidthPx` and related parsing/docs; `[display]` is now treated as an unknown config key.
+    Reason: The display config was unused and created dead code plus misleading documentation.
+    Tradeoffs: Existing configs with `[display]` will emit unknown-key warnings until updated.

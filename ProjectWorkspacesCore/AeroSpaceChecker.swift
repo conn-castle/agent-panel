@@ -49,6 +49,8 @@ struct AeroSpaceChecker {
     private let paths: ProjectWorkspacesPaths
     private let fileSystem: FileSystem
     private let commandRunner: CommandRunning
+    private let aeroSpaceCommandRunner: AeroSpaceCommandRunning
+    private let aeroSpaceTimeoutSeconds: TimeInterval
     private let aerospaceBinaryResolver: AeroSpaceBinaryResolving
     private let environment: EnvironmentProviding
     private let dateProvider: DateProviding
@@ -59,6 +61,8 @@ struct AeroSpaceChecker {
     ///   - fileSystem: File system accessor.
     ///   - commandRunner: Command runner for CLI checks.
     ///   - aerospaceBinaryResolver: Resolver for the AeroSpace CLI executable.
+    ///   - aeroSpaceCommandRunner: Serialized runner for AeroSpace CLI commands.
+    ///   - aeroSpaceTimeoutSeconds: Timeout for individual AeroSpace commands.
     ///   - environment: Environment provider for XDG config resolution.
     ///   - dateProvider: Date provider for timestamps.
     init(
@@ -66,12 +70,16 @@ struct AeroSpaceChecker {
         fileSystem: FileSystem,
         commandRunner: CommandRunning,
         aerospaceBinaryResolver: AeroSpaceBinaryResolving,
+        aeroSpaceCommandRunner: AeroSpaceCommandRunning = AeroSpaceCommandExecutor.shared,
+        aeroSpaceTimeoutSeconds: TimeInterval = 2,
         environment: EnvironmentProviding,
         dateProvider: DateProviding
     ) {
         self.paths = paths
         self.fileSystem = fileSystem
         self.commandRunner = commandRunner
+        self.aeroSpaceCommandRunner = aeroSpaceCommandRunner
+        self.aeroSpaceTimeoutSeconds = aeroSpaceTimeoutSeconds
         self.aerospaceBinaryResolver = aerospaceBinaryResolver
         self.environment = environment
         self.dateProvider = dateProvider
@@ -477,7 +485,7 @@ struct AeroSpaceChecker {
 
             let switchResult = runCommand(
                 executable: executable,
-                arguments: ["workspace", "pw-inbox"]
+                arguments: ["summon-workspace", "pw-inbox"]
             )
 
             switch switchResult {
@@ -533,7 +541,7 @@ struct AeroSpaceChecker {
             if previousWorkspace != "pw-inbox" {
                 let restoreResult = runCommand(
                     executable: executable,
-                    arguments: ["workspace", previousWorkspace]
+                    arguments: ["summon-workspace", previousWorkspace]
                 )
 
                 switch restoreResult {
@@ -542,7 +550,7 @@ struct AeroSpaceChecker {
                         DoctorFinding(
                             severity: .warn,
                             title: "Could not restore previous workspace automatically.",
-                            bodyLines: ["Fix: Run: aerospace workspace \(previousWorkspace)"]
+                            bodyLines: ["Fix: Run: aerospace summon-workspace \(previousWorkspace)"]
                         )
                     )
                     return findings
@@ -561,7 +569,7 @@ struct AeroSpaceChecker {
                         DoctorFinding(
                             severity: .warn,
                             title: "Could not restore previous workspace automatically.",
-                            bodyLines: ["Fix: Run: aerospace workspace \(previousWorkspace)"]
+                            bodyLines: ["Fix: Run: aerospace summon-workspace \(previousWorkspace)"]
                         )
                     )
                 case .success(let restoredWorkspace):
@@ -570,7 +578,7 @@ struct AeroSpaceChecker {
                             DoctorFinding(
                                 severity: .warn,
                                 title: "Could not restore previous workspace automatically.",
-                                bodyLines: ["Fix: Run: aerospace workspace \(previousWorkspace)"]
+                                bodyLines: ["Fix: Run: aerospace summon-workspace \(previousWorkspace)"]
                             )
                         )
                     } else {
@@ -582,6 +590,69 @@ struct AeroSpaceChecker {
                         )
                     }
                 }
+            }
+        }
+
+        return findings
+    }
+
+    /// Checks AeroSpace CLI compatibility for required commands.
+    /// - Parameter executable: Resolved AeroSpace executable URL.
+    /// - Returns: Findings for required command support.
+    func checkAeroSpaceCompatibility(executable: URL) -> [DoctorFinding] {
+        let checks: [(args: [String], successTitle: String, failureTitle: String, failureFix: String)] = [
+            (
+                ["list-workspaces", "--focused"],
+                "AeroSpace supports list-workspaces --focused",
+                "AeroSpace list-workspaces --focused failed",
+                "Ensure AeroSpace is running, then retry `aerospace list-workspaces --focused`."
+            ),
+            (
+                ["list-windows", "--all", "--json"],
+                "AeroSpace supports list-windows --all --json",
+                "AeroSpace list-windows --all --json failed",
+                "Ensure AeroSpace is running, then retry `aerospace list-windows --all --json`."
+            ),
+            (
+                ["focus", "--help"],
+                "AeroSpace supports focus --window-id",
+                "AeroSpace focus --help failed",
+                "Ensure the installed AeroSpace version supports `focus --window-id`."
+            ),
+            (
+                ["move-node-to-workspace", "--help"],
+                "AeroSpace supports move-node-to-workspace --window-id",
+                "AeroSpace move-node-to-workspace --help failed",
+                "Ensure the installed AeroSpace version supports `move-node-to-workspace --window-id`."
+            ),
+            (
+                ["summon-workspace", "--help"],
+                "AeroSpace supports summon-workspace",
+                "AeroSpace summon-workspace --help failed",
+                "Ensure the installed AeroSpace version supports `summon-workspace`."
+            )
+        ]
+
+        var findings: [DoctorFinding] = []
+        for check in checks {
+            let result = runCommand(executable: executable, arguments: check.args)
+            switch result {
+            case .success:
+                findings.append(
+                    DoctorFinding(
+                        severity: .pass,
+                        title: check.successTitle
+                    )
+                )
+            case .failure(let detail):
+                findings.append(
+                    DoctorFinding(
+                        severity: .fail,
+                        title: check.failureTitle,
+                        detail: detail,
+                        fix: check.failureFix
+                    )
+                )
             }
         }
 
@@ -642,19 +713,16 @@ struct AeroSpaceChecker {
     ///   - arguments: Arguments to pass to the executable.
     /// - Returns: Command result or a failure detail string.
     private func runCommand(executable: URL, arguments: [String]) -> CommandOutcome {
-        do {
-            let result = try commandRunner.run(
-                command: executable,
-                arguments: arguments,
-                environment: nil,
-                workingDirectory: nil
-            )
-            if result.exitCode == 0 {
-                return .success(result)
-            }
-            return .failure(result.failureDetail(prefix: "Command failed"))
-        } catch {
-            return .failure("Command failed to launch: \(error)")
+        let result = aeroSpaceCommandRunner.run(
+            executable: executable,
+            arguments: arguments,
+            timeoutSeconds: aeroSpaceTimeoutSeconds
+        )
+        switch result {
+        case .success(let commandResult):
+            return .success(commandResult)
+        case .failure(let error):
+            return .failure(error.userFacingMessage)
         }
     }
 

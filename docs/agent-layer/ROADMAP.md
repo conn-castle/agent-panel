@@ -67,27 +67,30 @@ Incomplete:
 
 ## Phase 2 ✅ — VS Code workspace generation + IDE launch pipeline
 
-- Generated `.code-workspace` files with `workbench.colorCustomizations` derived from `project.colorHex`.
-- Implemented IDE launch pipeline (ideCommand/launcher/open fallback), VS Code CLI enforcement via shim, and Antigravity open fallback.
+- Generated IDE workspace files with `workbench.colorCustomizations` derived from `project.colorHex`.
+- Implemented IDE launch pipeline and workspace generation (legacy pipeline later removed; minimal auto-open + workspace generation reintroduced in the 2026-02 binding-based activation).
 - Added unit tests for workspace generation, color palette validation, environment building, and launch selection rules.
+- Superseded by the 2026-02 CLI-only activation migration; legacy IDE launch automation was removed.
 
 
 ## Phase 3 ✅ — Chrome window creation + tab seeding
 
 - Implemented `ChromeLauncher` with workspace precondition enforcement and deterministic window detection.
-- Created Chrome windows with `--new-window` and ordered, deduplicated URLs (`globalChromeUrls` → `repoUrl` → `chromeUrls`).
+- Created Chrome windows with ordered, deduplicated URLs (legacy Chrome automation; minimal `open -na` remains in binding-based activation for missing windows).
 - Detected newly created Chrome windows by diffing AeroSpace window IDs before/after launch with fixed polling.
 - Handled edge cases: existing windows (single/multiple), ambiguous detection within the workspace, and timeout errors without cross-workspace scanning.
 - Enforced IDE refocus after Chrome creation via `refocusIdeWindow` helper.
 - Added `.unexpectedOutput` error case to `AeroSpaceCommandError` for semantic precision.
 - Extracted shared test helpers (`AeroSpaceCommandSignature`, `SequencedAeroSpaceCommandRunner`) to reduce duplication.
 - Added 11 unit tests covering all Chrome launcher scenarios.
+- Superseded by the 2026-02 CLI-only activation migration; Chrome launch automation was removed.
 
 
 ## Phase 4 ✅ — Activation engine (Activate(Project))
 - Implemented no-hijack activation that is idempotent, deterministic, and leaves the IDE focused.
 - Added structured activation logging with AeroSpace command capture and explicit warning/error outcomes.
 - Added unit coverage for idempotence, missing-window recovery, and edge cases in activation orchestration.
+ - Added binding-based activation that opens and binds a single IDE + Chrome window when missing and leaves unbound windows untouched.
 
 
 ## Phase 5 ✅ — Switcher UI + global hotkey
@@ -100,10 +103,11 @@ Incomplete:
 ## Phase 6 ✅ — Layout engine + persistence
 - Implemented display mode detection for laptop and ultrawide modes.
 - Implemented default layouts (maximized for laptop, 8-segment split for ultrawide).
-- Implemented versioned `state.json` cache for layout persistence with atomic writes.
+- Implemented versioned layout state cache for layout persistence with atomic writes.
 - Persisted geometry on window move/resize via Accessibility (AX) APIs with 500ms debounce.
 - Applied geometry via AeroSpace window focus and AX focused-window mutation.
 - Added unit tests for layout math and state serialization.
+- Superseded by the 2026-02 CLI-only activation migration; AX-based layout persistence was removed.
 
 ## Phase 7 ✅ — Architecture cleanup + Core/App boundary
 - Introduced the Core workspace facade (`WorkspaceManaging`) and focus snapshot/restore in Core so the App no longer touches AeroSpace internals.
@@ -118,12 +122,10 @@ Incomplete:
 
 ### Tasks
 - [ ] Extract ActivationService steps into named types or methods and move step implementations into dedicated files.
-- [ ] Consolidate ChromeLauncher detection/launch logic into shared helpers and decide on a single public API surface.
 - [ ] Replace SwitcherPanelController’s implicit state machine with explicit state structs/reducer-style updates.
 
 ### Exit criteria
 - ActivationService is a small orchestrator (target under ~300 lines) with steps in separate files.
-- ChromeLauncher has one canonical detection/launch flow with no duplicated logic.
 - SwitcherPanelController state transitions are explicit and covered by updated tests.
 
 ## Phase 9 — Close Project (empty the workspace)
@@ -140,7 +142,7 @@ Incomplete:
 - [ ] Log every close action with timestamp, projectId, workspaceName, AeroSpace command stdout/stderr, and final outcome (success/warn/fail).
 
 ### Exit criteria
-- Close empties the project workspace and next activation recreates missing windows as needed.
+- Close empties the project workspace; activation reopens/binds IDE and Chrome windows as needed.
 
 
 ## Phase 10 — Packaging + onboarding + documentation polish
