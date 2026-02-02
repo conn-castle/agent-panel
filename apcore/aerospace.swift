@@ -145,72 +145,34 @@ struct ApAeroSpace {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
+            var failures: [String] = []
+            failures.reserveCapacity(windows.count)
+
             for window in windows {
                 switch closeWindow(windowId: window.windowId) {
                 case .failure(let error):
-                    return .failure(error)
+                    failures.append("window \(window.windowId): \(error.message)")
                 case .success:
                     continue
                 }
             }
-            return .success(())
-        }
-    }
 
-    /// Returns window titles for AP IDE windows on the focused monitor.
-    /// - Returns: Titles or an error.
-    func listApIdeTitles() -> Result<[String], ApCoreError> {
-        switch listApIdeWindows() {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let windows):
-            return .success(windows.map { $0.windowTitle })
-        }
-    }
-
-    /// Returns AP IDE windows on the focused monitor.
-    /// - Returns: Window data or an error.
-    func listApIdeWindows() -> Result<[ApWindow], ApCoreError> {
-        switch listWindowsFocusedMonitor() {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let windows):
-            let filtered = windows.filter {
-                $0.appBundleId == ApVSCodeLauncher.bundleId &&
-                    $0.windowTitle.contains(ApIdeToken.prefix) &&
-                    !$0.windowTitle.isEmpty
-            }
-            return .success(filtered)
-        }
-    }
-
-    /// Returns AP Chrome windows on the focused monitor.
-    /// - Returns: Window data or an error.
-    func listApChromeWindows() -> Result<[ApWindow], ApCoreError> {
-        switch listWindowsFocusedMonitor() {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let windows):
-            let filtered = windows.filter {
-                $0.appBundleId == ApChromeLauncher.bundleId &&
-                    $0.windowTitle.contains(ApIdeToken.prefix) &&
-                    !$0.windowTitle.isEmpty
-            }
-            let chromeWindows = filtered.map {
-                ApWindow(
-                    windowId: $0.windowId,
-                    appBundleId: $0.appBundleId,
-                    workspace: $0.workspace,
-                    windowTitle: $0.windowTitle
+            guard failures.isEmpty else {
+                let details = failures.joined(separator: "\n")
+                return .failure(
+                    ApCoreError(
+                        message: "Failed to close \(failures.count) windows in workspace \(trimmed):\n\(details)"
+                    )
                 )
             }
-            return .success(chromeWindows)
+
+            return .success(())
         }
     }
 
     /// Returns windows on the focused monitor.
     /// - Returns: Window list or an error.
-    private func listWindowsFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
+    func listWindowsFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
         switch commandRunner.run(
             executable: "aerospace",
             arguments: [
@@ -235,6 +197,50 @@ struct ApAeroSpace {
             }
             return parseWindowSummaries(output: result.stdout)
         }
+    }
+
+    /// Returns windows on the focused monitor filtered by app bundle id.
+    /// - Parameter appBundleId: App bundle identifier to filter.
+    /// - Returns: Window list or an error.
+    func listWindowsOnFocusedMonitor(appBundleId: String) -> Result<[ApWindow], ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: [
+                "list-windows",
+                "--monitor",
+                "focused",
+                "--app-bundle-id",
+                appBundleId,
+                "--format",
+                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+            ]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmed.isEmpty ? "" : "\n\(trimmed)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace list-windows --monitor focused --app-bundle-id failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+            return parseWindowSummaries(output: result.stdout)
+        }
+    }
+
+    /// Returns VS Code windows on the focused monitor.
+    /// - Returns: Window list or an error.
+    func listVSCodeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
+        listWindowsOnFocusedMonitor(appBundleId: ApVSCodeLauncher.bundleId)
+    }
+
+    /// Returns Chrome windows on the focused monitor.
+    /// - Returns: Window list or an error.
+    func listChromeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
+        listWindowsOnFocusedMonitor(appBundleId: ApChromeLauncher.bundleId)
     }
 
     /// Returns the currently focused window.

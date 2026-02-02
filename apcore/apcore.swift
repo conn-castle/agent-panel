@@ -120,13 +120,31 @@ public final class ApCore {
     /// Lists all AP IDE windows.
     /// - Returns: Window data or an error.
     public func listIdeWindows() -> Result<[ApWindow], ApCoreError> {
-        aerospace.listApIdeWindows()
+        switch aerospace.listVSCodeWindowsOnFocusedMonitor() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let windows):
+            let filtered = windows.filter {
+                $0.windowTitle.contains(ApIdeToken.prefix) &&
+                    !$0.windowTitle.isEmpty
+            }
+            return .success(filtered)
+        }
     }
 
     /// Lists all AP Chrome windows.
     /// - Returns: Window data or an error.
     public func listChromeWindows() -> Result<[ApWindow], ApCoreError> {
-        aerospace.listApChromeWindows()
+        switch aerospace.listChromeWindowsOnFocusedMonitor() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let windows):
+            let filtered = windows.filter {
+                $0.windowTitle.contains(ApIdeToken.prefix) &&
+                    !$0.windowTitle.isEmpty
+            }
+            return .success(filtered)
+        }
     }
 
     /// Lists all windows in a workspace.

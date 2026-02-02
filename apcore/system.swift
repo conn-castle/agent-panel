@@ -16,8 +16,13 @@ struct ApSystemCommandRunner {
     /// - Parameters:
     ///   - executable: Executable name to run.
     ///   - arguments: Arguments to pass to the executable.
+    ///   - timeoutSeconds: Optional timeout in seconds. Pass nil to wait indefinitely.
     /// - Returns: Captured output on success, or an error.
-    func run(executable: String, arguments: [String]) -> Result<ApCommandResult, ApCoreError> {
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval? = 5
+    ) -> Result<ApCommandResult, ApCoreError> {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [executable] + arguments
@@ -27,13 +32,29 @@ struct ApSystemCommandRunner {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
+        let completion = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in completion.signal() }
+
         do {
             try process.run()
         } catch {
             return .failure(ApCoreError(message: "Failed to launch \(executable): \(error.localizedDescription)"))
         }
 
-        process.waitUntilExit()
+        if let timeoutSeconds = timeoutSeconds {
+            let waitResult = completion.wait(timeout: .now() + timeoutSeconds)
+            if waitResult == .timedOut {
+                process.terminate()
+                _ = completion.wait(timeout: .now() + 1)
+                return .failure(
+                    ApCoreError(
+                        message: "Command timed out after \(timeoutSeconds)s: \(executable) \(arguments.joined(separator: " "))"
+                    )
+                )
+            }
+        } else {
+            completion.wait()
+        }
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
