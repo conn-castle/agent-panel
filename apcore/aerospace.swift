@@ -121,7 +121,7 @@ struct ApAeroSpace {
 
     /// Returns AP IDE windows on the focused monitor.
     /// - Returns: Window data or an error.
-    func list_ap_ide_windows() -> Result<[ApIdeWindow], ApCoreError> {
+    func list_ap_ide_windows() -> Result<[ApWindow], ApCoreError> {
         switch list_windows_focused_monitor() {
         case .failure(let error):
             return .failure(error)
@@ -135,9 +135,33 @@ struct ApAeroSpace {
         }
     }
 
+    /// Returns AP Chrome windows on the focused monitor.
+    /// - Returns: Window data or an error.
+    func list_ap_chrome_windows() -> Result<[ApWindow], ApCoreError> {
+        switch list_windows_focused_monitor() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let windows):
+            let filtered = windows.filter {
+                $0.appBundleId == ApChromeLauncher.bundleId &&
+                    $0.windowTitle.contains(ApIdeToken.prefix) &&
+                    !$0.windowTitle.isEmpty
+            }
+            let chromeWindows = filtered.map {
+                ApWindow(
+                    windowId: $0.windowId,
+                    appBundleId: $0.appBundleId,
+                    workspace: $0.workspace,
+                    windowTitle: $0.windowTitle
+                )
+            }
+            return .success(chromeWindows)
+        }
+    }
+
     /// Returns windows on the focused monitor.
     /// - Returns: Window list or an error.
-    private func list_windows_focused_monitor() -> Result<[ApIdeWindow], ApCoreError> {
+    private func list_windows_focused_monitor() -> Result<[ApWindow], ApCoreError> {
         switch commandRunner.run(
             executable: "aerospace",
             arguments: [
@@ -167,9 +191,9 @@ struct ApAeroSpace {
     /// Parses window summaries from formatted AeroSpace output.
     /// - Parameter output: Output from `aerospace list-windows --format`.
     /// - Returns: Parsed window summaries or an error.
-    private func parseWindowSummaries(output: String) -> Result<[ApIdeWindow], ApCoreError> {
+    private func parseWindowSummaries(output: String) -> Result<[ApWindow], ApCoreError> {
         let lines = output.split(whereSeparator: \.isNewline)
-        var windows: [ApIdeWindow] = []
+        var windows: [ApWindow] = []
         windows.reserveCapacity(lines.count)
 
         for line in lines {
@@ -221,7 +245,7 @@ struct ApAeroSpace {
             let windowTitle = String(titlePart).trimmingCharacters(in: .whitespacesAndNewlines)
 
             windows.append(
-                ApIdeWindow(
+                ApWindow(
                     windowId: windowId,
                     appBundleId: appBundleId,
                     workspace: workspace,

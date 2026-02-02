@@ -9,7 +9,9 @@ private enum ApHelpTopic {
     case showConfig
     case newWorkspace
     case newIde
+    case newChrome
     case listIde
+    case listChrome
     case moveWindow
 }
 
@@ -20,7 +22,9 @@ private enum ApCommand {
     case showConfig
     case newWorkspace(String)
     case newIde(String)
+    case newChrome(String)
     case listIde
+    case listChrome
     case moveWindow(String, Int)
 }
 
@@ -73,10 +77,22 @@ private struct ApArgumentParser {
                 helpTopic: .newIde,
                 arguments: Array(arguments.dropFirst())
             )
+        case "new-chrome":
+            return parseSingleArgumentCommand(
+                commandBuilder: { .newChrome($0) },
+                helpTopic: .newChrome,
+                arguments: Array(arguments.dropFirst())
+            )
         case "list-ide":
             return parseNoArgumentCommand(
                 command: .listIde,
                 helpTopic: .listIde,
+                arguments: Array(arguments.dropFirst())
+            )
+        case "list-chrome":
+            return parseNoArgumentCommand(
+                command: .listChrome,
+                helpTopic: .listChrome,
                 arguments: Array(arguments.dropFirst())
             )
         case "move-window":
@@ -221,7 +237,9 @@ private func usageText(for topic: ApHelpTopic) -> String {
           show-config
           new-workspace <name>
           new-ide <identifier>
+          new-chrome <identifier>
           list-ide
+          list-chrome
           move-window <workspace> <window-id>
 
         Options:
@@ -263,6 +281,22 @@ private func usageText(for topic: ApHelpTopic) -> String {
         return """
         Usage:
           ap list-ide
+
+        Options:
+          -h, --help   Show help
+        """
+    case .newChrome:
+        return """
+        Usage:
+          ap new-chrome <identifier>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .listChrome:
+        return """
+        Usage:
+          ap list-chrome
 
         Options:
           -h, --help   Show help
@@ -353,6 +387,21 @@ case .success(let command):
                 exit(ApExitCode.ok.rawValue)
             }
         }
+    case .newChrome(let identifier):
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.newChrome(identifier: identifier) {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success:
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
     case .listIde:
         switch ApConfig.loadDefault() {
         case .failure(let error):
@@ -361,6 +410,24 @@ case .success(let command):
         case .success(let config):
             let apcore = ApCore(config: config)
             switch apcore.listIdeWindows() {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success(let windows):
+                for window in windows {
+                    print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
+                }
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
+    case .listChrome:
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.listChromeWindows() {
             case .failure(let error):
                 printStderr("error: \(error.message)")
                 exit(ApExitCode.failure.rawValue)

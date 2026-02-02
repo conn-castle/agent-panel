@@ -115,3 +115,72 @@ struct ApVSCodeLauncher {
         }
     }
 }
+
+/// Launches new Chrome windows with a tagged window title.
+struct ApChromeLauncher {
+    /// Chrome bundle identifier used for filtering windows.
+    static let bundleId = "com.google.Chrome"
+
+    private let commandRunner = ApSystemCommandRunner()
+
+    /// Opens a new Chrome window tagged with the provided identifier.
+    /// - Parameter identifier: Identifier embedded in the window title token.
+    /// - Returns: Success or an error.
+    func open_new_window(identifier: String) -> Result<Void, ApCoreError> {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(ApCoreError(message: "Identifier cannot be empty."))
+        }
+        if trimmed.contains("/") {
+            return .failure(ApCoreError(message: "Identifier cannot contain '/'."))
+        }
+
+        let windowTitle = ApChromeLauncher.escapeForAppleScriptString("\(ApIdeToken.prefix)\(trimmed)")
+        let script = [
+            "tell application \"Google Chrome\"",
+            "activate",
+            "set newWindow to make new window",
+            "set URL of active tab of newWindow to \"https://example.com\"",
+            "set given name of newWindow to \"\(windowTitle)\"",
+            "end tell"
+        ]
+
+        switch commandRunner.run(executable: "osascript", arguments: ApChromeLauncher.scriptArguments(lines: script)) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
+                return .failure(
+                    ApCoreError(
+                        message: "osascript failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+            return .success(())
+        }
+    }
+
+    /// Builds osascript arguments for a list of script lines.
+    /// - Parameter lines: AppleScript lines to execute.
+    /// - Returns: Arguments for osascript.
+    private static func scriptArguments(lines: [String]) -> [String] {
+        var args: [String] = []
+        for line in lines {
+            args.append("-e")
+            args.append(line)
+        }
+        return args
+    }
+
+    /// Escapes a string for insertion into a double-quoted AppleScript string.
+    /// - Parameter value: Raw value.
+    /// - Returns: Escaped string.
+    private static func escapeForAppleScriptString(_ value: String) -> String {
+        var escaped = value
+        escaped = escaped.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+        return escaped
+    }
+}

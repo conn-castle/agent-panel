@@ -17,8 +17,8 @@ enum ApIdeToken {
     static let prefix = "AP:"
 }
 
-/// Minimal IDE window data used by ap.
-public struct ApIdeWindow: Equatable {
+/// Minimal window data used by ap.
+public struct ApWindow: Equatable {
     /// AeroSpace window id.
     public let windowId: Int
     /// App bundle identifier for the window.
@@ -49,6 +49,7 @@ public final class ApCore {
 
     private let aerospace: ApAeroSpace
     private let ideLauncher: ApVSCodeLauncher
+    private let chromeLauncher: ApChromeLauncher
     private let workspacePrefix = "ap-"
 
     /// Creates a new ApCore instance.
@@ -57,6 +58,7 @@ public final class ApCore {
         self.config = config
         self.aerospace = ApAeroSpace()
         self.ideLauncher = ApVSCodeLauncher()
+        self.chromeLauncher = ApChromeLauncher()
     }
 
     /// Prints AeroSpace workspaces filtered by the `ap-` prefix.
@@ -90,6 +92,13 @@ public final class ApCore {
         ideLauncher.open_new_window(identifier: identifier)
     }
 
+    /// Opens a new Chrome window tagged with the provided identifier.
+    /// - Parameter identifier: Identifier embedded in the window title token.
+    /// - Returns: Success or an error.
+    public func newChrome(identifier: String) -> Result<Void, ApCoreError> {
+        chromeLauncher.open_new_window(identifier: identifier)
+    }
+
     /// Creates a new AeroSpace workspace.
     /// - Parameter name: Workspace name to create.
     /// - Returns: Success or an error.
@@ -110,8 +119,14 @@ public final class ApCore {
 
     /// Lists all AP IDE windows.
     /// - Returns: Window data or an error.
-    public func listIdeWindows() -> Result<[ApIdeWindow], ApCoreError> {
+    public func listIdeWindows() -> Result<[ApWindow], ApCoreError> {
         aerospace.list_ap_ide_windows()
+    }
+
+    /// Lists all AP Chrome windows.
+    /// - Returns: Window data or an error.
+    public func listChromeWindows() -> Result<[ApWindow], ApCoreError> {
+        aerospace.list_ap_chrome_windows()
     }
 
     /// Moves a window into the specified workspace.
