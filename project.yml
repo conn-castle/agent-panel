@@ -36,6 +36,23 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  apcore:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: apcore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+  ap:
+    type: tool
+    platform: macOS
+    sources:
+      - path: ap
+    dependencies:
+      - target: apcore
+
   pwctl:
     type: tool
     platform: macOS
@@ -79,6 +96,7 @@ schemes:
     build:
       targets:
         ProjectWorkspacesApp: all
+        ap: all
         pwctl: all
     test:
       targets:

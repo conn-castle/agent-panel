@@ -29,6 +29,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BEEB7627B8AAD421F15C0BC0"
+               BuildableName = "ap"
+               BlueprintName = "ap"
+               ReferencedContainer = "container:ProjectWorkspaces.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "9465A67A95ADB59E1402A241"
                BuildableName = "pwctl"
                BlueprintName = "pwctl"

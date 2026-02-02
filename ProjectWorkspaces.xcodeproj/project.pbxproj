@@ -14,10 +14,12 @@
 		105AB02CFAC501E3DCB64126 /* AeroSpaceClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24341DAD7A3A95E43E760685 /* AeroSpaceClientTests.swift */; };
 		137A26ED38AFC2B33C913164 /* vscode-workspace.json in Resources */ = {isa = PBXBuildFile; fileRef = ED556F35DA4367F65256F98C /* vscode-workspace.json */; };
 		13BA1FB60F27ECF0809049EE /* ActivationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B444D0192C002004F200FE6 /* ActivationServiceTests.swift */; };
+		13E9FD14B2096A7BA2EFE9D6 /* apcore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EB0D02658D63EEBD2071165E /* apcore.framework */; };
 		1D9CEA5204D43505A1F4BF4E /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		1E9A922B1173768D5B836264 /* DoctorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */; };
 		27711F6FFAFE416822B473C1 /* ProjectWorkspacesCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */; };
 		2ABE941A1718FCDAFFC4C1D0 /* PwctlCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB49CC53F5F1FD6AC1F9905E /* PwctlCommand.swift */; };
+		2C33674531A7C9C6B0AD96E7 /* aerospace.swift in Sources */ = {isa = PBXBuildFile; fileRef = EADB2B1A5C6714A456214E0D /* aerospace.swift */; };
 		2CE1D9CC6FAC99C16E6FF8B6 /* AppDiscoveryChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59F523D28298233703CE0CDB /* AppDiscoveryChecker.swift */; };
 		2D9D118AD5FA6D9BCF5FDDBB /* ProjectFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43021B5D6A347EF3B7ECF6D9 /* ProjectFilter.swift */; };
 		31178CF9DB741EBFEB634657 /* AeroSpaceErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54DF5A1DD97802B5F7D8AA2 /* AeroSpaceErrors.swift */; };
@@ -61,11 +63,14 @@
 		B2BF302562CF85A19BB2A30C /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 9459069FE493CF9D8B805C13 /* TOMLDecoder */; };
 		B4676B286BFDAB23EEC2C9C6 /* ProjectWindowToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA11A79B75C55B8E96195EBF /* ProjectWindowToken.swift */; };
 		BA3F48BFB05CC483B40B1D30 /* PermissionsChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */; };
+		BACB3499BA0A58FC9F8C8631 /* apcore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15AFACAD8579C23A969496F7 /* apcore.swift */; };
 		BCEA15FBAFE654FB08878EB2 /* ConfigParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34BA28935316C4E65502857 /* ConfigParser.swift */; };
 		C0CBA68748D54CE946A0EF80 /* PwctlServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */; };
 		C1267969603E2EA559E268EB /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20D9258757A24CF6447B37E /* AppKitIntegration.swift */; };
 		CA33A40484F47958DFB60006 /* PwctlArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */; };
 		CC8EE6744251B7D5A37D677E /* HotkeyRegistrationStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76AA9857B18A6538E3637B1E /* HotkeyRegistrationStatus.swift */; };
+		D1B8A0D0299A989E4109F17F /* system.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6635872778C9A57796BEA9FB /* system.swift */; };
+		D660F397AACF0D630608ADF2 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFA55E179941F3B37AEC3439 /* main.swift */; };
 		D92BDA1C2B3C58EB7FD3FC8E /* WindowDetection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18DBD6C5C24F27ACCB2932E3 /* WindowDetection.swift */; };
 		DBB3F860352136FECBF6CDC9 /* ProjectCatalogServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E65A9110DBCC68179E7B99CC /* ProjectCatalogServiceTests.swift */; };
 		DD4A03EA9008170D83C941C8 /* ProjectWorkspacesPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C91B70E593368DB41FD910 /* ProjectWorkspacesPathsTests.swift */; };
@@ -73,6 +78,7 @@
 		DEAEE847DD0B745D001FAAA0 /* ActivationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */; };
 		E0D3E0576BAC75F7FB0B8789 /* DoctorDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D3C12D5E9D333F7FD3923B /* DoctorDependencies.swift */; };
 		E3455D9DCD60F3C7AAC1BBE6 /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D642BAC76F6C8CEB4D72DC4F /* Doctor.swift */; };
+		E6CA7391BFEEDE435DC2D7A8 /* config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2B9077C09CC05B046CE330 /* config.swift */; };
 		F092788D2B7A3B8E0912160B /* VSCodeColorPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C619E1497F90654F355A5ABA /* VSCodeColorPaletteTests.swift */; };
 		F20F077BCFE0E1DD32BF36E7 /* IdeAppResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */; };
 		F7E72745E883E4678CECF94C /* ProjectWorkspacesPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D0D42F8B2C3061E38C76F1A /* ProjectWorkspacesPaths.swift */; };
@@ -103,6 +109,13 @@
 			remoteGlobalIDString = 05DA0BB87C17C68B90FA16AC;
 			remoteInfo = ProjectWorkspacesCore;
 		};
+		9FC0A7E82B9AA32AE7D31F87 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0F443EF38EEBB3995D2C5B41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1CE7E68DA096C2D2EF329601;
+			remoteInfo = apcore;
+		};
 		BA1E26E1D7EC0D0C727708F9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0F443EF38EEBB3995D2C5B41 /* Project object */;
@@ -120,11 +133,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0049FC7C27EBE1211652BAE1 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
 		02F8D36261C25D167F08CC60 /* CommandExecution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandExecution.swift; sourceTree = "<group>"; };
 		09205C65723670593B3E7109 /* AeroSpaceCommandTracer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCommandTracer.swift; sourceTree = "<group>"; };
 		0980D9F296FC33846D2EF524 /* DoctorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorModels.swift; sourceTree = "<group>"; };
 		0C5118E252B6F6FBDAEC0E88 /* AeroSpaceRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceRetry.swift; sourceTree = "<group>"; };
 		0F7FF11EF79AD3CC381AB7B9 /* ProjectFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectFilterTests.swift; sourceTree = "<group>"; };
+		15AFACAD8579C23A969496F7 /* apcore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = apcore.swift; sourceTree = "<group>"; };
 		180E6C1A905887F5DA7DA9E9 /* ProjectWorkspacesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesApp.swift; sourceTree = "<group>"; };
 		18DBD6C5C24F27ACCB2932E3 /* WindowDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDetection.swift; sourceTree = "<group>"; };
 		1AAA23488CB50EF649B6C15C /* PwctlServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlServiceTests.swift; sourceTree = "<group>"; };
@@ -146,9 +161,11 @@
 		550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectWorkspacesAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		59F523D28298233703CE0CDB /* AppDiscoveryChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDiscoveryChecker.swift; sourceTree = "<group>"; };
 		5AB454D5B06D8510C852BDA3 /* ProjectWorkspacesLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacesLoggerTests.swift; sourceTree = "<group>"; };
+		5E2B9077C09CC05B046CE330 /* config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = config.swift; sourceTree = "<group>"; };
 		5E4303CBD633CD86E2BAC454 /* PermissionsChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsChecker.swift; sourceTree = "<group>"; };
 		5E671F49BB4A7558EEB7C6B9 /* IdeAppResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeAppResolver.swift; sourceTree = "<group>"; };
 		608E9027CC40A582D60DAF4E /* VSCodeColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPalette.swift; sourceTree = "<group>"; };
+		6635872778C9A57796BEA9FB /* system.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.swift; sourceTree = "<group>"; };
 		6873A9C5B58A71CC29798F0C /* PwctlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlService.swift; sourceTree = "<group>"; };
 		6D625F1F3FBB7D669ED5A25F /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
 		76AA9857B18A6538E3637B1E /* HotkeyRegistrationStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRegistrationStatus.swift; sourceTree = "<group>"; };
@@ -182,8 +199,11 @@
 		D99C6CE3A3A68078C7522AF3 /* SwitcherPanelControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelControllerTests.swift; sourceTree = "<group>"; };
 		E2FDCA54D7D5D3053C5CD8FF /* PwctlArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PwctlArgumentParserTests.swift; sourceTree = "<group>"; };
 		E65A9110DBCC68179E7B99CC /* ProjectCatalogServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCatalogServiceTests.swift; sourceTree = "<group>"; };
+		EADB2B1A5C6714A456214E0D /* aerospace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aerospace.swift; sourceTree = "<group>"; };
+		EB0D02658D63EEBD2071165E /* apcore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = apcore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED556F35DA4367F65256F98C /* vscode-workspace.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "vscode-workspace.json"; sourceTree = "<group>"; };
 		EE1058D22B1036E8A57CEE58 /* ActivationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationModels.swift; sourceTree = "<group>"; };
+		EFA55E179941F3B37AEC3439 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		F0FDAD5688D9FC95EF10D6A4 /* DoctorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorTests.swift; sourceTree = "<group>"; };
 		F233C80D7194940A1F3AC06C /* ActivationErrorFindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivationErrorFindings.swift; sourceTree = "<group>"; };
 		F433424D50DFE6A43BCF4809 /* WorkspaceManagement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceManagement.swift; sourceTree = "<group>"; };
@@ -227,6 +247,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6C040A4B2110B6DC1A7378F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				13E9FD14B2096A7BA2EFE9D6 /* apcore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E19BB74F111870B45DA1ABBC /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -264,6 +292,17 @@
 			path = ProjectWorkspacesCoreTests;
 			sourceTree = "<group>";
 		};
+		6D1367DF2F58CE0CEB0FF593 /* apcore */ = {
+			isa = PBXGroup;
+			children = (
+				EADB2B1A5C6714A456214E0D /* aerospace.swift */,
+				15AFACAD8579C23A969496F7 /* apcore.swift */,
+				5E2B9077C09CC05B046CE330 /* config.swift */,
+				6635872778C9A57796BEA9FB /* system.swift */,
+			);
+			path = apcore;
+			sourceTree = "<group>";
+		};
 		90A03AE47AE5253B1C479F8C /* ProjectWorkspacesAppTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -275,6 +314,8 @@
 		9BD450460A73A349743786D3 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				0049FC7C27EBE1211652BAE1 /* ap */,
+				EB0D02658D63EEBD2071165E /* apcore.framework */,
 				22C2FE7B1C0F43B29A92E2C4 /* ProjectWorkspacesApp.app */,
 				550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */,
 				BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */,
@@ -287,6 +328,8 @@
 		C215404A7A302D4D6B727B60 = {
 			isa = PBXGroup;
 			children = (
+				D733CF58DDB4D7BA05ABB80D /* ap */,
+				6D1367DF2F58CE0CEB0FF593 /* apcore */,
 				E0A3A944F976FF23B46FE502 /* ProjectWorkspacesApp */,
 				90A03AE47AE5253B1C479F8C /* ProjectWorkspacesAppTests */,
 				F710D1A554E2179D37B2F186 /* ProjectWorkspacesCore */,
@@ -312,6 +355,14 @@
 				7E82A0992420A094C6BC1789 /* main.swift */,
 			);
 			path = pwctl;
+			sourceTree = "<group>";
+		};
+		D733CF58DDB4D7BA05ABB80D /* ap */ = {
+			isa = PBXGroup;
+			children = (
+				EFA55E179941F3B37AEC3439 /* main.swift */,
+			);
+			path = ap;
 			sourceTree = "<group>";
 		};
 		E0A3A944F976FF23B46FE502 /* ProjectWorkspacesApp */ = {
@@ -392,6 +443,23 @@
 			productReference = BEA6688E9E4BE59FAADE0C3B /* ProjectWorkspacesCore.framework */;
 			productType = "com.apple.product-type.framework.static";
 		};
+		1CE7E68DA096C2D2EF329601 /* apcore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3832F6BB6AD820A47BEFD454 /* Build configuration list for PBXNativeTarget "apcore" */;
+			buildPhases = (
+				1A3FE0E4E05DCD086946DA8A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = apcore;
+			packageProductDependencies = (
+			);
+			productName = apcore;
+			productReference = EB0D02658D63EEBD2071165E /* apcore.framework */;
+			productType = "com.apple.product-type.framework.static";
+		};
 		45E10229B68F4E64A6AABC79 /* ProjectWorkspacesApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 14CA8D4D41A89D65D08B883A /* Build configuration list for PBXNativeTarget "ProjectWorkspacesApp" */;
@@ -453,6 +521,25 @@
 			productReference = 550BD099ACB81D07AA011B0C /* ProjectWorkspacesAppTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		BEEB7627B8AAD421F15C0BC0 /* ap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4DBF4291AA2D93ED2DF594BD /* Build configuration list for PBXNativeTarget "ap" */;
+			buildPhases = (
+				2F21AD0D0717714731AC0275 /* Sources */,
+				6C040A4B2110B6DC1A7378F7 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7A36C6A5704731DA823F551A /* PBXTargetDependency */,
+			);
+			name = ap;
+			packageProductDependencies = (
+			);
+			productName = ap;
+			productReference = 0049FC7C27EBE1211652BAE1 /* ap */;
+			productType = "com.apple.product-type.tool";
+		};
 		CDAB6A5157B78E5693FF5BB1 /* ProjectWorkspacesCoreTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FBF6DFFE949DF552DE393493 /* Build configuration list for PBXNativeTarget "ProjectWorkspacesCoreTests" */;
@@ -504,6 +591,8 @@
 				A7175CDC2F90A81CB8C16451 /* ProjectWorkspacesAppTests */,
 				05DA0BB87C17C68B90FA16AC /* ProjectWorkspacesCore */,
 				CDAB6A5157B78E5693FF5BB1 /* ProjectWorkspacesCoreTests */,
+				BEEB7627B8AAD421F15C0BC0 /* ap */,
+				1CE7E68DA096C2D2EF329601 /* apcore */,
 				9465A67A95ADB59E1402A241 /* pwctl */,
 			);
 		};
@@ -521,6 +610,17 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1A3FE0E4E05DCD086946DA8A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2C33674531A7C9C6B0AD96E7 /* aerospace.swift in Sources */,
+				BACB3499BA0A58FC9F8C8631 /* apcore.swift in Sources */,
+				E6CA7391BFEEDE435DC2D7A8 /* config.swift in Sources */,
+				D1B8A0D0299A989E4109F17F /* system.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1CBD98B7E6DA6FD668A5FC0C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -547,6 +647,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				4CFA3513BE5857447391A662 /* SwitcherPanelControllerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2F21AD0D0717714731AC0275 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D660F397AACF0D630608ADF2 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -641,6 +749,11 @@
 			target = 05DA0BB87C17C68B90FA16AC /* ProjectWorkspacesCore */;
 			targetProxy = 76EA4459EF285B1408991BAA /* PBXContainerItemProxy */;
 		};
+		7A36C6A5704731DA823F551A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1CE7E68DA096C2D2EF329601 /* apcore */;
+			targetProxy = 9FC0A7E82B9AA32AE7D31F87 /* PBXContainerItemProxy */;
+		};
 		DB6ABAB1D1A47443E4303618 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 45E10229B68F4E64A6AABC79 /* ProjectWorkspacesApp */;
@@ -649,6 +762,29 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		077C54C18A18A2F66C104DEA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.apcore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
 		3905F2ABF2F08A8DAE3E83CE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -685,6 +821,19 @@
 			};
 			name = Release;
 		};
+		4FC864DE9C451A4E419CCE0F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ap;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
 		56F12107ABAAA125478D7C9C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -699,6 +848,29 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ProjectWorkspacesAppTests;
 				SDKROOT = macosx;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProjectWorkspaces.app/Contents/MacOS/ProjectWorkspaces";
+			};
+			name = Release;
+		};
+		59A0E5D23E393262ECFAFD29 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.apcore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -843,6 +1015,19 @@
 			};
 			name = Release;
 		};
+		C6526F274EA9D31E725E4DBA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.projectworkspaces.ap;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
 		C864BC050E904D769875D664 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -955,6 +1140,24 @@
 			buildConfigurations = (
 				FA794A8F18068BD78ED5A6EC /* Debug */,
 				4FB28108733B37FFA4B004E2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		3832F6BB6AD820A47BEFD454 /* Build configuration list for PBXNativeTarget "apcore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				077C54C18A18A2F66C104DEA /* Debug */,
+				59A0E5D23E393262ECFAFD29 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4DBF4291AA2D93ED2DF594BD /* Build configuration list for PBXNativeTarget "ap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4FC864DE9C451A4E419CCE0F /* Debug */,
+				C6526F274EA9D31E725E4DBA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
