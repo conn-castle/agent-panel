@@ -64,7 +64,7 @@ public final class ApCore {
     /// Prints AeroSpace workspaces filtered by the `ap-` prefix.
     /// - Returns: Success or an error.
     public func listWorkspaces() -> Result<Void, ApCoreError> {
-        switch aerospace.get_workspaces() {
+        switch aerospace.getWorkspaces() {
         case .failure(let error):
             return .failure(error)
         case .success(let workspaces):
@@ -89,21 +89,21 @@ public final class ApCore {
     /// - Parameter identifier: Identifier embedded in the window title token.
     /// - Returns: Success or an error.
     public func newIde(identifier: String) -> Result<Void, ApCoreError> {
-        ideLauncher.open_new_window(identifier: identifier)
+        ideLauncher.openNewWindow(identifier: identifier)
     }
 
     /// Opens a new Chrome window tagged with the provided identifier.
     /// - Parameter identifier: Identifier embedded in the window title token.
     /// - Returns: Success or an error.
     public func newChrome(identifier: String) -> Result<Void, ApCoreError> {
-        chromeLauncher.open_new_window(identifier: identifier)
+        chromeLauncher.openNewWindow(identifier: identifier)
     }
 
     /// Creates a new AeroSpace workspace.
     /// - Parameter name: Workspace name to create.
     /// - Returns: Success or an error.
     public func newWorkspace(name: String) -> Result<Void, ApCoreError> {
-        aerospace.create_workspace(name)
+        aerospace.createWorkspace(name)
     }
 
     /// Lists all AP IDE window titles.
@@ -120,13 +120,26 @@ public final class ApCore {
     /// Lists all AP IDE windows.
     /// - Returns: Window data or an error.
     public func listIdeWindows() -> Result<[ApWindow], ApCoreError> {
-        aerospace.list_ap_ide_windows()
+        aerospace.listApIdeWindows()
     }
 
     /// Lists all AP Chrome windows.
     /// - Returns: Window data or an error.
     public func listChromeWindows() -> Result<[ApWindow], ApCoreError> {
-        aerospace.list_ap_chrome_windows()
+        aerospace.listApChromeWindows()
+    }
+
+    /// Lists all windows in a workspace.
+    /// - Parameter workspace: Workspace name to query.
+    /// - Returns: Window data or an error.
+    public func listWindowsWorkspace(_ workspace: String) -> Result<[ApWindow], ApCoreError> {
+        aerospace.listWindowsWorkspace(workspace: workspace)
+    }
+
+    /// Returns the currently focused window.
+    /// - Returns: Focused window data or an error.
+    public func focusedWindow() -> Result<ApWindow, ApCoreError> {
+        aerospace.focusedWindow()
     }
 
     /// Moves a window into the specified workspace.
@@ -135,6 +148,20 @@ public final class ApCore {
     ///   - windowId: AeroSpace window id to move.
     /// - Returns: Success or an error.
     public func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> {
-        aerospace.move_window_to_workspace(workspace: workspace, windowId: windowId)
+        aerospace.moveWindowToWorkspace(workspace: workspace, windowId: windowId)
+    }
+
+    /// Focuses a window by its AeroSpace window id.
+    /// - Parameter windowId: AeroSpace window id to focus.
+    /// - Returns: Success or an error.
+    public func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
+        aerospace.focusWindow(windowId: windowId)
+    }
+
+    /// Closes all windows in the specified workspace.
+    /// - Parameter name: Workspace name to close windows in.
+    /// - Returns: Success or an error.
+    public func closeWorkspace(name: String) -> Result<Void, ApCoreError> {
+        aerospace.closeWorkspace(name: name)
     }
 }

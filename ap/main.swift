@@ -12,7 +12,11 @@ private enum ApHelpTopic {
     case newChrome
     case listIde
     case listChrome
+    case listWindows
+    case focusedWindow
     case moveWindow
+    case focusWindow
+    case closeWorkspace
 }
 
 /// Commands supported by the ap CLI.
@@ -25,7 +29,11 @@ private enum ApCommand {
     case newChrome(String)
     case listIde
     case listChrome
+    case listWindows(String)
+    case focusedWindow
     case moveWindow(String, Int)
+    case focusWindow(Int)
+    case closeWorkspace(String)
 }
 
 /// Parse errors for ap CLI arguments.
@@ -95,12 +103,36 @@ private struct ApArgumentParser {
                 helpTopic: .listChrome,
                 arguments: Array(arguments.dropFirst())
             )
+        case "list-windows":
+            return parseSingleArgumentCommand(
+                commandBuilder: { .listWindows($0) },
+                helpTopic: .listWindows,
+                arguments: Array(arguments.dropFirst())
+            )
+        case "focused-window":
+            return parseNoArgumentCommand(
+                command: .focusedWindow,
+                helpTopic: .focusedWindow,
+                arguments: Array(arguments.dropFirst())
+            )
         case "move-window":
             return parseTwoArgumentCommand(
                 commandBuilder: { workspace, windowId in
                     .moveWindow(workspace, windowId)
                 },
                 helpTopic: .moveWindow,
+                arguments: Array(arguments.dropFirst())
+            )
+        case "focus-window":
+            return parseSingleIntArgumentCommand(
+                commandBuilder: { .focusWindow($0) },
+                helpTopic: .focusWindow,
+                arguments: Array(arguments.dropFirst())
+            )
+        case "close-workspace":
+            return parseSingleArgumentCommand(
+                commandBuilder: { .closeWorkspace($0) },
+                helpTopic: .closeWorkspace,
                 arguments: Array(arguments.dropFirst())
             )
         default:
@@ -211,6 +243,46 @@ private struct ApArgumentParser {
             )
         )
     }
+
+    /// Parses commands that require a single integer argument (besides --help).
+    /// - Parameters:
+    ///   - commandBuilder: Builds the command from the provided argument.
+    ///   - helpTopic: Topic to use when rendering usage.
+    ///   - arguments: Remaining CLI arguments to validate.
+    /// - Returns: Parsed command or a parse error.
+    private func parseSingleIntArgumentCommand(
+        commandBuilder: (Int) -> ApCommand,
+        helpTopic: ApHelpTopic,
+        arguments: [String]
+    ) -> Result<ApCommand, ApParseError> {
+        if arguments.count == 1, let arg = arguments.first {
+            if arg == "-h" || arg == "--help" {
+                return .success(.help(helpTopic))
+            }
+            guard let value = Int(arg) else {
+                return .failure(
+                    ApParseError(
+                        message: "argument must be an integer: \(arg)",
+                        usageTopic: helpTopic
+                    )
+                )
+            }
+            return .success(commandBuilder(value))
+        }
+
+        if arguments.count == 0 {
+            return .failure(
+                ApParseError(message: "missing argument", usageTopic: helpTopic)
+            )
+        }
+
+        return .failure(
+            ApParseError(
+                message: "unexpected arguments: \(arguments.joined(separator: " "))",
+                usageTopic: helpTopic
+            )
+        )
+    }
 }
 
 /// Exit codes used by `ap`.
@@ -240,7 +312,11 @@ private func usageText(for topic: ApHelpTopic) -> String {
           new-chrome <identifier>
           list-ide
           list-chrome
+          list-windows <workspace>
+          focused-window
           move-window <workspace> <window-id>
+          focus-window <window-id>
+          close-workspace <workspace>
 
         Options:
           -h, --help   Show help
@@ -301,10 +377,42 @@ private func usageText(for topic: ApHelpTopic) -> String {
         Options:
           -h, --help   Show help
         """
+    case .listWindows:
+        return """
+        Usage:
+          ap list-windows <workspace>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .focusedWindow:
+        return """
+        Usage:
+          ap focused-window
+
+        Options:
+          -h, --help   Show help
+        """
     case .moveWindow:
         return """
         Usage:
           ap move-window <workspace> <window-id>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .focusWindow:
+        return """
+        Usage:
+          ap focus-window <window-id>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .closeWorkspace:
+        return """
+        Usage:
+          ap close-workspace <workspace>
 
         Options:
           -h, --help   Show help
@@ -438,6 +546,40 @@ case .success(let command):
                 exit(ApExitCode.ok.rawValue)
             }
         }
+    case .listWindows(let workspace):
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.listWindowsWorkspace(workspace) {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success(let windows):
+                for window in windows {
+                    print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
+                }
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
+    case .focusedWindow:
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.focusedWindow() {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success(let window):
+                print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
     case .moveWindow(let workspace, let windowId):
         switch ApConfig.loadDefault() {
         case .failure(let error):
@@ -446,6 +588,36 @@ case .success(let command):
         case .success(let config):
             let apcore = ApCore(config: config)
             switch apcore.moveWindowToWorkspace(workspace: workspace, windowId: windowId) {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success:
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
+    case .focusWindow(let windowId):
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.focusWindow(windowId: windowId) {
+            case .failure(let error):
+                printStderr("error: \(error.message)")
+                exit(ApExitCode.failure.rawValue)
+            case .success:
+                exit(ApExitCode.ok.rawValue)
+            }
+        }
+    case .closeWorkspace(let workspace):
+        switch ApConfig.loadDefault() {
+        case .failure(let error):
+            printStderr("error: \(error.message)")
+            exit(ApExitCode.failure.rawValue)
+        case .success(let config):
+            let apcore = ApCore(config: config)
+            switch apcore.closeWorkspace(name: workspace) {
             case .failure(let error):
                 printStderr("error: \(error.message)")
                 exit(ApExitCode.failure.rawValue)

@@ -66,7 +66,7 @@ struct ApVSCodeLauncher {
     /// Opens a new VS Code window tagged with the provided identifier.
     /// - Parameter identifier: Identifier embedded in the window title token.
     /// - Returns: Success or an error.
-    func open_new_window(identifier: String) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
         let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(ApCoreError(message: "Identifier cannot be empty."))
@@ -126,7 +126,7 @@ struct ApChromeLauncher {
     /// Opens a new Chrome window tagged with the provided identifier.
     /// - Parameter identifier: Identifier embedded in the window title token.
     /// - Returns: Success or an error.
-    func open_new_window(identifier: String) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
         let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(ApCoreError(message: "Identifier cannot be empty."))

@@ -6,7 +6,7 @@ struct ApAeroSpace {
 
     /// Returns a list of AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
-    func get_workspaces() -> Result<[String], ApCoreError> {
+    func getWorkspaces() -> Result<[String], ApCoreError> {
         switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--all"]) {
         case .failure(let error):
             return .failure(error)
@@ -33,8 +33,8 @@ struct ApAeroSpace {
     /// Checks whether a workspace name exists.
     /// - Parameter name: Workspace name to look up.
     /// - Returns: True if the workspace exists, or an error.
-    func workspace_exists(_ name: String) -> Result<Bool, ApCoreError> {
-        switch get_workspaces() {
+    func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> {
+        switch getWorkspaces() {
         case .failure(let error):
             return .failure(error)
         case .success(let workspaces):
@@ -45,13 +45,13 @@ struct ApAeroSpace {
     /// Creates a new workspace with the provided name.
     /// - Parameter name: Workspace name to create.
     /// - Returns: Success or an error.
-    func create_workspace(_ name: String) -> Result<Void, ApCoreError> {
+    func createWorkspace(_ name: String) -> Result<Void, ApCoreError> {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(ApCoreError(message: "Workspace name cannot be empty."))
         }
 
-        switch workspace_exists(trimmed) {
+        switch workspaceExists(trimmed) {
         case .failure(let error):
             return .failure(error)
         case .success(true):
@@ -82,7 +82,7 @@ struct ApAeroSpace {
     ///   - workspace: Destination workspace name.
     ///   - windowId: AeroSpace window id to move.
     /// - Returns: Success or an error.
-    func move_window_to_workspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> {
+    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> {
         let trimmed = workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(ApCoreError(message: "Workspace name cannot be empty."))
@@ -108,10 +108,59 @@ struct ApAeroSpace {
         }
     }
 
+    /// Focuses a window by its AeroSpace window id.
+    /// - Parameter windowId: AeroSpace window id to focus.
+    /// - Returns: Success or an error.
+    func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["focus", "--window-id", "\(windowId)"]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace focus --window-id failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+            return .success(())
+        }
+    }
+
+    /// Closes all windows in the provided workspace.
+    /// - Parameter name: Workspace name to close windows in.
+    /// - Returns: Success or an error.
+    func closeWorkspace(name: String) -> Result<Void, ApCoreError> {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(ApCoreError(message: "Workspace name cannot be empty."))
+        }
+
+        switch listWindowsWorkspace(workspace: trimmed) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let windows):
+            for window in windows {
+                switch closeWindow(windowId: window.windowId) {
+                case .failure(let error):
+                    return .failure(error)
+                case .success:
+                    continue
+                }
+            }
+            return .success(())
+        }
+    }
+
     /// Returns window titles for AP IDE windows on the focused monitor.
     /// - Returns: Titles or an error.
-    func list_ap_ide_titles() -> Result<[String], ApCoreError> {
-        switch list_ap_ide_windows() {
+    func listApIdeTitles() -> Result<[String], ApCoreError> {
+        switch listApIdeWindows() {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
@@ -121,8 +170,8 @@ struct ApAeroSpace {
 
     /// Returns AP IDE windows on the focused monitor.
     /// - Returns: Window data or an error.
-    func list_ap_ide_windows() -> Result<[ApWindow], ApCoreError> {
-        switch list_windows_focused_monitor() {
+    func listApIdeWindows() -> Result<[ApWindow], ApCoreError> {
+        switch listWindowsFocusedMonitor() {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
@@ -137,8 +186,8 @@ struct ApAeroSpace {
 
     /// Returns AP Chrome windows on the focused monitor.
     /// - Returns: Window data or an error.
-    func list_ap_chrome_windows() -> Result<[ApWindow], ApCoreError> {
-        switch list_windows_focused_monitor() {
+    func listApChromeWindows() -> Result<[ApWindow], ApCoreError> {
+        switch listWindowsFocusedMonitor() {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
@@ -161,7 +210,7 @@ struct ApAeroSpace {
 
     /// Returns windows on the focused monitor.
     /// - Returns: Window list or an error.
-    private func list_windows_focused_monitor() -> Result<[ApWindow], ApCoreError> {
+    private func listWindowsFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
         switch commandRunner.run(
             executable: "aerospace",
             arguments: [
@@ -185,6 +234,107 @@ struct ApAeroSpace {
                 )
             }
             return parseWindowSummaries(output: result.stdout)
+        }
+    }
+
+    /// Returns the currently focused window.
+    /// - Returns: Focused window or an error.
+    func focusedWindow() -> Result<ApWindow, ApCoreError> {
+        switch listWindowsFocused() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let windows):
+            guard windows.count == 1, let window = windows.first else {
+                return .failure(
+                    ApCoreError(
+                        message: "Expected exactly one focused window, found \(windows.count)."
+                    )
+                )
+            }
+            return .success(window)
+        }
+    }
+
+    /// Returns windows scoped to the focused window query.
+    /// - Returns: Window list or an error.
+    private func listWindowsFocused() -> Result<[ApWindow], ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: [
+                "list-windows",
+                "--focused",
+                "--format",
+                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+            ]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmed.isEmpty ? "" : "\n\(trimmed)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace list-windows --focused failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+            return parseWindowSummaries(output: result.stdout)
+        }
+    }
+
+    /// Returns windows for the given workspace.
+    /// - Parameter workspace: Workspace name to query.
+    /// - Returns: Window list or an error.
+    func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: [
+                "list-windows",
+                "--workspace",
+                workspace,
+                "--format",
+                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+            ]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmed.isEmpty ? "" : "\n\(trimmed)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace list-windows --workspace failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+
+            return parseWindowSummaries(output: result.stdout)
+        }
+    }
+
+    /// Closes a window by its AeroSpace window id.
+    /// - Parameter windowId: AeroSpace window id to close.
+    /// - Returns: Success or an error.
+    private func closeWindow(windowId: Int) -> Result<Void, ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["close", "--window-id", "\(windowId)"]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace close --window-id failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+            return .success(())
         }
     }
 
@@ -256,4 +406,5 @@ struct ApAeroSpace {
 
         return .success(windows)
     }
+
 }
