@@ -1,8 +1,100 @@
 import Foundation
 
 /// AeroSpace CLI wrapper for ap.
-struct ApAeroSpace {
+public struct ApAeroSpace {
+    /// Default AeroSpace app path.
+    public static let appPath = "/Applications/AeroSpace.app"
+
     private let commandRunner = ApSystemCommandRunner()
+
+    /// Creates a new AeroSpace wrapper.
+    public init() {}
+
+    /// Returns true when AeroSpace.app is installed.
+    /// - Returns: True if AeroSpace.app exists on disk.
+    public func isAppInstalled() -> Bool {
+        let appURL = URL(fileURLWithPath: Self.appPath, isDirectory: true)
+        var isDirectory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: appURL.path, isDirectory: &isDirectory)
+        return exists && isDirectory.boolValue
+    }
+
+    /// Returns true when the aerospace CLI is available on PATH.
+    /// - Returns: True if `aerospace --help` succeeds.
+    public func isCliAvailable() -> Bool {
+        switch commandRunner.run(executable: "aerospace", arguments: ["--help"], timeoutSeconds: 2) {
+        case .failure:
+            return false
+        case .success(let result):
+            return result.exitCode == 0
+        }
+    }
+
+    /// Returns a list of focused AeroSpace workspaces.
+    /// - Returns: Workspace names on success, or an error.
+    public func listWorkspacesFocused() -> Result<[String], ApCoreError> {
+        switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--focused"]) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmed.isEmpty ? "" : "\n\(trimmed)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace list-workspaces --focused failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+
+            let workspaces = result.stdout
+                .split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
+            return .success(workspaces)
+        }
+    }
+
+    /// Checks whether the installed aerospace CLI supports required commands and flags.
+    /// - Returns: Success when compatible, or an error describing missing support.
+    public func checkCompatibility() -> Result<Void, ApCoreError> {
+        let checks: [(command: String, requiredFlags: [String])] = [
+            ("list-workspaces", ["--all", "--focused"]),
+            ("list-windows", ["--monitor", "--workspace", "--focused", "--app-bundle-id", "--format"]),
+            ("summon-workspace", []),
+            ("move-node-to-workspace", ["--window-id"]),
+            ("focus", ["--window-id"]),
+            ("close", ["--window-id"])
+        ]
+
+        var failures: [String] = []
+        failures.reserveCapacity(checks.count)
+
+        for check in checks {
+            switch commandHelpOutput(command: check.command) {
+            case .failure(let error):
+                failures.append("aerospace \(check.command) --help failed: \(error.message)")
+            case .success(let output):
+                let missing = check.requiredFlags.filter { !output.contains($0) }
+                if !missing.isEmpty {
+                    failures.append(
+                        "aerospace \(check.command) missing flags: \(missing.joined(separator: ", "))"
+                    )
+                }
+            }
+        }
+
+        guard failures.isEmpty else {
+            return .failure(
+                ApCoreError(
+                    message: "AeroSpace CLI compatibility check failed:\n\(failures.joined(separator: "\n"))"
+                )
+            )
+        }
+
+        return .success(())
+    }
 
     /// Returns a list of AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
@@ -411,6 +503,32 @@ struct ApAeroSpace {
         }
 
         return .success(windows)
+    }
+
+    /// Returns help output for a CLI command.
+    /// - Parameter command: AeroSpace command name to query.
+    /// - Returns: Help output or an error.
+    private func commandHelpOutput(command: String) -> Result<String, ApCoreError> {
+        switch commandRunner.run(executable: "aerospace", arguments: [command, "--help"], timeoutSeconds: 2) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmed.isEmpty ? "" : "\n\(trimmed)"
+                return .failure(
+                    ApCoreError(
+                        message: "aerospace \(command) --help failed with exit code \(result.exitCode).\(suffix)"
+                    )
+                )
+            }
+
+            let output = [result.stdout, result.stderr]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            return .success(output)
+        }
     }
 
 }

@@ -5,6 +5,7 @@ import apcore
 /// Help topics supported by the ap CLI.
 private enum ApHelpTopic {
     case root
+    case doctor
     case listWorkspaces
     case showConfig
     case newWorkspace
@@ -22,6 +23,7 @@ private enum ApHelpTopic {
 /// Commands supported by the ap CLI.
 private enum ApCommand {
     case help(ApHelpTopic)
+    case doctor
     case listWorkspaces
     case showConfig
     case newWorkspace(String)
@@ -61,6 +63,12 @@ private struct ApArgumentParser {
         }
 
         switch first {
+        case "doctor":
+            return parseNoArgumentCommand(
+                command: .doctor,
+                helpTopic: .doctor,
+                arguments: Array(arguments.dropFirst())
+            )
         case "list-workspaces":
             return parseNoArgumentCommand(
                 command: .listWorkspaces,
@@ -299,12 +307,13 @@ private func usageText(for topic: ApHelpTopic) -> String {
     switch topic {
     case .root:
         return """
-        ap (AeroSpace test CLI)
+        ap (AgentPanel CLI)
 
         Usage:
           ap <command> [args]
 
         Commands:
+          doctor
           list-workspaces
           show-config
           new-workspace <name>
@@ -317,6 +326,14 @@ private func usageText(for topic: ApHelpTopic) -> String {
           move-window <workspace> <window-id>
           focus-window <window-id>
           close-workspace <workspace>
+
+        Options:
+          -h, --help   Show help
+        """
+    case .doctor:
+        return """
+        Usage:
+          ap doctor
 
         Options:
           -h, --help   Show help
@@ -426,6 +443,24 @@ private func printStderr(_ text: String) {
     FileHandle.standardError.write(Data((text + "\n").utf8))
 }
 
+/// Loads config or exits with an error.
+/// - Returns: Loaded config on success.
+private func loadConfigOrExit() -> Config {
+    switch ConfigLoader.loadDefault() {
+    case .failure(let error):
+        printStderr("error: \(error.message)")
+        exit(ApExitCode.failure.rawValue)
+    case .success(let result):
+        guard let config = result.config else {
+            let firstFail = result.findings.first { $0.severity == .fail }
+            let message = firstFail?.title ?? "Config validation failed"
+            printStderr("error: \(message)")
+            exit(ApExitCode.failure.rawValue)
+        }
+        return config
+    }
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 private let parser = ApArgumentParser()
 
@@ -435,195 +470,141 @@ case .success(let command):
     case .help(let topic):
         print(usageText(for: topic))
         exit(ApExitCode.ok.rawValue)
+    case .doctor:
+        let report = Doctor(
+            runningApplicationChecker: AppKitRunningApplicationChecker()
+        ).run()
+        print(report.rendered())
+        exit(report.hasFailures ? ApExitCode.failure.rawValue : ApExitCode.ok.rawValue)
     case .listWorkspaces:
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.listWorkspaces() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.listWorkspaces() {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .showConfig:
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.showConfig() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.showConfig() {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .newWorkspace(let name):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.newWorkspace(name: name) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.newWorkspace(name: name) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .newIde(let identifier):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.newIde(identifier: identifier) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.newIde(identifier: identifier) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .newChrome(let identifier):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.newChrome(identifier: identifier) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.newChrome(identifier: identifier) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .listIde:
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.listIdeWindows() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.listIdeWindows() {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success(let windows):
-                for window in windows {
-                    print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
-                }
-                exit(ApExitCode.ok.rawValue)
+        case .success(let windows):
+            for window in windows {
+                print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
             }
+            exit(ApExitCode.ok.rawValue)
         }
     case .listChrome:
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.listChromeWindows() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.listChromeWindows() {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success(let windows):
-                for window in windows {
-                    print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
-                }
-                exit(ApExitCode.ok.rawValue)
+        case .success(let windows):
+            for window in windows {
+                print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
             }
+            exit(ApExitCode.ok.rawValue)
         }
     case .listWindows(let workspace):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.listWindowsWorkspace(workspace) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.listWindowsWorkspace(workspace) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success(let windows):
-                for window in windows {
-                    print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
-                }
-                exit(ApExitCode.ok.rawValue)
+        case .success(let windows):
+            for window in windows {
+                print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
             }
+            exit(ApExitCode.ok.rawValue)
         }
     case .focusedWindow:
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.focusedWindow() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.focusedWindow() {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success(let window):
-                print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success(let window):
+            print("\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)")
+            exit(ApExitCode.ok.rawValue)
         }
     case .moveWindow(let workspace, let windowId):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.moveWindowToWorkspace(workspace: workspace, windowId: windowId) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.moveWindowToWorkspace(workspace: workspace, windowId: windowId) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .focusWindow(let windowId):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.focusWindow(windowId: windowId) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.focusWindow(windowId: windowId) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     case .closeWorkspace(let workspace):
-        switch ApConfig.loadDefault() {
+        let config = loadConfigOrExit()
+        let apcore = ApCore(config: config)
+        switch apcore.closeWorkspace(name: workspace) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
-        case .success(let config):
-            let apcore = ApCore(config: config)
-            switch apcore.closeWorkspace(name: workspace) {
-            case .failure(let error):
-                printStderr("error: \(error.message)")
-                exit(ApExitCode.failure.rawValue)
-            case .success:
-                exit(ApExitCode.ok.rawValue)
-            }
+        case .success:
+            exit(ApExitCode.ok.rawValue)
         }
     }
 case .failure(let error):

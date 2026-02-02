@@ -1,0 +1,580 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		07E3E4F730B7615EF75C9244 /* config.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8C6F21D84F11D6120589F46 /* config.swift */; };
+		0B0B81A44C56E86D4A63D1FF /* apcore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A04409B6130FE7ADBA38A0C2 /* apcore.framework */; };
+		12E68FD3FABC4B15F2BDD930 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = D128E87BEFCFADE383A073B1 /* TOMLDecoder */; };
+		24035BB3B59123C1D2E521A1 /* dependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27EF33B0B89B421AF18A6156 /* dependencies.swift */; };
+		241EB99384E9D3E2868CD9DD /* apcore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A04409B6130FE7ADBA38A0C2 /* apcore.framework */; };
+		262E4E2BC329A07B5C027F8D /* paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9774F2F71CC610E28C03C0C2 /* paths.swift */; };
+		2B798A84AE1B39283C76831D /* logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72F4E458D697D8B8211F0D0 /* logger.swift */; };
+		2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
+		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
+		53FAE2D132EE7A318D20F1D6 /* apcore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2D7E662DA51A534FCB3C1 /* apcore.swift */; };
+		7D7B71DA2C9E3658C5450AAC /* doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDCD6C08816DB3B195351A0 /* doctor.swift */; };
+		7DC1C1601A56E052686C1DE4 /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E3A7B3310CB0E1C8F26C8E4 /* AppKitIntegration.swift */; };
+		81DAD065D1B37F179A31C5EA /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */; };
+		A3E5C105A17B84778C1E101D /* system.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF91B92F52982EA4FF587D9 /* system.swift */; };
+		C1C7A54A5D63DDF0DE6DF316 /* aerospace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B8868EEF2392C0C034C866 /* aerospace.swift */; };
+		D65832D12C11B8E3DB712C3F /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */; };
+		DB32DC006C6D55CF3EF211BD /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086E1EBAE36A964047A746A2 /* main.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3D3AFDDFAA4CB492499FC9CF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1354B288D980D5C4A28FE2F;
+			remoteInfo = apcore;
+		};
+		4192FE80A7DAA6EA61DF758A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1354B288D980D5C4A28FE2F;
+			remoteInfo = apcore;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
+		086E1EBAE36A964047A746A2 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		1E3A7B3310CB0E1C8F26C8E4 /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
+		27EF33B0B89B421AF18A6156 /* dependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = dependencies.swift; sourceTree = "<group>"; };
+		33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPanelApp.swift; sourceTree = "<group>"; };
+		38B8868EEF2392C0C034C866 /* aerospace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aerospace.swift; sourceTree = "<group>"; };
+		4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
+		488846A96DAD08F10E554D29 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
+		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9774F2F71CC610E28C03C0C2 /* paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = paths.swift; sourceTree = "<group>"; };
+		A04409B6130FE7ADBA38A0C2 /* apcore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = apcore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A8C6F21D84F11D6120589F46 /* config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = config.swift; sourceTree = "<group>"; };
+		B3F2D7E662DA51A534FCB3C1 /* apcore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = apcore.swift; sourceTree = "<group>"; };
+		BC700F71F91521277C58EA20 /* AgentPanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		EBF91B92F52982EA4FF587D9 /* system.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.swift; sourceTree = "<group>"; };
+		F72F4E458D697D8B8211F0D0 /* logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = logger.swift; sourceTree = "<group>"; };
+		FEDCD6C08816DB3B195351A0 /* doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = doctor.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5EBB091802FD6E21FC2886A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12E68FD3FABC4B15F2BDD930 /* TOMLDecoder in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7555730D28ED00EA368BDB79 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0B0B81A44C56E86D4A63D1FF /* apcore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FD9BB5336D2D116C0F91213C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				241EB99384E9D3E2868CD9DD /* apcore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		29BF1CF4B055D961037D563F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BC700F71F91521277C58EA20 /* AgentPanel.app */,
+				488846A96DAD08F10E554D29 /* ap */,
+				A04409B6130FE7ADBA38A0C2 /* apcore.framework */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		29FCA0281F4D1ED8333E2A3E /* AgentPanelApp */ = {
+			isa = PBXGroup;
+			children = (
+				33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */,
+				4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */,
+				D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */,
+				6C8E9CF917B3E9C1AF573815 /* Info.plist */,
+				0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */,
+			);
+			path = AgentPanelApp;
+			sourceTree = "<group>";
+		};
+		2EF8E6419BC0AB0E6F6F7F0B /* ap */ = {
+			isa = PBXGroup;
+			children = (
+				1E3A7B3310CB0E1C8F26C8E4 /* AppKitIntegration.swift */,
+				086E1EBAE36A964047A746A2 /* main.swift */,
+			);
+			path = ap;
+			sourceTree = "<group>";
+		};
+		30BE42C621FEBBB8B18BAB83 = {
+			isa = PBXGroup;
+			children = (
+				29FCA0281F4D1ED8333E2A3E /* AgentPanelApp */,
+				2EF8E6419BC0AB0E6F6F7F0B /* ap */,
+				4613F07383862A48A320D91E /* apcore */,
+				29BF1CF4B055D961037D563F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4613F07383862A48A320D91E /* apcore */ = {
+			isa = PBXGroup;
+			children = (
+				38B8868EEF2392C0C034C866 /* aerospace.swift */,
+				B3F2D7E662DA51A534FCB3C1 /* apcore.swift */,
+				A8C6F21D84F11D6120589F46 /* config.swift */,
+				27EF33B0B89B421AF18A6156 /* dependencies.swift */,
+				FEDCD6C08816DB3B195351A0 /* doctor.swift */,
+				F72F4E458D697D8B8211F0D0 /* logger.swift */,
+				9774F2F71CC610E28C03C0C2 /* paths.swift */,
+				EBF91B92F52982EA4FF587D9 /* system.swift */,
+			);
+			path = apcore;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4439FD99CA53EECDBD580533 /* AgentPanel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E0D620F87B3048326AA6EB0 /* Build configuration list for PBXNativeTarget "AgentPanel" */;
+			buildPhases = (
+				123D602003439CCF3D734EFE /* Sources */,
+				7555730D28ED00EA368BDB79 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				426C80B2FB5A7E4A480BFB30 /* PBXTargetDependency */,
+			);
+			name = AgentPanel;
+			packageProductDependencies = (
+			);
+			productName = AgentPanel;
+			productReference = BC700F71F91521277C58EA20 /* AgentPanel.app */;
+			productType = "com.apple.product-type.application";
+		};
+		962BFBCBC0AACA8DF7737E6C /* ap */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3427F6DBB03876E5C4371258 /* Build configuration list for PBXNativeTarget "ap" */;
+			buildPhases = (
+				72628035929525B6E0CDE500 /* Sources */,
+				FD9BB5336D2D116C0F91213C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				364A396E022AE0A6C3228440 /* PBXTargetDependency */,
+			);
+			name = ap;
+			packageProductDependencies = (
+			);
+			productName = ap;
+			productReference = 488846A96DAD08F10E554D29 /* ap */;
+			productType = "com.apple.product-type.tool";
+		};
+		B1354B288D980D5C4A28FE2F /* apcore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 77272EE93E209EF9049E6B3E /* Build configuration list for PBXNativeTarget "apcore" */;
+			buildPhases = (
+				DC168BD3656BA2B9EDF592A0 /* Sources */,
+				5EBB091802FD6E21FC2886A6 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = apcore;
+			packageProductDependencies = (
+				D128E87BEFCFADE383A073B1 /* TOMLDecoder */,
+			);
+			productName = apcore;
+			productReference = A04409B6130FE7ADBA38A0C2 /* apcore.framework */;
+			productType = "com.apple.product-type.framework.static";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CEFD7A53191D3874EAB41EC5 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 8BAAAE382E80B5C46AF2BB45 /* Build configuration list for PBXProject "AgentPanel" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 30BE42C621FEBBB8B18BAB83;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9853D577A6D83C1E545ED27E /* XCRemoteSwiftPackageReference "TOMLDecoder" */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4439FD99CA53EECDBD580533 /* AgentPanel */,
+				962BFBCBC0AACA8DF7737E6C /* ap */,
+				B1354B288D980D5C4A28FE2F /* apcore */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		123D602003439CCF3D734EFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */,
+				D65832D12C11B8E3DB712C3F /* AppKitIntegration.swift in Sources */,
+				4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */,
+				81DAD065D1B37F179A31C5EA /* SwitcherPanelController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		72628035929525B6E0CDE500 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7DC1C1601A56E052686C1DE4 /* AppKitIntegration.swift in Sources */,
+				DB32DC006C6D55CF3EF211BD /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DC168BD3656BA2B9EDF592A0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C1C7A54A5D63DDF0DE6DF316 /* aerospace.swift in Sources */,
+				53FAE2D132EE7A318D20F1D6 /* apcore.swift in Sources */,
+				07E3E4F730B7615EF75C9244 /* config.swift in Sources */,
+				24035BB3B59123C1D2E521A1 /* dependencies.swift in Sources */,
+				7D7B71DA2C9E3658C5450AAC /* doctor.swift in Sources */,
+				2B798A84AE1B39283C76831D /* logger.swift in Sources */,
+				262E4E2BC329A07B5C027F8D /* paths.swift in Sources */,
+				A3E5C105A17B84778C1E101D /* system.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		364A396E022AE0A6C3228440 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1354B288D980D5C4A28FE2F /* apcore */;
+			targetProxy = 4192FE80A7DAA6EA61DF758A /* PBXContainerItemProxy */;
+		};
+		426C80B2FB5A7E4A480BFB30 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1354B288D980D5C4A28FE2F /* apcore */;
+			targetProxy = 3D3AFDDFAA4CB492499FC9CF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		20DEDC063AD5E9098A463F2C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = AgentPanelApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel;
+				PRODUCT_NAME = AgentPanel;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		9D72C333CD2805A410229AFD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = AgentPanelApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel;
+				PRODUCT_NAME = AgentPanel;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		B02881B3C0BA9DD6FA23ACE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.apcore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		BC65E0E78FB1A1A05A26A694 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DCA1FC929245F48A30C9CDA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.ap;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		E2F45B84F5FF0DE92DE525C2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.ap;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		ECAFB01A8A0BF5B0F380BE73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		FC1A4D80D2D768BCE3A96649 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.apcore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3427F6DBB03876E5C4371258 /* Build configuration list for PBXNativeTarget "ap" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCA1FC929245F48A30C9CDA8 /* Debug */,
+				E2F45B84F5FF0DE92DE525C2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5E0D620F87B3048326AA6EB0 /* Build configuration list for PBXNativeTarget "AgentPanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9D72C333CD2805A410229AFD /* Debug */,
+				20DEDC063AD5E9098A463F2C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		77272EE93E209EF9049E6B3E /* Build configuration list for PBXNativeTarget "apcore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B02881B3C0BA9DD6FA23ACE6 /* Debug */,
+				FC1A4D80D2D768BCE3A96649 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8BAAAE382E80B5C46AF2BB45 /* Build configuration list for PBXProject "AgentPanel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC65E0E78FB1A1A05A26A694 /* Debug */,
+				ECAFB01A8A0BF5B0F380BE73 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		9853D577A6D83C1E545ED27E /* XCRemoteSwiftPackageReference "TOMLDecoder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dduan/TOMLDecoder";
+			requirement = {
+				kind = exactVersion;
+				version = 0.4.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D128E87BEFCFADE383A073B1 /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9853D577A6D83C1E545ED27E /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = CEFD7A53191D3874EAB41EC5 /* Project object */;
+}

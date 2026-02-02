@@ -27,12 +27,12 @@ A rolling log of important, non-obvious decisions that materially affect future 
 <!-- ENTRIES START -->
 
 - Decision 2026-01-11 9fd499c: Build workflow and Xcode project management
-    Decision: Track `project.yml` and regenerate `ProjectWorkspaces.xcodeproj` via XcodeGen; keep a single repo-level `.xcodeproj` (no `.xcworkspace` in v1); drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile and resolve packages in CI; require Apple toolchain for developers/CI while keeping Xcode GUI optional.
+    Decision: Track `project.yml` and regenerate `AgentPanel.xcodeproj` via XcodeGen; keep a single repo-level `.xcodeproj` (no `.xcworkspace` in v1); drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile and resolve packages in CI; require Apple toolchain for developers/CI while keeping Xcode GUI optional.
     Reason: Deterministic, reviewable builds with minimal IDE friction and no brittle `.pbxproj` manual edits.
     Tradeoffs: Contributors must install `xcodegen`; additional script maintenance; occasional need to open Xcode for debugging/provisioning.
 
 - Decision 2026-01-11 9fd499c: Core target is a static framework
-    Decision: Build `ProjectWorkspacesCore` as a static framework so `pwctl` can link it without requiring embedded runtime frameworks.
+    Decision: Build `AgentPanelCore` as a static framework so `ap` can link it without requiring embedded runtime frameworks.
     Reason: A command-line tool does not embed dependent dynamic frameworks by default, which causes runtime loader failures during development.
     Tradeoffs: Static linking can increase binary size; switching to dynamic later would require explicit embedding and runtime search path configuration.
 
@@ -42,7 +42,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: TOML dependency must be maintained; more custom code in-house for hotkey.
 
 - Decision 2026-01-11 9fd499c: Logging contract
-    Decision: Write JSON Lines log entries with UTC ISO-8601 timestamps to `workspaces.log`; rotate at 10 MiB with up to 5 archives (`workspaces.log.1`…`workspaces.log.5`).
+    Decision: Write JSON Lines log entries with UTC ISO-8601 timestamps to `agent-panel.log`; rotate at 10 MiB with up to 5 archives (`agent-panel.log.1`…`agent-panel.log.5`).
     Reason: Structured logs are easy to parse/filter; stable "tail this file" contract; prevents unbounded growth.
     Tradeoffs: Less human-readable without tooling; schema must stay stable; older history rotates out.
 
@@ -56,10 +56,10 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Make Close(Project) deterministic and ensure there is always a safe workspace to land on.
     Tradeoffs: Users cannot use `inbox` as a project id.
 
-- Decision 2026-01-11 9fd499c: CI test scope and opt-in integration tests
-    Decision: Require unit tests in CI; gate real AeroSpace integration tests behind `RUN_AEROSPACE_IT=1` for local runs only.
+- Decision 2026-01-11 9fd499c: CI test scope
+    Decision: Require unit tests in CI; do not run AeroSpace integration tests by default.
     Reason: Real window manipulation and permissions are not reliably runnable in CI environments.
-    Tradeoffs: Less end-to-end coverage in CI; engineers must run opt-in integration tests locally.
+    Tradeoffs: Less end-to-end coverage in CI; engineers must run integration checks locally when needed.
 
 - Decision 2026-01-11 9fd499c: Distribution channels
     Decision: Ship both a Homebrew cask (recommended) and a signed+notarized direct download artifact from a single canonical pipeline.
@@ -72,12 +72,12 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: Older macOS versions unsupported.
 
 - Decision 2026-01-14 02e7dee: Skip hotkey check when agent runs
-    Decision: Keep both `pwctl doctor` and in-app "Run Doctor"; skip hotkey registration check when the agent app is already running.
+    Decision: Keep both `ap doctor` and in-app "Run Doctor"; skip hotkey registration check when the agent app is already running.
     Reason: Prevents false FAIL results during normal use when the agent already holds the hotkey.
     Tradeoffs: Hotkey check relies on agent detection.
 
 - Decision 2026-01-25 f311f35: AeroSpace onboarding safe config
-    Decision: Install a ProjectWorkspaces-safe AeroSpace config at `~/.aerospace.toml` only when no config exists; never modify existing configs; Doctor handles config state checks, safe installs, and emergency `aerospace enable off` action.
+    Decision: Install a AgentPanel-safe AeroSpace config at `~/.aerospace.toml` only when no config exists; never modify existing configs; Doctor handles config state checks, safe installs, and emergency `aerospace enable off` action.
     Reason: Prevent tiling shock while preserving existing AeroSpace setups.
     Tradeoffs: Users with existing configs must opt into changes themselves.
 
@@ -112,7 +112,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: Window titles include a visible token; focused recovery is time-bound and can fail if the new window never becomes focused.
 
 - Decision 2026-01-28 c3f1aa: VS Code workspace files in state dir
-    Decision: Store generated `.code-workspace` files under `~/.local/state/project-workspaces/vscode` and set `window.title` with the deterministic token.
+    Decision: Store generated `.code-workspace` files under `~/.local/state/agent-panel/vscode` and set `window.title` with the deterministic token.
     Reason: Keeps generated artifacts in state cache and enables deterministic VS Code window identification.
     Tradeoffs: Workspace files move from config to state; VS Code titles include a visible token.
 
@@ -198,7 +198,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
 - Decision 2026-01-31 8f3a2b: AeroSpace list-workspaces requires explicit scope flag
     Decision: `AeroSpaceClient.listWorkspaces()` uses `--all` flag; upstream AeroSpace requires one of `--all`, `--focused`, or `--monitor` for `list-workspaces`.
     Reason: AeroSpace CLI contract requires explicit scope; omitting the flag causes command failure.
-    Tradeoffs: Cross-monitor enumeration by default; if focused-monitor scoping is needed, add a scope parameter.
 
 - Decision 2026-01-31 9e4b3c: State file atomic replacement uses replaceItemAt
     Decision: StateStore.save() uses `FileManager.replaceItemAt` when the destination file exists, falling back to `moveItem` for first-time saves.
@@ -220,6 +219,21 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: `replaceItemAt` provides atomic replacement and avoids the error-prone `moveItem` path.
     Tradeoffs: Relies on `replaceItemAt` behavior for non-existent destinations; supersedes the earlier conditional move/replace decision.
 
+- Decision 2026-02-02 5a7c2e9: Doctor helpers live in ApDoctor.swift
+    Decision: Inline PermissionsChecker and AppDiscoveryChecker into ApDoctor.swift and keep Doctor-only helper logic co-located there.
+    Reason: Reduce file count while keeping Doctor-only functionality in one place.
+    Tradeoffs: ApDoctor.swift grows larger; reverses the extracted-checkers structure from 2026-01-26 24a9013.
+
+- Decision 2026-02-02 8c2a9d1: Remove emergency disable AeroSpace action
+    Decision: Remove the Doctor/UI action that runs `aerospace enable off` ("Emergency: Disable AeroSpace") and drop the corresponding action availability state.
+    Reason: The project no longer wants to support or advertise disabling AeroSpace window management via AgentPanel.
+    Tradeoffs: Fewer recovery options inside AgentPanel; users must manage AeroSpace state directly when needed.
+
+- Decision 2026-02-02 1f6c3e7: Remove Accessibility permission requirement
+    Decision: Remove Accessibility checks from Doctor and drop the Accessibility permission requirement for AgentPanel.
+    Reason: The current app behavior does not use AX APIs; keeping the requirement was unnecessary friction.
+    Tradeoffs: If AX-based window manipulation returns later, the check must be reintroduced.
+
 - Decision 2026-02-01 2b7d9e0: Remove legacy launch + layout persistence pipeline
     Decision: Removed the legacy IDE/Chrome launch pipeline, token-based window detection, layout defaults/persistence, and StateStore; activation is CLI-only and requires pre-opened IDE/Chrome windows.
     Reason: Those paths are unused in the CLI-only activation flow and were creating dead code and stale docs.
@@ -239,3 +253,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Drop `display.ultrawideMinWidthPx` and related parsing/docs; `[display]` is now treated as an unknown config key.
     Reason: The display config was unused and created dead code plus misleading documentation.
     Tradeoffs: Existing configs with `[display]` will emit unknown-key warnings until updated.
+
+- Decision 2026-02-02 b4d9e2: AgentPanel reset and activation removal
+    Decision: Remove activation/workspace management and the legacy CLI; keep Doctor/config/logging/paths and a list-only switcher; `ap` is the CLI entrypoint.
+    Reason: Focus on the ap stack and establish a clean baseline while preserving Doctor and config validation.
+    Tradeoffs: No project activation; switcher selection only logs until activation is rebuilt.
+
+- Decision 2026-02-02 a8c2d4f: Doctor AeroSpace checks now use apcore
+    Decision: Doctor uses `apcore`'s `ApAeroSpace` for CLI readiness (`list-workspaces --focused`) and compatibility (single `--help` flag audit) and no longer performs workspace-switch tests; config state checks remain in Doctor.
+    Reason: Keep AeroSpace command knowledge in apcore and avoid intrusive workspace switching during Doctor.
+    Tradeoffs: Loses a direct workspace-switch integration check; readiness now only confirms CLI responsiveness.

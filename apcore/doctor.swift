@@ -1,0 +1,406 @@
+import Foundation
+
+// MARK: - Doctor Models
+
+/// Severity level for Doctor findings.
+public enum DoctorSeverity: String, CaseIterable, Sendable {
+    case pass = "PASS"
+    case warn = "WARN"
+    case fail = "FAIL"
+
+    /// Sort order for display purposes (failures first).
+    public var sortOrder: Int {
+        switch self {
+        case .fail: return 0
+        case .warn: return 1
+        case .pass: return 2
+        }
+    }
+}
+
+/// A single Doctor finding rendered in the report.
+public struct DoctorFinding: Equatable, Sendable {
+    public let severity: DoctorSeverity
+    public let title: String
+    public let bodyLines: [String]
+    public let snippet: String?
+
+    /// Creates a Doctor finding.
+    /// - Parameters:
+    ///   - severity: PASS, WARN, or FAIL severity.
+    ///   - title: Short summary of the finding.
+    ///   - detail: Optional detail text for additional context.
+    ///   - fix: Optional "Fix:" guidance for the user.
+    ///   - bodyLines: Additional lines to render verbatim after the title.
+    ///   - snippet: Optional copy/paste snippet to resolve the finding.
+    public init(
+        severity: DoctorSeverity,
+        title: String,
+        detail: String? = nil,
+        fix: String? = nil,
+        bodyLines: [String] = [],
+        snippet: String? = nil
+    ) {
+        self.severity = severity
+        self.title = title
+        var lines = bodyLines
+        if let detail, !detail.isEmpty {
+            lines.append("Detail: \(detail)")
+        }
+        if let fix, !fix.isEmpty {
+            lines.append("Fix: \(fix)")
+        }
+        self.bodyLines = lines
+        self.snippet = snippet
+    }
+}
+
+/// Report metadata rendered in the Doctor header.
+public struct DoctorMetadata: Equatable, Sendable {
+    public let timestamp: String
+    public let agentPanelVersion: String
+    public let macOSVersion: String
+    public let aerospaceApp: String
+    public let aerospaceCli: String
+
+    public init(
+        timestamp: String,
+        agentPanelVersion: String,
+        macOSVersion: String,
+        aerospaceApp: String,
+        aerospaceCli: String
+    ) {
+        self.timestamp = timestamp
+        self.agentPanelVersion = agentPanelVersion
+        self.macOSVersion = macOSVersion
+        self.aerospaceApp = aerospaceApp
+        self.aerospaceCli = aerospaceCli
+    }
+}
+
+/// Action availability for Doctor UI buttons.
+public struct DoctorActionAvailability: Equatable, Sendable {
+    public let canInstallAeroSpace: Bool
+    public let canInstallSafeAeroSpaceConfig: Bool
+    public let canStartAeroSpace: Bool
+    public let canReloadAeroSpaceConfig: Bool
+    public let canUninstallSafeAeroSpaceConfig: Bool
+
+    public init(
+        canInstallAeroSpace: Bool,
+        canInstallSafeAeroSpaceConfig: Bool,
+        canStartAeroSpace: Bool,
+        canReloadAeroSpaceConfig: Bool,
+        canUninstallSafeAeroSpaceConfig: Bool
+    ) {
+        self.canInstallAeroSpace = canInstallAeroSpace
+        self.canInstallSafeAeroSpaceConfig = canInstallSafeAeroSpaceConfig
+        self.canStartAeroSpace = canStartAeroSpace
+        self.canReloadAeroSpaceConfig = canReloadAeroSpaceConfig
+        self.canUninstallSafeAeroSpaceConfig = canUninstallSafeAeroSpaceConfig
+    }
+
+    /// Returns a disabled action set.
+    public static let none = DoctorActionAvailability(
+        canInstallAeroSpace: false,
+        canInstallSafeAeroSpaceConfig: false,
+        canStartAeroSpace: false,
+        canReloadAeroSpaceConfig: false,
+        canUninstallSafeAeroSpaceConfig: false
+    )
+}
+
+/// A structured Doctor report.
+public struct DoctorReport: Equatable, Sendable {
+    public let metadata: DoctorMetadata
+    public let findings: [DoctorFinding]
+    public let actions: DoctorActionAvailability
+
+    public init(
+        metadata: DoctorMetadata,
+        findings: [DoctorFinding],
+        actions: DoctorActionAvailability = .none
+    ) {
+        self.metadata = metadata
+        self.findings = findings
+        self.actions = actions
+    }
+
+    /// Returns true when the report contains any FAIL findings.
+    public var hasFailures: Bool {
+        findings.contains { $0.severity == .fail }
+    }
+
+    /// Renders the report as a human-readable string.
+    public func rendered() -> String {
+        let indexed = findings.enumerated()
+        let sortedFindings = indexed.sorted { lhs, rhs in
+            let leftOrder = lhs.element.severity.sortOrder
+            let rightOrder = rhs.element.severity.sortOrder
+            if leftOrder == rightOrder {
+                return lhs.offset < rhs.offset
+            }
+            return leftOrder < rightOrder
+        }.map { $0.element }
+
+        var lines: [String] = []
+        lines.append("AgentPanel Doctor Report")
+        lines.append("Timestamp: \(metadata.timestamp)")
+        lines.append("AgentPanel version: \(metadata.agentPanelVersion)")
+        lines.append("macOS version: \(metadata.macOSVersion)")
+        lines.append("AeroSpace app: \(metadata.aerospaceApp)")
+        lines.append("aerospace CLI: \(metadata.aerospaceCli)")
+        lines.append("")
+
+        if sortedFindings.isEmpty {
+            lines.append("PASS  no issues found")
+        } else {
+            for finding in sortedFindings {
+                if finding.title.isEmpty {
+                    for line in finding.bodyLines {
+                        lines.append(line)
+                    }
+                    continue
+                }
+
+                lines.append("\(finding.severity.rawValue)  \(finding.title)")
+                for line in finding.bodyLines {
+                    lines.append(line)
+                }
+                if let snippet = finding.snippet, !snippet.isEmpty {
+                    lines.append("  Snippet:")
+                    lines.append("  ```toml")
+                    for line in snippet.split(separator: "\n", omittingEmptySubsequences: false) {
+                        lines.append("  \(line)")
+                    }
+                    lines.append("  ```")
+                }
+            }
+        }
+
+        let countedFindings = sortedFindings.filter { !$0.title.isEmpty }
+        let passCount = countedFindings.filter { $0.severity == .pass }.count
+        let warnCount = countedFindings.filter { $0.severity == .warn }.count
+        let failCount = countedFindings.filter { $0.severity == .fail }.count
+
+        lines.append("")
+        lines.append("Summary: \(passCount) PASS, \(warnCount) WARN, \(failCount) FAIL")
+
+        return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Doctor Implementation
+
+/// Checks system requirements and environment for AgentPanel.
+public struct Doctor {
+    private let runningApplicationChecker: RunningApplicationChecking
+    private let hotkeyStatusProvider: HotkeyStatusProviding?
+    private let aerospace: ApAeroSpace
+
+    /// Creates a Doctor instance.
+    /// - Parameters:
+    ///   - runningApplicationChecker: Running application checker.
+    ///   - hotkeyStatusProvider: Optional hotkey status provider.
+    public init(
+        runningApplicationChecker: RunningApplicationChecking,
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+    ) {
+        self.runningApplicationChecker = runningApplicationChecker
+        self.hotkeyStatusProvider = hotkeyStatusProvider
+        self.aerospace = ApAeroSpace()
+    }
+
+    /// Runs all Doctor checks and returns a report.
+    public func run() -> DoctorReport {
+        var findings: [DoctorFinding] = []
+
+        // Check AeroSpace app
+        var aerospaceAppLabel = "NOT FOUND"
+        if aerospace.isAppInstalled() {
+            aerospaceAppLabel = ApAeroSpace.appPath
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "AeroSpace.app installed",
+                detail: ApAeroSpace.appPath
+            ))
+        } else {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "AeroSpace.app not found",
+                fix: "Install AeroSpace via Homebrew: brew install --cask nikitabobko/tap/aerospace"
+            ))
+        }
+
+        // Check AeroSpace CLI
+        var aerospaceCliLabel = "NOT FOUND"
+        if aerospace.isCliAvailable() {
+            aerospaceCliLabel = "AVAILABLE"
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "aerospace CLI available"
+            ))
+
+            // Check AeroSpace compatibility
+            switch aerospace.checkCompatibility() {
+            case .success:
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "aerospace CLI compatibility verified"
+                ))
+            case .failure(let error):
+                findings.append(DoctorFinding(
+                    severity: .fail,
+                    title: "aerospace CLI compatibility issues",
+                    detail: error.message
+                ))
+            }
+        } else {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "aerospace CLI not available",
+                fix: "Ensure AeroSpace is installed and the CLI is in your PATH."
+            ))
+        }
+
+        // Check AeroSpace running
+        let aerospaceRunning = runningApplicationChecker.isApplicationRunning(bundleIdentifier: "bobko.aerospace")
+        if aerospaceRunning {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "AeroSpace is running"
+            ))
+        } else {
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "AeroSpace is not running",
+                fix: "Start AeroSpace from Applications or enable 'start-at-login' in ~/.aerospace.toml."
+            ))
+        }
+
+        // Check config
+        switch ConfigLoader.loadDefault() {
+        case .failure(let error):
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Config file error",
+                detail: error.message
+            ))
+        case .success(let result):
+            if result.config != nil {
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Config file parsed successfully"
+                ))
+            }
+            for finding in result.findings {
+                findings.append(DoctorFinding(
+                    severity: finding.severity == .fail ? .fail : (finding.severity == .warn ? .warn : .pass),
+                    title: finding.title,
+                    detail: finding.detail,
+                    fix: finding.fix
+                ))
+            }
+
+            // Check project paths exist
+            for project in result.projects {
+                let pathURL = URL(fileURLWithPath: project.path, isDirectory: true)
+                var isDirectory = ObjCBool(false)
+                let exists = FileManager.default.fileExists(atPath: pathURL.path, isDirectory: &isDirectory)
+                if exists && isDirectory.boolValue {
+                    findings.append(DoctorFinding(
+                        severity: .pass,
+                        title: "Project path exists: \(project.id)",
+                        detail: project.path
+                    ))
+                } else {
+                    findings.append(DoctorFinding(
+                        severity: .fail,
+                        title: "Project path missing: \(project.id)",
+                        detail: project.path,
+                        fix: "Update project.path to an existing directory."
+                    ))
+                }
+            }
+        }
+
+        // Check hotkey status if provider available
+        if let provider = hotkeyStatusProvider {
+            switch provider.hotkeyRegistrationStatus() {
+            case .registered:
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Hotkey registered (Cmd+Shift+Space)"
+                ))
+            case .failed(let osStatus):
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "Hotkey registration failed",
+                    detail: "OSStatus: \(osStatus)",
+                    fix: "Another application may have claimed Cmd+Shift+Space. Check System Settings > Keyboard > Keyboard Shortcuts."
+                ))
+            case .none:
+                break
+            }
+        }
+
+        let metadata = DoctorMetadata(
+            timestamp: ISO8601DateFormatter().string(from: Date()),
+            agentPanelVersion: "dev",
+            macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            aerospaceApp: aerospaceAppLabel,
+            aerospaceCli: aerospaceCliLabel
+        )
+
+        let actions = DoctorActionAvailability(
+            canInstallAeroSpace: !aerospace.isAppInstalled(),
+            canInstallSafeAeroSpaceConfig: false,
+            canStartAeroSpace: aerospace.isAppInstalled() && !aerospaceRunning,
+            canReloadAeroSpaceConfig: aerospaceRunning,
+            canUninstallSafeAeroSpaceConfig: false
+        )
+
+        return DoctorReport(metadata: metadata, findings: findings, actions: actions)
+    }
+
+    /// Installs AeroSpace via Homebrew and returns an updated report.
+    public func installAeroSpace() -> DoctorReport {
+        let runner = ApSystemCommandRunner()
+        _ = runner.run(
+            executable: "brew",
+            arguments: ["install", "--cask", "nikitabobko/tap/aerospace"],
+            timeoutSeconds: 300
+        )
+        return run()
+    }
+
+    /// Installs a safe AeroSpace config and returns an updated report.
+    /// - Note: This is a placeholder implementation.
+    public func installSafeAeroSpaceConfig() -> DoctorReport {
+        // TODO: Implement safe config installation
+        return run()
+    }
+
+    /// Starts AeroSpace and returns an updated report.
+    public func startAeroSpace() -> DoctorReport {
+        let runner = ApSystemCommandRunner()
+        _ = runner.run(executable: "open", arguments: ["-a", "AeroSpace"])
+        // Wait briefly for app to start
+        Thread.sleep(forTimeInterval: 1.0)
+        return run()
+    }
+
+    /// Reloads the AeroSpace config and returns an updated report.
+    public func reloadAeroSpaceConfig() -> DoctorReport {
+        let runner = ApSystemCommandRunner()
+        _ = runner.run(executable: "aerospace", arguments: ["reload-config"])
+        return run()
+    }
+
+    /// Uninstalls the safe AeroSpace config and returns an updated report.
+    /// - Note: This is a placeholder implementation.
+    public func uninstallSafeAeroSpaceConfig() -> DoctorReport {
+        // TODO: Implement safe config uninstallation
+        return run()
+    }
+}

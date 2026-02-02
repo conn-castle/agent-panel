@@ -105,7 +105,7 @@ struct ApVSCodeLauncher {
         // We prefix the title with "AP:<identifier>" so we can detect/move the correct window later.
         let windowTitle = "\(ApIdeToken.prefix)\(trimmed) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
         let workspaceDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/state/project-workspaces/ap/vscode", isDirectory: true)
+            .appendingPathComponent(".local/state/agent-panel/ap/vscode", isDirectory: true)
         let workspaceURL = workspaceDirectory.appendingPathComponent("\(trimmed).code-workspace")
 
         let payload: [String: Any] = [

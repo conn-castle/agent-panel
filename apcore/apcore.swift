@@ -1,5 +1,14 @@
 import Foundation
 
+/// AgentPanel version and identifiers.
+public enum AgentPanel {
+    /// Bundle identifier for the AgentPanel app.
+    public static let appBundleIdentifier: String = "com.agentpanel.AgentPanel"
+
+    /// A human-readable version identifier for diagnostic output.
+    public static let version: String = "0.0.0-dev"
+}
+
 /// Errors emitted by ApCore operations.
 public struct ApCoreError: Error, Equatable {
     /// Human-readable error message.
@@ -44,8 +53,8 @@ public struct ApWindow: Equatable {
 
 /// Core library for the ap CLI.
 public final class ApCore {
-    /// Parsed config for this ApCore instance.
-    public let config: ApConfig
+    /// Typed config for this ApCore instance.
+    public let config: Config
 
     private let aerospace: ApAeroSpace
     private let ideLauncher: ApVSCodeLauncher
@@ -53,8 +62,8 @@ public final class ApCore {
     private let workspacePrefix = "ap-"
 
     /// Creates a new ApCore instance.
-    /// - Parameter config: Parsed config to associate with this instance.
-    public init(config: ApConfig) {
+    /// - Parameter config: Typed config to associate with this instance.
+    public init(config: Config) {
         self.config = config
         self.aerospace = ApAeroSpace()
         self.ideLauncher = ApVSCodeLauncher()
@@ -79,10 +88,15 @@ public final class ApCore {
     /// Prints the raw config contents to stdout.
     /// - Returns: Success or an error.
     public func showConfig() -> Result<Void, ApCoreError> {
-        if !config.raw.isEmpty {
-            FileHandle.standardOutput.write(Data(config.raw.utf8))
+        let configPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/agent-panel/config.toml")
+        do {
+            let raw = try String(contentsOf: configPath, encoding: .utf8)
+            FileHandle.standardOutput.write(Data(raw.utf8))
+            return .success(())
+        } catch {
+            return .failure(ApCoreError(message: "Failed to read config: \(error.localizedDescription)"))
         }
-        return .success(())
     }
 
     /// Opens a new VS Code window tagged with the provided identifier.
