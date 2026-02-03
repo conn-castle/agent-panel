@@ -1,6 +1,6 @@
 import Foundation
 
-import apcore
+import AgentPanelCore
 
 /// Help topics supported by the ap CLI.
 private enum ApHelpTopic {
@@ -478,8 +478,8 @@ case .success(let command):
         exit(report.hasFailures ? ApExitCode.failure.rawValue : ApExitCode.ok.rawValue)
     case .listWorkspaces:
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.listWorkspaces() {
+        let core = ApCore(config: config)
+        switch core.listWorkspaces() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -488,8 +488,8 @@ case .success(let command):
         }
     case .showConfig:
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.showConfig() {
+        let core = ApCore(config: config)
+        switch core.showConfig() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -498,8 +498,8 @@ case .success(let command):
         }
     case .newWorkspace(let name):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.newWorkspace(name: name) {
+        let core = ApCore(config: config)
+        switch core.newWorkspace(name: name) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -508,8 +508,8 @@ case .success(let command):
         }
     case .newIde(let identifier):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.newIde(identifier: identifier) {
+        let core = ApCore(config: config)
+        switch core.newIde(identifier: identifier) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -518,8 +518,8 @@ case .success(let command):
         }
     case .newChrome(let identifier):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.newChrome(identifier: identifier) {
+        let core = ApCore(config: config)
+        switch core.newChrome(identifier: identifier) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -528,8 +528,8 @@ case .success(let command):
         }
     case .listIde:
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.listIdeWindows() {
+        let core = ApCore(config: config)
+        switch core.listIdeWindows() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -541,8 +541,8 @@ case .success(let command):
         }
     case .listChrome:
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.listChromeWindows() {
+        let core = ApCore(config: config)
+        switch core.listChromeWindows() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -554,8 +554,8 @@ case .success(let command):
         }
     case .listWindows(let workspace):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.listWindowsWorkspace(workspace) {
+        let core = ApCore(config: config)
+        switch core.listWindowsWorkspace(workspace) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -567,8 +567,8 @@ case .success(let command):
         }
     case .focusedWindow:
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.focusedWindow() {
+        let core = ApCore(config: config)
+        switch core.focusedWindow() {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -578,8 +578,8 @@ case .success(let command):
         }
     case .moveWindow(let workspace, let windowId):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.moveWindowToWorkspace(workspace: workspace, windowId: windowId) {
+        let core = ApCore(config: config)
+        switch core.moveWindowToWorkspace(workspace: workspace, windowId: windowId) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -588,8 +588,8 @@ case .success(let command):
         }
     case .focusWindow(let windowId):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.focusWindow(windowId: windowId) {
+        let core = ApCore(config: config)
+        switch core.focusWindow(windowId: windowId) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)
@@ -598,8 +598,8 @@ case .success(let command):
         }
     case .closeWorkspace(let workspace):
         let config = loadConfigOrExit()
-        let apcore = ApCore(config: config)
-        switch apcore.closeWorkspace(name: workspace) {
+        let core = ApCore(config: config)
+        switch core.closeWorkspace(name: workspace) {
         case .failure(let error):
             printStderr("error: \(error.message)")
             exit(ApExitCode.failure.rawValue)

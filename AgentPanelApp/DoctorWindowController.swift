@@ -9,7 +9,7 @@
 
 import AppKit
 
-import apcore
+import AgentPanelCore
 
 /// Controls the Doctor diagnostic window presentation.
 ///

@@ -1,10 +1,10 @@
-// NOTE: This file is intentionally duplicated in ap/.
-// Both targets need AppKit access, but apcore cannot import AppKit.
+// NOTE: This file is intentionally duplicated in AgentPanelCLI/.
+// Both targets need AppKit access, but AgentPanelCore cannot import AppKit.
 // Keep both copies in sync.
 
 import AppKit
 
-import apcore
+import AgentPanelCore
 
 /// Checks if an application is running using AppKit APIs.
 struct AppKitRunningApplicationChecker: RunningApplicationChecking {

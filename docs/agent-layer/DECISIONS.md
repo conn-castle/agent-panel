@@ -52,6 +52,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: Users without Homebrew cannot install AgentPanel; any future direct-download path will require intentional new work (signing/notarization + updater story).
 
 - Decision 2026-02-03 appkit: AppKitIntegration duplication is intentional
-    Decision: Both `apcore/AppKitIntegration.swift` and `AgentPanelApp/AppKitIntegration.swift` contain a `RunningApplicationChecking` protocol and `AppKitRunningApplicationChecker` implementation. This duplication is kept intentionally.
-    Reason: `apcore` is a static framework that cannot import AppKit (it is shared between the CLI and GUI targets). Both targets need `NSRunningApplication` API for Doctor checks. Duplicating the implementation allows each target to compile independently while maintaining API compatibility.
+    Decision: Both `AgentPanelCLI/AppKitIntegration.swift` and `AgentPanelApp/AppKitIntegration.swift` contain a `RunningApplicationChecking` protocol and `AppKitRunningApplicationChecker` implementation. This duplication is kept intentionally.
+    Reason: `AgentPanelCore` is a static framework that cannot import AppKit (it is shared between the CLI and GUI targets). Both targets need `NSRunningApplication` API for Doctor checks. Duplicating the implementation allows each target to compile independently while maintaining API compatibility.
     Tradeoffs: Must keep both files in sync manually; any changes to the protocol or implementation require updates in both locations.

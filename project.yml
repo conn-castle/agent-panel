@@ -17,35 +17,39 @@ targets:
     sources:
       - path: AgentPanelApp
     dependencies:
-      - target: apcore
+      - target: AgentPanelCore
     settings:
       base:
         PRODUCT_NAME: AgentPanel
         PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
         INFOPLIST_FILE: AgentPanelApp/Info.plist
 
-  apcore:
+  AgentPanelCore:
     type: framework.static
     platform: macOS
     sources:
-      - path: apcore
+      - path: AgentPanelCore
     dependencies:
       - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
-  ap:
+  AgentPanelCLI:
     type: tool
     platform: macOS
+    productName: ap
     sources:
-      - path: ap
+      - path: AgentPanelCLI
     dependencies:
-      - target: apcore
+      - target: AgentPanelCore
+    settings:
+      base:
+        PRODUCT_NAME: ap
 
 schemes:
   AgentPanel:
     build:
       targets:
         AgentPanel: all
-        ap: all
+        AgentPanelCLI: all

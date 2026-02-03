@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-import apcore
+import AgentPanelCore
 
 @main
 struct AgentPanelApp: App {

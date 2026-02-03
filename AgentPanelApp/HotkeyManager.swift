@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 
-import apcore
+import AgentPanelCore
 
 /// Manages global hotkey registration for the switcher.
 final class HotkeyManager: HotkeyStatusProviding {

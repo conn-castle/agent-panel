@@ -29,9 +29,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "962BFBCBC0AACA8DF7737E6C"
+               BlueprintIdentifier = "36DBAEFAC32FD041A8308E5F"
                BuildableName = "ap"
-               BlueprintName = "ap"
+               BlueprintName = "AgentPanelCLI"
                ReferencedContainer = "container:AgentPanel.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>

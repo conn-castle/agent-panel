@@ -1,6 +1,6 @@
 //
 //  ApAeroSpace.swift
-//  apcore
+//  AgentPanelCore
 //
 //  CLI wrapper for the AeroSpace window manager.
 //  Provides methods for installing, starting, and controlling AeroSpace,

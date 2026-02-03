@@ -10,7 +10,7 @@
 
 import AppKit
 
-import apcore
+import AgentPanelCore
 
 // MARK: - Supporting Types
 

@@ -1,6 +1,6 @@
 import AppKit
 
-import apcore
+import AgentPanelCore
 
 /// Result of the onboarding check.
 enum OnboardingResult {

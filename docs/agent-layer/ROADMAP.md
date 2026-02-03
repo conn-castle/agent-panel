@@ -66,11 +66,11 @@ Incomplete:
 ## Phase 2 — Rebuild app (nebulous)
 
 ### Goal
-- Rebuild the AgentPanel app around the `apcore` foundation while keeping the switcher + Doctor UI.
-- Shrink/flatten the remaining architecture so UI is presentation-only and core logic lives in `apcore` (or in Doctor-only code when appropriate).
+- Rebuild the AgentPanel app around the `AgentPanelCore` foundation while keeping the switcher + Doctor UI.
+- Shrink/flatten the remaining architecture so UI is presentation-only and core logic lives in `AgentPanelCore` (or in Doctor-only code when appropriate).
 
 ### Tasks
-- [ ] Define the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `apcore` and delete/merge anything that doesn't fit.
+- [ ] Define the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `AgentPanelCLI` and delete/merge anything that doesn't fit.
 - [ ] Reduce the switcher implementation to the minimal UX surface (load config, list, filter, log selection) with clean wiring and stable logs.
 - [ ] Keep `ap` working end-to-end while simplifying the app (tests, build scripts, and CLI usage remain valid).
 

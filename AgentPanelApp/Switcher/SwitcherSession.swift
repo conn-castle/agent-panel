@@ -9,7 +9,7 @@
 
 import Foundation
 
-import apcore
+import AgentPanelCore
 
 /// Manages switcher session lifecycle and structured logging.
 ///

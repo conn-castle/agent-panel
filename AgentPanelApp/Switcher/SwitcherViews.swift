@@ -9,7 +9,7 @@
 
 import AppKit
 
-import apcore
+import AgentPanelCore
 
 /// Custom panel that can control key window behavior.
 final class SwitcherPanel: NSPanel {

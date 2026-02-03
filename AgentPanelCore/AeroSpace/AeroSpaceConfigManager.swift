@@ -1,6 +1,6 @@
 //
 //  AeroSpaceConfigManager.swift
-//  apcore
+//  AgentPanelCore
 //
 //  Manages the AeroSpace configuration file (~/.aerospace.toml).
 //  Handles config status detection, backup creation, and writing

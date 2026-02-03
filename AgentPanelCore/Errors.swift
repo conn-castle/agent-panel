@@ -1,8 +1,8 @@
 //
 //  Errors.swift
-//  apcore
+//  AgentPanelCore
 //
-//  Typed error system for apcore operations.
+//  Typed error system for AgentPanelCore operations.
 //  Provides categorized errors with optional command details,
 //  and helper functions for common error patterns.
 //
