@@ -7,20 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		013393FD1083BAABB0FF2D64 /* DataStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE19D2A2DEACFD72F48CBAA /* DataStoreTests.swift */; };
+		01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFEA52B096500A617A9783 /* LoggerTests.swift */; };
 		03FA4C65DFD1DC5041CA4C3A /* DataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D53B01FF98440B766C063AB /* DataStore.swift */; };
 		085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */; };
 		0CC7C30ED18250F29ED6809B /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */; };
+		12346D4F33A1FB23A5C18AC4 /* DoctorReportRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */; };
 		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
 		255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */; };
 		2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
 		2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */; };
+		31625350B6505009A8424B51 /* AgentPanelCLICore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */; };
 		3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */; };
 		3CD536BD167B8DF6493C8EB7 /* ApCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D00F1D0832017A54995EE51 /* ApCore.swift */; };
 		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
 		45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */; };
 		476AD5F6F072D635D7418FAB /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E0C3DAA0280728917003498 /* Logger.swift */; };
 		4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */; };
+		4D56806E02C971D273BD392D /* ConfigLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */; };
 		4DCD2D11F2BA5709E38B9233 /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E8DE3E79215020A2587A722 /* Errors.swift */; };
 		5141A819B89EBFC8A69B9211 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A646649932F90C2FCB262BD /* Config.swift */; };
 		534C04B714BF962C54E5B19E /* ConfigParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */; };
@@ -28,15 +33,20 @@
 		6025AFD99FB66395A3BB4B44 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		65822A51B623A24EA742CF9C /* Dependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691139171C62F83E4E0CC709 /* Dependencies.swift */; };
 		6C75BE6C1A65316450803073 /* DoctorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */; };
+		6CE77530863CFF774479B52E /* AgentPanelCLICore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */; };
 		7337E72993D5E0B5564AB239 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
+		978993AA3AA3CB4C61F47AE8 /* ApCLIDependencies+Live.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234D600E8E9793B28FCB7DBD /* ApCLIDependencies+Live.swift */; };
+		98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D35ABD3022669F375FDB52F /* ApCLI.swift */; };
 		B28936C2D4FA7AE9CA34DF4A /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = DA4BB8B60939EF907169EAD7 /* TOMLDecoder */; };
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
+		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
 		D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9708BB20B7C2071A1EE21D7 /* main.swift */; };
 		D65832D12C11B8E3DB712C3F /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */; };
 		E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */; };
 		E1A3D5707DC2114E42745583 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D8C73BDF50CEB78DBA5853 /* System.swift */; };
+		E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */; };
 		FF90DD97E05DB53306719BAA /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935CD37A022BA8B71683DE72 /* Doctor.swift */; };
 /* End PBXBuildFile section */
 
@@ -48,7 +58,28 @@
 			remoteGlobalIDString = A7CB1C420487F73AFA87FE79;
 			remoteInfo = AgentPanelCore;
 		};
+		3E46891076CC8FFC2BEA6703 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 362741CB32D9130FC345A967;
+			remoteInfo = AgentPanelCLICore;
+		};
+		3F1878BA3BDAEC5C7A696632 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 362741CB32D9130FC345A967;
+			remoteInfo = AgentPanelCLICore;
+		};
 		4069C0A234E1051FFAD198E8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A7CB1C420487F73AFA87FE79;
+			remoteInfo = AgentPanelCore;
+		};
+		70D1A0EB65E11162C148D0C5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
 			proxyType = 1;
@@ -67,6 +98,8 @@
 /* Begin PBXFileReference section */
 		0D53B01FF98440B766C063AB /* DataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStore.swift; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		234D600E8E9793B28FCB7DBD /* ApCLIDependencies+Live.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApCLIDependencies+Live.swift"; sourceTree = "<group>"; };
+		2D35ABD3022669F375FDB52F /* ApCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCLI.swift; sourceTree = "<group>"; };
 		2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorWindowController.swift; sourceTree = "<group>"; };
 		33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPanelApp.swift; sourceTree = "<group>"; };
 		351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceConfigManager.swift; sourceTree = "<group>"; };
@@ -74,32 +107,48 @@
 		422A67E2D8FA409FACB7DBDF /* AgentPanelCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentPanelCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */ = {isa = PBXFileReference; path = "aerospace-safe.toml"; sourceTree = "<group>"; };
 		4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecutableResolverTests.swift; sourceTree = "<group>"; };
+		66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentPanelCLITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		691139171C62F83E4E0CC709 /* Dependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dependencies.swift; sourceTree = "<group>"; };
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6E8DE3E79215020A2587A722 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		7D00F1D0832017A54995EE51 /* ApCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCore.swift; sourceTree = "<group>"; };
 		8375E9AD9F43075DD43C36F4 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
 		864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserTests.swift; sourceTree = "<group>"; };
+		896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApArgumentParserTests.swift; sourceTree = "<group>"; };
 		935CD37A022BA8B71683DE72 /* Doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Doctor.swift; sourceTree = "<group>"; };
+		97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigLoaderTests.swift; sourceTree = "<group>"; };
 		9E0C3DAA0280728917003498 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		A8AFEA52B096500A617A9783 /* LoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerTests.swift; sourceTree = "<group>"; };
 		B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandTimeoutTests.swift; sourceTree = "<group>"; };
+		B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorReportRenderingTests.swift; sourceTree = "<group>"; };
 		B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		B8D8C73BDF50CEB78DBA5853 /* System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = System.swift; sourceTree = "<group>"; };
 		BC700F71F91521277C58EA20 /* AgentPanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UTCTimestampTests.swift; sourceTree = "<group>"; };
+		BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCLIRunnerTests.swift; sourceTree = "<group>"; };
 		C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdNormalizationTests.swift; sourceTree = "<group>"; };
 		D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
+		D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelCLICore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
 		D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		D9708BB20B7C2071A1EE21D7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApAeroSpace.swift; sourceTree = "<group>"; };
 		E715EECFCCE988C7C96B6561 /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
+		EFE19D2A2DEACFD72F48CBAA /* DataStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataStoreTests.swift; sourceTree = "<group>"; };
 		F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherViews.swift; sourceTree = "<group>"; };
 		FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorValidationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		652C3D6B8085C00447E8AAAE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				31625350B6505009A8424B51 /* AgentPanelCLICore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		7555730D28ED00EA368BDB79 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +177,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6CE77530863CFF774479B52E /* AgentPanelCLICore.framework in Frameworks */,
 				0CC7C30ED18250F29ED6809B /* AgentPanelCore.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -140,9 +190,13 @@
 			children = (
 				FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */,
 				B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */,
+				97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */,
 				864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */,
+				EFE19D2A2DEACFD72F48CBAA /* DataStoreTests.swift */,
+				B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */,
 				4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */,
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
+				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
 			);
 			path = AgentPanelCoreTests;
@@ -172,10 +226,20 @@
 			path = AgentPanelCore;
 			sourceTree = "<group>";
 		};
+		1B95D211BB3B6E346100C384 /* AgentPanelCLICore */ = {
+			isa = PBXGroup;
+			children = (
+				2D35ABD3022669F375FDB52F /* ApCLI.swift */,
+			);
+			path = AgentPanelCLICore;
+			sourceTree = "<group>";
+		};
 		29BF1CF4B055D961037D563F /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				BC700F71F91521277C58EA20 /* AgentPanel.app */,
+				D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */,
+				66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */,
 				B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */,
 				422A67E2D8FA409FACB7DBDF /* AgentPanelCoreTests.xctest */,
 				8375E9AD9F43075DD43C36F4 /* ap */,
@@ -203,6 +267,8 @@
 			children = (
 				29FCA0281F4D1ED8333E2A3E /* AgentPanelApp */,
 				67E5A7D71202E91E46B1179D /* AgentPanelCLI */,
+				1B95D211BB3B6E346100C384 /* AgentPanelCLICore */,
+				ED9D71684E15A73ED606F516 /* AgentPanelCLITests */,
 				1B913158E38EFD90924724ED /* AgentPanelCore */,
 				1037EE7F169B2E890205D145 /* AgentPanelCoreTests */,
 				29BF1CF4B055D961037D563F /* Products */,
@@ -212,6 +278,7 @@
 		67E5A7D71202E91E46B1179D /* AgentPanelCLI */ = {
 			isa = PBXGroup;
 			children = (
+				234D600E8E9793B28FCB7DBD /* ApCLIDependencies+Live.swift */,
 				E715EECFCCE988C7C96B6561 /* AppKitIntegration.swift */,
 				D9708BB20B7C2071A1EE21D7 /* main.swift */,
 			);
@@ -227,6 +294,15 @@
 			path = AeroSpace;
 			sourceTree = "<group>";
 		};
+		ED9D71684E15A73ED606F516 /* AgentPanelCLITests */ = {
+			isa = PBXGroup;
+			children = (
+				896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */,
+				BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */,
+			);
+			path = AgentPanelCLITests;
+			sourceTree = "<group>";
+		};
 		EF65B4270E26D00E15F29526 /* Switcher */ = {
 			isa = PBXGroup;
 			children = (
@@ -240,6 +316,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		362741CB32D9130FC345A967 /* AgentPanelCLICore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 241B0C96796C910AD2A14C61 /* Build configuration list for PBXNativeTarget "AgentPanelCLICore" */;
+			buildPhases = (
+				6529B218C0FD9D3EF0638F81 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A0A3DEF608957F6D5CA5E957 /* PBXTargetDependency */,
+			);
+			name = AgentPanelCLICore;
+			packageProductDependencies = (
+			);
+			productName = AgentPanelCLICore;
+			productReference = D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */;
+			productType = "com.apple.product-type.framework.static";
+		};
 		36DBAEFAC32FD041A8308E5F /* AgentPanelCLI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 01A1ABC7A1A8ABD023B3AE5C /* Build configuration list for PBXNativeTarget "AgentPanelCLI" */;
@@ -250,6 +344,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				467E7CA8D59D11EF94608644 /* PBXTargetDependency */,
 				A6D8CDD23FC38AF5CF0FC0C4 /* PBXTargetDependency */,
 			);
 			name = AgentPanelCLI;
@@ -278,6 +373,25 @@
 			productName = AgentPanel;
 			productReference = BC700F71F91521277C58EA20 /* AgentPanel.app */;
 			productType = "com.apple.product-type.application";
+		};
+		6F9088D4B2D2EDD17FC37383 /* AgentPanelCLITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1141909B96B1DD8585AFE0ED /* Build configuration list for PBXNativeTarget "AgentPanelCLITests" */;
+			buildPhases = (
+				7F2BBCE5F7EE446F17A6FAFE /* Sources */,
+				652C3D6B8085C00447E8AAAE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2378E7D897904799654659AF /* PBXTargetDependency */,
+			);
+			name = AgentPanelCLITests;
+			packageProductDependencies = (
+			);
+			productName = AgentPanelCLITests;
+			productReference = 66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		7BC55D66EEC761B0E70D878C /* AgentPanelCoreTests */ = {
 			isa = PBXNativeTarget;
@@ -345,6 +459,8 @@
 			targets = (
 				4439FD99CA53EECDBD580533 /* AgentPanel */,
 				36DBAEFAC32FD041A8308E5F /* AgentPanelCLI */,
+				362741CB32D9130FC345A967 /* AgentPanelCLICore */,
+				6F9088D4B2D2EDD17FC37383 /* AgentPanelCLITests */,
 				A7CB1C420487F73AFA87FE79 /* AgentPanelCore */,
 				7BC55D66EEC761B0E70D878C /* AgentPanelCoreTests */,
 			);
@@ -378,6 +494,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6529B218C0FD9D3EF0638F81 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6871E9BD8CB0909F5BE7B4DC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -395,10 +519,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7F2BBCE5F7EE446F17A6FAFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */,
+				E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B7597369949AAA5FDD68A522 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				978993AA3AA3CB4C61F47AE8 /* ApCLIDependencies+Live.swift in Sources */,
 				5DD77F6A9ABBF6BEBE903B26 /* AppKitIntegration.swift in Sources */,
 				D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */,
 			);
@@ -410,9 +544,13 @@
 			files = (
 				3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */,
 				45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */,
+				4D56806E02C971D273BD392D /* ConfigLoaderTests.swift in Sources */,
 				534C04B714BF962C54E5B19E /* ConfigParserTests.swift in Sources */,
+				013393FD1083BAABB0FF2D64 /* DataStoreTests.swift in Sources */,
+				12346D4F33A1FB23A5C18AC4 /* DoctorReportRenderingTests.swift in Sources */,
 				2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */,
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
+				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -429,6 +567,21 @@
 			isa = PBXTargetDependency;
 			target = A7CB1C420487F73AFA87FE79 /* AgentPanelCore */;
 			targetProxy = 10FD68FD651A7897413FDA0B /* PBXContainerItemProxy */;
+		};
+		2378E7D897904799654659AF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 362741CB32D9130FC345A967 /* AgentPanelCLICore */;
+			targetProxy = 3F1878BA3BDAEC5C7A696632 /* PBXContainerItemProxy */;
+		};
+		467E7CA8D59D11EF94608644 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 362741CB32D9130FC345A967 /* AgentPanelCLICore */;
+			targetProxy = 3E46891076CC8FFC2BEA6703 /* PBXContainerItemProxy */;
+		};
+		A0A3DEF608957F6D5CA5E957 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A7CB1C420487F73AFA87FE79 /* AgentPanelCore */;
+			targetProxy = 70D1A0EB65E11162C148D0C5 /* PBXContainerItemProxy */;
 		};
 		A6D8CDD23FC38AF5CF0FC0C4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -494,6 +647,29 @@
 				SDKROOT = macosx;
 			};
 			name = Debug;
+		};
+		71E328B284943EBF83C92403 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanelCLICore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
 		};
 		9CCDC528B5ACE20FD781365A /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -620,6 +796,61 @@
 			};
 			name = Release;
 		};
+		C0041D0C687E1DC6CCB47635 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				GENERATE_INFOPLIST_FILE = YES;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanelCLICore;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		C0230B525240D894C4FC0632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanelCLITests;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		CE423E08720400E345F1412F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanelCLITests;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
 		E0B798A07E8021BB5CA85A78 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -707,6 +938,24 @@
 			buildConfigurations = (
 				B6C0A8C4CBCA956E893A9EB8 /* Debug */,
 				BCB0463D08B8C4A69DD75A90 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1141909B96B1DD8585AFE0ED /* Build configuration list for PBXNativeTarget "AgentPanelCLITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CE423E08720400E345F1412F /* Debug */,
+				C0230B525240D894C4FC0632 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		241B0C96796C910AD2A14C61 /* Build configuration list for PBXNativeTarget "AgentPanelCLICore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0041D0C687E1DC6CCB47635 /* Debug */,
+				71E328B284943EBF83C92403 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

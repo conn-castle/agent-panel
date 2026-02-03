@@ -186,10 +186,18 @@ public struct DoctorReport: Equatable, Sendable {
 
 /// Checks system requirements and environment for AgentPanel.
 public struct Doctor {
+    /// VS Code bundle identifier.
+    private static let vscodeBundleId = "com.microsoft.VSCode"
+    /// Chrome bundle identifier.
+    private static let chromeBundleId = "com.google.Chrome"
+
     private let runningApplicationChecker: RunningApplicationChecking
     private let hotkeyStatusProvider: HotkeyStatusProviding?
     private let dateProvider: DateProviding
     private let aerospace: ApAeroSpace
+    private let appDiscovery: AppDiscovering
+    private let executableResolver: ExecutableResolver
+    private let dataStore: DataStore
 
     /// Creates a Doctor instance.
     /// - Parameters:
@@ -197,16 +205,25 @@ public struct Doctor {
     ///   - hotkeyStatusProvider: Optional hotkey status provider.
     ///   - dateProvider: Date provider for timestamps.
     ///   - aerospace: AeroSpace wrapper for checks.
+    ///   - appDiscovery: App discovery for checking installed apps.
+    ///   - executableResolver: Resolver for checking CLI tools.
+    ///   - dataStore: Data store for path checks.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding? = nil,
         dateProvider: DateProviding = SystemDateProvider(),
-        aerospace: ApAeroSpace = ApAeroSpace()
+        aerospace: ApAeroSpace = ApAeroSpace(),
+        appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
+        executableResolver: ExecutableResolver = ExecutableResolver(),
+        dataStore: DataStore = .default()
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
         self.dateProvider = dateProvider
         self.aerospace = aerospace
+        self.appDiscovery = appDiscovery
+        self.executableResolver = executableResolver
+        self.dataStore = dataStore
     }
 
     /// Builds a UTC ISO-8601 timestamp string with fractional seconds.
@@ -221,6 +238,20 @@ public struct Doctor {
     /// Runs all Doctor checks and returns a report.
     public func run() -> DoctorReport {
         var findings: [DoctorFinding] = []
+
+        // Check Homebrew
+        if executableResolver.resolve("brew") != nil {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Homebrew installed"
+            ))
+        } else {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Homebrew not found",
+                fix: "Install Homebrew from https://brew.sh"
+            ))
+        }
 
         // Check AeroSpace app
         var aerospaceAppLabel = "NOT FOUND"
@@ -315,6 +346,56 @@ public struct Doctor {
             ))
         }
 
+        // Check VS Code
+        if let vscodeURL = appDiscovery.applicationURL(bundleIdentifier: Self.vscodeBundleId) {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "VS Code installed",
+                detail: vscodeURL.path
+            ))
+        } else {
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "VS Code not found",
+                detail: "Required for IDE window management",
+                fix: "Install: brew install --cask visual-studio-code (or configure a custom IDE in the future)"
+            ))
+        }
+
+        // Check Chrome
+        if let chromeURL = appDiscovery.applicationURL(bundleIdentifier: Self.chromeBundleId) {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Google Chrome installed",
+                detail: chromeURL.path
+            ))
+        } else {
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "Google Chrome not found",
+                detail: "Required for browser window management",
+                fix: "Install: brew install --cask google-chrome (or configure a custom browser in the future)"
+            ))
+        }
+
+        // Check required directories
+        let logsDir = dataStore.logsDirectory
+        var isLogsDir = ObjCBool(false)
+        if FileManager.default.fileExists(atPath: logsDir.path, isDirectory: &isLogsDir), isLogsDir.boolValue {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Logs directory exists",
+                detail: logsDir.path
+            ))
+        } else {
+            // This is a PASS with note - directory will be created on first log write
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Logs directory will be created on first use",
+                detail: logsDir.path
+            ))
+        }
+
         // Check AgentPanel config
         switch ConfigLoader.loadDefault() {
         case .failure(let error):
@@ -339,7 +420,26 @@ public struct Doctor {
                 ))
             }
 
-            // Check project paths exist
+            // Check agent-layer CLI if any project uses it
+            let agentLayerProjects = result.projects.filter { $0.useAgentLayer }
+            if !agentLayerProjects.isEmpty {
+                if executableResolver.resolve("al") != nil {
+                    findings.append(DoctorFinding(
+                        severity: .pass,
+                        title: "Agent layer CLI (al) installed"
+                    ))
+                } else {
+                    let projectNames = agentLayerProjects.map { $0.id }.joined(separator: ", ")
+                    findings.append(DoctorFinding(
+                        severity: .fail,
+                        title: "Agent layer CLI (al) not found",
+                        detail: "Required by: \(projectNames)",
+                        fix: "Install: brew install conn-castle/tap/agent-layer (or set useAgentLayer=false for these projects)"
+                    ))
+                }
+            }
+
+            // Check project paths exist and agent-layer if required
             for project in result.projects {
                 let pathURL = URL(fileURLWithPath: project.path, isDirectory: true)
                 var isDirectory = ObjCBool(false)
@@ -350,6 +450,30 @@ public struct Doctor {
                         title: "Project path exists: \(project.id)",
                         detail: project.path
                     ))
+
+                    // Check agent-layer directory if useAgentLayer is true
+                    if project.useAgentLayer {
+                        let agentLayerPath = pathURL.appendingPathComponent(".agent-layer", isDirectory: true)
+                        var isAgentLayerDir = ObjCBool(false)
+                        let agentLayerExists = FileManager.default.fileExists(
+                            atPath: agentLayerPath.path,
+                            isDirectory: &isAgentLayerDir
+                        )
+                        if agentLayerExists && isAgentLayerDir.boolValue {
+                            findings.append(DoctorFinding(
+                                severity: .pass,
+                                title: "Agent layer exists: \(project.id)",
+                                detail: agentLayerPath.path
+                            ))
+                        } else {
+                            findings.append(DoctorFinding(
+                                severity: .warn,
+                                title: "Agent layer missing: \(project.id)",
+                                detail: "useAgentLayer=true but .agent-layer directory not found",
+                                fix: "Create .agent-layer directory in \(project.path) or set useAgentLayer=false"
+                            ))
+                        }
+                    }
                 } else {
                     findings.append(DoctorFinding(
                         severity: .fail,
@@ -381,9 +505,19 @@ public struct Doctor {
             }
         }
 
+        // Check for critical failures that onboarding can fix
+        let hasCriticalAeroSpaceFailure = !aerospace.isAppInstalled() || !aerospace.isCliAvailable()
+        if hasCriticalAeroSpaceFailure {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Critical: AeroSpace setup incomplete",
+                fix: "Launch AgentPanel.app to run onboarding, or install manually: brew install --cask nikitabobko/tap/aerospace"
+            ))
+        }
+
         let metadata = DoctorMetadata(
             timestamp: makeUTCTimestamp(),
-            agentPanelVersion: "dev",
+            agentPanelVersion: AgentPanel.version,
             macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             aerospaceApp: aerospaceAppLabel,
             aerospaceCli: aerospaceCliLabel

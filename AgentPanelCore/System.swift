@@ -254,7 +254,17 @@ struct ApVSCodeLauncher {
     /// VS Code bundle identifier used for filtering windows.
     static let bundleId = "com.microsoft.VSCode"
 
-    private let commandRunner = ApSystemCommandRunner()
+    private let dataStore: DataStore
+    private let commandRunner: ApSystemCommandRunner
+
+    /// Creates a VS Code launcher.
+    /// - Parameters:
+    ///   - dataStore: Data store for workspace file paths.
+    ///   - commandRunner: Command runner for launching VS Code.
+    init(dataStore: DataStore = .default(), commandRunner: ApSystemCommandRunner = ApSystemCommandRunner()) {
+        self.dataStore = dataStore
+        self.commandRunner = commandRunner
+    }
 
     /// Opens a new VS Code window tagged with the provided identifier.
     /// - Parameter identifier: Identifier embedded in the window title token.
@@ -276,8 +286,7 @@ struct ApVSCodeLauncher {
         // - ${appName}: application name
         // We prefix the title with "AP:<identifier>" so we can detect/move the correct window later.
         let windowTitle = "\(ApIdeToken.prefix)\(trimmed) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
-        let workspaceDirectory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/state/agent-panel/ap/vscode", isDirectory: true)
+        let workspaceDirectory = dataStore.vscodeWorkspaceDirectory
         let workspaceURL = workspaceDirectory.appendingPathComponent("\(trimmed).code-workspace")
 
         let payload: [String: Any] = [

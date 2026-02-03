@@ -56,26 +56,26 @@ Incomplete:
 - Fully cover first-run onboarding and install checks (including Homebrew-only assumptions).
 
 ### Tasks
-- [ ] Define and document the canonical on-disk layout (config, logs, state/history) in a prose doc, not just code.
-- [ ] Document the config TOML schema formally (fields, types, defaults, validation rules).
+- [x] Define and document the canonical on-disk layout (config, logs, state/history) in a prose doc, not just code.
+- [x] Document the config TOML schema formally (fields, types, defaults, validation rules).
 - [x] Make config loading/validation exhaustive and consistent across app + CLI (no hidden defaults; actionable errors).
-- [ ] Implement a config writer/migrator used for first-run onboarding (create starter config if missing; safe updates).
-- [ ] Make Doctor "100% functional": full check suite for config validity, required directories, Homebrew, AeroSpace (app + CLI), Chrome, supported IDEs, and any agent-layer prerequisites.
+- [x] Make Doctor "100% functional": full check suite for config validity, required directories, Homebrew, AeroSpace (app + CLI), Chrome, supported IDEs, and any agent-layer prerequisites.
 - [ ] Define a persistence API in `AgentPanelCore` (e.g., a `StateStore`) and implement it (incl. migrations/versioning strategy) with structured logs.
 - [ ] Add CLI tests: argument parsing, command execution, error handling.
-- [ ] Add `ap version` command and ensure version is reported consistently (CLI, app, Doctor).
+- [x] Add `ap --version` command and ensure version is reported consistently (CLI, app, Doctor).
 - [ ] Write a "core interface document" defining `AgentPanelCore` public API boundaries (moved from Phase 2).
 - [x] Keep the switcher UI as a skeleton: load config, list projects, basic filter, and log selections with stable identifiers.
 - [x] Ensure `ap doctor` and in-app Doctor share the same core report types/output and remain end-to-end working (`scripts/test.sh` stays green).
 
 ### Exit criteria
-- `ap doctor` and the in-app Doctor produce a complete report with clear PASS/WARN/FAIL and actionable remediation steps.
-- Config can be created/loaded/validated deterministically; invalid configs fail loudly with specific messages.
+- `ap doctor` and the in-app Doctor produce a complete report with clear PASS/WARN/FAIL and actionable remediation steps. ✅
+- Config can be created/loaded/validated deterministically; invalid configs fail loudly with specific messages. ✅
 - A real state store exists on disk (with a documented schema + versioning) and is exercised by at least one persisted datum.
 - CLI has test coverage for argument parsing and core commands.
 - Core interface document exists and matches implemented public APIs.
-- On-disk layout and config schema are documented.
-- AgentPanel launches and the switcher skeleton works; `scripts/test.sh` passes.
+- On-disk layout and config schema are documented. ✅
+- `ap --version` reports version consistently with Doctor output. ✅
+- AgentPanel launches and the switcher skeleton works; `scripts/test.sh` passes. ✅
 
 ## Phase 2 — Focus + switcher UX + core interfaces (separation of concerns)
 

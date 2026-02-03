@@ -78,6 +78,17 @@
                ReferencedContainer = "container:AgentPanel.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "6F9088D4B2D2EDD17FC37383"
+               BuildableName = "AgentPanelCLITests.xctest"
+               BlueprintName = "AgentPanelCLITests"
+               ReferencedContainer = "container:AgentPanel.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

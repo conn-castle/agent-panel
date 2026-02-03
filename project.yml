@@ -37,6 +37,17 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
+  AgentPanelCLICore:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: AgentPanelCLICore
+    dependencies:
+      - target: AgentPanelCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
   AgentPanelCLI:
     type: tool
     platform: macOS
@@ -44,6 +55,7 @@ targets:
     sources:
       - path: AgentPanelCLI
     dependencies:
+      - target: AgentPanelCLICore
       - target: AgentPanelCore
     settings:
       base:
@@ -59,6 +71,16 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  AgentPanelCLITests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AgentPanelCLITests
+    dependencies:
+      - target: AgentPanelCLICore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   AgentPanel:
@@ -70,3 +92,4 @@ schemes:
     test:
       targets:
         - AgentPanelCoreTests
+        - AgentPanelCLITests

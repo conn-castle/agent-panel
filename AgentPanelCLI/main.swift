@@ -23,6 +23,7 @@ private enum ApHelpTopic {
 /// Commands supported by the ap CLI.
 private enum ApCommand {
     case help(ApHelpTopic)
+    case version
     case doctor
     case listWorkspaces
     case showConfig
@@ -60,6 +61,10 @@ private struct ApArgumentParser {
 
         if first == "-h" || first == "--help" {
             return .success(.help(.root))
+        }
+
+        if first == "-v" || first == "--version" {
+            return .success(.version)
         }
 
         switch first {
@@ -328,7 +333,8 @@ private func usageText(for topic: ApHelpTopic) -> String {
           close-workspace <workspace>
 
         Options:
-          -h, --help   Show help
+          -h, --help      Show help
+          -v, --version   Show version
         """
     case .doctor:
         return """
@@ -469,6 +475,9 @@ case .success(let command):
     switch command {
     case .help(let topic):
         print(usageText(for: topic))
+        exit(ApExitCode.ok.rawValue)
+    case .version:
+        print("ap \(AgentPanel.version)")
         exit(ApExitCode.ok.rawValue)
     case .doctor:
         let report = Doctor(

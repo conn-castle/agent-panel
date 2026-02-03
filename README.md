@@ -20,8 +20,18 @@ The switcher currently **lists projects and logs selections**. Project activatio
 1) macOS 15.7+
 2) Homebrew (required for Doctor's AeroSpace install action)
 3) AeroSpace installed
-4) Google Chrome
-5) VS Code and/or Antigravity
+4) Google Chrome (required for `ap new-chrome` and future activation)
+5) VS Code and/or Antigravity (required for `ap new-ide` and future activation)
+
+## First run (onboarding)
+
+On first launch, AgentPanel will prompt to install/configure AeroSpace if needed:
+
+- Installs AeroSpace via Homebrew (if missing)
+- Writes a safe `~/.aerospace.toml` (backs up any existing config to `~/.aerospace.toml.agentpanel-backup`)
+- Attempts to start AeroSpace
+
+If you decline, AgentPanel quits.
 
 ## Configuration
 
@@ -30,6 +40,7 @@ The switcher currently **lists projects and logs selections**. Project activatio
 `~/.config/agent-panel/config.toml`
 
 If the file is missing, AgentPanel creates a starter config with commented guidance and an example.
+Until you add at least one `[[project]]`, Doctor will report config failures.
 
 ### Schema
 
@@ -47,8 +58,12 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 ## Paths
 
 - Config: `~/.config/agent-panel/config.toml`
+- State (reserved): `~/.local/state/agent-panel/state.json`
 - Logs (active): `~/.local/state/agent-panel/logs/agent-panel.log`
 - Logs (rotated): `~/.local/state/agent-panel/logs/agent-panel.log.1` … `agent-panel.log.5`
+- Logs format: JSON Lines with UTC ISO-8601 timestamps; rotation at 10 MiB
+- VS Code workspaces (created by `ap new-ide <identifier>`): `~/.local/state/agent-panel/vscode/<identifier>.code-workspace`
+- AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`)
 
 ## Doctor
 
@@ -59,6 +74,21 @@ ap doctor
 ```
 
 Or use the app menu: **Run Doctor...**
+
+Current checks include:
+
+- Homebrew installed
+- AeroSpace.app installed
+- `aerospace` CLI available + basic compatibility (required commands/flags)
+- Whether AeroSpace is currently running
+- Whether `~/.aerospace.toml` is AgentPanel-managed
+- VS Code installed
+- Google Chrome installed
+- Logs directory status
+- AgentPanel config parses, and each `project.path` exists
+- Agent-layer CLI (`al`) installed (if any project has `useAgentLayer=true`)
+- Agent-layer directory exists for projects with `useAgentLayer=true`
+- Hotkey registration status (app only)
 
 ## CLI (`ap`)
 
