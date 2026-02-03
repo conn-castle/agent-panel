@@ -1,6 +1,56 @@
 import Foundation
 import TOMLDecoder
 
+// MARK: - ID Normalization
+
+/// Normalizes identifiers (project names, workspace names) to a consistent format.
+///
+/// Used for deriving project IDs from names and normalizing workspace names.
+/// Rules: lowercase, non-alphanumeric characters become hyphens, consecutive hyphens collapsed, trimmed.
+public enum IdNormalizer {
+    /// Allowed characters in a normalized ID.
+    private static let allowedCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
+
+    /// Normalizes a string to a valid identifier.
+    /// - Parameter value: Raw string (e.g., project name, workspace name).
+    /// - Returns: Normalized identifier (lowercase, hyphens for separators, no leading/trailing hyphens).
+    public static func normalize(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var normalized = ""
+        var previousWasHyphen = false
+
+        for scalar in trimmed.lowercased().unicodeScalars {
+            if allowedCharacters.contains(scalar) {
+                normalized.unicodeScalars.append(scalar)
+                previousWasHyphen = false
+            } else if !previousWasHyphen {
+                normalized.append("-")
+                previousWasHyphen = true
+            }
+        }
+
+        let hyphenSet = CharacterSet(charactersIn: "-")
+        return normalized.trimmingCharacters(in: hyphenSet)
+    }
+
+    /// Checks if an identifier is valid (non-empty after normalization).
+    /// - Parameter value: String to check.
+    /// - Returns: True if the string normalizes to a non-empty identifier.
+    public static func isValid(_ value: String) -> Bool {
+        !normalize(value).isEmpty
+    }
+
+    /// Reserved identifiers that cannot be used.
+    public static let reserved: Set<String> = ["inbox"]
+
+    /// Checks if an identifier is reserved.
+    /// - Parameter normalizedId: Already-normalized identifier.
+    /// - Returns: True if the identifier is reserved.
+    public static func isReserved(_ normalizedId: String) -> Bool {
+        reserved.contains(normalizedId)
+    }
+}
+
 // MARK: - Config Models
 
 /// Full parsed configuration for AgentPanel.
@@ -165,7 +215,7 @@ public struct ConfigLoader {
 
     /// Loads and parses the default config file.
     public static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
-        let url = AgentPanelPaths.defaultPaths().configFile
+        let url = DataStore.default().configFile
         return load(from: url)
     }
 
@@ -340,7 +390,7 @@ struct ConfigParser {
         // Name validation + id derivation
         var derivedId: String?
         if let name {
-            let normalized = normalizeProjectId(name)
+            let normalized = IdNormalizer.normalize(name)
             if normalized.isEmpty {
                 findings.append(ConfigFinding(
                     severity: .fail,
@@ -349,12 +399,12 @@ struct ConfigParser {
                     fix: "Use a name with letters or numbers so an id can be derived."
                 ))
                 projectIsValid = false
-            } else if normalized == "inbox" {
+            } else if IdNormalizer.isReserved(normalized) {
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].id is reserved",
-                    detail: "The id 'inbox' is reserved.",
-                    fix: "Choose a different project name so the derived id is not 'inbox'."
+                    detail: "The id '\(normalized)' is reserved.",
+                    fix: "Choose a different project name so the derived id is not reserved."
                 ))
                 projectIsValid = false
             } else if let existingIndex = seenIds[normalized] {
@@ -412,27 +462,6 @@ struct ConfigParser {
     }
 
     // MARK: - Validation Helpers
-
-    /// Normalizes a project name into a stable id (lowercased, non-alphanumerics replaced with hyphens).
-    private static func normalizeProjectId(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        var normalized = ""
-        var previousWasHyphen = false
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
-
-        for scalar in trimmed.lowercased().unicodeScalars {
-            if allowed.contains(scalar) {
-                normalized.unicodeScalars.append(scalar)
-                previousWasHyphen = false
-            } else if !previousWasHyphen {
-                normalized.append("-")
-                previousWasHyphen = true
-            }
-        }
-
-        let hyphenSet = CharacterSet(charactersIn: "-")
-        return normalized.trimmingCharacters(in: hyphenSet)
-    }
 
     private static func isValidColorHex(_ value: String) -> Bool {
         guard value.count == 7, value.hasPrefix("#") else {

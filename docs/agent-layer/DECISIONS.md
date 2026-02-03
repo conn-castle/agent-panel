@@ -55,3 +55,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Both `AgentPanelCLI/AppKitIntegration.swift` and `AgentPanelApp/AppKitIntegration.swift` contain a `RunningApplicationChecking` protocol and `AppKitRunningApplicationChecker` implementation. This duplication is kept intentionally.
     Reason: `AgentPanelCore` is a static framework that cannot import AppKit (it is shared between the CLI and GUI targets). Both targets need `NSRunningApplication` API for Doctor checks. Duplicating the implementation allows each target to compile independently while maintaining API compatibility.
     Tradeoffs: Must keep both files in sync manually; any changes to the protocol or implementation require updates in both locations.
+
+- Decision 2026-02-03 guipath: GUI apps don't inherit shell PATH
+    Decision: Use `ExecutableResolver` to find executables instead of `/usr/bin/env`. Searches standard paths first, falls back to login shell `which`.
+    Reason: GUI apps launched via Finder/Dock get a minimal PATH without Homebrew or user additions. `/usr/bin/env` fails to find `code`, `brew`, `aerospace`, etc.
+    Tradeoffs: Must maintain search path list; zsh fallback has performance cost.
+
+- Decision 2026-02-03 pipes: Read pipes concurrently to avoid deadlock
+    Decision: Use `readabilityHandler` to stream stdout/stderr while process runs, not after termination.
+    Reason: Pipe buffers are ~64KB. If a process fills the buffer and blocks, waiting for termination before reading creates a deadlock.
+    Tradeoffs: More complex thread synchronization.

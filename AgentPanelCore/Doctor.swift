@@ -188,19 +188,34 @@ public struct DoctorReport: Equatable, Sendable {
 public struct Doctor {
     private let runningApplicationChecker: RunningApplicationChecking
     private let hotkeyStatusProvider: HotkeyStatusProviding?
+    private let dateProvider: DateProviding
     private let aerospace: ApAeroSpace
 
     /// Creates a Doctor instance.
     /// - Parameters:
     ///   - runningApplicationChecker: Running application checker.
     ///   - hotkeyStatusProvider: Optional hotkey status provider.
+    ///   - dateProvider: Date provider for timestamps.
+    ///   - aerospace: AeroSpace wrapper for checks.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
-        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        dateProvider: DateProviding = SystemDateProvider(),
+        aerospace: ApAeroSpace = ApAeroSpace()
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
-        self.aerospace = ApAeroSpace()
+        self.dateProvider = dateProvider
+        self.aerospace = aerospace
+    }
+
+    /// Builds a UTC ISO-8601 timestamp string with fractional seconds.
+    /// - Returns: Timestamp string in UTC timezone.
+    private func makeUTCTimestamp() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: dateProvider.now())
     }
 
     /// Runs all Doctor checks and returns a report.
@@ -210,11 +225,11 @@ public struct Doctor {
         // Check AeroSpace app
         var aerospaceAppLabel = "NOT FOUND"
         if aerospace.isAppInstalled() {
-            aerospaceAppLabel = ApAeroSpace.appPath
+            aerospaceAppLabel = aerospace.appPath ?? "FOUND"
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace.app installed",
-                detail: ApAeroSpace.appPath
+                detail: aerospace.appPath
             ))
         } else {
             findings.append(DoctorFinding(
@@ -367,7 +382,7 @@ public struct Doctor {
         }
 
         let metadata = DoctorMetadata(
-            timestamp: ISO8601DateFormatter().string(from: Date()),
+            timestamp: makeUTCTimestamp(),
             agentPanelVersion: "dev",
             macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             aerospaceApp: aerospaceAppLabel,

@@ -23,6 +23,8 @@ targets:
         PRODUCT_NAME: AgentPanel
         PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
         INFOPLIST_FILE: AgentPanelApp/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
 
   AgentPanelCore:
     type: framework.static
@@ -47,9 +49,24 @@ targets:
       base:
         PRODUCT_NAME: ap
 
+  AgentPanelCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AgentPanelCoreTests
+    dependencies:
+      - target: AgentPanelCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   AgentPanel:
     build:
       targets:
         AgentPanel: all
         AgentPanelCLI: all
+        AgentPanelCoreTests: [test]
+    test:
+      targets:
+        - AgentPanelCoreTests

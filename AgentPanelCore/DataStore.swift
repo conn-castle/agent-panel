@@ -1,28 +1,34 @@
 import Foundation
 
-/// Canonical filesystem locations used by AgentPanel.
-public struct AgentPanelPaths: Sendable {
+/// Canonical filesystem locations and data access for AgentPanel.
+///
+/// Currently provides path resolution. Future: read/write APIs for config, state, and logs.
+public struct DataStore: Sendable {
     /// User home directory used as the root for derived paths.
     public let homeDirectory: URL
 
-    /// Creates a paths container rooted at the provided home directory.
+    /// Creates a data store rooted at the provided home directory.
     /// - Parameter homeDirectory: Home directory as a file URL.
     public init(homeDirectory: URL) {
         precondition(homeDirectory.isFileURL, "homeDirectory must be a file URL")
         self.homeDirectory = homeDirectory.standardizedFileURL
     }
 
-    /// Creates a paths container rooted at the current user's home directory.
+    /// Creates a data store rooted at the current user's home directory.
     /// - Parameter fileManager: File manager used to resolve the home directory.
-    /// - Returns: A `AgentPanelPaths` instance rooted at the user's home directory.
-    public static func defaultPaths(fileManager: FileManager = .default) -> AgentPanelPaths {
-        AgentPanelPaths(homeDirectory: fileManager.homeDirectoryForCurrentUser)
+    /// - Returns: A `DataStore` instance rooted at the user's home directory.
+    public static func `default`(fileManager: FileManager = .default) -> DataStore {
+        DataStore(homeDirectory: fileManager.homeDirectoryForCurrentUser)
     }
+
+    // MARK: - Config paths
 
     /// Returns `~/.config/agent-panel/config.toml`.
     public var configFile: URL {
         configDirectory.appendingPathComponent("config.toml", isDirectory: false)
     }
+
+    // MARK: - State paths
 
     /// Returns `~/.local/state/agent-panel/vscode`.
     public var vscodeWorkspaceDirectory: URL {
@@ -41,6 +47,8 @@ public struct AgentPanelPaths: Sendable {
         stateDirectory.appendingPathComponent("state.json", isDirectory: false)
     }
 
+    // MARK: - Log paths
+
     /// Returns `~/.local/state/agent-panel/logs`.
     public var logsDirectory: URL {
         stateDirectory.appendingPathComponent("logs", isDirectory: true)
@@ -50,6 +58,8 @@ public struct AgentPanelPaths: Sendable {
     public var primaryLogFile: URL {
         logsDirectory.appendingPathComponent("agent-panel.log", isDirectory: false)
     }
+
+    // MARK: - Private
 
     private var configDirectory: URL {
         homeDirectory

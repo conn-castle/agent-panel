@@ -25,16 +25,17 @@ struct Onboarding {
         self.configManager = AeroSpaceConfigManager()
     }
 
-    /// Performs onboarding if needed.
-    /// - Returns: `.ready` if setup is complete, `.declined` if user chose to quit.
-    func runIfNeeded() -> OnboardingResult {
+    /// Performs onboarding if needed, calling completion when done.
+    /// - Parameter completion: Called with result on main thread.
+    func runIfNeeded(completion: @escaping (OnboardingResult) -> Void) {
         let needsAeroSpaceInstall = !aerospace.isAppInstalled()
         let needsConfigSetup = configManager.configStatus() != .managedByAgentPanel
 
         // If everything is set up, no onboarding needed
         guard needsAeroSpaceInstall || needsConfigSetup else {
             log(event: "onboarding.skipped", context: ["reason": "already_configured"])
-            return .ready
+            completion(.ready)
+            return
         }
 
         log(
@@ -49,15 +50,28 @@ struct Onboarding {
 
         guard userAccepted else {
             log(event: "onboarding.declined")
-            return .declined
+            completion(.declined)
+            return
         }
 
         log(event: "onboarding.accepted")
 
-        if performSetup(needsAeroSpaceInstall: needsAeroSpaceInstall) {
-            return .ready
-        } else {
-            return .declined
+        // Show progress window
+        let progressWindow = OnboardingProgressWindow(
+            message: needsAeroSpaceInstall
+                ? "Installing AeroSpace via Homebrew..."
+                : "Configuring AeroSpace..."
+        )
+        progressWindow.show()
+
+        // Run setup on background queue to avoid blocking main thread
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let success = self.performSetup(needsAeroSpaceInstall: needsAeroSpaceInstall)
+
+            DispatchQueue.main.async {
+                progressWindow.close()
+                completion(success ? .ready : .declined)
+            }
         }
     }
 
@@ -100,7 +114,9 @@ struct Onboarding {
             switch aerospace.installViaHomebrew() {
             case .failure(let error):
                 log(event: "onboarding.install_failed", context: ["error": error.message])
-                showErrorAlert(message: "Failed to install AeroSpace: \(error.message)")
+                DispatchQueue.main.sync {
+                    showErrorAlert(message: "Failed to install AeroSpace: \(error.message)")
+                }
                 return false
             case .success:
                 log(event: "onboarding.aerospace_installed")
@@ -112,7 +128,9 @@ struct Onboarding {
         switch configManager.writeSafeConfig() {
         case .failure(let error):
             log(event: "onboarding.config_failed", context: ["error": error.message])
-            showErrorAlert(message: "Failed to write AeroSpace config: \(error.message)")
+            DispatchQueue.main.sync {
+                showErrorAlert(message: "Failed to write AeroSpace config: \(error.message)")
+            }
             return false
         case .success:
             log(event: "onboarding.config_written")
@@ -145,5 +163,51 @@ struct Onboarding {
     /// Logs an onboarding event.
     private func log(event: String, context: [String: String]? = nil) {
         _ = logger.log(event: event, level: .info, message: nil, context: context)
+    }
+}
+
+// MARK: - Progress Window
+
+/// Simple progress window for onboarding with spinner.
+private final class OnboardingProgressWindow {
+    private let window: NSWindow
+    private let progressIndicator: NSProgressIndicator
+
+    init(message: String) {
+        let contentRect = NSRect(x: 0, y: 0, width: 400, height: 100)
+        window = NSWindow(
+            contentRect: contentRect,
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AgentPanel Setup"
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        let contentView = NSView(frame: contentRect)
+
+        let label = NSTextField(labelWithString: message)
+        label.frame = NSRect(x: 20, y: 50, width: 360, height: 30)
+        label.alignment = .center
+        contentView.addSubview(label)
+
+        progressIndicator = NSProgressIndicator()
+        progressIndicator.style = .spinning
+        progressIndicator.frame = NSRect(x: 180, y: 10, width: 40, height: 40)
+        progressIndicator.startAnimation(nil)
+        contentView.addSubview(progressIndicator)
+
+        window.contentView = contentView
+    }
+
+    func show() {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func close() {
+        progressIndicator.stopAnimation(nil)
+        window.close()
     }
 }

@@ -11,13 +11,49 @@ import Foundation
 
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
-    /// Default AeroSpace app path.
-    public static let appPath = "/Applications/AeroSpace.app"
+    /// AeroSpace bundle identifier for Launch Services lookups.
+    public static let bundleIdentifier = "bobko.aerospace"
 
-    private let commandRunner = ApSystemCommandRunner()
+    /// Legacy app path for fallback detection.
+    private static let legacyAppPath = "/Applications/AeroSpace.app"
+
+    /// Maximum time to wait for AeroSpace to become ready after launch.
+    private static let startupTimeoutSeconds: TimeInterval = 10.0
+
+    /// Interval between readiness checks during startup.
+    private static let readinessCheckInterval: TimeInterval = 0.25
+
+    private let commandRunner: ApSystemCommandRunner
+    private let appDiscovery: AppDiscovering
 
     /// Creates a new AeroSpace wrapper.
-    public init() {}
+    /// - Parameters:
+    ///   - commandRunner: Command runner for CLI operations.
+    ///   - appDiscovery: App discovery for installation checks.
+    public init(
+        commandRunner: ApSystemCommandRunner = ApSystemCommandRunner(),
+        appDiscovery: AppDiscovering = LaunchServicesAppDiscovery()
+    ) {
+        self.commandRunner = commandRunner
+        self.appDiscovery = appDiscovery
+    }
+
+    /// Returns the path to AeroSpace.app if installed.
+    /// Uses Launch Services to find the app by bundle ID, with fallback to legacy path.
+    public var appPath: String? {
+        // Try Launch Services first (handles all install locations)
+        if let url = appDiscovery.applicationURL(bundleIdentifier: Self.bundleIdentifier) {
+            return url.path
+        }
+        // Fallback for edge cases where Launch Services hasn't indexed yet
+        let legacyURL = URL(fileURLWithPath: Self.legacyAppPath, isDirectory: true)
+        var isDirectory = ObjCBool(false)
+        if FileManager.default.fileExists(atPath: legacyURL.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return Self.legacyAppPath
+        }
+        return nil
+    }
 
     // MARK: - App Lifecycle
 
@@ -42,17 +78,34 @@ public struct ApAeroSpace {
     /// Starts the AeroSpace application.
     /// - Returns: Success or an error.
     public func start() -> Result<Void, ApCoreError> {
-        switch commandRunner.run(executable: "open", arguments: ["-a", "AeroSpace"]) {
+        switch commandRunner.run(executable: "open", arguments: ["-a", "AeroSpace"], timeoutSeconds: 10) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
             guard result.exitCode == 0 else {
                 return .failure(commandError("open -a AeroSpace", result: result))
             }
-            // Brief delay to let the app start
-            Thread.sleep(forTimeInterval: 1.0)
-            return .success(())
+            // Poll for readiness instead of fixed sleep
+            return waitForReadiness()
         }
+    }
+
+    /// Waits for AeroSpace CLI to become responsive after launch.
+    /// - Returns: Success when CLI is available, or an error on timeout.
+    private func waitForReadiness() -> Result<Void, ApCoreError> {
+        let deadline = Date().addingTimeInterval(Self.startupTimeoutSeconds)
+
+        while Date() < deadline {
+            if isCliAvailable() {
+                return .success(())
+            }
+            Thread.sleep(forTimeInterval: Self.readinessCheckInterval)
+        }
+
+        return .failure(ApCoreError(
+            category: .aerospace,
+            message: "AeroSpace did not become ready within \(Self.startupTimeoutSeconds)s after launch."
+        ))
     }
 
     /// Reloads the AeroSpace configuration.
@@ -72,10 +125,7 @@ public struct ApAeroSpace {
     /// Returns true when AeroSpace.app is installed.
     /// - Returns: True if AeroSpace.app exists on disk.
     public func isAppInstalled() -> Bool {
-        let appURL = URL(fileURLWithPath: Self.appPath, isDirectory: true)
-        var isDirectory = ObjCBool(false)
-        let exists = FileManager.default.fileExists(atPath: appURL.path, isDirectory: &isDirectory)
-        return exists && isDirectory.boolValue
+        appPath != nil
     }
 
     /// Returns true when the aerospace CLI is available on PATH.

@@ -87,21 +87,21 @@ public struct AgentPanelLogger {
     private static let defaultMaxLogSizeBytes: UInt64 = 10 * 1024 * 1024
     private static let defaultMaxArchives: Int = 5
 
-    private let paths: AgentPanelPaths
+    private let dataStore: DataStore
     private let fileSystem: FileSystem
     private let maxLogSizeBytes: UInt64
     private let maxArchives: Int
 
     /// Creates a logger that writes to the default log path.
     /// - Parameters:
-    ///   - paths: File system paths for AgentPanel.
+    ///   - dataStore: Data store for AgentPanel paths.
     ///   - fileSystem: File system accessor.
     public init(
-        paths: AgentPanelPaths = .defaultPaths(),
+        dataStore: DataStore = .default(),
         fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.init(
-            paths: paths,
+            dataStore: dataStore,
             fileSystem: fileSystem,
             maxLogSizeBytes: AgentPanelLogger.defaultMaxLogSizeBytes,
             maxArchives: AgentPanelLogger.defaultMaxArchives
@@ -110,19 +110,19 @@ public struct AgentPanelLogger {
 
     /// Creates a logger with explicit rotation settings.
     /// - Parameters:
-    ///   - paths: File system paths for AgentPanel.
+    ///   - dataStore: Data store for AgentPanel paths.
     ///   - fileSystem: File system accessor.
     ///   - maxLogSizeBytes: Maximum size in bytes before rotation.
     ///   - maxArchives: Maximum number of rotated archives to keep.
     init(
-        paths: AgentPanelPaths,
+        dataStore: DataStore,
         fileSystem: FileSystem,
         maxLogSizeBytes: UInt64,
         maxArchives: Int
     ) {
         precondition(maxLogSizeBytes > 0, "maxLogSizeBytes must be positive")
         precondition(maxArchives > 0, "maxArchives must be positive")
-        self.paths = paths
+        self.dataStore = dataStore
         self.fileSystem = fileSystem
         self.maxLogSizeBytes = maxLogSizeBytes
         self.maxArchives = maxArchives
@@ -171,7 +171,7 @@ public struct AgentPanelLogger {
         }
 
         do {
-            try fileSystem.createDirectory(at: paths.logsDirectory)
+            try fileSystem.createDirectory(at: dataStore.logsDirectory)
         } catch {
             return .failure(.createDirectoryFailed(String(describing: error)))
         }
@@ -185,7 +185,7 @@ public struct AgentPanelLogger {
         }
 
         do {
-            try fileSystem.appendFile(at: paths.primaryLogFile, data: encodedLine)
+            try fileSystem.appendFile(at: dataStore.primaryLogFile, data: encodedLine)
         } catch {
             return .failure(.writeFailed(String(describing: error)))
         }
@@ -206,7 +206,7 @@ public struct AgentPanelLogger {
     /// - Parameter appendingBytes: Bytes that will be appended to the log.
     /// - Throws: Error when file inspection or rotation fails.
     private func rotateIfNeeded(appendingBytes: UInt64) throws {
-        let logURL = paths.primaryLogFile
+        let logURL = dataStore.primaryLogFile
         guard fileSystem.fileExists(at: logURL) else {
             return
         }
@@ -232,7 +232,7 @@ public struct AgentPanelLogger {
     /// Performs deterministic log rotation.
     /// - Throws: Error when rotation operations fail.
     private func rotateLogs() throws {
-        let logURL = paths.primaryLogFile
+        let logURL = dataStore.primaryLogFile
 
         if maxArchives > 0 {
             for index in stride(from: maxArchives, through: 1, by: -1) {
@@ -264,7 +264,7 @@ public struct AgentPanelLogger {
     /// - Parameter index: Archive index starting at 1.
     /// - Returns: Archive file URL.
     private func archiveURL(index: Int) -> URL {
-        paths.logsDirectory.appendingPathComponent("agent-panel.log.\(index)", isDirectory: false)
+        dataStore.logsDirectory.appendingPathComponent("agent-panel.log.\(index)", isDirectory: false)
     }
 }
 

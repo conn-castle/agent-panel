@@ -29,13 +29,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger: AgentPanelLogging = AgentPanelLogger()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Run onboarding check before setting up the app
+        // Run onboarding check asynchronously before setting up the app
         let onboarding = Onboarding(logger: logger)
-        if onboarding.runIfNeeded() == .declined {
-            NSApplication.shared.terminate(nil)
-            return
-        }
+        onboarding.runIfNeeded { [weak self] result in
+            guard let self else { return }
 
+            if result == .declined {
+                NSApplication.shared.terminate(nil)
+                return
+            }
+
+            self.completeAppSetup()
+        }
+    }
+
+    /// Completes app setup after onboarding succeeds.
+    private func completeAppSetup() {
         NSApp.setActivationPolicy(.accessory)
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "AP"
@@ -56,13 +65,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hotkeyManager = hotkeyManager
         updateHotkeyStatus(hotkeyManager.hotkeyRegistrationStatus())
 
-        let paths = AgentPanelPaths.defaultPaths()
+        let dataStore = DataStore.default()
         logAppEvent(
             event: "app.started",
             context: [
                 "version": AgentPanel.version,
-                "log_path": paths.primaryLogFile.path,
-                "config_path": paths.configFile.path
+                "log_path": dataStore.primaryLogFile.path,
+                "config_path": dataStore.configFile.path
             ]
         )
     }

@@ -6,7 +6,14 @@ public enum AgentPanel {
     public static let appBundleIdentifier: String = "com.agentpanel.AgentPanel"
 
     /// A human-readable version identifier for diagnostic output.
-    public static let version: String = "0.0.0-dev"
+    /// Reads from bundle when available, falls back to dev version for CLI.
+    public static var version: String {
+        if let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+           !bundleVersion.isEmpty {
+            return bundleVersion
+        }
+        return "0.0.0-dev"
+    }
 }
 
 /// Shared IDE token prefix used to tag new IDE windows.
@@ -76,7 +83,7 @@ public final class ApCore {
     /// Prints the raw config contents to stdout.
     /// - Returns: Success or an error.
     public func showConfig() -> Result<Void, ApCoreError> {
-        let configPath = AgentPanelPaths.defaultPaths().configFile
+        let configPath = DataStore.default().configFile
         if !FileManager.default.fileExists(atPath: configPath.path) {
             _ = ConfigLoader.loadDefault()
         }
@@ -103,11 +110,25 @@ public final class ApCore {
         chromeLauncher.openNewWindow(identifier: identifier)
     }
 
-    /// Creates a new AeroSpace workspace.
-    /// - Parameter name: Workspace name to create.
+    /// Creates a new AeroSpace workspace with the ap- prefix.
+    /// - Parameter name: Workspace name (without prefix). Normalized to lowercase with hyphens.
     /// - Returns: Success or an error.
     public func newWorkspace(name: String) -> Result<Void, ApCoreError> {
-        aerospace.createWorkspace(name)
+        // Normalize the name using the same rules as project IDs
+        let normalized = IdNormalizer.normalize(name)
+        guard !normalized.isEmpty else {
+            return .failure(validationError("Workspace name cannot be empty after normalization."))
+        }
+
+        // Ensure prefix is applied (avoid double-prefix)
+        let fullName: String
+        if normalized.hasPrefix(workspacePrefix) {
+            fullName = normalized
+        } else {
+            fullName = workspacePrefix + normalized
+        }
+
+        return aerospace.createWorkspace(fullName)
     }
 
     /// Lists all AP IDE window titles.
