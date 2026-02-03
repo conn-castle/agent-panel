@@ -7,23 +7,30 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		07E3E4F730B7615EF75C9244 /* config.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8C6F21D84F11D6120589F46 /* config.swift */; };
+		085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */; };
 		0B0B81A44C56E86D4A63D1FF /* apcore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A04409B6130FE7ADBA38A0C2 /* apcore.framework */; };
+		0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */; };
 		12E68FD3FABC4B15F2BDD930 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = D128E87BEFCFADE383A073B1 /* TOMLDecoder */; };
-		24035BB3B59123C1D2E521A1 /* dependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27EF33B0B89B421AF18A6156 /* dependencies.swift */; };
+		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
 		241EB99384E9D3E2868CD9DD /* apcore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A04409B6130FE7ADBA38A0C2 /* apcore.framework */; };
-		262E4E2BC329A07B5C027F8D /* paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9774F2F71CC610E28C03C0C2 /* paths.swift */; };
-		2B798A84AE1B39283C76831D /* logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = F72F4E458D697D8B8211F0D0 /* logger.swift */; };
 		2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
+		37B245B56B4EC6598380F485 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BBA8798F59731C282FFB4CE /* System.swift */; };
 		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
-		53FAE2D132EE7A318D20F1D6 /* apcore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3F2D7E662DA51A534FCB3C1 /* apcore.swift */; };
-		7D7B71DA2C9E3658C5450AAC /* doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDCD6C08816DB3B195351A0 /* doctor.swift */; };
+		4D4A8FCF868D8F58B72863CD /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42A2D1AB4A01091CA37C429C /* Paths.swift */; };
+		57131ACA3908154C6801C952 /* ApCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB4D7AE446B7CCF75AFF78C /* ApCore.swift */; };
+		5B73BEBB29C69355198F84C2 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059A660DC7D402DEA31F34B6 /* AeroSpaceConfigManager.swift */; };
+		6313492793A8255A222DED2F /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = F85021B40D37B244D8C978A4 /* ApAeroSpace.swift */; };
+		6C75BE6C1A65316450803073 /* DoctorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */; };
 		7DC1C1601A56E052686C1DE4 /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E3A7B3310CB0E1C8F26C8E4 /* AppKitIntegration.swift */; };
-		81DAD065D1B37F179A31C5EA /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */; };
-		A3E5C105A17B84778C1E101D /* system.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBF91B92F52982EA4FF587D9 /* system.swift */; };
-		C1C7A54A5D63DDF0DE6DF316 /* aerospace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B8868EEF2392C0C034C866 /* aerospace.swift */; };
+		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
+		A1122C4FDA1B2EBE2EC78FEC /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 202BB7AD471AAA21FD7A334E /* Config.swift */; };
+		AC6D21713A91687F7222F1D0 /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275380932E3F3C1D6DC000BF /* Doctor.swift */; };
+		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
+		BFAE8F5B61D444BF516C2C84 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E9B4E23DC22FCABC69FC3E /* Logger.swift */; };
+		C10366F48C9965BB03BA0531 /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC5866461144F670373BBD54 /* Errors.swift */; };
 		D65832D12C11B8E3DB712C3F /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */; };
 		DB32DC006C6D55CF3EF211BD /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 086E1EBAE36A964047A746A2 /* main.swift */; };
+		E6AECD862D4AF4498EFB5A5A /* Dependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A6EB77A1722ACCA7DE65F3 /* Dependencies.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,24 +51,31 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
+		059A660DC7D402DEA31F34B6 /* AeroSpaceConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceConfigManager.swift; sourceTree = "<group>"; };
 		086E1EBAE36A964047A746A2 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		1E3A7B3310CB0E1C8F26C8E4 /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
-		27EF33B0B89B421AF18A6156 /* dependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = dependencies.swift; sourceTree = "<group>"; };
+		202BB7AD471AAA21FD7A334E /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		275380932E3F3C1D6DC000BF /* Doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Doctor.swift; sourceTree = "<group>"; };
+		2BBA8798F59731C282FFB4CE /* System.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = System.swift; sourceTree = "<group>"; };
+		2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorWindowController.swift; sourceTree = "<group>"; };
 		33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPanelApp.swift; sourceTree = "<group>"; };
-		38B8868EEF2392C0C034C866 /* aerospace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = aerospace.swift; sourceTree = "<group>"; };
 		4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitIntegration.swift; sourceTree = "<group>"; };
+		42A2D1AB4A01091CA37C429C /* Paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paths.swift; sourceTree = "<group>"; };
+		46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */ = {isa = PBXFileReference; path = "aerospace-safe.toml"; sourceTree = "<group>"; };
 		488846A96DAD08F10E554D29 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		9774F2F71CC610E28C03C0C2 /* paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = paths.swift; sourceTree = "<group>"; };
+		81A6EB77A1722ACCA7DE65F3 /* Dependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dependencies.swift; sourceTree = "<group>"; };
+		8CB4D7AE446B7CCF75AFF78C /* ApCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCore.swift; sourceTree = "<group>"; };
 		A04409B6130FE7ADBA38A0C2 /* apcore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = apcore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		A8C6F21D84F11D6120589F46 /* config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = config.swift; sourceTree = "<group>"; };
-		B3F2D7E662DA51A534FCB3C1 /* apcore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = apcore.swift; sourceTree = "<group>"; };
+		A1E9B4E23DC22FCABC69FC3E /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		BC700F71F91521277C58EA20 /* AgentPanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC5866461144F670373BBD54 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
+		D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
+		D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
 		D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
-		EBF91B92F52982EA4FF587D9 /* system.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = system.swift; sourceTree = "<group>"; };
-		F72F4E458D697D8B8211F0D0 /* logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = logger.swift; sourceTree = "<group>"; };
-		FEDCD6C08816DB3B195351A0 /* doctor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = doctor.swift; sourceTree = "<group>"; };
+		F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherViews.swift; sourceTree = "<group>"; };
+		F85021B40D37B244D8C978A4 /* ApAeroSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApAeroSpace.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -92,6 +106,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1845F68E024C28647A040A43 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		29BF1CF4B055D961037D563F /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -107,9 +129,12 @@
 			children = (
 				33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */,
 				4078BF99FC38BB4090AEE334 /* AppKitIntegration.swift */,
+				2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */,
 				D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */,
 				6C8E9CF917B3E9C1AF573815 /* Info.plist */,
-				0546F5FD92A25AE0D06F844D /* SwitcherPanelController.swift */,
+				B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */,
+				1845F68E024C28647A040A43 /* Resources */,
+				EF65B4270E26D00E15F29526 /* Switcher */,
 			);
 			path = AgentPanelApp;
 			sourceTree = "<group>";
@@ -136,16 +161,36 @@
 		4613F07383862A48A320D91E /* apcore */ = {
 			isa = PBXGroup;
 			children = (
-				38B8868EEF2392C0C034C866 /* aerospace.swift */,
-				B3F2D7E662DA51A534FCB3C1 /* apcore.swift */,
-				A8C6F21D84F11D6120589F46 /* config.swift */,
-				27EF33B0B89B421AF18A6156 /* dependencies.swift */,
-				FEDCD6C08816DB3B195351A0 /* doctor.swift */,
-				F72F4E458D697D8B8211F0D0 /* logger.swift */,
-				9774F2F71CC610E28C03C0C2 /* paths.swift */,
-				EBF91B92F52982EA4FF587D9 /* system.swift */,
+				8CB4D7AE446B7CCF75AFF78C /* ApCore.swift */,
+				202BB7AD471AAA21FD7A334E /* Config.swift */,
+				81A6EB77A1722ACCA7DE65F3 /* Dependencies.swift */,
+				275380932E3F3C1D6DC000BF /* Doctor.swift */,
+				CC5866461144F670373BBD54 /* Errors.swift */,
+				A1E9B4E23DC22FCABC69FC3E /* Logger.swift */,
+				42A2D1AB4A01091CA37C429C /* Paths.swift */,
+				2BBA8798F59731C282FFB4CE /* System.swift */,
+				A77B2D9C40D44FDB8C9CC739 /* AeroSpace */,
 			);
 			path = apcore;
+			sourceTree = "<group>";
+		};
+		A77B2D9C40D44FDB8C9CC739 /* AeroSpace */ = {
+			isa = PBXGroup;
+			children = (
+				059A660DC7D402DEA31F34B6 /* AeroSpaceConfigManager.swift */,
+				F85021B40D37B244D8C978A4 /* ApAeroSpace.swift */,
+			);
+			path = AeroSpace;
+			sourceTree = "<group>";
+		};
+		EF65B4270E26D00E15F29526 /* Switcher */ = {
+			isa = PBXGroup;
+			children = (
+				D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */,
+				D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */,
+				F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */,
+			);
+			path = Switcher;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -156,6 +201,7 @@
 			buildConfigurationList = 5E0D620F87B3048326AA6EB0 /* Build configuration list for PBXNativeTarget "AgentPanel" */;
 			buildPhases = (
 				123D602003439CCF3D734EFE /* Sources */,
+				3D80DB9589795D8CB0C9F592 /* Resources */,
 				7555730D28ED00EA368BDB79 /* Frameworks */,
 			);
 			buildRules = (
@@ -241,6 +287,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		3D80DB9589795D8CB0C9F592 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		123D602003439CCF3D734EFE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -248,8 +305,12 @@
 			files = (
 				2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */,
 				D65832D12C11B8E3DB712C3F /* AppKitIntegration.swift in Sources */,
+				6C75BE6C1A65316450803073 /* DoctorWindowController.swift in Sources */,
 				4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */,
-				81DAD065D1B37F179A31C5EA /* SwitcherPanelController.swift in Sources */,
+				0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */,
+				19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */,
+				84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */,
+				085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,14 +327,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C1C7A54A5D63DDF0DE6DF316 /* aerospace.swift in Sources */,
-				53FAE2D132EE7A318D20F1D6 /* apcore.swift in Sources */,
-				07E3E4F730B7615EF75C9244 /* config.swift in Sources */,
-				24035BB3B59123C1D2E521A1 /* dependencies.swift in Sources */,
-				7D7B71DA2C9E3658C5450AAC /* doctor.swift in Sources */,
-				2B798A84AE1B39283C76831D /* logger.swift in Sources */,
-				262E4E2BC329A07B5C027F8D /* paths.swift in Sources */,
-				A3E5C105A17B84778C1E101D /* system.swift in Sources */,
+				5B73BEBB29C69355198F84C2 /* AeroSpaceConfigManager.swift in Sources */,
+				6313492793A8255A222DED2F /* ApAeroSpace.swift in Sources */,
+				57131ACA3908154C6801C952 /* ApCore.swift in Sources */,
+				A1122C4FDA1B2EBE2EC78FEC /* Config.swift in Sources */,
+				E6AECD862D4AF4498EFB5A5A /* Dependencies.swift in Sources */,
+				AC6D21713A91687F7222F1D0 /* Doctor.swift in Sources */,
+				C10366F48C9965BB03BA0531 /* Errors.swift in Sources */,
+				BFAE8F5B61D444BF516C2C84 /* Logger.swift in Sources */,
+				4D4A8FCF868D8F58B72863CD /* Paths.swift in Sources */,
+				37B245B56B4EC6598380F485 /* System.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -3,55 +3,12 @@ import TOMLDecoder
 
 // MARK: - Config Models
 
-/// Supported IDE identifiers for AgentPanel.
-public enum IdeKind: String, CaseIterable, Equatable, Sendable {
-    case vscode
-    case antigravity
-}
-
 /// Full parsed configuration for AgentPanel.
 public struct Config: Equatable, Sendable {
-    public let global: GlobalConfig
-    public let ide: IdeConfig
     public let projects: [ProjectConfig]
 
-    public init(global: GlobalConfig, ide: IdeConfig, projects: [ProjectConfig]) {
-        self.global = global
-        self.ide = ide
+    public init(projects: [ProjectConfig]) {
         self.projects = projects
-    }
-}
-
-/// Global configuration values.
-public struct GlobalConfig: Equatable, Sendable {
-    public let defaultIde: IdeKind
-    public let globalChromeUrls: [String]
-
-    public init(defaultIde: IdeKind, globalChromeUrls: [String]) {
-        self.defaultIde = defaultIde
-        self.globalChromeUrls = globalChromeUrls
-    }
-}
-
-/// IDE configuration values for supported IDEs.
-public struct IdeConfig: Equatable, Sendable {
-    public let vscode: IdeAppConfig?
-    public let antigravity: IdeAppConfig?
-
-    public init(vscode: IdeAppConfig?, antigravity: IdeAppConfig?) {
-        self.vscode = vscode
-        self.antigravity = antigravity
-    }
-}
-
-/// IDE app configuration details.
-public struct IdeAppConfig: Equatable, Sendable {
-    public let appPath: String?
-    public let bundleId: String?
-
-    public init(appPath: String?, bundleId: String?) {
-        self.appPath = appPath
-        self.bundleId = bundleId
     }
 }
 
@@ -60,27 +17,81 @@ public struct ProjectConfig: Equatable, Sendable {
     public let id: String
     public let name: String
     public let path: String
-    public let colorHex: String
-    public let ide: IdeKind
-    public let chromeUrls: [String]
-    public let chromeProfileDirectory: String?
+    public let color: String
+    public let useAgentLayer: Bool
 
-    public init(
-        id: String,
-        name: String,
-        path: String,
-        colorHex: String,
-        ide: IdeKind,
-        chromeUrls: [String],
-        chromeProfileDirectory: String?
-    ) {
+    public init(id: String, name: String, path: String, color: String, useAgentLayer: Bool) {
         self.id = id
         self.name = name
         self.path = path
-        self.colorHex = colorHex
-        self.ide = ide
-        self.chromeUrls = chromeUrls
-        self.chromeProfileDirectory = chromeProfileDirectory
+        self.color = color
+        self.useAgentLayer = useAgentLayer
+    }
+}
+
+/// RGB components for named project colors.
+public struct ProjectColorRGB: Equatable, Sendable {
+    public let red: Double
+    public let green: Double
+    public let blue: Double
+
+    public init(red: Double, green: Double, blue: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+}
+
+/// Supported named colors for project color values.
+public enum ProjectColorPalette {
+    public static let named: [String: ProjectColorRGB] = [
+        "black": ProjectColorRGB(red: 0.0, green: 0.0, blue: 0.0),
+        "blue": ProjectColorRGB(red: 0.0, green: 0.0, blue: 1.0),
+        "brown": ProjectColorRGB(red: 0.6471, green: 0.1647, blue: 0.1647),
+        "cyan": ProjectColorRGB(red: 0.0, green: 1.0, blue: 1.0),
+        "gray": ProjectColorRGB(red: 0.5020, green: 0.5020, blue: 0.5020),
+        "grey": ProjectColorRGB(red: 0.5020, green: 0.5020, blue: 0.5020),
+        "green": ProjectColorRGB(red: 0.0, green: 0.5020, blue: 0.0),
+        "indigo": ProjectColorRGB(red: 0.2941, green: 0.0, blue: 0.5098),
+        "orange": ProjectColorRGB(red: 1.0, green: 0.6471, blue: 0.0),
+        "pink": ProjectColorRGB(red: 1.0, green: 0.7529, blue: 0.7961),
+        "purple": ProjectColorRGB(red: 0.5020, green: 0.0, blue: 0.5020),
+        "red": ProjectColorRGB(red: 1.0, green: 0.0, blue: 0.0),
+        "teal": ProjectColorRGB(red: 0.0, green: 0.5020, blue: 0.5020),
+        "white": ProjectColorRGB(red: 1.0, green: 1.0, blue: 1.0),
+        "yellow": ProjectColorRGB(red: 1.0, green: 1.0, blue: 0.0)
+    ]
+
+    public static let sortedNames: [String] = named.keys.sorted()
+
+    /// Resolves a color string (hex or named) to RGB components.
+    /// - Parameter value: A hex color (#RRGGBB) or named color string.
+    /// - Returns: RGB components if valid, nil otherwise.
+    public static func resolve(_ value: String) -> ProjectColorRGB? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let hex = parseHex(trimmed) {
+            return hex
+        }
+
+        return named[trimmed.lowercased()]
+    }
+
+    /// Parses a hex color string (#RRGGBB) to RGB components.
+    private static func parseHex(_ value: String) -> ProjectColorRGB? {
+        guard value.count == 7, value.hasPrefix("#") else {
+            return nil
+        }
+
+        let hexDigits = String(value.dropFirst())
+        guard let intValue = Int(hexDigits, radix: 16) else {
+            return nil
+        }
+
+        let red = Double((intValue >> 16) & 0xFF) / 255.0
+        let green = Double((intValue >> 8) & 0xFF) / 255.0
+        let blue = Double(intValue & 0xFF) / 255.0
+        return ProjectColorRGB(red: red, green: green, blue: blue)
     }
 }
 
@@ -101,24 +112,12 @@ public struct ConfigLoadResult: Equatable, Sendable {
     public let config: Config?
     /// Findings from parsing (warnings and errors).
     public let findings: [ConfigFinding]
-    /// IDE kinds actually used by projects.
-    public let effectiveIdeKinds: Set<IdeKind>
-    /// IDE config section (for app discovery).
-    public let ideConfig: IdeConfig
     /// Parsed projects (may be partial on error).
     public let projects: [ProjectConfig]
 
-    public init(
-        config: Config?,
-        findings: [ConfigFinding],
-        effectiveIdeKinds: Set<IdeKind>,
-        ideConfig: IdeConfig,
-        projects: [ProjectConfig]
-    ) {
+    public init(config: Config?, findings: [ConfigFinding], projects: [ProjectConfig]) {
         self.config = config
         self.findings = findings
-        self.effectiveIdeKinds = effectiveIdeKinds
-        self.ideConfig = ideConfig
         self.projects = projects
     }
 }
@@ -147,20 +146,41 @@ public struct ConfigFinding: Equatable, Sendable {
 
 /// Loads and parses the AgentPanel configuration file.
 public struct ConfigLoader {
-    private static let configRelativePath = ".config/agent-panel/config.toml"
+    private static let starterConfigTemplate = """
+# AgentPanel configuration
+#
+# Each [[project]] entry describes one local git repo.
+# - name: Display name (id is derived by lowercasing and replacing non [a-z0-9] with '-')
+# - path: Absolute path to the repo on this machine
+# - color: "#RRGGBB" or a named color (\(ProjectColorPalette.sortedNames.joined(separator: ", ")))
+# - useAgentLayer: true if the repo uses an .agent-layer folder
+#
+# Example:
+# [[project]]
+# name = "AgentPanel"
+# path = "/Users/you/src/agent-panel"
+# color = "indigo"
+# useAgentLayer = true
+"""
 
     /// Loads and parses the default config file.
     public static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
-        let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(configRelativePath)
+        let url = AgentPanelPaths.defaultPaths().configFile
         return load(from: url)
     }
 
     /// Loads and parses a config file at the given URL.
     public static func load(from url: URL) -> Result<ConfigLoadResult, ConfigError> {
         let path = url.path
-        guard FileManager.default.fileExists(atPath: path) else {
-            return .failure(ConfigError(message: "Config file not found at \(path)"))
+        if !FileManager.default.fileExists(atPath: path) {
+            do {
+                try createStarterConfig(at: url)
+            } catch {
+                return .failure(ConfigError(message: "Failed to create config at \(path): \(error.localizedDescription)"))
+            }
+            return .failure(ConfigError(
+                message: "Config file not found. Created a starter config at \(path). Edit it to add projects."
+            ))
         }
 
         let raw: String
@@ -171,6 +191,13 @@ public struct ConfigLoader {
         }
 
         return .success(ConfigParser.parse(toml: raw))
+    }
+
+    /// Writes a starter config template at the provided location.
+    private static func createStarterConfig(at url: URL) throws {
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try starterConfigTemplate.write(to: url, atomically: true, encoding: .utf8)
     }
 }
 
@@ -193,8 +220,6 @@ struct ConfigParser {
                         fix: "Fix the TOML syntax in config.toml."
                     )
                 ],
-                effectiveIdeKinds: [],
-                ideConfig: IdeConfig(vscode: nil, antigravity: nil),
                 projects: []
             )
         }
@@ -202,190 +227,28 @@ struct ConfigParser {
 
     private static func parse(table: TOMLTable) -> ConfigLoadResult {
         var findings: [ConfigFinding] = []
-        var effectiveIdeKinds = Set<IdeKind>()
 
-        let globalOutcome = parseGlobal(table: table, findings: &findings)
-        let ideOutcome = parseIdeConfig(table: table, findings: &findings)
-        let projectOutcomes = parseProjects(
-            table: table,
-            defaultIde: globalOutcome.defaultIde,
-            findings: &findings
-        )
-
-        for outcome in projectOutcomes {
-            if let ide = outcome.effectiveIde {
-                effectiveIdeKinds.insert(ide)
-            }
-        }
-
-        let validationFailed = findings.contains { $0.severity == .fail }
+        let projectOutcomes = parseProjects(table: table, findings: &findings)
         let parsedProjects = projectOutcomes.compactMap { $0.config }
 
-        let config: Config?
-        if validationFailed {
-            config = nil
-        } else if let global = globalOutcome.config {
-            config = Config(global: global, ide: ideOutcome, projects: parsedProjects)
-        } else {
-            config = nil
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "Config defaults incomplete",
-                detail: "Global defaults could not be resolved.",
-                fix: "Ensure global.defaultIde is valid."
-            ))
-        }
+        let validationFailed = findings.contains { $0.severity == .fail }
+        let config: Config? = validationFailed ? nil : Config(projects: parsedProjects)
 
         return ConfigLoadResult(
             config: config,
             findings: findings,
-            effectiveIdeKinds: effectiveIdeKinds,
-            ideConfig: ideOutcome,
             projects: parsedProjects
         )
-    }
-
-    // MARK: - Global Parsing
-
-    private struct GlobalOutcome {
-        let config: GlobalConfig?
-        let defaultIde: IdeKind?
-    }
-
-    private static func parseGlobal(table: TOMLTable, findings: inout [ConfigFinding]) -> GlobalOutcome {
-        var defaultIde: IdeKind?
-        var globalChromeUrls: [String]?
-
-        if table.contains(key: "global") {
-            guard let globalTable = try? table.table(forKey: "global") else {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "global must be a table",
-                    fix: "Replace global with a TOML table: [global]"
-                ))
-                return GlobalOutcome(config: nil, defaultIde: nil)
-            }
-
-            if let rawDefaultIde = try? globalTable.string(forKey: "defaultIde") {
-                if let ide = IdeKind(rawValue: rawDefaultIde) {
-                    defaultIde = ide
-                } else {
-                    findings.append(ConfigFinding(
-                        severity: .fail,
-                        title: "global.defaultIde is invalid",
-                        detail: "Value must be one of: vscode, antigravity.",
-                        fix: "Set global.defaultIde to \"vscode\" or \"antigravity\"."
-                    ))
-                }
-            } else if !globalTable.contains(key: "defaultIde") {
-                defaultIde = .vscode
-                findings.append(ConfigFinding(
-                    severity: .warn,
-                    title: "Default applied: global.defaultIde = \"vscode\"",
-                    fix: "Add global.defaultIde to config.toml to make the default explicit."
-                ))
-            }
-
-            if let array = try? globalTable.array(forKey: "globalChromeUrls") {
-                var urls: [String] = []
-                for i in 0..<array.count {
-                    if let url = try? array.string(atIndex: i) {
-                        urls.append(url)
-                    }
-                }
-                globalChromeUrls = urls
-            } else if !globalTable.contains(key: "globalChromeUrls") {
-                globalChromeUrls = []
-                findings.append(ConfigFinding(
-                    severity: .warn,
-                    title: "Default applied: global.globalChromeUrls = []",
-                    fix: "Add global.globalChromeUrls to config.toml to make the default explicit."
-                ))
-            }
-        } else {
-            defaultIde = .vscode
-            globalChromeUrls = []
-            findings.append(ConfigFinding(
-                severity: .warn,
-                title: "Default applied: global.defaultIde = \"vscode\"",
-                fix: "Add [global] with defaultIde to config.toml."
-            ))
-            findings.append(ConfigFinding(
-                severity: .warn,
-                title: "Default applied: global.globalChromeUrls = []",
-                fix: "Add [global] with globalChromeUrls to config.toml."
-            ))
-        }
-
-        let config: GlobalConfig?
-        if let defaultIde, let globalChromeUrls {
-            config = GlobalConfig(defaultIde: defaultIde, globalChromeUrls: globalChromeUrls)
-        } else {
-            config = nil
-        }
-
-        return GlobalOutcome(config: config, defaultIde: defaultIde)
-    }
-
-    // MARK: - IDE Config Parsing
-
-    private static func parseIdeConfig(table: TOMLTable, findings: inout [ConfigFinding]) -> IdeConfig {
-        var vscodeConfig: IdeAppConfig?
-        var antigravityConfig: IdeAppConfig?
-
-        if table.contains(key: "ide") {
-            guard let ideTable = try? table.table(forKey: "ide") else {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "ide must be a table",
-                    fix: "Replace ide with a TOML table: [ide]"
-                ))
-                return IdeConfig(vscode: nil, antigravity: nil)
-            }
-
-            if ideTable.contains(key: "vscode") {
-                vscodeConfig = parseIdeAppConfig(parent: ideTable, key: "vscode", prefix: "ide.vscode", findings: &findings)
-            }
-
-            if ideTable.contains(key: "antigravity") {
-                antigravityConfig = parseIdeAppConfig(parent: ideTable, key: "antigravity", prefix: "ide.antigravity", findings: &findings)
-            }
-        }
-
-        return IdeConfig(vscode: vscodeConfig, antigravity: antigravityConfig)
-    }
-
-    private static func parseIdeAppConfig(
-        parent: TOMLTable,
-        key: String,
-        prefix: String,
-        findings: inout [ConfigFinding]
-    ) -> IdeAppConfig? {
-        guard let appTable = try? parent.table(forKey: key) else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "\(prefix) must be a table",
-                fix: "Replace \(prefix) with a TOML table."
-            ))
-            return nil
-        }
-
-        let appPath = try? appTable.string(forKey: "appPath")
-        let bundleId = try? appTable.string(forKey: "bundleId")
-
-        return IdeAppConfig(appPath: appPath, bundleId: bundleId)
     }
 
     // MARK: - Project Parsing
 
     private struct ProjectOutcome {
         let config: ProjectConfig?
-        let effectiveIde: IdeKind?
     }
 
     private static func parseProjects(
         table: TOMLTable,
-        defaultIde: IdeKind?,
         findings: inout [ConfigFinding]
     ) -> [ProjectOutcome] {
         guard table.contains(key: "project") else {
@@ -425,14 +288,13 @@ struct ConfigParser {
                     title: "project[\(index)] must be a table",
                     fix: "Ensure each [[project]] entry is a TOML table."
                 ))
-                outcomes.append(ProjectOutcome(config: nil, effectiveIde: nil))
+                outcomes.append(ProjectOutcome(config: nil))
                 continue
             }
 
             let outcome = parseProject(
                 table: projectTable,
                 index: index,
-                defaultIde: defaultIde,
                 seenIds: &seenIds,
                 findings: &findings
             )
@@ -445,202 +307,131 @@ struct ConfigParser {
     private static func parseProject(
         table: TOMLTable,
         index: Int,
-        defaultIde: IdeKind?,
         seenIds: inout [String: Int],
         findings: inout [ConfigFinding]
     ) -> ProjectOutcome {
         var projectIsValid = true
 
-        // Required fields
-        let id = try? table.string(forKey: "id")
-        let name = try? table.string(forKey: "name")
-        let path = try? table.string(forKey: "path")
-        let colorHex = try? table.string(forKey: "colorHex")
+        let name = readNonEmptyString(
+            from: table,
+            key: "name",
+            label: "project[\(index)].name",
+            findings: &findings
+        )
+        let path = readNonEmptyString(
+            from: table,
+            key: "path",
+            label: "project[\(index)].path",
+            findings: &findings
+        )
+        let color = readNonEmptyString(
+            from: table,
+            key: "color",
+            label: "project[\(index)].color",
+            findings: &findings
+        )
+        let useAgentLayer = readBool(
+            from: table,
+            key: "useAgentLayer",
+            label: "project[\(index)].useAgentLayer",
+            findings: &findings
+        )
 
-        // ID validation
-        if let id {
-            if id == "inbox" {
+        // Name validation + id derivation
+        var derivedId: String?
+        if let name {
+            let normalized = normalizeProjectId(name)
+            if normalized.isEmpty {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].name cannot derive an id",
+                    detail: "Normalized id was empty after removing invalid characters.",
+                    fix: "Use a name with letters or numbers so an id can be derived."
+                ))
+                projectIsValid = false
+            } else if normalized == "inbox" {
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].id is reserved",
                     detail: "The id 'inbox' is reserved.",
-                    fix: "Choose a different project id."
+                    fix: "Choose a different project name so the derived id is not 'inbox'."
                 ))
                 projectIsValid = false
-            } else if !isValidProjectId(id) {
+            } else if let existingIndex = seenIds[normalized] {
                 findings.append(ConfigFinding(
                     severity: .fail,
-                    title: "project[\(index)].id is invalid",
-                    detail: "Project ids must match ^[a-z0-9-]+$.",
-                    fix: "Use lowercase letters, numbers, and hyphens only."
-                ))
-                projectIsValid = false
-            } else if let existingIndex = seenIds[id] {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "Duplicate project.id: \(id)",
-                    detail: "Found at indexes \(existingIndex) and \(index).",
-                    fix: "Ensure each project.id is unique."
+                    title: "Duplicate project.id: \(normalized)",
+                    detail: "Derived from project indexes \(existingIndex) and \(index).",
+                    fix: "Ensure project names normalize to unique ids."
                 ))
                 projectIsValid = false
             } else {
-                seenIds[id] = index
+                derivedId = normalized
+                seenIds[normalized] = index
             }
         } else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "project[\(index)].id is missing",
-                fix: "Set project.id to a unique value."
-            ))
-            projectIsValid = false
-        }
-
-        // Name validation
-        if let name {
-            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "project[\(index)].name is empty",
-                    fix: "Set project.name to a non-empty string."
-                ))
-                projectIsValid = false
-            }
-        } else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "project[\(index)].name is missing",
-                fix: "Set project.name to a non-empty string."
-            ))
-            projectIsValid = false
-        }
-
-        // Path validation
-        if let path {
-            if path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "project[\(index)].path is empty",
-                    fix: "Set project.path to an existing directory."
-                ))
-                projectIsValid = false
-            }
-        } else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "project[\(index)].path is missing",
-                fix: "Set project.path to an existing directory."
-            ))
             projectIsValid = false
         }
 
         // Color validation
-        if let colorHex {
-            if !isValidColorHex(colorHex) {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "project[\(index)].colorHex is invalid",
-                    detail: "Color must match #RRGGBB.",
-                    fix: "Set project.colorHex to a valid hex color like #7C3AED."
-                ))
-                projectIsValid = false
-            }
-        } else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "project[\(index)].colorHex is missing",
-                fix: "Set project.colorHex to a valid hex color like #7C3AED."
-            ))
-            projectIsValid = false
-        }
-
-        // IDE resolution
-        var resolvedIde: IdeKind?
-        if let rawIde = try? table.string(forKey: "ide") {
-            if let ide = IdeKind(rawValue: rawIde) {
-                resolvedIde = ide
+        var normalizedColor: String?
+        if let color {
+            let trimmed = color.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isValidColorHex(trimmed) {
+                normalizedColor = trimmed
             } else {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "project[\(index)].ide is invalid",
-                    detail: "Value must be one of: vscode, antigravity.",
-                    fix: "Set project.ide to \"vscode\" or \"antigravity\"."
-                ))
-                projectIsValid = false
-            }
-        } else if let defaultIde {
-            resolvedIde = defaultIde
-            findings.append(ConfigFinding(
-                severity: .warn,
-                title: "Default applied: project[\(index)].ide = \"\(defaultIde.rawValue)\"",
-                fix: "Add project.ide to config.toml to make the default explicit."
-            ))
-        } else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "project[\(index)].ide is unresolved",
-                fix: "Set project.ide explicitly or ensure global.defaultIde is valid."
-            ))
-            projectIsValid = false
-        }
-
-        // Chrome URLs
-        var chromeUrls: [String] = []
-        if let array = try? table.array(forKey: "chromeUrls") {
-            for i in 0..<array.count {
-                if let url = try? array.string(atIndex: i) {
-                    chromeUrls.append(url)
+                let lowercased = trimmed.lowercased()
+                if ProjectColorPalette.named.keys.contains(lowercased) {
+                    normalizedColor = lowercased
+                } else {
+                    findings.append(ConfigFinding(
+                        severity: .fail,
+                        title: "project[\(index)].color is invalid",
+                        detail: "Color must be #RRGGBB or a named color.",
+                        fix: "Use a hex color or one of: \(ProjectColorPalette.sortedNames.joined(separator: ", "))."
+                    ))
+                    projectIsValid = false
                 }
             }
-        } else if !table.contains(key: "chromeUrls") {
-            findings.append(ConfigFinding(
-                severity: .warn,
-                title: "Default applied: project[\(index)].chromeUrls = []",
-                fix: "Add project.chromeUrls to config.toml if you want to override."
-            ))
+        } else {
+            projectIsValid = false
         }
 
-        // Chrome profile directory
-        var chromeProfileDirectory: String?
-        if let dir = try? table.string(forKey: "chromeProfileDirectory") {
-            if dir.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                findings.append(ConfigFinding(
-                    severity: .fail,
-                    title: "project[\(index)].chromeProfileDirectory is empty",
-                    fix: "Set project.chromeProfileDirectory to a non-empty value."
-                ))
-                projectIsValid = false
-            } else {
-                chromeProfileDirectory = dir
-            }
+        guard let name, let path, let normalizedColor, let useAgentLayer, let derivedId, projectIsValid else {
+            return ProjectOutcome(config: nil)
         }
 
-        // Build project config if valid
-        if projectIsValid,
-           let id,
-           let name,
-           let path,
-           let colorHex,
-           let resolvedIde {
-            let projectConfig = ProjectConfig(
-                id: id,
-                name: name,
-                path: path,
-                colorHex: colorHex,
-                ide: resolvedIde,
-                chromeUrls: chromeUrls,
-                chromeProfileDirectory: chromeProfileDirectory
-            )
-            return ProjectOutcome(config: projectConfig, effectiveIde: resolvedIde)
-        }
-
-        return ProjectOutcome(config: nil, effectiveIde: resolvedIde)
+        let projectConfig = ProjectConfig(
+            id: derivedId,
+            name: name,
+            path: path,
+            color: normalizedColor,
+            useAgentLayer: useAgentLayer
+        )
+        return ProjectOutcome(config: projectConfig)
     }
 
     // MARK: - Validation Helpers
 
-    private static func isValidProjectId(_ value: String) -> Bool {
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789-")
-        return !value.isEmpty && value.rangeOfCharacter(from: allowed.inverted) == nil
+    /// Normalizes a project name into a stable id (lowercased, non-alphanumerics replaced with hyphens).
+    private static func normalizeProjectId(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        var normalized = ""
+        var previousWasHyphen = false
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
+
+        for scalar in trimmed.lowercased().unicodeScalars {
+            if allowed.contains(scalar) {
+                normalized.unicodeScalars.append(scalar)
+                previousWasHyphen = false
+            } else if !previousWasHyphen {
+                normalized.append("-")
+                previousWasHyphen = true
+            }
+        }
+
+        let hyphenSet = CharacterSet(charactersIn: "-")
+        return normalized.trimmingCharacters(in: hyphenSet)
     }
 
     private static func isValidColorHex(_ value: String) -> Bool {
@@ -656,5 +447,71 @@ struct ConfigParser {
                 return false
             }
         }
+    }
+
+    /// Reads a required non-empty string value or records a failure.
+    private static func readNonEmptyString(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> String? {
+        if !table.contains(key: key) {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) is missing",
+                fix: "Set \(label) to a non-empty string."
+            ))
+            return nil
+        }
+
+        guard let value = try? table.string(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be a string",
+                fix: "Set \(label) to a non-empty string."
+            ))
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) is empty",
+                fix: "Set \(label) to a non-empty string."
+            ))
+            return nil
+        }
+
+        return trimmed
+    }
+
+    /// Reads a required boolean value or records a failure.
+    private static func readBool(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Bool? {
+        if !table.contains(key: key) {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) is missing",
+                fix: "Set \(label) to true or false."
+            ))
+            return nil
+        }
+
+        guard let value = try? table.bool(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be a boolean",
+                fix: "Set \(label) to true or false."
+            ))
+            return nil
+        }
+
+        return value
     }
 }

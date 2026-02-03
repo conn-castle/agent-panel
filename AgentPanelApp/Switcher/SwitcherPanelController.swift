@@ -1,6 +1,18 @@
+//
+//  SwitcherPanelController.swift
+//  AgentPanel
+//
+//  Core controller for the project switcher panel.
+//  Manages panel lifecycle, keyboard navigation, project filtering,
+//  and selection handling. Coordinates with SwitcherSession for logging
+//  and SwitcherViews for rendering.
+//
+
 import AppKit
 
 import apcore
+
+// MARK: - Supporting Types
 
 /// Source of a switcher presentation request.
 enum SwitcherPresentationSource: String {
@@ -17,13 +29,34 @@ enum SwitcherDismissReason: String {
     case unknown
 }
 
+/// Timing constants for switcher behavior.
 private enum SwitcherTiming {
     static let visibilityCheckDelaySeconds: TimeInterval = 0.15
 }
 
+/// Visual severity level for status messages.
+private enum StatusLevel: Equatable {
+    case info
+    case warning
+    case error
+
+    var textColor: NSColor {
+        switch self {
+        case .info:
+            return .secondaryLabelColor
+        case .warning:
+            return .systemOrange
+        case .error:
+            return .systemRed
+        }
+    }
+}
+
+// MARK: - Controller
+
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
 final class SwitcherPanelController: NSObject {
-    private let logger: AgentPanelLogging
+    private let session: SwitcherSession
 
     private let panel: SwitcherPanel
     private let searchField: NSSearchField
@@ -33,18 +66,17 @@ final class SwitcherPanelController: NSObject {
     private var allProjects: [ProjectConfig] = []
     private var filteredProjects: [ProjectConfig] = []
     private var configErrorMessage: String?
-    private var switcherSessionId: String?
-    private var sessionOrigin: SwitcherPresentationSource = .unknown
     private var lastFilterQuery: String = ""
     private var lastStatusMessage: String?
     private var lastStatusLevel: StatusLevel?
     private var expectsVisible: Bool = false
     private var pendingVisibilityCheckToken: UUID?
+    private var previouslyActiveApp: NSRunningApplication?
 
     /// Creates a switcher panel controller.
     /// - Parameter logger: Logger used for switcher diagnostics.
     init(logger: AgentPanelLogging = AgentPanelLogger()) {
-        self.logger = logger
+        self.session = SwitcherSession(logger: logger)
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
@@ -65,6 +97,8 @@ final class SwitcherPanelController: NSObject {
         layoutContent()
     }
 
+    // MARK: - Public Interface
+
     /// Toggles the switcher panel visibility.
     func toggle(origin: SwitcherPresentationSource = .unknown) {
         if panel.isVisible {
@@ -76,10 +110,11 @@ final class SwitcherPanelController: NSObject {
 
     /// Shows the switcher panel and resets transient state.
     func show(origin: SwitcherPresentationSource = .unknown) {
+        previouslyActiveApp = NSWorkspace.shared.frontmostApplication
         resetState()
         expectsVisible = true
-        beginSession(origin: origin)
-        logShowRequested(origin: origin)
+        session.begin(origin: origin)
+        session.logShowRequested(origin: origin)
         showPanel()
         loadProjects()
         applyFilter(query: "")
@@ -89,20 +124,13 @@ final class SwitcherPanelController: NSObject {
     /// Dismisses the switcher panel and clears transient state.
     func dismiss(reason: SwitcherDismissReason = .unknown) {
         expectsVisible = false
-        endSession(reason: reason)
+        session.end(reason: reason)
         panel.orderOut(nil)
+        restorePreviousFocus()
         resetState()
     }
 
-    /// Returns the panel visibility for tests.
-    func isPanelVisibleForTesting() -> Bool {
-        panel.isVisible
-    }
-
-    /// Returns the panel collection behavior for tests.
-    func panelCollectionBehaviorForTesting() -> NSWindow.CollectionBehavior {
-        panel.collectionBehavior
-    }
+    // MARK: - Private Configuration
 
     /// Configures the switcher panel presentation behavior.
     private func configurePanel() {
@@ -178,6 +206,45 @@ final class SwitcherPanelController: NSObject {
         ])
     }
 
+    // MARK: - State Management
+
+    /// Resets query, selection, and status labels.
+    private func resetState() {
+        allProjects = []
+        searchField.stringValue = ""
+        searchField.isEnabled = true
+        searchField.isEditable = true
+        configErrorMessage = nil
+        filteredProjects = []
+        tableView.isEnabled = true
+        lastFilterQuery = ""
+        lastStatusMessage = nil
+        lastStatusLevel = nil
+        tableView.reloadData()
+        tableView.deselectAll(nil)
+        clearStatus()
+    }
+
+    /// Restores focus to the app that was active before the switcher was shown.
+    private func restorePreviousFocus() {
+        guard let previousApp = previouslyActiveApp else {
+            return
+        }
+        previousApp.activate()
+        previouslyActiveApp = nil
+    }
+
+    /// Shows the panel and focuses the search field.
+    private func showPanel() {
+        panel.center()
+        NSApp.activate(ignoringOtherApps: true)
+        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
+        panel.makeFirstResponder(searchField)
+    }
+
+    // MARK: - Project Loading
+
     /// Loads projects from config and surfaces warnings or failures.
     private func loadProjects() {
         switch ConfigLoader.loadDefault() {
@@ -186,7 +253,7 @@ final class SwitcherPanelController: NSObject {
             filteredProjects = []
             configErrorMessage = error.message
             setStatus(message: "Config error: \(error.message)", level: .error)
-            logConfigFailure(error)
+            session.logConfigFailure(error)
         case .success(let result):
             guard let config = result.config else {
                 allProjects = []
@@ -194,7 +261,7 @@ final class SwitcherPanelController: NSObject {
                 let firstFinding = result.findings.first
                 configErrorMessage = firstFinding?.title ?? "Config error"
                 setStatus(message: "Config error: \(configErrorMessage ?? "Unknown")", level: .error)
-                logConfigFindingsFailure(result.findings)
+                session.logConfigFindingsFailure(result.findings)
                 return
             }
 
@@ -204,13 +271,15 @@ final class SwitcherPanelController: NSObject {
             let warnings = result.findings.filter { $0.severity == .warn }
             if warnings.isEmpty {
                 clearStatus()
-                logConfigLoaded(projectCount: config.projects.count)
+                session.logConfigLoaded(projectCount: config.projects.count)
             } else {
                 setStatus(message: "Config warnings detected. Run Doctor for details.", level: .warning)
-                logConfigWarnings(projectCount: config.projects.count, warningCount: warnings.count)
+                session.logConfigWarnings(projectCount: config.projects.count, warningCount: warnings.count)
             }
         }
     }
+
+    // MARK: - Filtering
 
     /// Filters projects by case-insensitive substring match on id or name.
     private func filterProjects(_ projects: [ProjectConfig], query: String) -> [ProjectConfig] {
@@ -234,7 +303,7 @@ final class SwitcherPanelController: NSObject {
             filteredProjects = []
             tableView.reloadData()
             tableView.deselectAll(nil)
-            logEvent(
+            session.logEvent(
                 event: "switcher.filter.skipped",
                 level: .warn,
                 message: "Filter skipped due to config error.",
@@ -251,7 +320,7 @@ final class SwitcherPanelController: NSObject {
         tableView.reloadData()
         updateSelectionAfterFilter()
 
-        logEvent(
+        session.logEvent(
             event: "switcher.filter.applied",
             context: [
                 "query": query,
@@ -262,7 +331,7 @@ final class SwitcherPanelController: NSObject {
         )
 
         if filteredProjects.isEmpty {
-            logEvent(
+            session.logEvent(
                 event: "switcher.filter.empty",
                 message: "No matches.",
                 context: ["query": query]
@@ -270,82 +339,99 @@ final class SwitcherPanelController: NSObject {
         }
     }
 
-    /// Resets query, selection, and status labels.
-    private func resetState() {
-        allProjects = []
-        searchField.stringValue = ""
-        searchField.isEnabled = true
-        searchField.isEditable = true
-        configErrorMessage = nil
-        filteredProjects = []
-        tableView.isEnabled = true
-        lastFilterQuery = ""
-        lastStatusMessage = nil
-        lastStatusLevel = nil
-        tableView.reloadData()
-        tableView.deselectAll(nil)
-        clearStatus()
+    /// Updates selection after filtering.
+    private func updateSelectionAfterFilter() {
+        guard !filteredProjects.isEmpty else {
+            tableView.deselectAll(nil)
+            return
+        }
+        tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
     }
 
-    /// Shows the panel and focuses the search field.
-    private func showPanel() {
-        panel.center()
-        NSApp.activate(ignoringOtherApps: true)
-        panel.orderFrontRegardless()
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(searchField)
-    }
+    // MARK: - Selection
 
-    /// Starts a new switcher session for log correlation.
-    private func beginSession(origin: SwitcherPresentationSource) {
-        switcherSessionId = UUID().uuidString
-        sessionOrigin = origin
-        logEvent(
-            event: "switcher.session.start",
-            context: ["source": origin.rawValue]
-        )
-    }
-
-    /// Ends the current switcher session and records the reason.
-    private func endSession(reason: SwitcherDismissReason) {
-        guard switcherSessionId != nil else {
+    /// Logs that a project was selected.
+    private func handleSelection() {
+        guard let project = selectedProject() else {
+            session.logEvent(
+                event: "switcher.selection.skipped",
+                level: .warn,
+                message: "Selection skipped because no project is selected.",
+                context: ["reason": "no_selection"]
+            )
             return
         }
 
-        logEvent(
-            event: "switcher.session.end",
-            context: ["reason": reason.rawValue]
+        session.logEvent(
+            event: "switcher.project.selected",
+            context: [
+                "project_id": project.id,
+                "project_name": project.name
+            ]
         )
-        switcherSessionId = nil
-        sessionOrigin = .unknown
+        // TODO: Wire project activation.
     }
 
-    /// Writes a structured log entry with switcher session context.
-    private func logEvent(
-        event: String,
-        level: LogLevel = .info,
-        message: String? = nil,
-        context: [String: String]? = nil
-    ) {
-        var mergedContext = context ?? [:]
-        if mergedContext["session_id"] == nil, let sessionId = switcherSessionId {
-            mergedContext["session_id"] = sessionId
+    /// Returns the currently selected project, if any.
+    private func selectedProject() -> ProjectConfig? {
+        let row = tableView.selectedRow
+        guard row >= 0, row < filteredProjects.count else {
+            return nil
         }
-        if mergedContext["source"] == nil, sessionOrigin != .unknown {
-            mergedContext["source"] = sessionOrigin.rawValue
+        return filteredProjects[row]
+    }
+
+    // MARK: - Status Display
+
+    /// Updates the status label with a message and visual level.
+    private func setStatus(message: String, level: StatusLevel) {
+        statusLabel.stringValue = message
+        statusLabel.textColor = level.textColor
+        statusLabel.isHidden = false
+
+        let levelLabel: String
+        switch level {
+        case .info:
+            levelLabel = "info"
+        case .warning:
+            levelLabel = "warning"
+        case .error:
+            levelLabel = "error"
         }
 
-        let contextValue = mergedContext.isEmpty ? nil : mergedContext
-        _ = logger.log(event: event, level: level, message: message, context: contextValue)
+        if lastStatusMessage != message || lastStatusLevel != level {
+            session.logEvent(
+                event: "switcher.status.updated",
+                level: level == .error ? .error : (level == .warning ? .warn : .info),
+                message: message,
+                context: ["status_level": levelLabel]
+            )
+            lastStatusMessage = message
+            lastStatusLevel = level
+        }
     }
 
-    /// Records a show request for diagnostic tracing.
-    private func logShowRequested(origin: SwitcherPresentationSource) {
-        logEvent(
-            event: "switcher.show.requested",
-            context: ["source": origin.rawValue]
-        )
+    /// Hides the status label.
+    private func clearStatus() {
+        statusLabel.stringValue = ""
+        statusLabel.isHidden = true
+        statusLabel.textColor = .secondaryLabelColor
+
+        if lastStatusMessage != nil || lastStatusLevel != nil {
+            session.logEvent(event: "switcher.status.cleared")
+            lastStatusMessage = nil
+            lastStatusLevel = nil
+        }
     }
+
+    private var emptyStateMessage: String? {
+        if let configErrorMessage {
+            return configErrorMessage
+        }
+        return filteredProjects.isEmpty ? "No matches" : nil
+    }
+
+    // MARK: - Visibility Verification
 
     /// Schedules a visibility check to confirm the panel appeared.
     private func scheduleVisibilityCheck(origin: SwitcherPresentationSource) {
@@ -370,12 +456,12 @@ final class SwitcherPanelController: NSObject {
         ]
 
         if panel.isVisible {
-            logEvent(
+            session.logEvent(
                 event: "switcher.show.visible",
                 context: context
             )
         } else {
-            logEvent(
+            session.logEvent(
                 event: "switcher.show.not_visible",
                 level: .error,
                 message: "Switcher panel failed to become visible.",
@@ -383,148 +469,9 @@ final class SwitcherPanelController: NSObject {
             )
         }
     }
-
-    /// Logs a config load failure for diagnostics.
-    private func logConfigFailure(_ error: ConfigError) {
-        let configPath = AgentPanelPaths.defaultPaths().configFile.path
-        logEvent(
-            event: "switcher.config.failure",
-            level: .error,
-            message: error.message,
-            context: ["config_path": configPath]
-        )
-    }
-
-    /// Logs config findings failure for diagnostics.
-    private func logConfigFindingsFailure(_ findings: [ConfigFinding]) {
-        let configPath = AgentPanelPaths.defaultPaths().configFile.path
-        let primary = findings.first
-        logEvent(
-            event: "switcher.config.failure",
-            level: .error,
-            message: primary?.title,
-            context: [
-                "finding_count": "\(findings.count)",
-                "config_path": configPath
-            ]
-        )
-    }
-
-    /// Logs config warnings for diagnostics.
-    private func logConfigWarnings(projectCount: Int, warningCount: Int) {
-        let configPath = AgentPanelPaths.defaultPaths().configFile.path
-        logEvent(
-            event: "switcher.config.warnings",
-            level: .warn,
-            message: "Config warnings detected.",
-            context: [
-                "project_count": "\(projectCount)",
-                "warning_count": "\(warningCount)",
-                "config_path": configPath
-            ]
-        )
-    }
-
-    /// Logs successful config load summaries.
-    private func logConfigLoaded(projectCount: Int) {
-        let configPath = AgentPanelPaths.defaultPaths().configFile.path
-        logEvent(
-            event: "switcher.config.loaded",
-            context: [
-                "project_count": "\(projectCount)",
-                "config_path": configPath
-            ]
-        )
-    }
-
-    /// Updates selection after filtering.
-    private func updateSelectionAfterFilter() {
-        guard !filteredProjects.isEmpty else {
-            tableView.deselectAll(nil)
-            return
-        }
-        tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-    }
-
-    /// Logs that a project was selected.
-    private func handleSelection() {
-        guard let project = selectedProject() else {
-            logEvent(
-                event: "switcher.selection.skipped",
-                level: .warn,
-                message: "Selection skipped because no project is selected.",
-                context: ["reason": "no_selection"]
-            )
-            return
-        }
-
-        logEvent(
-            event: "switcher.project.selected",
-            context: [
-                "project_id": project.id,
-                "project_name": project.name
-            ]
-        )
-        // TODO: Wire project activation.
-    }
-
-    /// Returns the currently selected project, if any.
-    private func selectedProject() -> ProjectConfig? {
-        let row = tableView.selectedRow
-        guard row >= 0, row < filteredProjects.count else {
-            return nil
-        }
-        return filteredProjects[row]
-    }
-
-    /// Updates the status label with a message and visual level.
-    private func setStatus(message: String, level: StatusLevel) {
-        statusLabel.stringValue = message
-        statusLabel.textColor = level.textColor
-        statusLabel.isHidden = false
-
-        let levelLabel: String
-        switch level {
-        case .info:
-            levelLabel = "info"
-        case .warning:
-            levelLabel = "warning"
-        case .error:
-            levelLabel = "error"
-        }
-
-        if lastStatusMessage != message || lastStatusLevel != level {
-            logEvent(
-                event: "switcher.status.updated",
-                level: level == .error ? .error : (level == .warning ? .warn : .info),
-                message: message,
-                context: ["status_level": levelLabel]
-            )
-            lastStatusMessage = message
-            lastStatusLevel = level
-        }
-    }
-
-    /// Hides the status label.
-    private func clearStatus() {
-        statusLabel.stringValue = ""
-        statusLabel.isHidden = true
-        statusLabel.textColor = .secondaryLabelColor
-
-        if lastStatusMessage != nil || lastStatusLevel != nil {
-            logEvent(event: "switcher.status.cleared")
-            lastStatusMessage = nil
-            lastStatusLevel = nil
-        }
-    }
-
-    private var emptyStateMessage: String? {
-        if let configErrorMessage {
-            return configErrorMessage
-        }
-        return filteredProjects.isEmpty ? "No matches" : nil
-    }
 }
+
+// MARK: - NSWindowDelegate
 
 extension SwitcherPanelController: NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -535,6 +482,8 @@ extension SwitcherPanelController: NSWindowDelegate {
         dismiss(reason: .windowClose)
     }
 }
+
+// MARK: - NSTableViewDataSource, NSTableViewDelegate
 
 extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
@@ -564,12 +513,12 @@ extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
 
         let row = tableView.selectedRow
         guard row >= 0, row < filteredProjects.count else {
-            logEvent(event: "switcher.selection.cleared")
+            session.logEvent(event: "switcher.selection.cleared")
             return
         }
 
         let project = filteredProjects[row]
-        logEvent(
+        session.logEvent(
             event: "switcher.selection.changed",
             context: [
                 "row": "\(row)",
@@ -579,6 +528,8 @@ extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
         )
     }
 }
+
+// MARK: - NSSearchFieldDelegate, NSControlTextEditingDelegate
 
 extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDelegate {
     func controlTextDidChange(_ obj: Notification) {
@@ -590,144 +541,17 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-            logEvent(event: "switcher.action.enter")
+            session.logEvent(event: "switcher.action.enter")
             handleSelection()
             return true
         }
 
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-            logEvent(event: "switcher.action.escape")
+            session.logEvent(event: "switcher.action.escape")
             dismiss(reason: .escape)
             return true
         }
 
         return false
     }
-}
-
-private enum StatusLevel {
-    case info
-    case warning
-    case error
-
-    var textColor: NSColor {
-        switch self {
-        case .info:
-            return .secondaryLabelColor
-        case .warning:
-            return .systemOrange
-        case .error:
-            return .systemRed
-        }
-    }
-}
-
-final class SwitcherPanel: NSPanel {
-    var allowsKeyWindow: Bool = true
-
-    override var canBecomeKey: Bool {
-        allowsKeyWindow
-    }
-}
-
-private final class ProjectRowView: NSTableCellView {
-    let swatchView = NSView()
-    let nameLabel = NSTextField(labelWithString: "")
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        configure()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        configure()
-    }
-
-    private func configure() {
-        swatchView.wantsLayer = true
-        swatchView.layer?.cornerRadius = 4
-        swatchView.translatesAutoresizingMaskIntoConstraints = false
-
-        nameLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        nameLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView(views: [swatchView, nameLabel])
-        stack.orientation = .horizontal
-        stack.spacing = 10
-        stack.alignment = .centerY
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            swatchView.widthAnchor.constraint(equalToConstant: 12),
-            swatchView.heightAnchor.constraint(equalToConstant: 12),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
-        ])
-    }
-}
-
-private func projectCell(for project: ProjectConfig, tableView: NSTableView) -> NSTableCellView {
-    let identifier = NSUserInterfaceItemIdentifier("ProjectRow")
-    if let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? ProjectRowView {
-        configureProjectCell(cell, project: project)
-        return cell
-    }
-
-    let cell = ProjectRowView()
-    cell.identifier = identifier
-    configureProjectCell(cell, project: project)
-    return cell
-}
-
-private func configureProjectCell(_ cell: ProjectRowView, project: ProjectConfig) {
-    cell.nameLabel.stringValue = project.name
-    cell.swatchView.layer?.backgroundColor = colorFromHex(project.colorHex).cgColor
-}
-
-private func emptyStateCell(message: String, tableView: NSTableView) -> NSTableCellView {
-    let identifier = NSUserInterfaceItemIdentifier("EmptyStateRow")
-    if let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView {
-        cell.textField?.stringValue = message
-        return cell
-    }
-
-    let cell = NSTableCellView()
-    cell.identifier = identifier
-    let label = NSTextField(labelWithString: message)
-    label.textColor = .secondaryLabelColor
-    label.font = NSFont.systemFont(ofSize: 12)
-    label.alignment = .center
-    label.translatesAutoresizingMaskIntoConstraints = false
-
-    cell.addSubview(label)
-
-    NSLayoutConstraint.activate([
-        label.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-        label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-    ])
-
-    cell.textField = label
-    return cell
-}
-
-private func colorFromHex(_ hex: String) -> NSColor {
-    let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.count == 7, trimmed.hasPrefix("#") else {
-        return .controlAccentColor
-    }
-
-    let hexDigits = String(trimmed.dropFirst())
-    guard let value = Int(hexDigits, radix: 16) else {
-        return .controlAccentColor
-    }
-
-    let red = CGFloat((value >> 16) & 0xFF) / 255.0
-    let green = CGFloat((value >> 8) & 0xFF) / 255.0
-    let blue = CGFloat(value & 0xFF) / 255.0
-    return NSColor(red: red, green: green, blue: blue, alpha: 1.0)
 }

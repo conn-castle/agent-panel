@@ -1,13 +1,13 @@
+// NOTE: This file is intentionally duplicated in ap/.
+// Both targets need AppKit access, but apcore cannot import AppKit.
+// Keep both copies in sync.
+
 import AppKit
 
 import apcore
 
-/// AppKit-backed running application checker.
+/// Checks if an application is running using AppKit APIs.
 struct AppKitRunningApplicationChecker: RunningApplicationChecking {
-    /// Creates a running application checker.
-    init() {}
-
-    /// Returns true when an application with the given bundle identifier is running.
     func isApplicationRunning(bundleIdentifier: String) -> Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
     }

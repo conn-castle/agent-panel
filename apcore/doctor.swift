@@ -81,32 +81,24 @@ public struct DoctorMetadata: Equatable, Sendable {
 /// Action availability for Doctor UI buttons.
 public struct DoctorActionAvailability: Equatable, Sendable {
     public let canInstallAeroSpace: Bool
-    public let canInstallSafeAeroSpaceConfig: Bool
     public let canStartAeroSpace: Bool
     public let canReloadAeroSpaceConfig: Bool
-    public let canUninstallSafeAeroSpaceConfig: Bool
 
     public init(
         canInstallAeroSpace: Bool,
-        canInstallSafeAeroSpaceConfig: Bool,
         canStartAeroSpace: Bool,
-        canReloadAeroSpaceConfig: Bool,
-        canUninstallSafeAeroSpaceConfig: Bool
+        canReloadAeroSpaceConfig: Bool
     ) {
         self.canInstallAeroSpace = canInstallAeroSpace
-        self.canInstallSafeAeroSpaceConfig = canInstallSafeAeroSpaceConfig
         self.canStartAeroSpace = canStartAeroSpace
         self.canReloadAeroSpaceConfig = canReloadAeroSpaceConfig
-        self.canUninstallSafeAeroSpaceConfig = canUninstallSafeAeroSpaceConfig
     }
 
     /// Returns a disabled action set.
     public static let none = DoctorActionAvailability(
         canInstallAeroSpace: false,
-        canInstallSafeAeroSpaceConfig: false,
         canStartAeroSpace: false,
-        canReloadAeroSpaceConfig: false,
-        canUninstallSafeAeroSpaceConfig: false
+        canReloadAeroSpaceConfig: false
     )
 }
 
@@ -278,7 +270,37 @@ public struct Doctor {
             ))
         }
 
-        // Check config
+        // Check AeroSpace config
+        let configManager = AeroSpaceConfigManager()
+        switch configManager.configStatus() {
+        case .managedByAgentPanel:
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "AeroSpace config managed by AgentPanel"
+            ))
+        case .missing:
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "AeroSpace config file missing",
+                detail: AeroSpaceConfigManager.configPath,
+                fix: "Run AgentPanel setup to create a compatible AeroSpace config."
+            ))
+        case .externalConfig:
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "AeroSpace config not managed by AgentPanel",
+                detail: "Config exists but was not created by AgentPanel.",
+                fix: "AgentPanel may not function correctly. Consider allowing AgentPanel to manage the config."
+            ))
+        case .unknown:
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "Could not read AeroSpace config",
+                fix: "Check file permissions on \(AeroSpaceConfigManager.configPath)"
+            ))
+        }
+
+        // Check AgentPanel config
         switch ConfigLoader.loadDefault() {
         case .failure(let error):
             findings.append(DoctorFinding(
@@ -354,10 +376,8 @@ public struct Doctor {
 
         let actions = DoctorActionAvailability(
             canInstallAeroSpace: !aerospace.isAppInstalled(),
-            canInstallSafeAeroSpaceConfig: false,
             canStartAeroSpace: aerospace.isAppInstalled() && !aerospaceRunning,
-            canReloadAeroSpaceConfig: aerospaceRunning,
-            canUninstallSafeAeroSpaceConfig: false
+            canReloadAeroSpaceConfig: aerospaceRunning
         )
 
         return DoctorReport(metadata: metadata, findings: findings, actions: actions)
@@ -365,42 +385,19 @@ public struct Doctor {
 
     /// Installs AeroSpace via Homebrew and returns an updated report.
     public func installAeroSpace() -> DoctorReport {
-        let runner = ApSystemCommandRunner()
-        _ = runner.run(
-            executable: "brew",
-            arguments: ["install", "--cask", "nikitabobko/tap/aerospace"],
-            timeoutSeconds: 300
-        )
-        return run()
-    }
-
-    /// Installs a safe AeroSpace config and returns an updated report.
-    /// - Note: This is a placeholder implementation.
-    public func installSafeAeroSpaceConfig() -> DoctorReport {
-        // TODO: Implement safe config installation
+        _ = aerospace.installViaHomebrew()
         return run()
     }
 
     /// Starts AeroSpace and returns an updated report.
     public func startAeroSpace() -> DoctorReport {
-        let runner = ApSystemCommandRunner()
-        _ = runner.run(executable: "open", arguments: ["-a", "AeroSpace"])
-        // Wait briefly for app to start
-        Thread.sleep(forTimeInterval: 1.0)
+        _ = aerospace.start()
         return run()
     }
 
     /// Reloads the AeroSpace config and returns an updated report.
     public func reloadAeroSpaceConfig() -> DoctorReport {
-        let runner = ApSystemCommandRunner()
-        _ = runner.run(executable: "aerospace", arguments: ["reload-config"])
-        return run()
-    }
-
-    /// Uninstalls the safe AeroSpace config and returns an updated report.
-    /// - Note: This is a placeholder implementation.
-    public func uninstallSafeAeroSpaceConfig() -> DoctorReport {
-        // TODO: Implement safe config uninstallation
+        _ = aerospace.reloadConfig()
         return run()
     }
 }

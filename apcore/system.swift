@@ -1,13 +1,24 @@
 import Foundation
 
 /// Result of executing an external command.
-struct ApCommandResult: Equatable {
+public struct ApCommandResult: Equatable, Sendable {
     /// Process termination status.
-    let exitCode: Int32
+    public let exitCode: Int32
     /// Captured standard output.
-    let stdout: String
+    public let stdout: String
     /// Captured standard error.
-    let stderr: String
+    public let stderr: String
+
+    /// Creates a new command result.
+    /// - Parameters:
+    ///   - exitCode: Process termination status.
+    ///   - stdout: Captured standard output.
+    ///   - stderr: Captured standard error.
+    public init(exitCode: Int32, stdout: String, stderr: String) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+    }
 }
 
 /// Runs external commands using /usr/bin/env for PATH resolution.

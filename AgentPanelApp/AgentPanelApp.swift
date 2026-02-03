@@ -14,17 +14,6 @@ struct AgentPanelApp: App {
     }
 }
 
-private struct DoctorButtons {
-    let runDoctor: NSButton
-    let copyReport: NSButton
-    let installAeroSpace: NSButton
-    let installSafeConfig: NSButton
-    let startAeroSpace: NSButton
-    let reloadConfig: NSButton
-    let uninstallSafeConfig: NSButton
-    let close: NSButton
-}
-
 private struct MenuItems {
     let hotkeyWarning: NSMenuItem
     let openSwitcher: NSMenuItem
@@ -33,16 +22,20 @@ private struct MenuItems {
 /// App lifecycle hook used to create a minimal menu bar presence.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var doctorWindow: NSWindow?
-    private var doctorTextView: NSTextView?
-    private var doctorButtons: DoctorButtons?
-    private var lastDoctorReport: DoctorReport?
+    private var doctorController: DoctorWindowController?
     private var hotkeyManager: HotkeyManager?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private let logger: AgentPanelLogging = AgentPanelLogger()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Run onboarding check before setting up the app
+        let onboarding = Onboarding(logger: logger)
+        if onboarding.runIfNeeded() == .declined {
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
         NSApp.setActivationPolicy(.accessory)
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "AP"
@@ -241,8 +234,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Copies the current Doctor report to the clipboard.
-    @objc private func copyDoctorReport() {
-        guard let report = lastDoctorReport?.rendered() else {
+    private func copyDoctorReport() {
+        guard let report = doctorController?.lastReport?.rendered() else {
             logAppEvent(event: "doctor.copy.skipped", level: .warn, message: "No report to copy.")
             return
         }
@@ -253,23 +246,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Installs AeroSpace via Homebrew and refreshes the report.
-    @objc private func installAeroSpace() {
+    private func installAeroSpace() {
         logAppEvent(event: "doctor.install_aerospace.requested")
         let report = makeDoctor().installAeroSpace()
         showDoctorReport(report)
         logDoctorSummary(report, event: "doctor.install_aerospace.completed")
     }
 
-    /// Installs the safe AeroSpace config and refreshes the report.
-    @objc private func installSafeAeroSpaceConfig() {
-        logAppEvent(event: "doctor.install_safe_config.requested")
-        let report = makeDoctor().installSafeAeroSpaceConfig()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.install_safe_config.completed")
-    }
-
     /// Starts AeroSpace and refreshes the report.
-    @objc private func startAeroSpace() {
+    private func startAeroSpace() {
         logAppEvent(event: "doctor.start_aerospace.requested")
         let report = makeDoctor().startAeroSpace()
         showDoctorReport(report)
@@ -277,25 +262,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Reloads AeroSpace config and refreshes the report.
-    @objc private func reloadAeroSpaceConfig() {
+    private func reloadAeroSpaceConfig() {
         logAppEvent(event: "doctor.reload_aerospace.requested")
         let report = makeDoctor().reloadAeroSpaceConfig()
         showDoctorReport(report)
         logDoctorSummary(report, event: "doctor.reload_aerospace.completed")
     }
 
-    /// Uninstalls the safe AeroSpace config and refreshes the report.
-    @objc private func uninstallSafeAeroSpaceConfig() {
-        logAppEvent(event: "doctor.uninstall_safe_config.requested")
-        let report = makeDoctor().uninstallSafeAeroSpaceConfig()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.uninstall_safe_config.completed")
-    }
-
     /// Closes the Doctor window.
-    @objc private func closeDoctorWindow() {
+    private func closeDoctorWindow() {
         logAppEvent(event: "doctor.window.closed")
-        doctorWindow?.close()
+        doctorController?.close()
     }
 
     /// Terminates the app.
@@ -304,165 +281,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
-    /// Displays the Doctor report in a scrollable, selectable text view.
+    /// Displays the Doctor report using the DoctorWindowController.
     /// - Parameter report: Doctor report payload.
     private func showDoctorReport(_ report: DoctorReport) {
-        let textView: NSTextView
-        let window: NSWindow
+        let controller = ensureDoctorController()
+        controller.showReport(report)
+    }
 
-        if let existingWindow = doctorWindow, let existingTextView = doctorTextView {
-            window = existingWindow
-            textView = existingTextView
-        } else {
-            let panel = makeDoctorPanel()
-            let textViewInstance = makeDoctorTextView()
-            let buttons = makeDoctorButtons()
-            let contentView = makeDoctorContentView(textView: textViewInstance, buttons: buttons)
-            panel.contentView = contentView
-            panel.isReleasedWhenClosed = false
-
-            doctorWindow = panel
-            doctorTextView = textViewInstance
-            doctorButtons = buttons
-            window = panel
-            textView = textViewInstance
+    /// Ensures the DoctorWindowController exists and has callbacks configured.
+    /// - Returns: The doctor window controller instance.
+    private func ensureDoctorController() -> DoctorWindowController {
+        if let existing = doctorController {
+            return existing
         }
 
-        updateDoctorUI(with: report)
-
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private func updateDoctorUI(with report: DoctorReport) {
-        lastDoctorReport = report
-        doctorTextView?.string = report.rendered()
-        doctorTextView?.scrollToBeginningOfDocument(nil)
-
-        if let buttons = doctorButtons {
-            buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
-            buttons.installSafeConfig.isEnabled = report.actions.canInstallSafeAeroSpaceConfig
-            buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
-            buttons.reloadConfig.isEnabled = report.actions.canReloadAeroSpaceConfig
-            buttons.uninstallSafeConfig.isHidden = !report.actions.canUninstallSafeAeroSpaceConfig
-            buttons.uninstallSafeConfig.isEnabled = report.actions.canUninstallSafeAeroSpaceConfig
-        }
-    }
-
-    /// Creates the Doctor panel window.
-    /// - Returns: Configured panel instance.
-    private func makeDoctorPanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        panel.title = "Doctor"
-        panel.center()
-        return panel
-    }
-
-    private func makeDoctorContentView(textView: NSTextView, buttons: DoctorButtons) -> NSView {
-        let container = NSStackView()
-        container.orientation = .vertical
-        container.spacing = 12
-        container.translatesAutoresizingMaskIntoConstraints = false
-
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = textView
-        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
-
-        let primaryRow = makeButtonRow(buttons: [
-            buttons.runDoctor,
-            buttons.copyReport,
-            buttons.installAeroSpace,
-            buttons.installSafeConfig,
-            buttons.startAeroSpace
-        ])
-
-        let secondaryRow = makeButtonRow(buttons: [
-            buttons.reloadConfig,
-            buttons.uninstallSafeConfig,
-            buttons.close
-        ])
-
-        container.addArrangedSubview(scrollView)
-        container.addArrangedSubview(primaryRow)
-        container.addArrangedSubview(secondaryRow)
-
-        let contentView = NSView()
-        contentView.addSubview(container)
-
-        NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            container.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            container.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            container.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
-        ])
-
-        return contentView
-    }
-
-    private func makeButtonRow(buttons: [NSButton]) -> NSStackView {
-        let row = NSStackView(views: buttons)
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 8
-        row.distribution = .fillProportionally
-        return row
-    }
-
-    private func makeDoctorButtons() -> DoctorButtons {
-        let runDoctorButton = makeButton(title: "Run Doctor", action: #selector(runDoctor))
-        let copyReportButton = makeButton(title: "Copy Report", action: #selector(copyDoctorReport))
-        let installAeroSpaceButton = makeButton(title: "Install AeroSpace", action: #selector(installAeroSpace))
-        let installSafeConfigButton = makeButton(
-            title: "Install Safe AeroSpace Config",
-            action: #selector(installSafeAeroSpaceConfig)
-        )
-        let startAeroSpaceButton = makeButton(title: "Start AeroSpace", action: #selector(startAeroSpace))
-        let reloadConfigButton = makeButton(title: "Reload AeroSpace Config", action: #selector(reloadAeroSpaceConfig))
-        let uninstallSafeConfigButton = makeButton(
-            title: "Uninstall Safe AeroSpace Config",
-            action: #selector(uninstallSafeAeroSpaceConfig)
-        )
-        let closeButton = makeButton(title: "Close", action: #selector(closeDoctorWindow))
-
-        return DoctorButtons(
-            runDoctor: runDoctorButton,
-            copyReport: copyReportButton,
-            installAeroSpace: installAeroSpaceButton,
-            installSafeConfig: installSafeConfigButton,
-            startAeroSpace: startAeroSpaceButton,
-            reloadConfig: reloadConfigButton,
-            uninstallSafeConfig: uninstallSafeConfigButton,
-            close: closeButton
-        )
-    }
-
-    private func makeButton(title: String, action: Selector) -> NSButton {
-        let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .rounded
-        return button
-    }
-
-    /// Creates a selectable, non-editable text view for Doctor output.
-    /// - Returns: Configured text view instance.
-    private func makeDoctorTextView() -> NSTextView {
-        let textView = NSTextView()
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isRichText = false
-        textView.usesAdaptiveColorMappingForDarkAppearance = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textContainerInset = NSSize(width: 12, height: 12)
-        textView.textContainer?.widthTracksTextView = true
-        return textView
+        let controller = DoctorWindowController()
+        controller.onRunDoctor = { [weak self] in self?.runDoctor() }
+        controller.onCopyReport = { [weak self] in self?.copyDoctorReport() }
+        controller.onInstallAeroSpace = { [weak self] in self?.installAeroSpace() }
+        controller.onStartAeroSpace = { [weak self] in self?.startAeroSpace() }
+        controller.onReloadConfig = { [weak self] in self?.reloadAeroSpaceConfig() }
+        controller.onClose = { [weak self] in self?.closeDoctorWindow() }
+        doctorController = controller
+        return controller
     }
 }

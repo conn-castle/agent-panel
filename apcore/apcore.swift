@@ -9,18 +9,6 @@ public enum AgentPanel {
     public static let version: String = "0.0.0-dev"
 }
 
-/// Errors emitted by ApCore operations.
-public struct ApCoreError: Error, Equatable {
-    /// Human-readable error message.
-    public let message: String
-
-    /// Creates a new ApCoreError with the provided message.
-    /// - Parameter message: Error message.
-    public init(message: String) {
-        self.message = message
-    }
-}
-
 /// Shared IDE token prefix used to tag new IDE windows.
 enum ApIdeToken {
     static let prefix = "AP:"
@@ -88,8 +76,10 @@ public final class ApCore {
     /// Prints the raw config contents to stdout.
     /// - Returns: Success or an error.
     public func showConfig() -> Result<Void, ApCoreError> {
-        let configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/agent-panel/config.toml")
+        let configPath = AgentPanelPaths.defaultPaths().configFile
+        if !FileManager.default.fileExists(atPath: configPath.path) {
+            _ = ConfigLoader.loadDefault()
+        }
         do {
             let raw = try String(contentsOf: configPath, encoding: .utf8)
             FileHandle.standardOutput.write(Data(raw.utf8))

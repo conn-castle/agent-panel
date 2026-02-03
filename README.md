@@ -29,36 +29,20 @@ The switcher currently **lists projects and logs selections**. Project activatio
 
 `~/.config/agent-panel/config.toml`
 
+If the file is missing, AgentPanel creates a starter config with commented guidance and an example.
+
 ### Schema
 
 ```toml
-[global]
-defaultIde = "vscode"                 # optional; default "vscode" ("vscode" | "antigravity")
-globalChromeUrls = []                 # optional; URLs opened when a new project Chrome window is created
-
-[ide.vscode]
-appPath = "/Applications/Visual Studio Code.app"  # optional; omit to auto-discover via Launch Services
-bundleId = "com.microsoft.VSCode"                 # optional; omit to auto-discover via Launch Services
-
-[ide.antigravity]
-appPath = "/Applications/Antigravity.app"         # optional; omit to auto-discover via Launch Services
-# bundleId omitted on purpose; doctor can discover and print it as a copy/paste snippet
-
 [[project]]
-id = "codex"
-name = "Codex"
-path = "/Users/nick/src/codex"
-colorHex = "#7C3AED"
-
-# optional per-project override; defaults to global.defaultIde (Doctor WARN when omitted)
-ide = "vscode"
-
-# optional; URLs opened when a new Chrome window is created for this project
-chromeUrls = []
-
-# optional; Chrome profile directory to use when opening a new Chrome window
-chromeProfileDirectory = "Profile 2"
+name = "AgentPanel"                    # required; id derived from name
+path = "/Users/you/src/agent-panel"    # required; absolute path to the git repo
+color = "indigo"                       # required; "#RRGGBB" or named color
+useAgentLayer = true                   # required; repo uses an .agent-layer folder
 ```
+
+The project id is derived by lowercasing the name and replacing any character outside a-z and 0-9 with `-`.
+Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, pink, purple, red, teal, white, yellow.
 
 ## Paths
 
