@@ -65,3 +65,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Use `readabilityHandler` to stream stdout/stderr while process runs, not after termination.
     Reason: Pipe buffers are ~64KB. If a process fills the buffer and blocks, waiting for termination before reading creates a deadlock.
     Tradeoffs: More complex thread synchronization.
+
+- Decision 2026-02-04 e2ee3b6: SessionManager as single source of truth for state
+    Decision: All state persistence (AppState, FocusHistory) and focus capture/restore flows through SessionManager in Core. App sets FocusOperationsProviding after config load.
+    Reason: Consolidates state ownership in Core, eliminating duplicate state management in App/SwitcherPanelController. Enforces API boundaries via Swift access control.
+    Tradeoffs: App must call setFocusOperations() after loading config; focus operations unavailable until then.
+
+- Decision 2026-02-04 intentapi: Intent-based protocol pattern for cross-layer APIs
+    Decision: Protocols crossing layer boundaries (Core↔App) use intent-based signatures like `captureCurrentFocus() -> CapturedFocus?` instead of implementation-specific types like `focusedWindow() -> ApWindow?`.
+    Reason: Keeps implementation details (ApWindow, AeroSpace concepts) internal to the layer that owns them. Callers express what they want, not how to get it. Cleaner testability and looser coupling.
+    Tradeoffs: Implementation must translate between internal types and intent-based types; slightly more code in the implementing layer.

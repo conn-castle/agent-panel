@@ -34,9 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private let logger: AgentPanelLogging = AgentPanelLogger()
-    private let stateStore = StateStore()
-    private let focusHistoryStore = FocusHistoryStore()
-    private var appState = AppState()
+    private let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run onboarding check asynchronously before setting up the app
@@ -61,13 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
 
-        // Load persisted state and record session start
-        loadStateAndRecordSessionStart()
+        // Record session start
+        sessionManager.sessionStarted(version: AgentPanel.version)
 
         let switcherController = SwitcherPanelController(
             logger: logger,
-            stateStore: stateStore,
-            focusHistoryStore: focusHistoryStore
+            sessionManager: sessionManager
         )
         self.switcherController = switcherController
 
@@ -143,6 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
+        // Capture the previously active app BEFORE the menu dismisses and before we activate.
+        // This ensures restore-on-cancel returns to the correct app.
+        let previousApp = NSWorkspace.shared.frontmostApplication
         statusItem?.menu?.cancelTracking()
         // Small delay required to let the menu dismiss before showing the switcher.
         // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
@@ -151,12 +151,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().show(origin: .menu)
+            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp)
         }
     }
 
     /// Toggles the switcher panel from the global hotkey.
     private func toggleSwitcher() {
+        // Capture the previously active app BEFORE we activate AgentPanel.
+        // This must happen outside the async block to capture the correct app.
+        let previousApp = NSWorkspace.shared.frontmostApplication
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -166,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: ["hotkey": "Cmd+Shift+Space"]
             )
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().toggle(origin: .hotkey)
+            self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp)
         }
     }
 
@@ -178,8 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let controller = SwitcherPanelController(
             logger: logger,
-            stateStore: stateStore,
-            focusHistoryStore: focusHistoryStore
+            sessionManager: sessionManager
         )
         switcherController = controller
         return controller
@@ -336,67 +338,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Called when the app is about to terminate.
     func applicationWillTerminate(_ notification: Notification) {
-        recordSessionEndAndSave()
-    }
-
-    /// Loads persisted state and records a session start event.
-    private func loadStateAndRecordSessionStart() {
-        switch stateStore.load() {
-        case .success(let loadedState):
-            appState = loadedState
-        case .failure(let error):
-            logAppEvent(
-                event: "state.load.failed",
-                level: .error,
-                message: "Failed to load state: \(error)"
-            )
-            // Continue with fresh state
-            appState = AppState()
-        }
-
-        // Record session start and update last launched time
-        let event = FocusEvent.sessionStarted(
-            metadata: ["version": AgentPanel.version]
-        )
-        appState = focusHistoryStore.record(event: event, state: appState)
-        appState.lastLaunchedAt = Date()
-        saveState()
-    }
-
-    /// Records a session end event and saves state.
-    ///
-    /// Reloads state from disk before recording to avoid overwriting events
-    /// that may have been recorded by other components (e.g., SwitcherPanelController).
-    private func recordSessionEndAndSave() {
-        // Reload state to get any events recorded since app launch
-        switch stateStore.load() {
-        case .success(let freshState):
-            appState = freshState
-        case .failure(let error):
-            logAppEvent(
-                event: "state.reload.failed",
-                level: .error,
-                message: "Failed to reload state before session end: \(error)"
-            )
-            // Continue with existing state; better to record sessionEnded than lose it
-        }
-
-        let event = FocusEvent.sessionEnded()
-        appState = focusHistoryStore.record(event: event, state: appState)
-        saveState()
+        sessionManager.sessionEnded()
         logAppEvent(event: "app.session.ended")
-    }
-
-    /// Saves the current app state to disk with pruning.
-    private func saveState() {
-        let result = stateStore.save(appState, prunedWith: focusHistoryStore)
-        if case .failure(let error) = result {
-            logAppEvent(
-                event: "state.save.failed",
-                level: .error,
-                message: "Failed to save state: \(error)"
-            )
-        }
     }
 
     /// Displays the Doctor report using the DoctorWindowController.

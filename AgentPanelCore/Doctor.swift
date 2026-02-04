@@ -194,7 +194,7 @@ public struct Doctor {
     private let runningApplicationChecker: RunningApplicationChecking
     private let hotkeyStatusProvider: HotkeyStatusProviding?
     private let dateProvider: DateProviding
-    private let aerospace: ApAeroSpace
+    private let aerospaceHealth: AeroSpaceHealthChecking
     private let appDiscovery: AppDiscovering
     private let executableResolver: ExecutableResolver
     private let dataStore: DataPaths
@@ -210,7 +210,7 @@ public struct Doctor {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
         self.dateProvider = SystemDateProvider()
-        self.aerospace = ApAeroSpace()
+        self.aerospaceHealth = ApAeroSpace()
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.executableResolver = ExecutableResolver()
         self.dataStore = .default()
@@ -221,7 +221,7 @@ public struct Doctor {
     ///   - runningApplicationChecker: Running application checker.
     ///   - hotkeyStatusProvider: Optional hotkey status provider.
     ///   - dateProvider: Date provider for timestamps.
-    ///   - aerospace: AeroSpace wrapper for checks.
+    ///   - aerospaceHealth: AeroSpace health checker for status and remediation actions.
     ///   - appDiscovery: App discovery for checking installed apps.
     ///   - executableResolver: Resolver for checking CLI tools.
     ///   - dataStore: Data store for path checks.
@@ -229,7 +229,7 @@ public struct Doctor {
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding?,
         dateProvider: DateProviding,
-        aerospace: ApAeroSpace,
+        aerospaceHealth: AeroSpaceHealthChecking,
         appDiscovery: AppDiscovering,
         executableResolver: ExecutableResolver,
         dataStore: DataPaths
@@ -237,7 +237,7 @@ public struct Doctor {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
         self.dateProvider = dateProvider
-        self.aerospace = aerospace
+        self.aerospaceHealth = aerospaceHealth
         self.appDiscovery = appDiscovery
         self.executableResolver = executableResolver
         self.dataStore = dataStore
@@ -271,13 +271,14 @@ public struct Doctor {
         }
 
         // Check AeroSpace app
+        let installStatus = aerospaceHealth.installStatus()
         var aerospaceAppLabel = "NOT FOUND"
-        if aerospace.isAppInstalled() {
-            aerospaceAppLabel = aerospace.appPath ?? "FOUND"
+        if installStatus.isInstalled {
+            aerospaceAppLabel = installStatus.appPath ?? "FOUND"
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace.app installed",
-                detail: aerospace.appPath
+                detail: installStatus.appPath
             ))
         } else {
             findings.append(DoctorFinding(
@@ -289,7 +290,8 @@ public struct Doctor {
 
         // Check AeroSpace CLI
         var aerospaceCliLabel = "NOT FOUND"
-        if aerospace.isCliAvailable() {
+        let cliAvailable = aerospaceHealth.isCliAvailable()
+        if cliAvailable {
             aerospaceCliLabel = "AVAILABLE"
             findings.append(DoctorFinding(
                 severity: .pass,
@@ -297,17 +299,23 @@ public struct Doctor {
             ))
 
             // Check AeroSpace compatibility
-            switch aerospace.checkCompatibility() {
-            case .success:
+            switch aerospaceHealth.healthCheckCompatibility() {
+            case .compatible:
                 findings.append(DoctorFinding(
                     severity: .pass,
                     title: "aerospace CLI compatibility verified"
                 ))
-            case .failure(let error):
+            case .cliUnavailable:
+                findings.append(DoctorFinding(
+                    severity: .fail,
+                    title: "aerospace CLI not available for compatibility check",
+                    fix: "Ensure AeroSpace is installed and the CLI is in your PATH."
+                ))
+            case .incompatible(let detail):
                 findings.append(DoctorFinding(
                     severity: .fail,
                     title: "aerospace CLI compatibility issues",
-                    detail: error.message
+                    detail: detail
                 ))
             }
         } else {
@@ -523,7 +531,7 @@ public struct Doctor {
         }
 
         // Check for critical failures that onboarding can fix
-        let hasCriticalAeroSpaceFailure = !aerospace.isAppInstalled() || !aerospace.isCliAvailable()
+        let hasCriticalAeroSpaceFailure = !installStatus.isInstalled || !cliAvailable
         if hasCriticalAeroSpaceFailure {
             findings.append(DoctorFinding(
                 severity: .fail,
@@ -541,8 +549,8 @@ public struct Doctor {
         )
 
         let actions = DoctorActionAvailability(
-            canInstallAeroSpace: !aerospace.isAppInstalled(),
-            canStartAeroSpace: aerospace.isAppInstalled() && !aerospaceRunning,
+            canInstallAeroSpace: !installStatus.isInstalled,
+            canStartAeroSpace: installStatus.isInstalled && !aerospaceRunning,
             canReloadAeroSpaceConfig: aerospaceRunning
         )
 
@@ -551,19 +559,19 @@ public struct Doctor {
 
     /// Installs AeroSpace via Homebrew and returns an updated report.
     public func installAeroSpace() -> DoctorReport {
-        _ = aerospace.installViaHomebrew()
+        _ = aerospaceHealth.healthInstallViaHomebrew()
         return run()
     }
 
     /// Starts AeroSpace and returns an updated report.
     public func startAeroSpace() -> DoctorReport {
-        _ = aerospace.start()
+        _ = aerospaceHealth.healthStart()
         return run()
     }
 
     /// Reloads the AeroSpace config and returns an updated report.
     public func reloadAeroSpaceConfig() -> DoctorReport {
-        _ = aerospace.reloadConfig()
+        _ = aerospaceHealth.healthReloadConfig()
         return run()
     }
 }

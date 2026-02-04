@@ -27,17 +27,23 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-04 state-health: SessionManager.stateHealthIssue never surfaced in App
+    Priority: Medium. Area: App/UX
+    Description: `SessionManager.stateHealthIssue` is documented as requiring a user warning when non-nil, but the App never checks it. State saves can be blocked silently with only log output.
+    Next step: Add UI handling in App to check `stateHealthIssue` after SessionManager init and display appropriate warning/recovery prompt.
+    Notes: Documented in CORE_API.md Session Management section.
+
+- Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
+    Priority: Medium. Area: Config/UX
+    Description: `Config.loadDefault()` returns `Result<Config, ConfigLoadError>` which cannot convey warnings. If config is valid but has warnings (e.g., deprecated fields), they are silently dropped.
+    Next step: Either change return type to include warnings, or add a separate `Config.loadDefaultWithWarnings()` method that returns warnings alongside the config.
+    Notes: SwitcherPanelController clears status on success, so even if warnings were returned they'd need explicit handling.
+
 - Issue 2026-02-04 apcore-config: ApCore stores config but never uses it
     Priority: Medium. Area: Architecture
     Description: `ApCore.init(config:)` requires a `Config` parameter and stores it, but none of the methods use it. All operations are config-agnostic AeroSpace/window operations.
     Next step: Phase 2 should either use config for project-aware operations or reconsider whether ApCore should require config.
     Notes: Related to Phase 2 separation of concerns and project lifecycle work.
-
-- Issue 2026-02-04 coreapi: App/CLI depend on internal Core APIs
-    Priority: Medium. Area: Architecture
-    Description: AgentPanelApp uses `ConfigLoader`, `StateStore`, `FocusHistoryStore`, and `ApCore`, which are internal or CLI-only per `docs/CORE_API.md`. This contradicts the documented API boundary.
-    Next step: Either define public Core facades for these capabilities, or update CORE_API.md to explicitly allow these dependencies.
-    Notes: Align with Phase 2 separation-of-concerns tasks.
 
 - Issue 2026-02-03 doctorsev: Doctor VS Code/Chrome checks should FAIL when a project needs them
     Priority: Medium. Area: Doctor

@@ -76,7 +76,7 @@ final class UTCTimestampTests: XCTestCase {
             runningApplicationChecker: MockRunningAppChecker(),
             hotkeyStatusProvider: nil,
             dateProvider: dateProvider,
-            aerospace: ApAeroSpace(),
+            aerospaceHealth: ApAeroSpace(),
             appDiscovery: LaunchServicesAppDiscovery(),
             executableResolver: ExecutableResolver(),
             dataStore: .default()

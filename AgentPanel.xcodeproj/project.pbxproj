@@ -25,6 +25,7 @@
 		3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */; };
 		3CD536BD167B8DF6493C8EB7 /* ApCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D00F1D0832017A54995EE51 /* ApCore.swift */; };
 		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
+		448C4EF95D866B825E7426E2 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105C4761AB89D41712EE1C9D /* SessionManager.swift */; };
 		45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */; };
 		476AD5F6F072D635D7418FAB /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E0C3DAA0280728917003498 /* Logger.swift */; };
 		4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */; };
@@ -51,6 +52,7 @@
 		E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */; };
 		E1A3D5707DC2114E42745583 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D8C73BDF50CEB78DBA5853 /* System.swift */; };
 		E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */; };
+		E610605AF14F1B2E5AD25DC9 /* SessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 575E9B833A38F7EC5A0FE302 /* SessionManagerTests.swift */; };
 		FF90DD97E05DB53306719BAA /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935CD37A022BA8B71683DE72 /* Doctor.swift */; };
 /* End PBXBuildFile section */
 
@@ -101,6 +103,7 @@
 
 /* Begin PBXFileReference section */
 		009D8CA2F6B6E0FBD8FDA16C /* FocusEventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusEventTests.swift; sourceTree = "<group>"; };
+		105C4761AB89D41712EE1C9D /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		2D35ABD3022669F375FDB52F /* ApCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCLI.swift; sourceTree = "<group>"; };
 		2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorWindowController.swift; sourceTree = "<group>"; };
@@ -111,6 +114,7 @@
 		46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */ = {isa = PBXFileReference; path = "aerospace-safe.toml"; sourceTree = "<group>"; };
 		4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecutableResolverTests.swift; sourceTree = "<group>"; };
 		51E5F87E9B834D2CF33BA70D /* FocusHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusHistoryStore.swift; sourceTree = "<group>"; };
+		575E9B833A38F7EC5A0FE302 /* SessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManagerTests.swift; sourceTree = "<group>"; };
 		66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentPanelCLITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		691139171C62F83E4E0CC709 /* Dependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dependencies.swift; sourceTree = "<group>"; };
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -207,6 +211,7 @@
 				A48E8FE75AFE39843DBCCF8B /* FocusHistoryStoreTests.swift */,
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
+				575E9B833A38F7EC5A0FE302 /* SessionManagerTests.swift */,
 				D357E5394364E6E16CB9B6B3 /* StateStoreTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
 			);
@@ -232,6 +237,7 @@
 				6E8DE3E79215020A2587A722 /* Errors.swift */,
 				51E5F87E9B834D2CF33BA70D /* FocusHistoryStore.swift */,
 				9E0C3DAA0280728917003498 /* Logger.swift */,
+				105C4761AB89D41712EE1C9D /* SessionManager.swift */,
 				BF324B927ED39636BE625326 /* StateStore.swift */,
 				B8D8C73BDF50CEB78DBA5853 /* System.swift */,
 				D70EE9EFFE9128D41FD8C855 /* AeroSpace */,
@@ -528,6 +534,7 @@
 				4DCD2D11F2BA5709E38B9233 /* Errors.swift in Sources */,
 				2BD9383F76BEA285D638339E /* FocusHistoryStore.swift in Sources */,
 				476AD5F6F072D635D7418FAB /* Logger.swift in Sources */,
+				448C4EF95D866B825E7426E2 /* SessionManager.swift in Sources */,
 				CA833F303DDF5AB88E611185 /* StateStore.swift in Sources */,
 				E1A3D5707DC2114E42745583 /* System.swift in Sources */,
 			);
@@ -566,6 +573,7 @@
 				17C602CDF67B53EA21ACC09C /* FocusHistoryStoreTests.swift in Sources */,
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
 				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
+				E610605AF14F1B2E5AD25DC9 /* SessionManagerTests.swift in Sources */,
 				33066384967D87002FCAD4F3 /* StateStoreTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
 			);

@@ -64,11 +64,11 @@ Incomplete:
 - Publish a clear, stable interface for core functionality so App/CLI remain thin presentation layers.
 
 ### Tasks
-- [ ] Define and enforce the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `AgentPanelCLI`; delete/merge anything that doesn't fit.
+- [x] Define and enforce the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `AgentPanelCLI`; delete/merge anything that doesn't fit.
 - [x] Define the Focus domain model and events in `AgentPanelCore` (UTC timestamps; stable ids).
 - [x] Implement focus history storage on the Phase 1 persistence substrate (query, prune/export) with tests.
 - [ ] Specify and implement switcher search + sorting rules (including whether focus history influences ordering) with tests.
-- [ ] Refactor for strict separation of concerns: move business rules out of UI targets into `AgentPanelCore`.
+- [x] Refactor for strict separation of concerns: move business rules out of UI targets into `AgentPanelCore`.
 - [ ] Revisit AppKit integration: attempt a single shared AppKitIntegration module usable by both App and CLI (without importing AppKit from `AgentPanelCore`), or reaffirm the duplication with an updated decision.
 
 ### Exit criteria
@@ -86,9 +86,10 @@ Incomplete:
 ### Tasks
 - [ ] Design the activation/project lifecycle API surface in `AgentPanelCore` (success/failure states, idempotency, logging).
 - [ ] Implement activation orchestration with tests for success/failure scenarios (including partial failures and cleanup).
-- [ ] Implement “close project” in core and wire it to `ap` + UI, with tests.
+- [ ] Implement "close project" in core and wire it to `ap` + UI, with tests.
 - [ ] Wire switcher selection to activation and update UI messaging (progress + failures).
 - [ ] Ensure agent-layer is supported: if `useAgentLayer = true`, Doctor verifies it is installed/usable; if missing, route users to onboarding instead of dead ends.
+- [ ] Remove CLI-only items from the public API (`CORE_API.md`). Items like `ApWindow`, `ApCore` workspace/window methods exist solely because the CLI is a proof-of-concept tester; make them internal or move to a CLI-only module before MVP.
 
 ### Exit criteria
 - Selecting a project reliably activates it; closing a project reliably returns to a neutral state.
