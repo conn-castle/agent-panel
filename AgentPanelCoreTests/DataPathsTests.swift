@@ -1,11 +1,11 @@
 import XCTest
 @testable import AgentPanelCore
 
-final class DataStoreTests: XCTestCase {
+final class DataPathsTests: XCTestCase {
 
     func testPathsAreDerivedFromHomeDirectory() {
         let home = URL(fileURLWithPath: "/Users/testuser", isDirectory: true)
-        let store = DataStore(homeDirectory: home)
+        let store = DataPaths(homeDirectory: home)
 
         XCTAssertEqual(store.configFile.path, "/Users/testuser/.config/agent-panel/config.toml")
 

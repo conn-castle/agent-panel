@@ -83,7 +83,7 @@ public final class ApCore {
     /// Prints the raw config contents to stdout.
     /// - Returns: Success or an error.
     public func showConfig() -> Result<Void, ApCoreError> {
-        let configPath = DataStore.default().configFile
+        let configPath = DataPaths.default().configFile
         if !FileManager.default.fileExists(atPath: configPath.path) {
             _ = ConfigLoader.loadDefault()
         }

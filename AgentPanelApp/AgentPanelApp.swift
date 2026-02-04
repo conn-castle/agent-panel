@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hotkeyManager = hotkeyManager
         updateHotkeyStatus(hotkeyManager.hotkeyRegistrationStatus())
 
-        let dataStore = DataStore.default()
+        let dataStore = DataPaths.default()
         logAppEvent(
             event: "app.started",
             context: [

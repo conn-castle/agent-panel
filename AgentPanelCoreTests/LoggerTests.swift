@@ -5,7 +5,7 @@ final class LoggerTests: XCTestCase {
 
     func testLogEntryRejectsEmptyEvent() {
         let fileSystem = InMemoryFileSystem()
-        let dataStore = DataStore(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
+        let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
         let logger = AgentPanelLogger(
             dataStore: dataStore,
             fileSystem: fileSystem,
@@ -28,7 +28,7 @@ final class LoggerTests: XCTestCase {
 
     func testLogEntryAppendsJsonLine() throws {
         let fileSystem = InMemoryFileSystem()
-        let dataStore = DataStore(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
+        let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
         let logger = AgentPanelLogger(
             dataStore: dataStore,
             fileSystem: fileSystem,
@@ -66,7 +66,7 @@ final class LoggerTests: XCTestCase {
 
     func testRotationShiftsArchivesAndMovesActiveLog() throws {
         let fileSystem = InMemoryFileSystem()
-        let dataStore = DataStore(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
+        let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
 
         // Small max size to force rotation deterministically.
         let logger = AgentPanelLogger(

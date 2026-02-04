@@ -197,7 +197,7 @@ public struct Doctor {
     private let aerospace: ApAeroSpace
     private let appDiscovery: AppDiscovering
     private let executableResolver: ExecutableResolver
-    private let dataStore: DataStore
+    private let dataStore: DataPaths
 
     /// Creates a Doctor instance.
     /// - Parameters:
@@ -215,7 +215,7 @@ public struct Doctor {
         aerospace: ApAeroSpace = ApAeroSpace(),
         appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
         executableResolver: ExecutableResolver = ExecutableResolver(),
-        dataStore: DataStore = .default()
+        dataStore: DataPaths = .default()
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider

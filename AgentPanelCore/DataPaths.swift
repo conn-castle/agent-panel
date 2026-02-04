@@ -1,24 +1,24 @@
 import Foundation
 
-/// Canonical filesystem locations and data access for AgentPanel.
+/// Canonical filesystem paths for AgentPanel.
 ///
-/// Currently provides path resolution. Future: read/write APIs for config, state, and logs.
-public struct DataStore: Sendable {
+/// Provides path resolution for config, state, and logs. Does not perform I/O.
+public struct DataPaths: Sendable {
     /// User home directory used as the root for derived paths.
     public let homeDirectory: URL
 
-    /// Creates a data store rooted at the provided home directory.
+    /// Creates a DataPaths rooted at the provided home directory.
     /// - Parameter homeDirectory: Home directory as a file URL.
     public init(homeDirectory: URL) {
         precondition(homeDirectory.isFileURL, "homeDirectory must be a file URL")
         self.homeDirectory = homeDirectory.standardizedFileURL
     }
 
-    /// Creates a data store rooted at the current user's home directory.
+    /// Creates a DataPaths rooted at the current user's home directory.
     /// - Parameter fileManager: File manager used to resolve the home directory.
-    /// - Returns: A `DataStore` instance rooted at the user's home directory.
-    public static func `default`(fileManager: FileManager = .default) -> DataStore {
-        DataStore(homeDirectory: fileManager.homeDirectoryForCurrentUser)
+    /// - Returns: A `DataPaths` instance rooted at the user's home directory.
+    public static func `default`(fileManager: FileManager = .default) -> DataPaths {
+        DataPaths(homeDirectory: fileManager.homeDirectoryForCurrentUser)
     }
 
     // MARK: - Config paths

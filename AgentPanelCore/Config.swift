@@ -215,7 +215,7 @@ public struct ConfigLoader {
 
     /// Loads and parses the default config file.
     public static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
-        let url = DataStore.default().configFile
+        let url = DataPaths.default().configFile
         return load(from: url)
     }
 

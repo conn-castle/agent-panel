@@ -254,14 +254,14 @@ struct ApVSCodeLauncher {
     /// VS Code bundle identifier used for filtering windows.
     static let bundleId = "com.microsoft.VSCode"
 
-    private let dataStore: DataStore
+    private let dataStore: DataPaths
     private let commandRunner: ApSystemCommandRunner
 
     /// Creates a VS Code launcher.
     /// - Parameters:
     ///   - dataStore: Data store for workspace file paths.
     ///   - commandRunner: Command runner for launching VS Code.
-    init(dataStore: DataStore = .default(), commandRunner: ApSystemCommandRunner = ApSystemCommandRunner()) {
+    init(dataStore: DataPaths = .default(), commandRunner: ApSystemCommandRunner = ApSystemCommandRunner()) {
         self.dataStore = dataStore
         self.commandRunner = commandRunner
     }

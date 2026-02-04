@@ -87,7 +87,7 @@ public struct AgentPanelLogger {
     private static let defaultMaxLogSizeBytes: UInt64 = 10 * 1024 * 1024
     private static let defaultMaxArchives: Int = 5
 
-    private let dataStore: DataStore
+    private let dataStore: DataPaths
     private let fileSystem: FileSystem
     private let maxLogSizeBytes: UInt64
     private let maxArchives: Int
@@ -97,7 +97,7 @@ public struct AgentPanelLogger {
     ///   - dataStore: Data store for AgentPanel paths.
     ///   - fileSystem: File system accessor.
     public init(
-        dataStore: DataStore = .default(),
+        dataStore: DataPaths = .default(),
         fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.init(
@@ -115,7 +115,7 @@ public struct AgentPanelLogger {
     ///   - maxLogSizeBytes: Maximum size in bytes before rotation.
     ///   - maxArchives: Maximum number of rotated archives to keep.
     init(
-        dataStore: DataStore,
+        dataStore: DataPaths,
         fileSystem: FileSystem,
         maxLogSizeBytes: UInt64,
         maxArchives: Int
