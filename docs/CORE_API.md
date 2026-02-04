@@ -171,7 +171,7 @@ The following modules and helpers are internal implementation details and should
 
 - Configuration internals: `ConfigLoader`, `ConfigLoadResult`, `ConfigFinding`, `ConfigFindingSeverity`, `ConfigError`, `IdNormalizer`
 - AeroSpace internals: `ApAeroSpace`, `AeroSpaceConfigManager`, `AeroSpaceConfigStatus`
-- State persistence: `StateStore`, `AppState`, `FocusedWindowEntry`, `StateStoreError`
+- State persistence: `StateStore`, `AppState`, `StateStoreError`, `FocusEvent`, `FocusEventKind`, `FocusHistoryStore`, `FocusHistoryExportError`
 - System utilities: `ExecutableResolver`, `ApSystemCommandRunner`, `ApCommandResult`, `ApVSCodeLauncher`, `ApChromeLauncher`
 - Data paths: `DataPaths`
 - Logging: `AgentPanelLogger`, `LogEntry`, `LogLevel`, `LogWriteError`, `AgentPanelLogging`

@@ -35,8 +35,8 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-02-04 coreapi: App/CLI depend on internal Core APIs
     Priority: Medium. Area: Architecture
-    Description: AgentPanelApp and CLI both use `ConfigLoader`, which is internal per `docs/CORE_API.md`.
-    Next step: Define a Core config facade/provider, then update App/CLI to use that interface.
+    Description: AgentPanelApp uses `ConfigLoader`, `StateStore`, `FocusHistoryStore`, and `ApCore`, which are internal or CLI-only per `docs/CORE_API.md`. This contradicts the documented API boundary.
+    Next step: Either define public Core facades for these capabilities, or update CORE_API.md to explicitly allow these dependencies.
     Notes: Align with Phase 2 separation-of-concerns tasks.
 
 - Issue 2026-02-03 doctorsev: Doctor VS Code/Chrome checks should FAIL when a project needs them

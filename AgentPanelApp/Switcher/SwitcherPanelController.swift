@@ -25,6 +25,7 @@ enum SwitcherPresentationSource: String {
 enum SwitcherDismissReason: String {
     case toggle
     case escape
+    case projectSelected
     case windowClose
     case unknown
 }
@@ -52,11 +53,62 @@ private enum StatusLevel: Equatable {
     }
 }
 
+// MARK: - Focus Operations Protocol
+
+/// Protocol for window focus operations via AeroSpace.
+/// Allows dependency injection for testing and graceful degradation.
+protocol FocusOperations {
+    /// Returns the currently focused window, if available.
+    func focusedWindow() -> ApWindow?
+
+    /// Focuses a specific window by ID.
+    /// - Parameter windowId: The AeroSpace window ID to focus.
+    /// - Returns: True if focus was successful.
+    func focusWindow(windowId: Int) -> Bool
+}
+
+/// Default implementation using ApCore.
+final class ApCoreFocusOperations: FocusOperations {
+    private let apCore: ApCore?
+
+    init(config: Config?) {
+        if let config {
+            self.apCore = ApCore(config: config)
+        } else {
+            self.apCore = nil
+        }
+    }
+
+    func focusedWindow() -> ApWindow? {
+        guard let apCore else { return nil }
+        switch apCore.focusedWindow() {
+        case .success(let window):
+            return window
+        case .failure:
+            return nil
+        }
+    }
+
+    func focusWindow(windowId: Int) -> Bool {
+        guard let apCore else { return false }
+        switch apCore.focusWindow(windowId: windowId) {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
+    }
+}
+
 // MARK: - Controller
 
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
 final class SwitcherPanelController: NSObject {
+    private let logger: AgentPanelLogging
     private let session: SwitcherSession
+    private let stateStore: StateStore
+    private let focusHistoryStore: FocusHistoryStore
+    private var focusOperations: FocusOperations?
 
     private let panel: SwitcherPanel
     private let searchField: NSSearchField
@@ -73,10 +125,41 @@ final class SwitcherPanelController: NSObject {
     private var pendingVisibilityCheckToken: UUID?
     private var previouslyActiveApp: NSRunningApplication?
 
+    /// The window that was focused before the switcher opened.
+    /// Used for restore-on-cancel via AeroSpace.
+    private var defocusedWindow: ApWindow?
+
+    /// Current app state (loaded on init, updated on focus events).
+    private var appState: AppState
+
     /// Creates a switcher panel controller.
-    /// - Parameter logger: Logger used for switcher diagnostics.
-    init(logger: AgentPanelLogging = AgentPanelLogger()) {
+    /// - Parameters:
+    ///   - logger: Logger used for switcher diagnostics.
+    ///   - stateStore: Store for persisting app state.
+    ///   - focusHistoryStore: Store for focus history operations.
+    init(
+        logger: AgentPanelLogging = AgentPanelLogger(),
+        stateStore: StateStore = StateStore(),
+        focusHistoryStore: FocusHistoryStore = FocusHistoryStore()
+    ) {
+        self.logger = logger
         self.session = SwitcherSession(logger: logger)
+        self.stateStore = stateStore
+        self.focusHistoryStore = focusHistoryStore
+
+        // Load initial state
+        switch stateStore.load() {
+        case .success(let state):
+            self.appState = state
+        case .failure(let error):
+            _ = logger.log(
+                event: "switcher.state.load.failed",
+                level: .error,
+                message: "Failed to load state: \(error)",
+                context: nil
+            )
+            self.appState = AppState()
+        }
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
@@ -115,8 +198,14 @@ final class SwitcherPanelController: NSObject {
         expectsVisible = true
         session.begin(origin: origin)
         session.logShowRequested(origin: origin)
-        showPanel()
+
+        // Load config and set up focus operations
         loadProjects()
+
+        // Capture the currently focused window before showing switcher
+        captureDefocusedWindow()
+
+        showPanel()
         applyFilter(query: "")
         scheduleVisibilityCheck(origin: origin)
     }
@@ -126,8 +215,114 @@ final class SwitcherPanelController: NSObject {
         expectsVisible = false
         session.end(reason: reason)
         panel.orderOut(nil)
-        restorePreviousFocus()
+
+        // Restore focus unless a project was selected (switching context)
+        if reason != .projectSelected {
+            restorePreviousFocus()
+        }
+
         resetState()
+    }
+
+    // MARK: - Focus Capture and Restore
+
+    /// Captures the currently focused window via AeroSpace.
+    private func captureDefocusedWindow() {
+        guard let focusOps = focusOperations else {
+            defocusedWindow = nil
+            return
+        }
+
+        if let window = focusOps.focusedWindow() {
+            defocusedWindow = window
+
+            // Record windowDefocused event
+            let event = FocusEvent.windowDefocused(
+                windowId: window.windowId,
+                appBundleId: window.appBundleId,
+                metadata: ["source": "switcher_opened"]
+            )
+            appState = focusHistoryStore.record(event: event, state: appState)
+            saveState()
+
+            session.logEvent(
+                event: "switcher.focus.captured",
+                context: [
+                    "window_id": "\(window.windowId)",
+                    "app_bundle_id": window.appBundleId
+                ]
+            )
+        } else {
+            defocusedWindow = nil
+            session.logEvent(
+                event: "switcher.focus.capture_failed",
+                level: .warn,
+                message: "Could not capture focused window from AeroSpace."
+            )
+        }
+    }
+
+    /// Restores focus to the previously focused window or app.
+    private func restorePreviousFocus() {
+        // Try AeroSpace restore first
+        if let window = defocusedWindow, let focusOps = focusOperations {
+            if focusOps.focusWindow(windowId: window.windowId) {
+                // Record windowFocused event for restore
+                let event = FocusEvent.windowFocused(
+                    windowId: window.windowId,
+                    appBundleId: window.appBundleId,
+                    metadata: ["source": "switcher_restore"]
+                )
+                appState = focusHistoryStore.record(event: event, state: appState)
+                saveState()
+
+                session.logEvent(
+                    event: "switcher.focus.restored",
+                    context: [
+                        "window_id": "\(window.windowId)",
+                        "method": "aerospace"
+                    ]
+                )
+                defocusedWindow = nil
+                previouslyActiveApp = nil
+                return
+            } else {
+                session.logEvent(
+                    event: "switcher.focus.restore_failed",
+                    level: .warn,
+                    message: "AeroSpace focus restore failed, falling back to app activation.",
+                    context: ["window_id": "\(window.windowId)"]
+                )
+            }
+        }
+
+        // Fallback: activate the previously active app
+        if let previousApp = previouslyActiveApp {
+            previousApp.activate()
+            session.logEvent(
+                event: "switcher.focus.restored",
+                context: [
+                    "app_bundle_id": previousApp.bundleIdentifier ?? "unknown",
+                    "method": "app_activation"
+                ]
+            )
+        }
+
+        defocusedWindow = nil
+        previouslyActiveApp = nil
+    }
+
+    /// Saves the current app state to disk.
+    private func saveState() {
+        let result = stateStore.save(appState, prunedWith: focusHistoryStore)
+        if case .failure(let error) = result {
+            _ = logger.log(
+                event: "switcher.state.save.failed",
+                level: .error,
+                message: "Failed to save state: \(error)",
+                context: nil
+            )
+        }
     }
 
     // MARK: - Private Configuration
@@ -225,15 +420,6 @@ final class SwitcherPanelController: NSObject {
         clearStatus()
     }
 
-    /// Restores focus to the app that was active before the switcher was shown.
-    private func restorePreviousFocus() {
-        guard let previousApp = previouslyActiveApp else {
-            return
-        }
-        previousApp.activate()
-        previouslyActiveApp = nil
-    }
-
     /// Shows the panel and focuses the search field.
     private func showPanel() {
         panel.center()
@@ -252,6 +438,7 @@ final class SwitcherPanelController: NSObject {
             allProjects = []
             filteredProjects = []
             configErrorMessage = error.message
+            focusOperations = nil
             setStatus(message: "Config error: \(error.message)", level: .error)
             session.logConfigFailure(error)
         case .success(let result):
@@ -260,6 +447,7 @@ final class SwitcherPanelController: NSObject {
                 filteredProjects = []
                 let firstFinding = result.findings.first
                 configErrorMessage = firstFinding?.title ?? "Config error"
+                focusOperations = nil
                 setStatus(message: "Config error: \(configErrorMessage ?? "Unknown")", level: .error)
                 session.logConfigFindingsFailure(result.findings)
                 return
@@ -267,6 +455,7 @@ final class SwitcherPanelController: NSObject {
 
             allProjects = config.projects
             configErrorMessage = nil
+            focusOperations = ApCoreFocusOperations(config: config)
 
             let warnings = result.findings.filter { $0.severity == .warn }
             if warnings.isEmpty {
@@ -350,7 +539,7 @@ final class SwitcherPanelController: NSObject {
 
     // MARK: - Selection
 
-    /// Logs that a project was selected.
+    /// Handles project selection (Enter key).
     private func handleSelection() {
         guard let project = selectedProject() else {
             session.logEvent(
@@ -362,6 +551,14 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
+        // Record projectActivated event
+        let event = FocusEvent.projectActivated(
+            projectId: project.id,
+            metadata: ["project_name": project.name]
+        )
+        appState = focusHistoryStore.record(event: event, state: appState)
+        saveState()
+
         session.logEvent(
             event: "switcher.project.selected",
             context: [
@@ -369,7 +566,11 @@ final class SwitcherPanelController: NSObject {
                 "project_name": project.name
             ]
         )
-        // TODO: Wire project activation.
+
+        // Dismiss without restoring previous focus (we're switching to this project)
+        dismiss(reason: .projectSelected)
+
+        // TODO: Wire project activation (Phase 3).
     }
 
     /// Returns the currently selected project, if any.
