@@ -30,14 +30,14 @@ Notes: <optional constraints or tips>
 Run the doctor verification suite (checks config, dependencies, permissions, and app state):
 
 ```bash
-pwctl doctor
+ap doctor
 ```
 
 Run from repo root (or anywhere if installed).
 
 ## Generate
 
-Regenerate `ProjectWorkspaces.xcodeproj` from `project.yml` (XcodeGen):
+Regenerate `AgentPanel.xcodeproj` from `project.yml` (XcodeGen):
 
 ```bash
 scripts/regenerate_xcodeproj.sh
@@ -64,14 +64,13 @@ Build the app + CLI (Debug), without code signing:
 scripts/build.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
-Notes: Set `RUN_AEROSPACE_IT=1` to run local AeroSpace integration tests (requires AeroSpace + windows present).
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -derivedDataPath build/DerivedData -resolvePackageDependencies
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO
+xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -derivedDataPath build/DerivedData -resolvePackageDependencies
+xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO
 ```
 
 ## Clean
@@ -82,7 +81,7 @@ Clean build artifacts (DerivedData + build output). Logs are outside the repo an
 scripts/clean.sh
 ```
 
-Run from repo root. Notes: The script prints the exact `rm -rf` command to delete logs under `~/.local/state/project-workspaces/logs`.
+Run from repo root. Notes: The script prints the exact `rm -rf` command to delete logs under `~/.local/state/agent-panel/logs`.
 
 ## Test
 
@@ -92,11 +91,10 @@ Run unit tests (Debug), without code signing:
 scripts/test.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
-Notes: Set `RUN_AEROSPACE_IT=1` to include local AeroSpace integration tests (requires AeroSpace + windows present).
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 
 ```bash
-xcodebuild -project ProjectWorkspaces.xcodeproj -scheme ProjectWorkspaces -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData test CODE_SIGNING_ALLOWED=NO
+xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData test CODE_SIGNING_ALLOWED=NO
 ```

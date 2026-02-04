@@ -1,0 +1,13 @@
+# Managed by AgentPanel - do not edit manually
+# Purpose: AeroSpace sits idle until AgentPanel explicitly controls it.
+# This config intentionally disables automatic tiling and keybindings.
+
+config-version = 2
+start-at-login = false
+
+[mode.main.binding]
+# Intentionally empty. AgentPanel provides the UX.
+
+[[on-window-detected]]
+check-further-callbacks = true
+run = 'layout floating'

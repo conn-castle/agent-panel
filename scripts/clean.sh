@@ -10,6 +10,6 @@ echo "Build artifacts removed."
 
 echo ""
 echo "Logs live outside the repo at:"
-echo "  ~/.local/state/project-workspaces/logs"
+echo "  ~/.local/state/agent-panel/logs"
 echo "To remove logs, run:"
-echo "  rm -rf ~/.local/state/project-workspaces/logs"
+echo "  rm -rf ~/.local/state/agent-panel/logs"

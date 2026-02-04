@@ -1,7 +1,7 @@
-name: ProjectWorkspaces
+name: AgentPanel
 
 options:
-  bundleIdPrefix: com.projectworkspaces
+  bundleIdPrefix: com.agentpanel
   deploymentTarget:
     macOS: "15.7"
 
@@ -11,76 +11,85 @@ packages:
     exactVersion: 0.4.3
 
 targets:
-  ProjectWorkspacesApp:
+  AgentPanel:
     type: application
     platform: macOS
     sources:
-      - path: ProjectWorkspacesApp
+      - path: AgentPanelApp
     dependencies:
-      - target: ProjectWorkspacesCore
-      - package: TOMLDecoder
+      - target: AgentPanelCore
     settings:
       base:
-        PRODUCT_NAME: ProjectWorkspaces
-        PRODUCT_BUNDLE_IDENTIFIER: com.projectworkspaces.ProjectWorkspaces
-        INFOPLIST_FILE: ProjectWorkspacesApp/Info.plist
+        PRODUCT_NAME: AgentPanel
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
+        INFOPLIST_FILE: AgentPanelApp/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
 
-  ProjectWorkspacesCore:
+  AgentPanelCore:
     type: framework.static
     platform: macOS
     sources:
-      - path: ProjectWorkspacesCore
+      - path: AgentPanelCore
     dependencies:
       - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
 
-  pwctl:
+  AgentPanelCLICore:
+    type: framework.static
+    platform: macOS
+    sources:
+      - path: AgentPanelCLICore
+    dependencies:
+      - target: AgentPanelCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+
+  AgentPanelCLI:
     type: tool
     platform: macOS
+    productName: ap
     sources:
-      - path: pwctl
+      - path: AgentPanelCLI
     dependencies:
-      - target: ProjectWorkspacesCore
-      - package: TOMLDecoder
+      - target: AgentPanelCLICore
+      - target: AgentPanelCore
+    settings:
+      base:
+        PRODUCT_NAME: ap
 
-  ProjectWorkspacesCoreTests:
+  AgentPanelCoreTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: ProjectWorkspacesCoreTests
-    resources:
-      - path: ProjectWorkspacesCoreTests/Fixtures
+      - path: AgentPanelCoreTests
     dependencies:
-      - target: ProjectWorkspacesCore
-      - package: TOMLDecoder
+      - target: AgentPanelCore
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-
-  ProjectWorkspacesAppTests:
+  AgentPanelCLITests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: ProjectWorkspacesAppTests
+      - path: AgentPanelCLITests
     dependencies:
-      - target: ProjectWorkspacesApp
-      - target: ProjectWorkspacesCore
-      - package: TOMLDecoder
+      - target: AgentPanelCLICore
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/ProjectWorkspaces.app/Contents/MacOS/ProjectWorkspaces"
-        BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:
-  ProjectWorkspaces:
+  AgentPanel:
     build:
       targets:
-        ProjectWorkspacesApp: all
-        pwctl: all
+        AgentPanel: all
+        AgentPanelCLI: all
+        AgentPanelCoreTests: [test]
     test:
       targets:
-        - ProjectWorkspacesCoreTests
-        - ProjectWorkspacesAppTests
+        - AgentPanelCoreTests
+        - AgentPanelCLITests
