@@ -15,6 +15,12 @@ fi
 derived_data_path="build/DerivedData"
 mkdir -p "$(dirname -- "$derived_data_path")"
 
+if ! command -v xcbeautify &>/dev/null; then
+  echo "error: xcbeautify not found" >&2
+  echo "Fix: brew install xcbeautify" >&2
+  exit 1
+fi
+
 echo "Running unit tests (Debug)..."
 xcodebuild \
   -project AgentPanel.xcodeproj \
@@ -23,6 +29,7 @@ xcodebuild \
   -destination "platform=macOS" \
   -derivedDataPath "$derived_data_path" \
   test \
-  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGNING_ALLOWED=NO \
+  2>&1 | xcbeautify
 
 echo "test: OK"

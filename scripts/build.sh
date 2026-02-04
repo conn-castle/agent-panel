@@ -15,12 +15,19 @@ fi
 derived_data_path="build/DerivedData"
 mkdir -p "$(dirname -- "$derived_data_path")"
 
+if ! command -v xcbeautify &>/dev/null; then
+  echo "error: xcbeautify not found" >&2
+  echo "Fix: brew install xcbeautify" >&2
+  exit 1
+fi
+
 echo "Resolving SwiftPM packages (if any)..."
 xcodebuild \
   -project AgentPanel.xcodeproj \
   -scheme AgentPanel \
   -derivedDataPath "$derived_data_path" \
-  -resolvePackageDependencies
+  -resolvePackageDependencies \
+  2>&1 | xcbeautify
 
 echo "Building (Debug)..."
 xcodebuild \
@@ -30,7 +37,8 @@ xcodebuild \
   -destination "platform=macOS" \
   -derivedDataPath "$derived_data_path" \
   build \
-  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGNING_ALLOWED=NO \
+  2>&1 | xcbeautify
 
 app_path="$derived_data_path/Build/Products/Debug/AgentPanel.app"
 alt_app_path="$derived_data_path/Build/Products/Debug/AgentPanelApp.app"

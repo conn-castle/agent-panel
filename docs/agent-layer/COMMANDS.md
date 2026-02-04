@@ -64,7 +64,7 @@ Build the app + CLI (Debug), without code signing:
 scripts/build.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 
@@ -91,7 +91,7 @@ Run unit tests (Debug), without code signing:
 scripts/test.sh
 ```
 
-Run from repo root. This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 Reference (underlying `xcodebuild`):
 

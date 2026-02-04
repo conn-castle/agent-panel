@@ -167,9 +167,16 @@ public struct ApSystemCommandRunner {
         let stdoutHandle = stdoutPipe.fileHandleForReading
         let stderrHandle = stderrPipe.fileHandleForReading
 
+        // Use semaphores to detect when each pipe has reached EOF.
+        // This ensures we capture all data even for fast-completing processes.
+        let stdoutEOF = DispatchSemaphore(value: 0)
+        let stderrEOF = DispatchSemaphore(value: 0)
+
         stdoutHandle.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty {
+            if data.isEmpty {
+                stdoutEOF.signal()
+            } else {
                 dataLock.lock()
                 stdoutData.append(data)
                 dataLock.unlock()
@@ -178,7 +185,9 @@ public struct ApSystemCommandRunner {
 
         stderrHandle.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty {
+            if data.isEmpty {
+                stderrEOF.signal()
+            } else {
                 dataLock.lock()
                 stderrData.append(data)
                 dataLock.unlock()
@@ -211,15 +220,20 @@ public struct ApSystemCommandRunner {
             didTimeout = false
         }
 
-        // Clean up handlers and read any remaining data
+        // Wait for both pipes to reach EOF to ensure all data is captured.
+        // This prevents race conditions where fast processes terminate before
+        // all output is read by the readabilityHandler.
+        if let timeoutSeconds = timeoutSeconds {
+            _ = stdoutEOF.wait(timeout: .now() + timeoutSeconds)
+            _ = stderrEOF.wait(timeout: .now() + timeoutSeconds)
+        } else {
+            stdoutEOF.wait()
+            stderrEOF.wait()
+        }
+
+        // Clean up handlers
         stdoutHandle.readabilityHandler = nil
         stderrHandle.readabilityHandler = nil
-
-        // Read any final data that may have arrived
-        dataLock.lock()
-        stdoutData.append(stdoutHandle.readDataToEndOfFile())
-        stderrData.append(stderrHandle.readDataToEndOfFile())
-        dataLock.unlock()
 
         if didTimeout {
             return .failure(
