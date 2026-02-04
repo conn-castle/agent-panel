@@ -123,7 +123,7 @@ public struct DoctorReport: Equatable, Sendable {
         findings.contains { $0.severity == .fail }
     }
 
-    /// Renders the report as a human-readable string.
+    /// Renders the report as a human-readable string for CLI and App display.
     public func rendered() -> String {
         let indexed = findings.enumerated()
         let sortedFindings = indexed.sorted { lhs, rhs in
@@ -199,7 +199,24 @@ public struct Doctor {
     private let executableResolver: ExecutableResolver
     private let dataStore: DataPaths
 
-    /// Creates a Doctor instance.
+    /// Creates a Doctor instance with default dependencies.
+    /// - Parameters:
+    ///   - runningApplicationChecker: Running application checker (required, provided by CLI/App).
+    ///   - hotkeyStatusProvider: Optional hotkey status provider for hotkey registration checks.
+    public init(
+        runningApplicationChecker: RunningApplicationChecking,
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+    ) {
+        self.runningApplicationChecker = runningApplicationChecker
+        self.hotkeyStatusProvider = hotkeyStatusProvider
+        self.dateProvider = SystemDateProvider()
+        self.aerospace = ApAeroSpace()
+        self.appDiscovery = LaunchServicesAppDiscovery()
+        self.executableResolver = ExecutableResolver()
+        self.dataStore = .default()
+    }
+
+    /// Creates a Doctor instance with full dependency injection (internal, for testing).
     /// - Parameters:
     ///   - runningApplicationChecker: Running application checker.
     ///   - hotkeyStatusProvider: Optional hotkey status provider.
@@ -208,14 +225,14 @@ public struct Doctor {
     ///   - appDiscovery: App discovery for checking installed apps.
     ///   - executableResolver: Resolver for checking CLI tools.
     ///   - dataStore: Data store for path checks.
-    public init(
+    init(
         runningApplicationChecker: RunningApplicationChecking,
-        hotkeyStatusProvider: HotkeyStatusProviding? = nil,
-        dateProvider: DateProviding = SystemDateProvider(),
-        aerospace: ApAeroSpace = ApAeroSpace(),
-        appDiscovery: AppDiscovering = LaunchServicesAppDiscovery(),
-        executableResolver: ExecutableResolver = ExecutableResolver(),
-        dataStore: DataPaths = .default()
+        hotkeyStatusProvider: HotkeyStatusProviding?,
+        dateProvider: DateProviding,
+        aerospace: ApAeroSpace,
+        appDiscovery: AppDiscovering,
+        executableResolver: ExecutableResolver,
+        dataStore: DataPaths
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider

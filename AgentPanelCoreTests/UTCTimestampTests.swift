@@ -6,10 +6,7 @@ final class UTCTimestampTests: XCTestCase {
     func testDoctorTimestampIsUTC() {
         // Create a Doctor with a fixed date provider
         let fixedDate = Date(timeIntervalSince1970: 1704067200) // 2024-01-01T00:00:00Z
-        let doctor = Doctor(
-            runningApplicationChecker: MockRunningAppChecker(),
-            dateProvider: MockDateProvider(fixedDate: fixedDate)
-        )
+        let doctor = makeDoctor(dateProvider: MockDateProvider(fixedDate: fixedDate))
 
         let report = doctor.run()
 
@@ -27,10 +24,7 @@ final class UTCTimestampTests: XCTestCase {
 
     func testDoctorTimestampFormat() {
         let fixedDate = Date(timeIntervalSince1970: 1704067200.123) // With fractional seconds
-        let doctor = Doctor(
-            runningApplicationChecker: MockRunningAppChecker(),
-            dateProvider: MockDateProvider(fixedDate: fixedDate)
-        )
+        let doctor = makeDoctor(dateProvider: MockDateProvider(fixedDate: fixedDate))
 
         let report = doctor.run()
 
@@ -63,10 +57,7 @@ final class UTCTimestampTests: XCTestCase {
     func testTimestampTimezoneIsExplicitlyUTC() {
         // Verify that timestamps are explicitly UTC regardless of system timezone
         let fixedDate = Date(timeIntervalSince1970: 1704067200) // Known time
-        let doctor = Doctor(
-            runningApplicationChecker: MockRunningAppChecker(),
-            dateProvider: MockDateProvider(fixedDate: fixedDate)
-        )
+        let doctor = makeDoctor(dateProvider: MockDateProvider(fixedDate: fixedDate))
 
         let report = doctor.run()
 
@@ -74,6 +65,21 @@ final class UTCTimestampTests: XCTestCase {
         XCTAssertTrue(
             report.metadata.timestamp.hasPrefix("2024-01-01T00:00:00"),
             "Expected 2024-01-01T00:00:00, got: \(report.metadata.timestamp)"
+        )
+    }
+
+    // MARK: - Helper
+
+    /// Creates a Doctor with test dependencies using the internal DI initializer.
+    private func makeDoctor(dateProvider: DateProviding) -> Doctor {
+        Doctor(
+            runningApplicationChecker: MockRunningAppChecker(),
+            hotkeyStatusProvider: nil,
+            dateProvider: dateProvider,
+            aerospace: ApAeroSpace(),
+            appDiscovery: LaunchServicesAppDiscovery(),
+            executableResolver: ExecutableResolver(),
+            dataStore: .default()
         )
     }
 }

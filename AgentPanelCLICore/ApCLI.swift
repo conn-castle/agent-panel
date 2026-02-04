@@ -310,8 +310,8 @@ public struct ApCLIOutput {
 
 /// Interface for core command execution (testable abstraction).
 public protocol ApCoreCommanding {
-    func listWorkspaces() -> Result<Void, ApCoreError>
-    func showConfig() -> Result<Void, ApCoreError>
+    var config: Config { get }
+    func listWorkspaces() -> Result<[String], ApCoreError>
     func newWorkspace(name: String) -> Result<Void, ApCoreError>
     func newIde(identifier: String) -> Result<Void, ApCoreError>
     func newChrome(identifier: String) -> Result<Void, ApCoreError>
@@ -382,13 +382,11 @@ public struct ApCLI {
             output.stdout(report.rendered())
             return report.hasFailures ? ApExitCode.failure.rawValue : ApExitCode.ok.rawValue
         case .listWorkspaces:
-            return runCoreCommand { core in
+            return runCoreWorkspacesCommand { core in
                 core.listWorkspaces()
             }
         case .showConfig:
-            return runCoreCommand { core in
-                core.showConfig()
-            }
+            return runShowConfigCommand()
         case .newWorkspace(let name):
             return runCoreCommand { core in
                 core.newWorkspace(name: name)
@@ -513,6 +511,40 @@ public struct ApCLI {
                 output.stdout(formatWindowLine(window))
                 return ApExitCode.ok.rawValue
             }
+        }
+    }
+
+    private func runCoreWorkspacesCommand(
+        _ execute: (ApCoreCommanding) -> Result<[String], ApCoreError>
+    ) -> Int32 {
+        switch loadConfig() {
+        case .failure(let error):
+            output.stderr("error: \(error.message)")
+            return ApExitCode.failure.rawValue
+        case .success(let config):
+            let core = dependencies.coreFactory(config)
+            switch execute(core) {
+            case .failure(let error):
+                output.stderr("error: \(error.message)")
+                return ApExitCode.failure.rawValue
+            case .success(let workspaces):
+                for workspace in workspaces {
+                    output.stdout(workspace)
+                }
+                return ApExitCode.ok.rawValue
+            }
+        }
+    }
+
+    private func runShowConfigCommand() -> Int32 {
+        switch loadConfig() {
+        case .failure(let error):
+            output.stderr("error: \(error.message)")
+            return ApExitCode.failure.rawValue
+        case .success(let config):
+            let core = dependencies.coreFactory(config)
+            output.stdout(formatConfig(core.config))
+            return ApExitCode.ok.rawValue
         }
     }
 }
@@ -655,6 +687,24 @@ func usageText(for topic: ApHelpTopic) -> String {
 
 private func formatWindowLine(_ window: ApWindow) -> String {
     "\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)"
+}
+
+private func formatConfig(_ config: Config) -> String {
+    var lines: [String] = []
+    lines.append("# AgentPanel Configuration")
+    lines.append("")
+
+    for project in config.projects {
+        lines.append("[[project]]")
+        lines.append("id = \"\(project.id)\"")
+        lines.append("name = \"\(project.name)\"")
+        lines.append("path = \"\(project.path)\"")
+        lines.append("color = \"\(project.color)\"")
+        lines.append("useAgentLayer = \(project.useAgentLayer)")
+        lines.append("")
+    }
+
+    return lines.joined(separator: "\n")
 }
 
 /// Prints text to stderr.

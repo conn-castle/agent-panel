@@ -56,7 +56,7 @@ public final class ApCore {
     private let chromeLauncher: ApChromeLauncher
     private let workspacePrefix = "ap-"
 
-    /// Creates a new ApCore instance.
+    /// Creates a new ApCore instance with default dependencies.
     /// - Parameter config: Typed config to associate with this instance.
     public init(config: Config) {
         self.config = config
@@ -65,34 +65,33 @@ public final class ApCore {
         self.chromeLauncher = ApChromeLauncher()
     }
 
-    /// Prints AeroSpace workspaces filtered by the `ap-` prefix.
-    /// - Returns: Success or an error.
-    public func listWorkspaces() -> Result<Void, ApCoreError> {
+    /// Creates an ApCore instance with full dependency injection (internal, for testing).
+    /// - Parameters:
+    ///   - config: Typed config to associate with this instance.
+    ///   - aerospace: AeroSpace wrapper for workspace/window operations.
+    ///   - ideLauncher: IDE launcher for opening new IDE windows.
+    ///   - chromeLauncher: Chrome launcher for opening new browser windows.
+    init(
+        config: Config,
+        aerospace: ApAeroSpace,
+        ideLauncher: ApVSCodeLauncher,
+        chromeLauncher: ApChromeLauncher
+    ) {
+        self.config = config
+        self.aerospace = aerospace
+        self.ideLauncher = ideLauncher
+        self.chromeLauncher = chromeLauncher
+    }
+
+    /// Returns AeroSpace workspaces filtered by the `ap-` prefix.
+    /// - Returns: Workspace names or an error.
+    public func listWorkspaces() -> Result<[String], ApCoreError> {
         switch aerospace.getWorkspaces() {
         case .failure(let error):
             return .failure(error)
         case .success(let workspaces):
             let filtered = workspaces.filter { $0.hasPrefix(workspacePrefix) }
-            for workspace in filtered {
-                print(workspace)
-            }
-            return .success(())
-        }
-    }
-
-    /// Prints the raw config contents to stdout.
-    /// - Returns: Success or an error.
-    public func showConfig() -> Result<Void, ApCoreError> {
-        let configPath = DataPaths.default().configFile
-        if !FileManager.default.fileExists(atPath: configPath.path) {
-            _ = ConfigLoader.loadDefault()
-        }
-        do {
-            let raw = try String(contentsOf: configPath, encoding: .utf8)
-            FileHandle.standardOutput.write(Data(raw.utf8))
-            return .success(())
-        } catch {
-            return .failure(ApCoreError(message: "Failed to read config: \(error.localizedDescription)"))
+            return .success(filtered)
         }
     }
 
@@ -129,17 +128,6 @@ public final class ApCore {
         }
 
         return aerospace.createWorkspace(fullName)
-    }
-
-    /// Lists all AP IDE window titles.
-    /// - Returns: Titles or an error.
-    public func listIdeTitles() -> Result<[String], ApCoreError> {
-        switch listIdeWindows() {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let windows):
-            return .success(windows.map { $0.windowTitle })
-        }
     }
 
     /// Lists all AP IDE windows.

@@ -48,34 +48,13 @@ Incomplete:
 - Stripped activation/workspace management from the switcher, leaving list + selection logging.
 - Updated paths, logging, and docs to the AgentPanel namespace.
 
-## Phase 1 — Foundations: Doctor, config, persistence (UI skeleton)
-
-### Goal
-- Keep the UI intentionally skeletal while making Doctor and project config production-grade.
-- Define canonical persistence (logs + state/history) with detailed, structured logging.
-- Fully cover first-run onboarding and install checks (including Homebrew-only assumptions).
-
-### Tasks
-- [x] Define and document the canonical on-disk layout (config, logs, state/history) in a prose doc, not just code.
-- [x] Document the config TOML schema formally (fields, types, defaults, validation rules).
-- [x] Make config loading/validation exhaustive and consistent across app + CLI (no hidden defaults; actionable errors).
-- [x] Make Doctor "100% functional": full check suite for config validity, required directories, Homebrew, AeroSpace (app + CLI), Chrome, supported IDEs, and any agent-layer prerequisites.
-- [ ] Define a persistence API in `AgentPanelCore` (e.g., a `StateStore`) and implement it (incl. migrations/versioning strategy) with structured logs.
-- [ ] Add CLI tests: argument parsing, command execution, error handling.
-- [x] Add `ap --version` command and ensure version is reported consistently (CLI, app, Doctor).
-- [ ] Write a "core interface document" defining `AgentPanelCore` public API boundaries (moved from Phase 2).
-- [x] Keep the switcher UI as a skeleton: load config, list projects, basic filter, and log selections with stable identifiers.
-- [x] Ensure `ap doctor` and in-app Doctor share the same core report types/output and remain end-to-end working (`scripts/test.sh` stays green).
-
-### Exit criteria
-- `ap doctor` and the in-app Doctor produce a complete report with clear PASS/WARN/FAIL and actionable remediation steps. ✅
-- Config can be created/loaded/validated deterministically; invalid configs fail loudly with specific messages. ✅
-- A real state store exists on disk (with a documented schema + versioning) and is exercised by at least one persisted datum.
-- CLI has test coverage for argument parsing and core commands.
-- Core interface document exists and matches implemented public APIs.
-- On-disk layout and config schema are documented. ✅
-- `ap --version` reports version consistently with Doctor output. ✅
-- AgentPanel launches and the switcher skeleton works; `scripts/test.sh` passes. ✅
+## Phase 1 ✅ — Foundations: Doctor, config, persistence (UI skeleton)
+- Doctor is 100% functional with checks for Homebrew, AeroSpace, VS Code, Chrome, agent-layer CLI, config validity, and directories.
+- Config loading/validation is exhaustive with actionable errors; schema documented in README.
+- StateStore persistence API implemented with versioned JSON schema, focus stack (LIFO, 20 max, 7-day prune), and lastLaunchedAt.
+- CLI has test coverage for argument parsing and command execution; `ap --version` added.
+- Core interface document (`docs/CORE_API.md`) catalogs all public APIs.
+- Switcher UI skeleton loads config, lists projects, and logs selections.
 
 ## Phase 2 — Focus + switcher UX + core interfaces (separation of concerns)
 

@@ -57,7 +57,7 @@ final class ApCLIRunnerTests: XCTestCase {
     func testListWorkspacesSuccessRunsCoreCommand() {
         let output = OutputRecorder()
         let stubCore = StubCore()
-        stubCore.listWorkspacesResult = .success(())
+        stubCore.listWorkspacesResult = .success(["ap-test", "ap-demo"])
 
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
@@ -71,6 +71,7 @@ final class ApCLIRunnerTests: XCTestCase {
 
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
         XCTAssertTrue(stubCore.listWorkspacesCalled)
+        XCTAssertEqual(output.stdout, ["ap-test", "ap-demo"])
         XCTAssertTrue(output.stderr.isEmpty)
     }
 
@@ -162,16 +163,18 @@ private final class OutputRecorder {
 }
 
 private final class StubCore: ApCoreCommanding {
+    var stubConfig: Config = Config(projects: [])
+    var config: Config { stubConfig }
+
     var listWorkspacesCalled = false
-    var listWorkspacesResult: Result<Void, ApCoreError> = .success(())
+    var listWorkspacesResult: Result<[String], ApCoreError> = .success([])
     var listIdeWindowsResult: Result<[ApWindow], ApCoreError> = .success([])
 
-    func listWorkspaces() -> Result<Void, ApCoreError> {
+    func listWorkspaces() -> Result<[String], ApCoreError> {
         listWorkspacesCalled = true
         return listWorkspacesResult
     }
 
-    func showConfig() -> Result<Void, ApCoreError> { .success(()) }
     func newWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
     func newIde(identifier: String) -> Result<Void, ApCoreError> { .success(()) }
     func newChrome(identifier: String) -> Result<Void, ApCoreError> { .success(()) }

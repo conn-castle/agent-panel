@@ -27,6 +27,18 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-04 apcore-config: ApCore stores config but never uses it
+    Priority: Medium. Area: Architecture
+    Description: `ApCore.init(config:)` requires a `Config` parameter and stores it, but none of the methods use it. All operations are config-agnostic AeroSpace/window operations.
+    Next step: Phase 2 should either use config for project-aware operations or reconsider whether ApCore should require config.
+    Notes: Related to Phase 2 separation of concerns and project lifecycle work.
+
+- Issue 2026-02-04 coreapi: App/CLI depend on internal Core APIs
+    Priority: Medium. Area: Architecture
+    Description: AgentPanelApp and CLI both use `ConfigLoader`, which is internal per `docs/CORE_API.md`.
+    Next step: Define a Core config facade/provider, then update App/CLI to use that interface.
+    Notes: Align with Phase 2 separation-of-concerns tasks.
+
 - Issue 2026-02-03 doctorsev: Doctor VS Code/Chrome checks should FAIL when a project needs them
     Priority: Medium. Area: Doctor
     Description: VS Code and Chrome checks are currently WARN. They should be FAIL if any configured project would use them (same logic as the agent-layer CLI check).
