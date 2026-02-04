@@ -3,6 +3,13 @@ import SwiftUI
 
 import AgentPanelCore
 
+/// Timing constants for menu behavior.
+private enum MenuTiming {
+    /// Delay after dismissing the menu before showing the switcher.
+    /// Required to let AppKit finish menu dismissal animation.
+    static let menuDismissDelaySeconds: TimeInterval = 0.05
+}
+
 @main
 struct AgentPanelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -127,7 +134,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: ["menu_item": "Open Switcher..."]
         )
         statusItem?.menu?.cancelTracking()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        // Small delay required to let the menu dismiss before showing the switcher.
+        // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
+        DispatchQueue.main.asyncAfter(deadline: .now() + MenuTiming.menuDismissDelaySeconds) { [weak self] in
             guard let self else {
                 return
             }
@@ -254,28 +263,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteboard.setString(report, forType: .string)
     }
 
+    /// Runs a Doctor action and shows the resulting report.
+    /// - Parameters:
+    ///   - action: The Doctor method to call.
+    ///   - requestedEvent: Event name to log before the action.
+    ///   - completedEvent: Event name to log after the action.
+    private func runDoctorAction(
+        _ action: (Doctor) -> DoctorReport,
+        requestedEvent: String,
+        completedEvent: String
+    ) {
+        logAppEvent(event: requestedEvent)
+        let report = action(makeDoctor())
+        showDoctorReport(report)
+        logDoctorSummary(report, event: completedEvent)
+    }
+
     /// Installs AeroSpace via Homebrew and refreshes the report.
     private func installAeroSpace() {
-        logAppEvent(event: "doctor.install_aerospace.requested")
-        let report = makeDoctor().installAeroSpace()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.install_aerospace.completed")
+        runDoctorAction(
+            { $0.installAeroSpace() },
+            requestedEvent: "doctor.install_aerospace.requested",
+            completedEvent: "doctor.install_aerospace.completed"
+        )
     }
 
     /// Starts AeroSpace and refreshes the report.
     private func startAeroSpace() {
-        logAppEvent(event: "doctor.start_aerospace.requested")
-        let report = makeDoctor().startAeroSpace()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.start_aerospace.completed")
+        runDoctorAction(
+            { $0.startAeroSpace() },
+            requestedEvent: "doctor.start_aerospace.requested",
+            completedEvent: "doctor.start_aerospace.completed"
+        )
     }
 
     /// Reloads AeroSpace config and refreshes the report.
     private func reloadAeroSpaceConfig() {
-        logAppEvent(event: "doctor.reload_aerospace.requested")
-        let report = makeDoctor().reloadAeroSpaceConfig()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.reload_aerospace.completed")
+        runDoctorAction(
+            { $0.reloadAeroSpaceConfig() },
+            requestedEvent: "doctor.reload_aerospace.requested",
+            completedEvent: "doctor.reload_aerospace.completed"
+        )
     }
 
     /// Closes the Doctor window.

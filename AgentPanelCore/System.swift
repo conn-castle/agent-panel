@@ -62,6 +62,11 @@ public struct ExecutableResolver {
     }
 
     /// Falls back to login shell `which` for non-standard locations.
+    ///
+    /// GUI apps have a minimal PATH. Using a login shell (`-l`) loads the user's
+    /// shell profile (`.zshrc`, `.zprofile`, etc.) to get their full PATH including
+    /// custom additions like Homebrew or tool-specific paths.
+    ///
     /// - Parameter name: Executable name to resolve.
     /// - Returns: Full path from login shell, or nil if not found.
     private func resolveViaLoginShell(_ name: String) -> String? {

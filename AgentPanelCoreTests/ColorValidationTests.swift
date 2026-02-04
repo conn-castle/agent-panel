@@ -53,15 +53,15 @@ final class ColorValidationTests: XCTestCase {
     }
 
     func testRGBValuesAreValid() {
-        // Verify that resolved colors have valid RGB values (0-255 range)
+        // Verify that resolved colors have valid RGB values (0.0-1.0 range for NSColor)
         for name in ProjectColorPalette.sortedNames {
             if let rgb = ProjectColorPalette.resolve(name) {
-                XCTAssertGreaterThanOrEqual(rgb.red, 0)
-                XCTAssertLessThanOrEqual(rgb.red, 255)
-                XCTAssertGreaterThanOrEqual(rgb.green, 0)
-                XCTAssertLessThanOrEqual(rgb.green, 255)
-                XCTAssertGreaterThanOrEqual(rgb.blue, 0)
-                XCTAssertLessThanOrEqual(rgb.blue, 255)
+                XCTAssertGreaterThanOrEqual(rgb.red, 0.0)
+                XCTAssertLessThanOrEqual(rgb.red, 1.0)
+                XCTAssertGreaterThanOrEqual(rgb.green, 0.0)
+                XCTAssertLessThanOrEqual(rgb.green, 1.0)
+                XCTAssertGreaterThanOrEqual(rgb.blue, 0.0)
+                XCTAssertLessThanOrEqual(rgb.blue, 1.0)
             }
         }
     }
