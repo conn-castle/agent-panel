@@ -183,23 +183,3 @@ public enum FocusHistoryExportError: Error, Equatable, Sendable {
     case stringConversionFailed
 }
 
-// MARK: - StateStore Integration
-
-extension StateStore {
-    /// Saves state to disk, pruning focus history before saving.
-    ///
-    /// This is the preferred save method. It prunes focus history to prevent
-    /// unbounded growth before persisting.
-    ///
-    /// - Parameters:
-    ///   - state: The state to save.
-    ///   - focusHistoryStore: The focus history store for pruning.
-    /// - Returns: Success or a file system error.
-    public func save(
-        _ state: AppState,
-        prunedWith focusHistoryStore: FocusHistoryStore
-    ) -> Result<Void, StateStoreError> {
-        let pruned = focusHistoryStore.prune(state: state)
-        return save(pruned)
-    }
-}

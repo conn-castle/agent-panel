@@ -63,11 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Record session start
         sessionManager.sessionStarted(version: AgentPanel.version)
 
-        let switcherController = SwitcherPanelController(
-            logger: logger,
-            sessionManager: sessionManager
-        )
-        self.switcherController = switcherController
+        self.switcherController = makeSwitcherController()
 
         let hotkeyManager = HotkeyManager()
         hotkeyManager.onHotkey = { [weak self] in
@@ -174,16 +170,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Creates a new SwitcherPanelController instance.
+    private func makeSwitcherController() -> SwitcherPanelController {
+        SwitcherPanelController(logger: logger, sessionManager: sessionManager)
+    }
+
     /// Ensures the switcher controller exists for menu/hotkey actions.
     /// - Returns: Switcher panel controller instance.
     private func ensureSwitcherController() -> SwitcherPanelController {
         if let switcherController {
             return switcherController
         }
-        let controller = SwitcherPanelController(
-            logger: logger,
-            sessionManager: sessionManager
-        )
+        let controller = makeSwitcherController()
         switcherController = controller
         return controller
     }

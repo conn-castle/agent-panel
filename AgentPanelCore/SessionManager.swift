@@ -419,7 +419,8 @@ public final class SessionManager {
             return
         }
 
-        let result = stateStore.save(appState, prunedWith: focusHistoryStore)
+        let prunedState = focusHistoryStore.prune(state: appState)
+        let result = stateStore.save(prunedState)
         if case .failure(let error) = result {
             logEvent(
                 "state.save.failed",

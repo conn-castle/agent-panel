@@ -142,7 +142,8 @@ struct StateStoreTests {
             )
         ]
 
-        let result = stateStore.save(state, prunedWith: focusStore)
+        let prunedState = focusStore.prune(state: state)
+        let result = stateStore.save(prunedState)
 
         guard case .success = result else {
             Issue.record("Expected save to succeed")
