@@ -103,7 +103,7 @@ public struct ApAeroSpace {
         }
 
         return .failure(ApCoreError(
-            category: .aerospace,
+            category: .command,
             message: "AeroSpace did not become ready within \(Self.startupTimeoutSeconds)s after launch."
         ))
     }
@@ -173,7 +173,7 @@ public struct ApAeroSpace {
         guard failures.isEmpty else {
             return .failure(
                 ApCoreError(
-                    category: .aerospace,
+                    category: .validation,
                     message: "AeroSpace CLI compatibility check failed.",
                     detail: failures.joined(separator: "\n")
                 )
@@ -294,7 +294,7 @@ public struct ApAeroSpace {
             guard failures.isEmpty else {
                 return .failure(
                     ApCoreError(
-                        category: .aerospace,
+                        category: .command,
                         message: "Failed to close \(failures.count) windows in workspace \(trimmed).",
                         detail: failures.joined(separator: "\n")
                     )
@@ -428,7 +428,7 @@ public struct ApAeroSpace {
             guard windows.count == 1, let window = windows.first else {
                 return .failure(
                     ApCoreError(
-                        category: .aerospace,
+                        category: .parse,
                         message: "Expected exactly one focused window, found \(windows.count)."
                     )
                 )
@@ -593,6 +593,62 @@ public struct ApAeroSpace {
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n")
             return .success(output)
+        }
+    }
+}
+
+// MARK: - AeroSpaceHealthChecking Conformance
+
+extension ApAeroSpace: AeroSpaceHealthChecking {
+    /// Returns the installation status of AeroSpace.
+    public func installStatus() -> AeroSpaceInstallStatus {
+        AeroSpaceInstallStatus(isInstalled: isAppInstalled(), appPath: appPath)
+    }
+
+    /// Checks whether the installed aerospace CLI is compatible.
+    /// Translates the internal Result type to the intent-based AeroSpaceCompatibility enum.
+    public func healthCheckCompatibility() -> AeroSpaceCompatibility {
+        guard isCliAvailable() else {
+            return .cliUnavailable
+        }
+        switch checkCompatibility() {
+        case .success:
+            return .compatible
+        case .failure(let error):
+            return .incompatible(detail: error.detail ?? error.message)
+        }
+    }
+
+    /// Installs AeroSpace via Homebrew.
+    /// - Returns: True if installation succeeded.
+    public func healthInstallViaHomebrew() -> Bool {
+        switch installViaHomebrew() {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
+    }
+
+    /// Starts AeroSpace.
+    /// - Returns: True if start succeeded.
+    public func healthStart() -> Bool {
+        switch start() {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
+    }
+
+    /// Reloads the AeroSpace configuration.
+    /// - Returns: True if reload succeeded.
+    public func healthReloadConfig() -> Bool {
+        switch reloadConfig() {
+        case .success:
+            return true
+        case .failure:
+            return false
         }
     }
 }

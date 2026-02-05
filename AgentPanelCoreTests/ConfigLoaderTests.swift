@@ -68,3 +68,58 @@ final class ConfigLoaderTests: XCTestCase {
     }
 }
 
+// MARK: - Config.loadDefault() Tests
+
+final class ConfigLoadDefaultTests: XCTestCase {
+    // Note: Config.loadDefault() uses DataPaths.default() which reads from ~/.config/agentpanel.
+    // These tests verify the error types and behavior, not the actual default path.
+
+    private func makeTempConfigDirectory() throws -> URL {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agent-panel-tests", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempRoot, withIntermediateDirectories: true)
+        return tempRoot
+    }
+
+    func testConfigLoadErrorEquatable() {
+        // Test that ConfigLoadError cases are equatable
+        let error1 = ConfigLoadError.fileNotFound(path: "/test")
+        let error2 = ConfigLoadError.fileNotFound(path: "/test")
+        let error3 = ConfigLoadError.fileNotFound(path: "/other")
+
+        XCTAssertEqual(error1, error2)
+        XCTAssertNotEqual(error1, error3)
+
+        let readError1 = ConfigLoadError.readFailed(path: "/test", detail: "error")
+        let readError2 = ConfigLoadError.readFailed(path: "/test", detail: "error")
+        XCTAssertEqual(readError1, readError2)
+
+        let parseError1 = ConfigLoadError.parseFailed(detail: "invalid")
+        let parseError2 = ConfigLoadError.parseFailed(detail: "invalid")
+        XCTAssertEqual(parseError1, parseError2)
+    }
+
+    func testConfigLoadErrorSendable() {
+        // ConfigLoadError should be Sendable (compile-time check)
+        let error: ConfigLoadError = .fileNotFound(path: "/test")
+        let _: any Sendable = error
+    }
+
+    func testValidationFailedContainsFindings() {
+        let findings = [
+            ConfigFinding(severity: .fail, title: "Missing name"),
+            ConfigFinding(severity: .fail, title: "Missing path")
+        ]
+        let error = ConfigLoadError.validationFailed(findings: findings)
+
+        if case .validationFailed(let resultFindings) = error {
+            XCTAssertEqual(resultFindings.count, 2)
+            XCTAssertEqual(resultFindings[0].title, "Missing name")
+            XCTAssertEqual(resultFindings[1].title, "Missing path")
+        } else {
+            XCTFail("Expected validationFailed case")
+        }
+    }
+}
+

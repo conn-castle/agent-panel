@@ -27,9 +27,13 @@ public protocol HotkeyStatusProviding {
 // MARK: - File System
 
 /// File system access protocol for testability.
+///
+/// This protocol includes only the methods actually used by Core components:
+/// - Logger: createDirectory, appendFile, fileExists, fileSize, removeItem, moveItem
+/// - ExecutableResolver: isExecutableFile
+/// - StateStore: fileExists, readFile, createDirectory, writeFile
 public protocol FileSystem {
     func fileExists(at url: URL) -> Bool
-    func directoryExists(at url: URL) -> Bool
     func isExecutableFile(at url: URL) -> Bool
     func readFile(at url: URL) throws -> Data
     func createDirectory(at url: URL) throws
@@ -38,9 +42,6 @@ public protocol FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws
     func appendFile(at url: URL, data: Data) throws
     func writeFile(at url: URL, data: Data) throws
-    func syncFile(at url: URL) throws
-    @discardableResult
-    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL?
 }
 
 /// Default file system implementation backed by FileManager.
@@ -53,12 +54,6 @@ public struct DefaultFileSystem: FileSystem {
 
     public func fileExists(at url: URL) -> Bool {
         fileManager.fileExists(atPath: url.path)
-    }
-
-    public func directoryExists(at url: URL) -> Bool {
-        var isDirectory = ObjCBool(false)
-        let exists = fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory)
-        return exists && isDirectory.boolValue
     }
 
     public func isExecutableFile(at url: URL) -> Bool {
@@ -107,17 +102,65 @@ public struct DefaultFileSystem: FileSystem {
     public func writeFile(at url: URL, data: Data) throws {
         try data.write(to: url, options: .atomic)
     }
+}
 
-    public func syncFile(at url: URL) throws {
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        try handle.synchronize()
-    }
+// MARK: - AeroSpace Health Checking
 
-    @discardableResult
-    public func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
-        try fileManager.replaceItemAt(originalURL, withItemAt: newItemURL)
+/// Result of an AeroSpace installation check.
+public struct AeroSpaceInstallStatus: Equatable, Sendable {
+    /// True if AeroSpace.app is installed.
+    public let isInstalled: Bool
+    /// Path to AeroSpace.app, if installed.
+    public let appPath: String?
+
+    public init(isInstalled: Bool, appPath: String?) {
+        self.isInstalled = isInstalled
+        self.appPath = appPath
     }
+}
+
+/// Result of an AeroSpace compatibility check.
+public enum AeroSpaceCompatibility: Equatable, Sendable {
+    /// AeroSpace CLI is compatible.
+    case compatible
+    /// AeroSpace CLI is not available.
+    case cliUnavailable
+    /// AeroSpace CLI is missing required commands or flags.
+    case incompatible(detail: String)
+}
+
+/// Intent-based protocol for AeroSpace health checks and actions.
+///
+/// Used by Doctor to check AeroSpace status and perform remediation actions.
+/// This protocol hides AeroSpace implementation details from Doctor.
+///
+/// Method names use a `health` prefix to avoid collision with the existing
+/// `Result`-returning methods on ApAeroSpace (e.g., `healthStart()` vs `start()`).
+public protocol AeroSpaceHealthChecking {
+    // MARK: - Health Checks
+
+    /// Returns the installation status of AeroSpace.
+    func installStatus() -> AeroSpaceInstallStatus
+
+    /// Returns true when the aerospace CLI is available.
+    func isCliAvailable() -> Bool
+
+    /// Checks whether the installed aerospace CLI is compatible.
+    func healthCheckCompatibility() -> AeroSpaceCompatibility
+
+    // MARK: - Actions
+
+    /// Installs AeroSpace via Homebrew.
+    /// - Returns: True if installation succeeded.
+    func healthInstallViaHomebrew() -> Bool
+
+    /// Starts AeroSpace.
+    /// - Returns: True if start succeeded.
+    func healthStart() -> Bool
+
+    /// Reloads the AeroSpace configuration.
+    /// - Returns: True if reload succeeded.
+    func healthReloadConfig() -> Bool
 }
 
 // MARK: - App Discovery

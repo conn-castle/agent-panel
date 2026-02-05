@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+import AgentPanelAppKit
 import AgentPanelCore
 
 /// Timing constants for menu behavior.
@@ -34,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private let logger: AgentPanelLogging = AgentPanelLogger()
+    private let sessionManager = SessionManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run onboarding check asynchronously before setting up the app
@@ -58,8 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
 
-        let switcherController = SwitcherPanelController(logger: logger)
-        self.switcherController = switcherController
+        // Record session start
+        sessionManager.sessionStarted(version: AgentPanel.version)
+
+        self.switcherController = makeSwitcherController()
 
         let hotkeyManager = HotkeyManager()
         hotkeyManager.onHotkey = { [weak self] in
@@ -133,6 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
+        // Capture the previously active app BEFORE the menu dismisses and before we activate.
+        // This ensures restore-on-cancel returns to the correct app.
+        let previousApp = NSWorkspace.shared.frontmostApplication
         statusItem?.menu?.cancelTracking()
         // Small delay required to let the menu dismiss before showing the switcher.
         // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
@@ -141,12 +148,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().show(origin: .menu)
+            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp)
         }
     }
 
     /// Toggles the switcher panel from the global hotkey.
     private func toggleSwitcher() {
+        // Capture the previously active app BEFORE we activate AgentPanel.
+        // This must happen outside the async block to capture the correct app.
+        let previousApp = NSWorkspace.shared.frontmostApplication
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -156,8 +166,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: ["hotkey": "Cmd+Shift+Space"]
             )
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().toggle(origin: .hotkey)
+            self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp)
         }
+    }
+
+    /// Creates a new SwitcherPanelController instance.
+    private func makeSwitcherController() -> SwitcherPanelController {
+        SwitcherPanelController(logger: logger, sessionManager: sessionManager)
     }
 
     /// Ensures the switcher controller exists for menu/hotkey actions.
@@ -166,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let switcherController {
             return switcherController
         }
-        let controller = SwitcherPanelController(logger: logger)
+        let controller = makeSwitcherController()
         switcherController = controller
         return controller
     }
@@ -316,6 +331,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() {
         logAppEvent(event: "app.quit.requested")
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - App Lifecycle State Management
+
+    /// Called when the app is about to terminate.
+    func applicationWillTerminate(_ notification: Notification) {
+        sessionManager.sessionEnded()
+        logAppEvent(event: "app.session.ended")
     }
 
     /// Displays the Doctor report using the DoctorWindowController.

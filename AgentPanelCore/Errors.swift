@@ -19,8 +19,6 @@ public enum ApCoreErrorCategory: String, Sendable {
     case fileSystem
     /// Configuration loading/parsing failures.
     case configuration
-    /// AeroSpace-specific failures.
-    case aerospace
     /// Output parsing failures.
     case parse
 }

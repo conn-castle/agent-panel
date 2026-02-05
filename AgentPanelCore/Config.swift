@@ -147,11 +147,23 @@ public enum ProjectColorPalette {
 
 // MARK: - Config Loading
 
+/// Kind of config loading error for programmatic handling.
+public enum ConfigErrorKind: String, Equatable, Sendable {
+    /// Config file does not exist (starter config was created).
+    case fileNotFound
+    /// Failed to create starter config file.
+    case createFailed
+    /// Failed to read existing config file.
+    case readFailed
+}
+
 /// Errors emitted by config loading operations.
 public struct ConfigError: Error, Equatable {
+    public let kind: ConfigErrorKind
     public let message: String
 
-    public init(message: String) {
+    public init(kind: ConfigErrorKind, message: String) {
+        self.kind = kind
         self.message = message
     }
 }
@@ -164,11 +176,19 @@ public struct ConfigLoadResult: Equatable, Sendable {
     public let findings: [ConfigFinding]
     /// Parsed projects (may be partial on error).
     public let projects: [ProjectConfig]
+    /// True if the TOML could not be parsed (syntax error vs validation error).
+    public let hasParseError: Bool
 
-    public init(config: Config?, findings: [ConfigFinding], projects: [ProjectConfig]) {
+    public init(
+        config: Config?,
+        findings: [ConfigFinding],
+        projects: [ProjectConfig] = [],
+        hasParseError: Bool = false
+    ) {
         self.config = config
         self.findings = findings
         self.projects = projects
+        self.hasParseError = hasParseError
     }
 }
 
@@ -226,9 +246,13 @@ public struct ConfigLoader {
             do {
                 try createStarterConfig(at: url)
             } catch {
-                return .failure(ConfigError(message: "Failed to create config at \(path): \(error.localizedDescription)"))
+                return .failure(ConfigError(
+                    kind: .createFailed,
+                    message: "Failed to create config at \(path): \(error.localizedDescription)"
+                ))
             }
             return .failure(ConfigError(
+                kind: .fileNotFound,
                 message: "Config file not found. Created a starter config at \(path). Edit it to add projects."
             ))
         }
@@ -237,7 +261,10 @@ public struct ConfigLoader {
         do {
             raw = try String(contentsOf: url, encoding: .utf8)
         } catch {
-            return .failure(ConfigError(message: "Failed to read config at \(path): \(error.localizedDescription)"))
+            return .failure(ConfigError(
+                kind: .readFailed,
+                message: "Failed to read config at \(path): \(error.localizedDescription)"
+            ))
         }
 
         return .success(ConfigParser.parse(toml: raw))
@@ -270,7 +297,7 @@ struct ConfigParser {
                         fix: "Fix the TOML syntax in config.toml."
                     )
                 ],
-                projects: []
+                hasParseError: true
             )
         }
     }
@@ -542,5 +569,68 @@ struct ConfigParser {
         }
 
         return value
+    }
+}
+
+// MARK: - ConfigLoadError
+
+/// Errors that can occur when loading configuration via `Config.loadDefault()`.
+///
+/// This is the public error type for the simplified config loading API.
+public enum ConfigLoadError: Error, Equatable, Sendable {
+    /// Config file not found at the expected path.
+    case fileNotFound(path: String)
+
+    /// Config file exists but could not be read.
+    case readFailed(path: String, detail: String)
+
+    /// Config file could not be parsed as valid TOML.
+    case parseFailed(detail: String)
+
+    /// Config file parsed but failed validation.
+    case validationFailed(findings: [ConfigFinding])
+}
+
+// MARK: - Config Public Loading API
+
+extension Config {
+    /// Loads and validates configuration from the default path.
+    ///
+    /// This is the recommended entry point for App to load configuration.
+    /// It provides a simplified API that returns either a valid Config or
+    /// a descriptive error. Uses `ConfigLoader` as the single source of truth.
+    ///
+    /// - Returns: Result with validated Config or ConfigLoadError.
+    public static func loadDefault() -> Result<Config, ConfigLoadError> {
+        let path = DataPaths.default().configFile.path
+
+        // Use ConfigLoader as single source of truth
+        switch ConfigLoader.loadDefault() {
+        case .failure(let error):
+            // Translate ConfigError to ConfigLoadError using the error kind.
+            switch error.kind {
+            case .fileNotFound:
+                return .failure(.fileNotFound(path: path))
+            case .createFailed, .readFailed:
+                return .failure(.readFailed(path: path, detail: error.message))
+            }
+
+        case .success(let result):
+            // Check for parse or validation errors
+            let failures = result.findings.filter { $0.severity == .fail }
+            if !failures.isEmpty || result.config == nil {
+                // Use the explicit flag instead of string matching
+                if result.hasParseError, let parseError = failures.first {
+                    return .failure(.parseFailed(detail: parseError.detail ?? parseError.title))
+                }
+                return .failure(.validationFailed(findings: failures))
+            }
+
+            guard let config = result.config else {
+                return .failure(.validationFailed(findings: result.findings))
+            }
+
+            return .success(config)
+        }
     }
 }

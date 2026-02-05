@@ -8,7 +8,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "9.9.9" },
-            configLoader: { XCTFail("configLoader should not be called"); return .failure(ConfigError(message: "")) },
+            configLoader: { XCTFail("configLoader should not be called"); return .failure(ConfigError(kind: .fileNotFound, message: "")) },
             coreFactory: { _ in XCTFail("coreFactory should not be called"); return StubCore() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
@@ -25,7 +25,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(message: "unused")) },
+            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "unused")) },
             coreFactory: { _ in StubCore() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
@@ -42,7 +42,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(message: "unused")) },
+            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "unused")) },
             coreFactory: { _ in StubCore() },
             doctorRunner: { makeDoctorReport(hasFailures: true) }
         )
@@ -98,7 +98,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(message: "config missing")) },
+            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "config missing")) },
             coreFactory: { _ in StubCore() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )

@@ -1,22 +1,178 @@
 import Foundation
 
-// MARK: - State Model
+// MARK: - FocusEventKind
 
-/// A snapshot of a focused window, captured when the switcher is opened.
-public struct FocusedWindowEntry: Codable, Equatable, Sendable {
-    /// AeroSpace window ID used to restore focus.
-    public let windowId: Int
-    /// App bundle identifier, used to check if the window still exists.
-    public let appBundleId: String
-    /// UTC timestamp when this entry was captured.
-    public let capturedAt: Date
+/// The kind of focus change that occurred.
+public enum FocusEventKind: String, Codable, Sendable, CaseIterable {
+    /// A project was activated in the switcher.
+    case projectActivated
 
-    public init(windowId: Int, appBundleId: String, capturedAt: Date) {
+    /// A project was deactivated (user switched away).
+    case projectDeactivated
+
+    /// A window gained focus.
+    case windowFocused
+
+    /// A window lost focus (e.g., switcher opened).
+    case windowDefocused
+
+    /// The app session started (app launched).
+    case sessionStarted
+
+    /// The app session ended (app quit).
+    case sessionEnded
+}
+
+// MARK: - FocusEvent
+
+/// A focus event in the history log.
+///
+/// Events are immutable and identified by a stable UUID for correlation
+/// across exports and debugging. All timestamps are UTC.
+public struct FocusEvent: Codable, Equatable, Sendable, Identifiable {
+    /// Stable correlation ID for this event.
+    public let id: UUID
+
+    /// The kind of focus change that occurred.
+    public let kind: FocusEventKind
+
+    /// UTC timestamp when this event occurred.
+    public let timestamp: Date
+
+    /// Project ID if this event relates to a project (from config).
+    public let projectId: String?
+
+    /// AeroSpace window ID if applicable.
+    public let windowId: Int?
+
+    /// App bundle identifier if applicable.
+    public let appBundleId: String?
+
+    /// Extensible context for additional event-specific data.
+    public let metadata: [String: String]?
+
+    /// Creates a new focus event.
+    ///
+    /// - Parameters:
+    ///   - id: Stable correlation ID. Defaults to a new UUID.
+    ///   - kind: The kind of focus change.
+    ///   - timestamp: UTC timestamp. Defaults to current time.
+    ///   - projectId: Project ID if applicable.
+    ///   - windowId: AeroSpace window ID if applicable.
+    ///   - appBundleId: App bundle identifier if applicable.
+    ///   - metadata: Additional context for the event.
+    public init(
+        id: UUID = UUID(),
+        kind: FocusEventKind,
+        timestamp: Date = Date(),
+        projectId: String? = nil,
+        windowId: Int? = nil,
+        appBundleId: String? = nil,
+        metadata: [String: String]? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.timestamp = timestamp
+        self.projectId = projectId
         self.windowId = windowId
         self.appBundleId = appBundleId
-        self.capturedAt = capturedAt
+        self.metadata = metadata
     }
 }
+
+// MARK: - FocusEvent Factory Methods
+
+extension FocusEvent {
+    /// Creates a project activated event.
+    public static func projectActivated(
+        projectId: String,
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .projectActivated,
+            timestamp: timestamp,
+            projectId: projectId,
+            metadata: metadata
+        )
+    }
+
+    /// Creates a project deactivated event.
+    public static func projectDeactivated(
+        projectId: String,
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .projectDeactivated,
+            timestamp: timestamp,
+            projectId: projectId,
+            metadata: metadata
+        )
+    }
+
+    /// Creates a window focused event.
+    public static func windowFocused(
+        windowId: Int,
+        appBundleId: String,
+        projectId: String? = nil,
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .windowFocused,
+            timestamp: timestamp,
+            projectId: projectId,
+            windowId: windowId,
+            appBundleId: appBundleId,
+            metadata: metadata
+        )
+    }
+
+    /// Creates a window defocused event.
+    public static func windowDefocused(
+        windowId: Int,
+        appBundleId: String,
+        projectId: String? = nil,
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .windowDefocused,
+            timestamp: timestamp,
+            projectId: projectId,
+            windowId: windowId,
+            appBundleId: appBundleId,
+            metadata: metadata
+        )
+    }
+
+    /// Creates a session started event.
+    public static func sessionStarted(
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .sessionStarted,
+            timestamp: timestamp,
+            metadata: metadata
+        )
+    }
+
+    /// Creates a session ended event.
+    public static func sessionEnded(
+        timestamp: Date = Date(),
+        metadata: [String: String]? = nil
+    ) -> FocusEvent {
+        FocusEvent(
+            kind: .sessionEnded,
+            timestamp: timestamp,
+            metadata: metadata
+        )
+    }
+}
+
+// MARK: - AppState
 
 /// Persisted application state.
 ///
@@ -33,26 +189,30 @@ public struct AppState: Codable, Equatable, Sendable {
     /// UTC timestamp of the last app launch.
     public var lastLaunchedAt: Date?
 
-    /// Stack of recently focused windows (LIFO). Most recent is last.
-    /// Used to restore focus when canceling the switcher or closing a project.
-    public var focusStack: [FocusedWindowEntry]
+    /// Focus event history (append-only log, newest last).
+    /// Used for analytics, restore-on-cancel, and influencing switcher ordering.
+    public var focusHistory: [FocusEvent]
 
     /// Creates a new empty state at the current schema version.
     public init() {
         self.version = Self.currentVersion
         self.lastLaunchedAt = nil
-        self.focusStack = []
+        self.focusHistory = []
     }
 
-    /// Creates state with explicit values (for testing or migrations).
-    public init(version: Int, lastLaunchedAt: Date?, focusStack: [FocusedWindowEntry]) {
+    /// Creates state with explicit values (for testing).
+    public init(
+        version: Int,
+        lastLaunchedAt: Date?,
+        focusHistory: [FocusEvent] = []
+    ) {
         self.version = version
         self.lastLaunchedAt = lastLaunchedAt
-        self.focusStack = focusStack
+        self.focusHistory = focusHistory
     }
 }
 
-// MARK: - StateStore
+// MARK: - StateStoreError
 
 /// Errors that can occur during state operations.
 public enum StateStoreError: Error, Equatable, Sendable {
@@ -64,20 +224,13 @@ public enum StateStoreError: Error, Equatable, Sendable {
     case fileSystemError(detail: String)
 }
 
+// MARK: - StateStore
+
 /// Persistence layer for application state.
 ///
 /// State is stored as JSON at the path provided by `DataPaths.stateFile`.
-/// The store handles:
-/// - Schema versioning and migrations
-/// - Focus stack size limits (max 20 entries)
-/// - Pruning stale entries (older than 7 days)
+/// The store handles schema versioning and migrations.
 public struct StateStore {
-    /// Maximum number of entries in the focus stack.
-    public static let maxFocusStackSize = 20
-
-    /// Maximum age for focus stack entries (7 days).
-    public static let maxFocusStackAge: TimeInterval = 7 * 24 * 60 * 60
-
     private let dataStore: DataPaths
     private let fileSystem: FileSystem
     private let dateProvider: DateProviding
@@ -138,21 +291,16 @@ public struct StateStore {
 
     /// Saves state to disk.
     ///
-    /// The state is pruned before saving (removes stale focus stack entries).
-    ///
     /// - Parameter state: The state to save.
     /// - Returns: Success or a file system error.
     public func save(_ state: AppState) -> Result<Void, StateStoreError> {
-        // Prune before saving
-        let pruned = prune(state: state)
-
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         let data: Data
         do {
-            data = try encoder.encode(pruned)
+            data = try encoder.encode(state)
         } catch {
             return .failure(.fileSystemError(detail: "Failed to encode state: \(error.localizedDescription)"))
         }
@@ -174,84 +322,14 @@ public struct StateStore {
         return .success(())
     }
 
-    // MARK: - Focus Stack Operations
-
-    /// Pushes a focused window onto the stack.
-    ///
-    /// - Parameters:
-    ///   - window: The window to push.
-    ///   - state: The current state.
-    /// - Returns: Updated state with the window pushed.
-    public func pushFocus(window: FocusedWindowEntry, state: AppState) -> AppState {
-        var updated = state
-        updated.focusStack.append(window)
-
-        // Enforce size limit (remove oldest if over limit)
-        if updated.focusStack.count > Self.maxFocusStackSize {
-            updated.focusStack.removeFirst(updated.focusStack.count - Self.maxFocusStackSize)
-        }
-
-        return updated
-    }
-
-    /// Pops the most recently focused window from the stack.
-    ///
-    /// - Parameter state: The current state.
-    /// - Returns: Tuple of (popped window or nil, updated state).
-    public func popFocus(state: AppState) -> (FocusedWindowEntry?, AppState) {
-        var updated = state
-        let popped = updated.focusStack.popLast()
-        return (popped, updated)
-    }
-
     // MARK: - Migrations
 
     /// Applies migrations to bring state to the current version.
     private func migrate(state: AppState) -> AppState {
         var migrated = state
-
         // Future migrations go here:
         // if migrated.version < 2 { ... migrated.version = 2 }
-
         migrated.version = AppState.currentVersion
         return migrated
-    }
-
-    // MARK: - Pruning
-
-    /// Prunes stale entries from the focus stack.
-    ///
-    /// Removes entries that are:
-    /// - Older than 7 days
-    /// - Beyond the max stack size (keeps most recent)
-    ///
-    /// Note: Pruning for non-existent windows should be done by the caller
-    /// since it requires checking with AeroSpace, which this layer doesn't access.
-    private func prune(state: AppState) -> AppState {
-        var pruned = state
-        let now = dateProvider.now()
-        let cutoff = now.addingTimeInterval(-Self.maxFocusStackAge)
-
-        // Remove entries older than 7 days
-        pruned.focusStack = pruned.focusStack.filter { $0.capturedAt > cutoff }
-
-        // Enforce size limit (keep most recent)
-        if pruned.focusStack.count > Self.maxFocusStackSize {
-            pruned.focusStack = Array(pruned.focusStack.suffix(Self.maxFocusStackSize))
-        }
-
-        return pruned
-    }
-
-    /// Prunes entries for windows that no longer exist.
-    ///
-    /// - Parameters:
-    ///   - state: The current state.
-    ///   - existingWindowIds: Set of window IDs that currently exist.
-    /// - Returns: Updated state with dead window entries removed.
-    public func pruneDeadWindows(state: AppState, existingWindowIds: Set<Int>) -> AppState {
-        var pruned = state
-        pruned.focusStack = pruned.focusStack.filter { existingWindowIds.contains($0.windowId) }
-        return pruned
     }
 }

@@ -1,21 +1,108 @@
 # AgentPanelCore Public API
 
-This document defines the UI- and CLI-facing public API boundaries of `AgentPanelCore`. The App and CLI are presentation layers; all business logic lives in Core.
+This document defines the public API boundaries of `AgentPanelCore`. The App and CLI are presentation layers; all business logic lives in Core.
 
 ## Design Principles
 
 1. **Core owns business logic** — Config validation, Doctor checks, AeroSpace orchestration, state persistence
 2. **App/CLI are thin** — Parse input, call Core, format output
 3. **Dependency injection** — Core types accept protocol dependencies for testability
-4. **Result types for errors** — Functions return `Result<T, Error>` rather than throwing
+4. **Explicit error handling** — Functions return `Result<T, Error>`, optionals, or `Bool` rather than throwing
+
+---
+
+## Shared Surface (App + CLI)
+
+### Version & Identity
+
+```swift
+public enum AgentPanel {
+    /// Current version string (e.g., "1.0.0").
+    public static var version: String
+
+    /// Bundle identifier for the AgentPanel app.
+    public static let appBundleIdentifier: String
+}
+```
+
+### Errors
+
+| Type | Description |
+|------|-------------|
+| `ApCoreError` | Standard error type for Core operations |
+| `ApCoreErrorCategory` | Error category enum for programmatic handling |
+
+```swift
+public struct ApCoreError: Error, Equatable, Sendable {
+    public let category: ApCoreErrorCategory
+    public let message: String
+    public let detail: String?
+    public let command: String?
+    public let exitCode: Int32?
+}
+
+public enum ApCoreErrorCategory: String, Sendable {
+    case command        // External command execution failures
+    case validation     // Input validation failures
+    case fileSystem     // File system operation failures
+    case configuration  // Configuration loading/parsing failures
+    case parse          // Output parsing failures
+}
+```
 
 ---
 
 ## App (UI) Surface
 
-Only the following modules are intended for the UI.
+### Required Protocols (Implemented by App)
 
-### Module: Configuration (Data Only)
+These protocols are public because the App must provide implementations. Core cannot import AppKit.
+
+| Protocol | Description |
+|----------|-------------|
+| `RunningApplicationChecking` | Checks if an application is running (requires AppKit) |
+| `HotkeyStatusProviding` | Provides hotkey registration status (optional) |
+| `FocusOperationsProviding` | Captures and restores window focus (requires AeroSpace) |
+
+```swift
+/// Running application lookup interface for Doctor policies.
+public protocol RunningApplicationChecking {
+    /// Returns true when an application with the given bundle identifier is running.
+    func isApplicationRunning(bundleIdentifier: String) -> Bool
+}
+
+/// Provides the last known hotkey registration status.
+public protocol HotkeyStatusProviding {
+    /// Returns the current hotkey registration status, or nil if unknown.
+    func hotkeyRegistrationStatus() -> HotkeyRegistrationStatus?
+}
+
+public enum HotkeyRegistrationStatus: Equatable, Sendable {
+    case registered
+    case failed(osStatus: Int32)
+}
+
+/// Protocol for window focus operations.
+/// Core treats CapturedFocus as an opaque token; the App implementation
+/// knows how to create and consume it via AeroSpace.
+public protocol FocusOperationsProviding {
+    /// Captures the currently focused window for later restoration.
+    func captureCurrentFocus() -> CapturedFocus?
+
+    /// Restores focus to a previously captured window.
+    func restoreFocus(_ focus: CapturedFocus) -> Bool
+}
+
+/// Captured window focus state. Created by App, stored by Core, consumed by App.
+public struct CapturedFocus: Sendable, Equatable {
+    public let windowId: Int
+    public let appBundleId: String
+
+    public init(windowId: Int, appBundleId: String)
+}
+```
+
+### Configuration
 
 | Type | Description |
 |------|-------------|
@@ -23,10 +110,167 @@ Only the following modules are intended for the UI.
 | `ProjectConfig` | Single project definition (name, path, color, useAgentLayer) |
 | `ProjectColorRGB` | RGB color values (0.0–1.0) |
 | `ProjectColorPalette` | Named color resolution (indigo, blue, etc.) |
+| `ConfigLoadError` | Error type for configuration loading failures |
+| `ConfigFinding` | Diagnostic finding from config validation |
+| `ConfigFindingSeverity` | Severity level for config findings |
 
-Config loading, validation, and ID normalization are internal and not exposed to the UI. The UI should receive a validated `Config` from Core.
+```swift
+public struct Config: Equatable, Sendable {
+    public let projects: [ProjectConfig]
+}
 
-### Module: Doctor
+public struct ProjectConfig: Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let path: String
+    public let color: String // Named color or hex (#RRGGBB)
+    public let useAgentLayer: Bool
+}
+
+public struct ProjectColorRGB: Equatable, Sendable {
+    public let red: Double    // 0.0–1.0
+    public let green: Double  // 0.0–1.0
+    public let blue: Double   // 0.0–1.0
+}
+
+extension Config {
+    /// Loads and validates configuration from the default path.
+    public static func loadDefault() -> Result<Config, ConfigLoadError>
+}
+
+public enum ConfigLoadError: Error, Equatable, Sendable {
+    case fileNotFound(path: String)
+    case readFailed(path: String, detail: String)
+    case parseFailed(detail: String)
+    case validationFailed(findings: [ConfigFinding])
+}
+
+public struct ConfigFinding: Equatable, Sendable {
+    public let severity: ConfigFindingSeverity
+    public let title: String
+    public let detail: String?
+    public let fix: String?
+}
+
+public enum ConfigFindingSeverity: String, Sendable {
+    case pass
+    case warn
+    case fail
+}
+```
+
+### Session Management
+
+| Type | Description |
+|------|-------------|
+| `SessionManager` | Manages app session lifecycle, state persistence, and focus history |
+| `StateHealthIssue` | Reason why state is unhealthy (blocking saves) |
+| `FocusEvent` | A recorded focus history event |
+| `FocusEventKind` | Type of focus event |
+
+**Two-phase initialization:** SessionManager requires `setFocusOperations()` to be called after construction before focus capture/restore will work. Config must be loaded first to create the `FocusOperationsProviding` implementation.
+
+**Thread safety:** SessionManager is not thread-safe. All methods must be called from the main thread.
+
+```swift
+public final class SessionManager {
+    /// Creates a SessionManager with default dependencies.
+    public init()
+
+    /// Maximum number of project activation events used for sorting.
+    public static let recentProjectActivationSortLimit: Int
+
+    /// If non-nil, state is unhealthy and saves are blocked.
+    public private(set) var stateHealthIssue: StateHealthIssue?
+
+    /// Sets the focus operations provider.
+    /// Call after loading configuration to enable focus capture/restore.
+    public func setFocusOperations(_ provider: FocusOperationsProviding?)
+
+    /// Records session start. Call once when the app launches.
+    public func sessionStarted(version: String)
+
+    /// Records session end. Call when the app is about to terminate.
+    public func sessionEnded()
+
+    /// Captures the currently focused window for later restoration.
+    public func captureCurrentFocus() -> CapturedFocus?
+
+    /// Attempts to restore focus to a previously captured window.
+    @discardableResult
+    public func restoreFocus(_ captured: CapturedFocus) -> Bool
+
+    /// Records that a project was activated.
+    public func projectActivated(projectId: String)
+
+    /// Records that a project was deactivated.
+    public func projectDeactivated(projectId: String)
+
+    /// The current focus history for display purposes.
+    public var focusHistory: [FocusEvent] { get }
+
+    /// Returns the most recent focus events, newest first.
+    public func recentFocusHistory(count: Int) -> [FocusEvent]
+
+    /// Returns the most recent project activation events, newest first.
+    public func recentProjectActivations(count: Int) -> [FocusEvent]
+
+    /// Returns the most recent project activation events used for sorting.
+    public func recentProjectActivationsForSorting() -> [FocusEvent]
+}
+
+public enum StateHealthIssue: Equatable, Sendable {
+    case corrupted(detail: String)
+    case newerVersion(found: Int, supported: Int)
+}
+
+public struct FocusEvent: Equatable, Sendable {
+    public let id: UUID
+    public let timestamp: Date
+    public let kind: FocusEventKind
+    public let projectId: String?
+    public let windowId: Int?
+    public let appBundleId: String?
+    public let metadata: [String: String]?
+}
+
+public enum FocusEventKind: String, Codable, Equatable, Sendable {
+    case projectActivated
+    case projectDeactivated
+    case windowFocused
+    case windowDefocused
+    case sessionStarted
+    case sessionEnded
+}
+```
+
+### Project Sorting
+
+| Type | Description |
+|------|-------------|
+| `ProjectSorter` | Sorts and filters projects for switcher display |
+
+Sorting rules:
+- **Empty query:** Recently activated projects first (using the most recent 100 activation events; see `SessionManager.recentProjectActivationSortLimit`), then config order for unactivated projects
+- **Non-empty query:** Name-prefix matches first, then id-prefix, then infix matches; within each tier, recency (same 100-event activation window) then config order
+
+```swift
+public enum ProjectSorter {
+    /// Sorts and optionally filters projects based on search query and focus history.
+    /// - Parameters:
+    ///   - projects: All available projects (in config order)
+    ///   - query: Search query (empty = no filter, just sort by recency)
+    ///   - recentActivations: Focus events for projectActivated, newest first
+    /// - Returns: Filtered (if query non-empty) and sorted projects
+    public static func sortedProjects(
+        _ projects: [ProjectConfig],
+        query: String,
+        recentActivations: [FocusEvent]
+    ) -> [ProjectConfig]
+}
+```
+
+### Doctor
 
 | Type | Description |
 |------|-------------|
@@ -40,81 +284,82 @@ Config loading, validation, and ID normalization are internal and not exposed to
 ```swift
 public struct Doctor {
     /// Creates a Doctor instance.
-    /// - Parameters:
-    ///   - runningApplicationChecker: Running application checker (required, provided by CLI/App).
-    ///   - hotkeyStatusProvider: Optional hotkey status provider for hotkey registration checks.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding? = nil
     )
 
-    // Note: A full DI initializer with all dependencies is available internally
-    // for testing via @testable import.
-
     /// Runs all diagnostic checks.
-    func run() -> DoctorReport
+    public func run() -> DoctorReport
 
     /// Installs AeroSpace via Homebrew.
-    func installAeroSpace() -> DoctorReport
+    public func installAeroSpace() -> DoctorReport
 
     /// Starts AeroSpace.
-    func startAeroSpace() -> DoctorReport
+    public func startAeroSpace() -> DoctorReport
 
     /// Reloads AeroSpace configuration.
-    func reloadAeroSpaceConfig() -> DoctorReport
+    public func reloadAeroSpaceConfig() -> DoctorReport
 }
-```
 
-```swift
-public struct DoctorReport {
-    let findings: [DoctorFinding]
-    let metadata: DoctorMetadata
-    let actions: DoctorActionAvailability
+public struct DoctorReport: Equatable, Sendable {
+    public let findings: [DoctorFinding]
+    public let metadata: DoctorMetadata
+    public let actions: DoctorActionAvailability
 
     /// True if any finding has severity .fail
-    var hasFailures: Bool
+    public var hasFailures: Bool { get }
 
-    /// Renders the report as a human-readable string for CLI and App display.
-    func rendered() -> String
-}
-```
-
-### Module: Errors (Shared)
-
-| Type | Description |
-|------|-------------|
-| `ApCoreError` | Standard error type |
-| `ApCoreErrorCategory` | Error category enum |
-
-```swift
-public struct ApCoreError: Error, Equatable, Sendable {
-    let category: ApCoreErrorCategory
-    let message: String
-    let detail: String?
-    let command: String?
-    let exitCode: Int32?
+    /// Renders the report as a human-readable string.
+    public func rendered() -> String
 }
 
-public enum ApCoreErrorCategory: String, Sendable {
-    case command        // External command execution failures
-    case validation     // Input validation failures
-    case fileSystem     // File system operation failures
-    case configuration  // Configuration loading/parsing failures
-    case aerospace      // AeroSpace-specific failures
-    case parse          // Output parsing failures
+public struct DoctorFinding: Equatable, Sendable {
+    public let severity: DoctorSeverity
+    public let title: String
+    public let bodyLines: [String]
+    public let snippet: String?
+}
+
+public enum DoctorSeverity: String, CaseIterable, Sendable {
+    case pass = "PASS"
+    case warn = "WARN"
+    case fail = "FAIL"
+}
+
+public struct DoctorMetadata: Equatable, Sendable {
+    public let timestamp: String
+    public let agentPanelVersion: String
+    public let macOSVersion: String
+    public let aerospaceApp: String
+    public let aerospaceCli: String
+}
+
+public struct DoctorActionAvailability: Equatable, Sendable {
+    public let canInstallAeroSpace: Bool
+    public let canStartAeroSpace: Bool
+    public let canReloadAeroSpaceConfig: Bool
+
+    public static let none: DoctorActionAvailability
 }
 ```
 
 ---
 
-## CLI Surface (Not Used by UI)
+## CLI Surface (Proof-of-Concept — To Be Removed)
 
-### AgentPanel
+> **Note:** The following types exist solely because the CLI serves as a proof-of-concept tester. They are scheduled for removal or internalization in Phase 3. The App should not depend on these types.
+
+### ApWindow
+
+AeroSpace-specific window representation for CLI operations.
 
 ```swift
-public enum AgentPanel {
-    /// Current version string.
-    static var version: String
+public struct ApWindow: Equatable, Sendable {
+    public let windowId: Int
+    public let appBundleId: String
+    public let workspace: String
+    public let windowTitle: String
 }
 ```
 
@@ -122,67 +367,25 @@ public enum AgentPanel {
 
 ```swift
 public final class ApCore {
-    /// The validated configuration for this instance.
     public let config: Config
 
-    /// Creates an ApCore instance with default dependencies.
     public init(config: Config)
 
-    // Note: A full DI initializer with all dependencies is available internally
-    // for testing via @testable import.
-
     // Workspace commands
-    func listWorkspaces() -> Result<[String], ApCoreError>
-    func newWorkspace(name: String) -> Result<Void, ApCoreError>
-    func closeWorkspace(name: String) -> Result<Void, ApCoreError>
+    public func listWorkspaces() -> Result<[String], ApCoreError>
+    public func newWorkspace(name: String) -> Result<Void, ApCoreError>
+    public func closeWorkspace(name: String) -> Result<Void, ApCoreError>
 
     // IDE/Chrome
-    func newIde(identifier: String) -> Result<Void, ApCoreError>
-    func newChrome(identifier: String) -> Result<Void, ApCoreError>
-    func listIdeWindows() -> Result<[ApWindow], ApCoreError>
-    func listChromeWindows() -> Result<[ApWindow], ApCoreError>
+    public func newIde(identifier: String) -> Result<Void, ApCoreError>
+    public func newChrome(identifier: String) -> Result<Void, ApCoreError>
+    public func listIdeWindows() -> Result<[ApWindow], ApCoreError>
+    public func listChromeWindows() -> Result<[ApWindow], ApCoreError>
 
     // Window management
-    func listWindowsWorkspace(_ workspace: String) -> Result<[ApWindow], ApCoreError>
-    func focusedWindow() -> Result<ApWindow, ApCoreError>
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError>
-    func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
+    public func listWindowsWorkspace(_ workspace: String) -> Result<[ApWindow], ApCoreError>
+    public func focusedWindow() -> Result<ApWindow, ApCoreError>
+    public func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError>
+    public func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
 }
 ```
-
-### ApWindow
-
-```swift
-public struct ApWindow: Equatable {
-    let windowId: Int
-    let appBundleId: String
-    let workspace: String
-    let windowTitle: String
-}
-```
-
----
-
-## Internal (Not Public)
-
-The following modules and helpers are internal implementation details and should not be used directly by the App or CLI.
-
-> **Note:** Some internal types have `public` members to support `@testable import` for unit testing. This does not make them part of the public API; App and CLI should not depend on them.
-
-- Configuration internals: `ConfigLoader`, `ConfigLoadResult`, `ConfigFinding`, `ConfigFindingSeverity`, `ConfigError`, `IdNormalizer`
-- AeroSpace internals: `ApAeroSpace`, `AeroSpaceConfigManager`, `AeroSpaceConfigStatus`
-- State persistence: `StateStore`, `AppState`, `FocusedWindowEntry`, `StateStoreError`
-- System utilities: `ExecutableResolver`, `ApSystemCommandRunner`, `ApCommandResult`, `ApVSCodeLauncher`, `ApChromeLauncher`
-- Data paths: `DataPaths`
-- Logging: `AgentPanelLogger`, `LogEntry`, `LogLevel`, `LogWriteError`, `AgentPanelLogging`
-- Error factory functions: `commandError`, `validationError`, `fileSystemError`, `parseError` (public for Core use, not intended for App/CLI)
-- Internal dependency protocols: `FileSystem`, `DateProviding`, `AppDiscovering`, `HotkeyChecking`, `EnvironmentProviding`
-
-### Required Protocols (Public, Implemented by CLI/App)
-
-These protocols are public because CLI and App must provide implementations, but they are not part of the UI-facing API:
-
-| Protocol | Description |
-|----------|-------------|
-| `RunningApplicationChecking` | Checks if an application is running (requires AppKit) |
-| `HotkeyStatusProviding` | Provides hotkey registration status (optional, App only) |
