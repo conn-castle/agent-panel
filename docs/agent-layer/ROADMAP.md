@@ -56,25 +56,12 @@ Incomplete:
 - Core interface document (`docs/CORE_API.md`) catalogs all public APIs.
 - Switcher UI skeleton loads config, lists projects, and logs selections.
 
-## Phase 2 — Focus + switcher UX + core interfaces (separation of concerns)
-
-### Goal
-- Define focus functionality and persist focus history.
-- Specify and implement project searching/sorting/selecting behavior in the switcher UI.
-- Publish a clear, stable interface for core functionality so App/CLI remain thin presentation layers.
-
-### Tasks
-- [x] Define and enforce the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `AgentPanelCLI`; delete/merge anything that doesn't fit.
-- [x] Define the Focus domain model and events in `AgentPanelCore` (UTC timestamps; stable ids).
-- [x] Implement focus history storage on the Phase 1 persistence substrate (query, prune/export) with tests.
-- [x] Specify and implement switcher search + sorting rules (including whether focus history influences ordering) with tests.
-- [x] Refactor for strict separation of concerns: move business rules out of UI targets into `AgentPanelCore`.
-- [ ] Revisit AppKit integration: attempt a single shared AppKitIntegration module usable by both App and CLI (without importing AppKit from `AgentPanelCore`), or reaffirm the duplication with an updated decision.
-
-### Exit criteria
-- Focus history is persisted and retrievable; tests cover storage and ordering rules.
-- Switcher supports search/sort/select per spec and remains presentation-only.
-- AppKit integration approach is settled and documented (shared module or intentional duplication).
+## Phase 2 ✅ — Focus + switcher UX + core interfaces (separation of concerns)
+- Focus domain model defined with FocusEvent, FocusEventKind, and SessionManager as the single source of truth for state and focus history.
+- Focus history persisted via StateStore with query, prune, and export capabilities; comprehensive test coverage.
+- Switcher search + sorting rules specified and implemented in ProjectSorter: recency-based ordering, prefix-match prioritization, case-insensitive substring matching.
+- Strict separation of concerns enforced: business logic in AgentPanelCore, presentation in App/CLI.
+- AppKit integration consolidated into shared AgentPanelAppKit module (Core → AppKit → App/CLI layering).
 
 ## Phase 3 — MVP: activation/project lifecycle + agent-layer support
 

@@ -51,11 +51,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Keep installs and upgrades deterministic and reduce release/distribution surface area while we reboot the project.
     Tradeoffs: Users without Homebrew cannot install AgentPanel; any future direct-download path will require intentional new work (signing/notarization + updater story).
 
-- Decision 2026-02-03 appkit: AppKitIntegration duplication is intentional
-    Decision: Both `AgentPanelCLI/AppKitIntegration.swift` and `AgentPanelApp/AppKitIntegration.swift` contain a `RunningApplicationChecking` protocol and `AppKitRunningApplicationChecker` implementation. This duplication is kept intentionally.
-    Reason: `AgentPanelCore` is a static framework that cannot import AppKit (it is shared between the CLI and GUI targets). Both targets need `NSRunningApplication` API for Doctor checks. Duplicating the implementation allows each target to compile independently while maintaining API compatibility.
-    Tradeoffs: Must keep both files in sync manually; any changes to the protocol or implementation require updates in both locations.
-
 - Decision 2026-02-03 guipath: GUI apps don't inherit shell PATH
     Decision: Use `ExecutableResolver` to find executables instead of `/usr/bin/env`. Searches standard paths first, falls back to login shell `which`.
     Reason: GUI apps launched via Finder/Dock get a minimal PATH without Homebrew or user additions. `/usr/bin/env` fails to find `code`, `brew`, `aerospace`, etc.
@@ -75,3 +70,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Protocols crossing layer boundaries (Core↔App) use intent-based signatures like `captureCurrentFocus() -> CapturedFocus?` instead of implementation-specific types like `focusedWindow() -> ApWindow?`.
     Reason: Keeps implementation details (ApWindow, AeroSpace concepts) internal to the layer that owns them. Callers express what they want, not how to get it. Cleaner testability and looser coupling.
     Tradeoffs: Implementation must translate between internal types and intent-based types; slightly more code in the implementing layer.
+
+- Decision 2026-02-04 appkitmod: Shared AgentPanelAppKit module (supersedes appkit)
+    Decision: Create `AgentPanelAppKit` static framework containing `AppKitRunningApplicationChecker`. Both App and CLI depend on this shared module. Removes previous duplication in `AgentPanelApp/AppKitIntegration.swift` and `AgentPanelCLI/AppKitIntegration.swift`.
+    Reason: Single source of truth for AppKit integration code; clean layering (Core → AppKit → App/CLI); no manual sync required.
+    Tradeoffs: One additional build target; marginal complexity for small codebase, but scales if more AppKit integration is needed later.

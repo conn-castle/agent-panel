@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+import AgentPanelAppKit
 import AgentPanelCore
 
 /// Timing constants for menu behavior.

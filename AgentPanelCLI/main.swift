@@ -1,5 +1,6 @@
 import Foundation
 
+import AgentPanelAppKit
 import AgentPanelCLICore
 import AgentPanelCore
 
