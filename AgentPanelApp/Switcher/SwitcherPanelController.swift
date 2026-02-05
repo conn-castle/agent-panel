@@ -407,20 +407,6 @@ final class SwitcherPanelController: NSObject {
 
     // MARK: - Filtering
 
-    /// Filters projects by case-insensitive substring match on id or name.
-    private func filterProjects(_ projects: [ProjectConfig], query: String) -> [ProjectConfig] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return projects
-        }
-
-        let needle = trimmed.lowercased()
-        return projects.filter { project in
-            project.id.lowercased().contains(needle)
-                || project.name.lowercased().contains(needle)
-        }
-    }
-
     /// Applies filtering and updates selection.
     private func applyFilter(query: String) {
         let previousQuery = lastFilterQuery
@@ -442,7 +428,9 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
-        filteredProjects = filterProjects(allProjects, query: query)
+        // Get recent activations for sorting (most recently used projects first)
+        let recentActivations = sessionManager.recentProjectActivationsForSorting()
+        filteredProjects = ProjectSorter.sortedProjects(allProjects, query: query, recentActivations: recentActivations)
         tableView.reloadData()
         updateSelectionAfterFilter()
 

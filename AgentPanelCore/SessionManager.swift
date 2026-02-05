@@ -78,6 +78,9 @@ public enum StateHealthIssue: Equatable, Sendable {
 /// Thread Safety: SessionManager is not thread-safe. All methods must be
 /// called from the main thread.
 public final class SessionManager {
+    /// Maximum number of recent project activation events used for sorting.
+    public static let recentProjectActivationSortLimit = 100
+
     private let stateStore: StateStore
     private let focusHistoryStore: FocusHistoryStore
     private let logger: AgentPanelLogging
@@ -290,6 +293,13 @@ public final class SessionManager {
     public func recentProjectActivations(count: Int) -> [FocusEvent] {
         let events = focusHistoryStore.events(ofKind: .projectActivated, in: appState)
         return Array(events.suffix(count).reversed())
+    }
+
+    /// Returns the most recent project activation events used for sorting.
+    ///
+    /// - Returns: Most recent project activation events, newest first.
+    public func recentProjectActivationsForSorting() -> [FocusEvent] {
+        recentProjectActivations(count: Self.recentProjectActivationSortLimit)
     }
 
     // MARK: - Private Helpers

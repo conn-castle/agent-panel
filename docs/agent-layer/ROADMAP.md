@@ -67,7 +67,7 @@ Incomplete:
 - [x] Define and enforce the target boundaries for `AgentPanelApp` vs `AgentPanelCore` vs `AgentPanelCLI`; delete/merge anything that doesn't fit.
 - [x] Define the Focus domain model and events in `AgentPanelCore` (UTC timestamps; stable ids).
 - [x] Implement focus history storage on the Phase 1 persistence substrate (query, prune/export) with tests.
-- [ ] Specify and implement switcher search + sorting rules (including whether focus history influences ordering) with tests.
+- [x] Specify and implement switcher search + sorting rules (including whether focus history influences ordering) with tests.
 - [x] Refactor for strict separation of concerns: move business rules out of UI targets into `AgentPanelCore`.
 - [ ] Revisit AppKit integration: attempt a single shared AppKitIntegration module usable by both App and CLI (without importing AppKit from `AgentPanelCore`), or reaffirm the duplication with an updated decision.
 

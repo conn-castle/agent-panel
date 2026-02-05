@@ -254,6 +254,24 @@ struct SessionManagerTests {
         #expect(recent[1].projectId == "alpha")
     }
 
+    @Test("Recent project activations for sorting uses the default limit")
+    func recentProjectActivationsForSortingUsesDefaultLimit() {
+        let manager = makeSessionManager()
+        let limit = SessionManager.recentProjectActivationSortLimit
+        let total = limit + 2
+
+        for index in 0..<total {
+            manager.projectActivated(projectId: "project-\(index)")
+        }
+
+        let recent = manager.recentProjectActivationsForSorting()
+        let expectedOldestIndex = total - limit
+
+        #expect(recent.count == limit)
+        #expect(recent.first?.projectId == "project-\(total - 1)")
+        #expect(recent.last?.projectId == "project-\(expectedOldestIndex)")
+    }
+
     // MARK: - Set Focus Operations Tests
 
     @Test("Set focus operations enables capture")

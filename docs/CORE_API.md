@@ -123,7 +123,7 @@ public struct ProjectConfig: Equatable, Sendable {
     public let id: String
     public let name: String
     public let path: String
-    public let color: ProjectColorRGB
+    public let color: String // Named color or hex (#RRGGBB)
     public let useAgentLayer: Bool
 }
 
@@ -177,6 +177,9 @@ public final class SessionManager {
     /// Creates a SessionManager with default dependencies.
     public init()
 
+    /// Maximum number of project activation events used for sorting.
+    public static let recentProjectActivationSortLimit: Int
+
     /// If non-nil, state is unhealthy and saves are blocked.
     public private(set) var stateHealthIssue: StateHealthIssue?
 
@@ -211,6 +214,9 @@ public final class SessionManager {
 
     /// Returns the most recent project activation events, newest first.
     public func recentProjectActivations(count: Int) -> [FocusEvent]
+
+    /// Returns the most recent project activation events used for sorting.
+    public func recentProjectActivationsForSorting() -> [FocusEvent]
 }
 
 public enum StateHealthIssue: Equatable, Sendable {
@@ -235,6 +241,32 @@ public enum FocusEventKind: String, Codable, Equatable, Sendable {
     case windowDefocused
     case sessionStarted
     case sessionEnded
+}
+```
+
+### Project Sorting
+
+| Type | Description |
+|------|-------------|
+| `ProjectSorter` | Sorts and filters projects for switcher display |
+
+Sorting rules:
+- **Empty query:** Recently activated projects first (using the most recent 100 activation events; see `SessionManager.recentProjectActivationSortLimit`), then config order for unactivated projects
+- **Non-empty query:** Name-prefix matches first, then id-prefix, then infix matches; within each tier, recency (same 100-event activation window) then config order
+
+```swift
+public enum ProjectSorter {
+    /// Sorts and optionally filters projects based on search query and focus history.
+    /// - Parameters:
+    ///   - projects: All available projects (in config order)
+    ///   - query: Search query (empty = no filter, just sort by recency)
+    ///   - recentActivations: Focus events for projectActivated, newest first
+    /// - Returns: Filtered (if query non-empty) and sorted projects
+    public static func sortedProjects(
+        _ projects: [ProjectConfig],
+        query: String,
+        recentActivations: [FocusEvent]
+    ) -> [ProjectConfig]
 }
 ```
 
