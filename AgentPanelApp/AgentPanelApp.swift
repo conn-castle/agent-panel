@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private let logger: AgentPanelLogging = AgentPanelLogger()
-    private let sessionManager = SessionManager()
+    private let projectManager = ProjectManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run onboarding check asynchronously before setting up the app
@@ -59,9 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = "AP"
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
-
-        // Record session start
-        sessionManager.sessionStarted(version: AgentPanel.version)
 
         self.switcherController = makeSwitcherController()
 
@@ -172,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates a new SwitcherPanelController instance.
     private func makeSwitcherController() -> SwitcherPanelController {
-        SwitcherPanelController(logger: logger, sessionManager: sessionManager)
+        SwitcherPanelController(logger: logger, projectManager: projectManager)
     }
 
     /// Ensures the switcher controller exists for menu/hotkey actions.
@@ -337,8 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Called when the app is about to terminate.
     func applicationWillTerminate(_ notification: Notification) {
-        sessionManager.sessionEnded()
-        logAppEvent(event: "app.session.ended")
+        logAppEvent(event: "app.terminated")
     }
 
     /// Displays the Doctor report using the DoctorWindowController.

@@ -7,14 +7,14 @@ import TOMLDecoder
 ///
 /// Used for deriving project IDs from names and normalizing workspace names.
 /// Rules: lowercase, non-alphanumeric characters become hyphens, consecutive hyphens collapsed, trimmed.
-public enum IdNormalizer {
+enum IdNormalizer {
     /// Allowed characters in a normalized ID.
     private static let allowedCharacters = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
 
     /// Normalizes a string to a valid identifier.
     /// - Parameter value: Raw string (e.g., project name, workspace name).
     /// - Returns: Normalized identifier (lowercase, hyphens for separators, no leading/trailing hyphens).
-    public static func normalize(_ value: String) -> String {
+    static func normalize(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         var normalized = ""
         var previousWasHyphen = false
@@ -36,17 +36,17 @@ public enum IdNormalizer {
     /// Checks if an identifier is valid (non-empty after normalization).
     /// - Parameter value: String to check.
     /// - Returns: True if the string normalizes to a non-empty identifier.
-    public static func isValid(_ value: String) -> Bool {
+    static func isValid(_ value: String) -> Bool {
         !normalize(value).isEmpty
     }
 
     /// Reserved identifiers that cannot be used.
-    public static let reserved: Set<String> = ["inbox"]
+    static let reserved: Set<String> = ["inbox"]
 
     /// Checks if an identifier is reserved.
     /// - Parameter normalizedId: Already-normalized identifier.
     /// - Returns: True if the identifier is reserved.
-    public static func isReserved(_ normalizedId: String) -> Bool {
+    static func isReserved(_ normalizedId: String) -> Bool {
         reserved.contains(normalizedId)
     }
 }
@@ -57,7 +57,7 @@ public enum IdNormalizer {
 public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
 
-    public init(projects: [ProjectConfig]) {
+    init(projects: [ProjectConfig]) {
         self.projects = projects
     }
 }
@@ -70,7 +70,7 @@ public struct ProjectConfig: Equatable, Sendable {
     public let color: String
     public let useAgentLayer: Bool
 
-    public init(id: String, name: String, path: String, color: String, useAgentLayer: Bool) {
+    init(id: String, name: String, path: String, color: String, useAgentLayer: Bool) {
         self.id = id
         self.name = name
         self.path = path
@@ -85,7 +85,7 @@ public struct ProjectColorRGB: Equatable, Sendable {
     public let green: Double
     public let blue: Double
 
-    public init(red: Double, green: Double, blue: Double) {
+    init(red: Double, green: Double, blue: Double) {
         self.red = red
         self.green = green
         self.blue = blue
@@ -94,7 +94,7 @@ public struct ProjectColorRGB: Equatable, Sendable {
 
 /// Supported named colors for project color values.
 public enum ProjectColorPalette {
-    public static let named: [String: ProjectColorRGB] = [
+    static let named: [String: ProjectColorRGB] = [
         "black": ProjectColorRGB(red: 0.0, green: 0.0, blue: 0.0),
         "blue": ProjectColorRGB(red: 0.0, green: 0.0, blue: 1.0),
         "brown": ProjectColorRGB(red: 0.6471, green: 0.1647, blue: 0.1647),
@@ -112,7 +112,7 @@ public enum ProjectColorPalette {
         "yellow": ProjectColorRGB(red: 1.0, green: 1.0, blue: 0.0)
     ]
 
-    public static let sortedNames: [String] = named.keys.sorted()
+    static let sortedNames: [String] = named.keys.sorted()
 
     /// Resolves a color string (hex or named) to RGB components.
     /// - Parameter value: A hex color (#RRGGBB) or named color string.
@@ -148,7 +148,7 @@ public enum ProjectColorPalette {
 // MARK: - Config Loading
 
 /// Kind of config loading error for programmatic handling.
-public enum ConfigErrorKind: String, Equatable, Sendable {
+enum ConfigErrorKind: String, Equatable, Sendable {
     /// Config file does not exist (starter config was created).
     case fileNotFound
     /// Failed to create starter config file.
@@ -158,28 +158,28 @@ public enum ConfigErrorKind: String, Equatable, Sendable {
 }
 
 /// Errors emitted by config loading operations.
-public struct ConfigError: Error, Equatable {
-    public let kind: ConfigErrorKind
-    public let message: String
+struct ConfigError: Error, Equatable {
+    let kind: ConfigErrorKind
+    let message: String
 
-    public init(kind: ConfigErrorKind, message: String) {
+    init(kind: ConfigErrorKind, message: String) {
         self.kind = kind
         self.message = message
     }
 }
 
 /// Result of loading and parsing configuration.
-public struct ConfigLoadResult: Equatable, Sendable {
+struct ConfigLoadResult: Equatable, Sendable {
     /// Parsed config when successful.
-    public let config: Config?
+    let config: Config?
     /// Findings from parsing (warnings and errors).
-    public let findings: [ConfigFinding]
+    let findings: [ConfigFinding]
     /// Parsed projects (may be partial on error).
-    public let projects: [ProjectConfig]
+    let projects: [ProjectConfig]
     /// True if the TOML could not be parsed (syntax error vs validation error).
-    public let hasParseError: Bool
+    let hasParseError: Bool
 
-    public init(
+    init(
         config: Config?,
         findings: [ConfigFinding],
         projects: [ProjectConfig] = [],
@@ -203,10 +203,10 @@ public enum ConfigFindingSeverity: String, CaseIterable, Sendable {
 public struct ConfigFinding: Equatable, Sendable {
     public let severity: ConfigFindingSeverity
     public let title: String
-    public let detail: String?
-    public let fix: String?
+    let detail: String?
+    let fix: String?
 
-    public init(severity: ConfigFindingSeverity, title: String, detail: String? = nil, fix: String? = nil) {
+    init(severity: ConfigFindingSeverity, title: String, detail: String? = nil, fix: String? = nil) {
         self.severity = severity
         self.title = title
         self.detail = detail
@@ -215,7 +215,7 @@ public struct ConfigFinding: Equatable, Sendable {
 }
 
 /// Loads and parses the AgentPanel configuration file.
-public struct ConfigLoader {
+struct ConfigLoader {
     private static let starterConfigTemplate = """
 # AgentPanel configuration
 #
@@ -234,13 +234,13 @@ public struct ConfigLoader {
 """
 
     /// Loads and parses the default config file.
-    public static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
+    static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
         let url = DataPaths.default().configFile
         return load(from: url)
     }
 
     /// Loads and parses a config file at the given URL.
-    public static func load(from url: URL) -> Result<ConfigLoadResult, ConfigError> {
+    static func load(from url: URL) -> Result<ConfigLoadResult, ConfigError> {
         let path = url.path
         if !FileManager.default.fileExists(atPath: path) {
             do {

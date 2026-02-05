@@ -25,12 +25,12 @@ public enum LogLevel: String, Codable, Sendable {
 }
 
 /// Structured log entry encoded as a single JSON line.
-public struct LogEntry: Codable, Equatable, Sendable {
-    public let timestamp: String
-    public let level: LogLevel
-    public let event: String
-    public let message: String?
-    public let context: [String: String]?
+struct LogEntry: Codable, Equatable, Sendable {
+    let timestamp: String
+    let level: LogLevel
+    let event: String
+    let message: String?
+    let context: [String: String]?
 
     /// Creates a log entry.
     /// - Parameters:
@@ -39,7 +39,7 @@ public struct LogEntry: Codable, Equatable, Sendable {
     ///   - event: Event name to categorize the entry.
     ///   - message: Optional human-readable message.
     ///   - context: Optional structured context values.
-    public init(
+    init(
         timestamp: String,
         level: LogLevel,
         event: String,
@@ -93,16 +93,21 @@ public struct AgentPanelLogger {
     private let maxArchives: Int
 
     /// Creates a logger that writes to the default log path.
-    /// - Parameters:
-    ///   - dataStore: Data store for AgentPanel paths.
-    ///   - fileSystem: File system accessor.
-    public init(
-        dataStore: DataPaths = .default(),
-        fileSystem: FileSystem = DefaultFileSystem()
-    ) {
+    public init() {
+        self.init(
+            dataStore: .default(),
+            fileSystem: DefaultFileSystem(),
+            maxLogSizeBytes: AgentPanelLogger.defaultMaxLogSizeBytes,
+            maxArchives: AgentPanelLogger.defaultMaxArchives
+        )
+    }
+
+    /// Creates a logger with custom data store.
+    /// - Parameter dataStore: Data store for AgentPanel paths.
+    public init(dataStore: DataPaths) {
         self.init(
             dataStore: dataStore,
-            fileSystem: fileSystem,
+            fileSystem: DefaultFileSystem(),
             maxLogSizeBytes: AgentPanelLogger.defaultMaxLogSizeBytes,
             maxArchives: AgentPanelLogger.defaultMaxArchives
         )
@@ -154,7 +159,7 @@ public struct AgentPanelLogger {
     /// Writes a structured log entry to the primary log file.
     /// - Parameter entry: Log entry to encode and append.
     /// - Returns: Success or a log write error.
-    public func log(entry: LogEntry) -> Result<Void, LogWriteError> {
+    func log(entry: LogEntry) -> Result<Void, LogWriteError> {
         let trimmedEvent = entry.event.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedEvent.isEmpty else {
             return .failure(.invalidEvent)

@@ -53,46 +53,13 @@ private enum StatusLevel: Equatable {
     }
 }
 
-// MARK: - Focus Operations
-
-/// Default implementation of FocusOperationsProviding using ApCore.
-///
-/// This implementation handles all AeroSpace/ApWindow details internally,
-/// exposing only the intent-based CapturedFocus type to callers.
-final class ApCoreFocusOperations: FocusOperationsProviding {
-    private let apCore: ApCore
-
-    init(config: Config) {
-        self.apCore = ApCore(config: config)
-    }
-
-    func captureCurrentFocus() -> CapturedFocus? {
-        switch apCore.focusedWindow() {
-        case .success(let window):
-            // Translate ApWindow to CapturedFocus - ApWindow stays internal
-            return CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId)
-        case .failure:
-            return nil
-        }
-    }
-
-    func restoreFocus(_ focus: CapturedFocus) -> Bool {
-        switch apCore.focusWindow(windowId: focus.windowId) {
-        case .success:
-            return true
-        case .failure:
-            return false
-        }
-    }
-}
-
 // MARK: - Controller
 
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
 final class SwitcherPanelController: NSObject {
     private let logger: AgentPanelLogging
     private let session: SwitcherSession
-    private let sessionManager: SessionManager
+    private let projectManager: ProjectManager
 
     private let panel: SwitcherPanel
     private let searchField: NSSearchField
@@ -110,20 +77,20 @@ final class SwitcherPanelController: NSObject {
     private var previouslyActiveApp: NSRunningApplication?
 
     /// The captured focus state before the switcher opened.
-    /// Used for restore-on-cancel via SessionManager.
+    /// Used for restore-on-cancel via ProjectManager.
     private var capturedFocus: CapturedFocus?
 
     /// Creates a switcher panel controller.
     /// - Parameters:
     ///   - logger: Logger used for switcher diagnostics.
-    ///   - sessionManager: Session manager for state and focus operations.
+    ///   - projectManager: Project manager for config, sorting, and focus operations.
     init(
         logger: AgentPanelLogging = AgentPanelLogger(),
-        sessionManager: SessionManager = SessionManager()
+        projectManager: ProjectManager = ProjectManager()
     ) {
         self.logger = logger
         self.session = SwitcherSession(logger: logger)
-        self.sessionManager = sessionManager
+        self.projectManager = projectManager
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
@@ -178,7 +145,7 @@ final class SwitcherPanelController: NSObject {
         loadProjects()
 
         // Capture the currently focused window before showing switcher
-        capturedFocus = sessionManager.captureCurrentFocus()
+        capturedFocus = projectManager.captureCurrentFocus()
         if let focus = capturedFocus {
             session.logEvent(
                 event: "switcher.focus.captured",
@@ -219,9 +186,9 @@ final class SwitcherPanelController: NSObject {
 
     /// Restores focus to the previously focused window or app.
     private func restorePreviousFocus() {
-        // Try AeroSpace restore first via SessionManager
+        // Try AeroSpace restore first via ProjectManager
         if let focus = capturedFocus {
-            if sessionManager.restoreFocus(focus) {
+            if projectManager.restoreFocus(focus) {
                 session.logEvent(
                     event: "switcher.focus.restored",
                     context: [
@@ -364,12 +331,11 @@ final class SwitcherPanelController: NSObject {
 
     /// Loads projects from config and surfaces warnings or failures.
     private func loadProjects() {
-        switch Config.loadDefault() {
+        switch projectManager.loadConfig() {
         case .failure(let error):
             allProjects = []
             filteredProjects = []
             configErrorMessage = configLoadErrorMessage(error)
-            sessionManager.setFocusOperations(nil)
             setStatus(message: "Config error: \(configErrorMessage ?? "Unknown")", level: .error)
             session.logEvent(
                 event: "switcher.config.failed",
@@ -380,11 +346,6 @@ final class SwitcherPanelController: NSObject {
         case .success(let config):
             allProjects = config.projects
             configErrorMessage = nil
-
-            // Set up focus operations
-            let focusOps = ApCoreFocusOperations(config: config)
-            sessionManager.setFocusOperations(focusOps)
-
             clearStatus()
             session.logConfigLoaded(projectCount: config.projects.count)
         }
@@ -428,9 +389,8 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
-        // Get recent activations for sorting (most recently used projects first)
-        let recentActivations = sessionManager.recentProjectActivationsForSorting()
-        filteredProjects = ProjectSorter.sortedProjects(allProjects, query: query, recentActivations: recentActivations)
+        // Sort and filter projects (ProjectManager handles recency internally)
+        filteredProjects = projectManager.sortedProjects(query: query)
         tableView.reloadData()
         updateSelectionAfterFilter()
 
@@ -476,9 +436,6 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
-        // Record projectActivated event via SessionManager
-        sessionManager.projectActivated(projectId: project.id)
-
         session.logEvent(
             event: "switcher.project.selected",
             context: [
@@ -490,7 +447,16 @@ final class SwitcherPanelController: NSObject {
         // Dismiss without restoring previous focus (we're switching to this project)
         dismiss(reason: .projectSelected)
 
-        // TODO: Wire project activation (Phase 3).
+        // Activate the project (opens IDE/Chrome, moves to workspace, focuses IDE)
+        let result = projectManager.selectProject(projectId: project.id)
+        if case .failure(let error) = result {
+            session.logEvent(
+                event: "switcher.project.activation_failed",
+                level: .error,
+                message: "\(error)",
+                context: ["project_id": project.id]
+            )
+        }
     }
 
     /// Returns the currently selected project, if any.

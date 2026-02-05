@@ -71,12 +71,13 @@ Incomplete:
 - Support closing a project; reach MVP state.
 
 ### Tasks
-- [ ] Design the activation/project lifecycle API surface in `AgentPanelCore` (success/failure states, idempotency, logging).
-- [ ] Implement activation orchestration with tests for success/failure scenarios (including partial failures and cleanup).
-- [ ] Implement "close project" in core and wire it to `ap` + UI, with tests.
+- [x] Design the activation/project lifecycle API surface in `AgentPanelCore` (success/failure states, idempotency, logging).
+- [x] Implement activation orchestration with tests for success/failure scenarios (including partial failures and cleanup).
+- [x] Implement "close project" in core with tests. (Core API complete; wiring to UI pending.)
+- [x] Implement "exit to previous window" — return focus to the last non-project window without closing the project.
 - [ ] Wire switcher selection to activation and update UI messaging (progress + failures).
 - [ ] Ensure agent-layer is supported: if `useAgentLayer = true`, Doctor verifies it is installed/usable; if missing, route users to onboarding instead of dead ends.
-- [ ] Remove CLI-only items from the public API (`CORE_API.md`). Items like `ApWindow`, `ApCore` workspace/window methods exist solely because the CLI is a proof-of-concept tester; make them internal or move to a CLI-only module before MVP.
+- [x] Remove CLI-only items from the public API. `ApCore` class removed; CLI now uses `ProjectManager` directly. Comprehensive public API audit completed: `ApWindow` and 20+ internal types made internal; CORE_API.md updated to match actual public surface.
 
 ### Exit criteria
 - Selecting a project reliably activates it; closing a project reliably returns to a neutral state.

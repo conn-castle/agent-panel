@@ -9,10 +9,22 @@
 
 import Foundation
 
+/// Minimal window data returned by AeroSpace queries.
+struct ApWindow: Equatable {
+    /// AeroSpace window id.
+    let windowId: Int
+    /// App bundle identifier for the window.
+    let appBundleId: String
+    /// Workspace name for the window.
+    let workspace: String
+    /// Window title as reported by AeroSpace.
+    let windowTitle: String
+}
+
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
     /// AeroSpace bundle identifier for Launch Services lookups.
-    public static let bundleIdentifier = "bobko.aerospace"
+    static let bundleIdentifier = "bobko.aerospace"
 
     /// Legacy app path for fallback detection.
     private static let legacyAppPath = "/Applications/AeroSpace.app"
@@ -26,13 +38,19 @@ public struct ApAeroSpace {
     private let commandRunner: ApSystemCommandRunner
     private let appDiscovery: AppDiscovering
 
-    /// Creates a new AeroSpace wrapper.
+    /// Creates a new AeroSpace wrapper with default dependencies.
+    public init() {
+        self.commandRunner = ApSystemCommandRunner()
+        self.appDiscovery = LaunchServicesAppDiscovery()
+    }
+
+    /// Creates a new AeroSpace wrapper with custom dependencies.
     /// - Parameters:
     ///   - commandRunner: Command runner for CLI operations.
     ///   - appDiscovery: App discovery for installation checks.
-    public init(
-        commandRunner: ApSystemCommandRunner = ApSystemCommandRunner(),
-        appDiscovery: AppDiscovering = LaunchServicesAppDiscovery()
+    init(
+        commandRunner: ApSystemCommandRunner,
+        appDiscovery: AppDiscovering
     ) {
         self.commandRunner = commandRunner
         self.appDiscovery = appDiscovery
@@ -40,7 +58,7 @@ public struct ApAeroSpace {
 
     /// Returns the path to AeroSpace.app if installed.
     /// Uses Launch Services to find the app by bundle ID, with fallback to legacy path.
-    public var appPath: String? {
+    var appPath: String? {
         // Try Launch Services first (handles all install locations)
         if let url = appDiscovery.applicationURL(bundleIdentifier: Self.bundleIdentifier) {
             return url.path
@@ -110,7 +128,7 @@ public struct ApAeroSpace {
 
     /// Reloads the AeroSpace configuration.
     /// - Returns: Success or an error.
-    public func reloadConfig() -> Result<Void, ApCoreError> {
+    func reloadConfig() -> Result<Void, ApCoreError> {
         switch commandRunner.run(executable: "aerospace", arguments: ["reload-config"]) {
         case .failure(let error):
             return .failure(error)
@@ -143,7 +161,7 @@ public struct ApAeroSpace {
 
     /// Checks whether the installed aerospace CLI supports required commands and flags.
     /// - Returns: Success when compatible, or an error describing missing support.
-    public func checkCompatibility() -> Result<Void, ApCoreError> {
+    func checkCompatibility() -> Result<Void, ApCoreError> {
         let checks: [(command: String, requiredFlags: [String])] = [
             ("list-workspaces", ["--all", "--focused"]),
             ("list-windows", ["--monitor", "--workspace", "--focused", "--app-bundle-id", "--format"]),
@@ -187,7 +205,7 @@ public struct ApAeroSpace {
 
     /// Returns a list of focused AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
-    public func listWorkspacesFocused() -> Result<[String], ApCoreError> {
+    func listWorkspacesFocused() -> Result<[String], ApCoreError> {
         switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--focused"]) {
         case .failure(let error):
             return .failure(error)
@@ -601,13 +619,13 @@ public struct ApAeroSpace {
 
 extension ApAeroSpace: AeroSpaceHealthChecking {
     /// Returns the installation status of AeroSpace.
-    public func installStatus() -> AeroSpaceInstallStatus {
+    func installStatus() -> AeroSpaceInstallStatus {
         AeroSpaceInstallStatus(isInstalled: isAppInstalled(), appPath: appPath)
     }
 
     /// Checks whether the installed aerospace CLI is compatible.
     /// Translates the internal Result type to the intent-based AeroSpaceCompatibility enum.
-    public func healthCheckCompatibility() -> AeroSpaceCompatibility {
+    func healthCheckCompatibility() -> AeroSpaceCompatibility {
         guard isCliAvailable() else {
             return .cliUnavailable
         }
@@ -621,7 +639,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Installs AeroSpace via Homebrew.
     /// - Returns: True if installation succeeded.
-    public func healthInstallViaHomebrew() -> Bool {
+    func healthInstallViaHomebrew() -> Bool {
         switch installViaHomebrew() {
         case .success:
             return true
@@ -632,7 +650,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Starts AeroSpace.
     /// - Returns: True if start succeeded.
-    public func healthStart() -> Bool {
+    func healthStart() -> Bool {
         switch start() {
         case .success:
             return true
@@ -643,7 +661,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Reloads the AeroSpace configuration.
     /// - Returns: True if reload succeeded.
-    public func healthReloadConfig() -> Bool {
+    func healthReloadConfig() -> Bool {
         switch reloadConfig() {
         case .success:
             return true

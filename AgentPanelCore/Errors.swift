@@ -9,8 +9,8 @@
 
 import Foundation
 
-/// Categories of errors from ApCore operations.
-public enum ApCoreErrorCategory: String, Sendable {
+/// Categories of errors from AgentPanelCore operations.
+enum ApCoreErrorCategory: String, Sendable {
     /// External command execution failures.
     case command
     /// Input validation failures.
@@ -23,18 +23,18 @@ public enum ApCoreErrorCategory: String, Sendable {
     case parse
 }
 
-/// Errors emitted by ApCore operations.
+/// Errors emitted by AgentPanelCore operations.
 public struct ApCoreError: Error, Equatable, Sendable {
     /// Error category for programmatic handling.
-    public let category: ApCoreErrorCategory
+    let category: ApCoreErrorCategory
     /// Human-readable error message.
     public let message: String
     /// Additional detail (e.g., stderr output).
-    public let detail: String?
+    let detail: String?
     /// Command that was executed, if applicable.
-    public let command: String?
+    let command: String?
     /// Exit code from command execution, if applicable.
-    public let exitCode: Int32?
+    let exitCode: Int32?
 
     /// Creates a new ApCoreError with full details.
     /// - Parameters:
@@ -43,7 +43,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
     ///   - detail: Additional detail such as stderr output.
     ///   - command: Command that was executed.
     ///   - exitCode: Exit code from the command.
-    public init(
+    init(
         category: ApCoreErrorCategory,
         message: String,
         detail: String? = nil,
@@ -60,7 +60,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
     /// Creates a new ApCoreError with just a message.
     /// Defaults to `.command` category for backward compatibility.
     /// - Parameter message: Error message.
-    public init(message: String) {
+    init(message: String) {
         self.category = .command
         self.message = message
         self.detail = nil
@@ -77,7 +77,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
 ///   - commandDescription: Human-readable description of the command (e.g., "aerospace list-workspaces --all").
 ///   - result: The command result containing exit code and stderr.
 /// - Returns: A properly formatted ApCoreError.
-public func commandError(_ commandDescription: String, result: ApCommandResult) -> ApCoreError {
+func commandError(_ commandDescription: String, result: ApCommandResult) -> ApCoreError {
     let trimmed = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
     let detail = trimmed.isEmpty ? nil : trimmed
     return ApCoreError(
@@ -94,7 +94,7 @@ public func commandError(_ commandDescription: String, result: ApCommandResult) 
 /// - Parameters:
 ///   - message: Description of what validation failed.
 /// - Returns: A validation category ApCoreError.
-public func validationError(_ message: String) -> ApCoreError {
+func validationError(_ message: String) -> ApCoreError {
     ApCoreError(
         category: .validation,
         message: message
@@ -107,7 +107,7 @@ public func validationError(_ message: String) -> ApCoreError {
 ///   - message: Description of what file operation failed.
 ///   - detail: Additional detail about the failure.
 /// - Returns: A fileSystem category ApCoreError.
-public func fileSystemError(_ message: String, detail: String? = nil) -> ApCoreError {
+func fileSystemError(_ message: String, detail: String? = nil) -> ApCoreError {
     ApCoreError(
         category: .fileSystem,
         message: message,
@@ -121,7 +121,7 @@ public func fileSystemError(_ message: String, detail: String? = nil) -> ApCoreE
 ///   - message: Description of what parsing failed.
 ///   - detail: The content that failed to parse.
 /// - Returns: A parse category ApCoreError.
-public func parseError(_ message: String, detail: String? = nil) -> ApCoreError {
+func parseError(_ message: String, detail: String? = nil) -> ApCoreError {
     ApCoreError(
         category: .parse,
         message: message,

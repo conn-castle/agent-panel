@@ -9,8 +9,7 @@ let cli = ApCLI(
     parser: ApArgumentParser(),
     dependencies: ApCLIDependencies(
         version: { AgentPanel.version },
-        configLoader: { ConfigLoader.loadDefault() },
-        coreFactory: { ApCore(config: $0) },
+        projectManagerFactory: { ProjectManager() },
         doctorRunner: {
             Doctor(runningApplicationChecker: AppKitRunningApplicationChecker()).run()
         }
