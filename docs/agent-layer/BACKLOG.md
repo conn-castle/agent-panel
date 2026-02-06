@@ -28,6 +28,22 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-05 f3e1d2: Visual health indicator in AP menu bar icon
+    Priority: High. Area: Diagnostics/UX
+    Description: Update the Agent Panel menu bar icon to reflect system health (e.g., Red for errors, Yellow for warnings) after a Doctor run.
+    Acceptance criteria: Menu bar icon color or state changes based on Doctor results, providing immediate visual feedback on system readiness.
+
+- Backlog 2026-02-05 e2c1b4: Automatic Doctor run on operational errors
+    Priority: Medium. Area: Diagnostics
+    Description: Automatically trigger a `doctor` run when an error occurs during normal operation (e.g., project startup failure, command error).
+    Acceptance criteria: When an error is encountered in the app's workflow, `Doctor` runs in the background or surfaces a diagnostic report to the user automatically.
+
+- Backlog 2026-02-05 d1f2a3: Option to hide AeroSpace menu bar icon
+    Priority: Medium. Area: macOS Integration
+    Description: Provide a way to hide the AeroSpace icon from the macOS menu bar to reduce menu bar clutter.
+    Acceptance criteria: A configuration setting or command successfully hides the AeroSpace icon while keeping its window management features active.
+    Notes: Requires investigation into AeroSpace's ability to run in a "headless" or hidden-icon mode.
+
 - Backlog 2026-01-28 e8f3b1: Keybind to go back to most recent space or non-project window
     Priority: Medium. Area: Hotkeys
     Description: Add a keybind that allows the user to toggle back to their most recent macOS space or the most recent window that is not part of an active project.

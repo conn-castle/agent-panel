@@ -73,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hotkeyManager = hotkeyManager
         updateHotkeyStatus(hotkeyManager.hotkeyRegistrationStatus())
 
+        // Auto-start AeroSpace if installed but not running
+        ensureAeroSpaceRunning()
+
         let dataStore = DataPaths.default()
         logAppEvent(
             event: "app.started",
@@ -82,6 +85,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "config_path": dataStore.configFile.path
             ]
         )
+    }
+
+    /// Ensures AeroSpace is running if it's installed.
+    private func ensureAeroSpaceRunning() {
+        let aerospace = ApAeroSpace()
+        let checker = AppKitRunningApplicationChecker()
+
+        guard aerospace.isAppInstalled() else {
+            logAppEvent(
+                event: "aerospace.autostart.skipped",
+                level: .warn,
+                message: "AeroSpace not installed"
+            )
+            return
+        }
+
+        if checker.isApplicationRunning(bundleIdentifier: "bobko.aerospace") {
+            logAppEvent(event: "aerospace.autostart.skipped", message: "Already running")
+            return
+        }
+
+        logAppEvent(event: "aerospace.autostart.starting")
+        switch aerospace.start() {
+        case .success:
+            logAppEvent(event: "aerospace.autostart.success")
+        case .failure(let error):
+            logAppEvent(
+                event: "aerospace.autostart.failed",
+                level: .error,
+                message: error.message
+            )
+        }
     }
 
     /// Creates the menu bar menu.
@@ -134,9 +169,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        // Capture the previously active app BEFORE the menu dismisses and before we activate.
-        // This ensures restore-on-cancel returns to the correct app.
+        // Capture both the previously active app AND focus state BEFORE the menu dismisses
+        // and before we activate. This ensures restore-on-cancel returns to the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
+        let capturedFocus = projectManager.captureCurrentFocus()
         statusItem?.menu?.cancelTracking()
         // Small delay required to let the menu dismiss before showing the switcher.
         // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
@@ -145,15 +181,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp)
+            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
     /// Toggles the switcher panel from the global hotkey.
     private func toggleSwitcher() {
-        // Capture the previously active app BEFORE we activate AgentPanel.
-        // This must happen outside the async block to capture the correct app.
+        // Capture both the previously active app AND focus state BEFORE we activate AgentPanel.
+        // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
+        let capturedFocus = projectManager.captureCurrentFocus()
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -163,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 context: ["hotkey": "Cmd+Shift+Space"]
             )
             NSApp.activate(ignoringOtherApps: true)
-            self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp)
+            self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 

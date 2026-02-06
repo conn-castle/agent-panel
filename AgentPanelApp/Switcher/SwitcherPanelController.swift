@@ -119,11 +119,13 @@ final class SwitcherPanelController: NSObject {
     ///   - origin: Source that triggered the toggle.
     ///   - previousApp: The app that was active before AgentPanel was activated.
     ///                  Must be captured BEFORE calling NSApp.activate().
-    func toggle(origin: SwitcherPresentationSource = .unknown, previousApp: NSRunningApplication? = nil) {
+    ///   - capturedFocus: The window focus state captured before activation.
+    ///                    Must be captured BEFORE calling NSApp.activate().
+    func toggle(origin: SwitcherPresentationSource = .unknown, previousApp: NSRunningApplication? = nil, capturedFocus: CapturedFocus? = nil) {
         if panel.isVisible {
             dismiss(reason: .toggle)
         } else {
-            show(origin: origin, previousApp: previousApp)
+            show(origin: origin, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
@@ -133,7 +135,11 @@ final class SwitcherPanelController: NSObject {
     ///   - origin: Source that triggered the show.
     ///   - previousApp: The app that was active before AgentPanel was activated.
     ///                  Must be captured BEFORE calling NSApp.activate().
-    func show(origin: SwitcherPresentationSource = .unknown, previousApp: NSRunningApplication? = nil) {
+    ///   - capturedFocus: The window focus state captured before activation.
+    ///                    Must be captured BEFORE calling NSApp.activate().
+    func show(origin: SwitcherPresentationSource = .unknown, previousApp: NSRunningApplication? = nil, capturedFocus: CapturedFocus? = nil) {
+        let showStart = CFAbsoluteTimeGetCurrent()
+
         // Use provided previousApp, or fall back to current frontmost (less reliable)
         previouslyActiveApp = previousApp ?? NSWorkspace.shared.frontmostApplication
         resetState()
@@ -141,14 +147,12 @@ final class SwitcherPanelController: NSObject {
         session.begin(origin: origin)
         session.logShowRequested(origin: origin)
 
-        // Load config and set up focus operations
-        loadProjects()
+        // Use pre-captured focus (captured before NSApp.activate() in caller)
+        self.capturedFocus = capturedFocus
 
-        // Capture the currently focused window before showing switcher
-        capturedFocus = projectManager.captureCurrentFocus()
         if let focus = capturedFocus {
             session.logEvent(
-                event: "switcher.focus.captured",
+                event: "switcher.focus.received",
                 context: [
                     "window_id": "\(focus.windowId)",
                     "app_bundle_id": focus.appBundleId
@@ -156,24 +160,49 @@ final class SwitcherPanelController: NSObject {
             )
         } else {
             session.logEvent(
-                event: "switcher.focus.capture_failed",
+                event: "switcher.focus.not_provided",
                 level: .warn,
-                message: "Could not capture focused window."
+                message: "No focus state provided; restore-on-cancel may not work."
             )
         }
 
+        // Show panel
         showPanel()
+
+        // Load config and apply filter (should be fast - file read + in-memory sort)
+        loadProjects()
         applyFilter(query: "")
+
+        let totalMs = Int((CFAbsoluteTimeGetCurrent() - showStart) * 1000)
+
         scheduleVisibilityCheck(origin: origin)
+
+        session.logEvent(
+            event: "switcher.show.timing",
+            context: [
+                "total_ms": "\(totalMs)"
+            ]
+        )
     }
 
     /// Dismisses the switcher panel and clears transient state.
     func dismiss(reason: SwitcherDismissReason = .unknown) {
         expectsVisible = false
         session.end(reason: reason)
-        panel.orderOut(nil)
 
         // Restore focus unless a project was selected (switching context)
+        // IMPORTANT: Activate the previous app BEFORE closing the panel to prevent
+        // macOS from picking a random window when the panel disappears.
+        if reason != .projectSelected {
+            // Synchronously activate the previous app first (fast operation)
+            if let previousApp = previouslyActiveApp {
+                previousApp.activate()
+            }
+        }
+
+        panel.orderOut(nil)
+
+        // Now do the precise AeroSpace window focus async (can be slow)
         if reason != .projectSelected {
             restorePreviousFocus()
         }
@@ -185,42 +214,65 @@ final class SwitcherPanelController: NSObject {
     // MARK: - Focus Capture and Restore
 
     /// Restores focus to the previously focused window or app.
+    /// Runs asynchronously to avoid blocking the main thread if AeroSpace commands are slow.
     private func restorePreviousFocus() {
-        // Try AeroSpace restore first via ProjectManager
-        if let focus = capturedFocus {
-            if projectManager.restoreFocus(focus) {
-                session.logEvent(
-                    event: "switcher.focus.restored",
-                    context: [
-                        "window_id": "\(focus.windowId)",
-                        "method": "aerospace"
-                    ]
-                )
-                previouslyActiveApp = nil
-                return
-            } else {
-                session.logEvent(
-                    event: "switcher.focus.restore_failed",
-                    level: .warn,
-                    message: "AeroSpace focus restore failed, falling back to app activation.",
-                    context: ["window_id": "\(focus.windowId)"]
-                )
+        let focus = capturedFocus
+        let previousApp = previouslyActiveApp
+
+        // Clear references immediately so they're not reused
+        previouslyActiveApp = nil
+
+        // Run focus restore on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let restoreStart = CFAbsoluteTimeGetCurrent()
+
+            // Try AeroSpace restore first via ProjectManager
+            if let focus {
+                if self?.projectManager.restoreFocus(focus) == true {
+                    let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                    DispatchQueue.main.async {
+                        self?.session.logEvent(
+                            event: "switcher.focus.restored",
+                            context: [
+                                "window_id": "\(focus.windowId)",
+                                "method": "aerospace",
+                                "restore_ms": "\(restoreMs)"
+                            ]
+                        )
+                    }
+                    return
+                } else {
+                    let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                    DispatchQueue.main.async {
+                        self?.session.logEvent(
+                            event: "switcher.focus.restore_failed",
+                            level: .warn,
+                            message: "AeroSpace focus restore failed, falling back to app activation.",
+                            context: [
+                                "window_id": "\(focus.windowId)",
+                                "restore_ms": "\(restoreMs)"
+                            ]
+                        )
+                    }
+                }
+            }
+
+            // Fallback: activate the previously active app (must be on main thread)
+            DispatchQueue.main.async {
+                if let previousApp {
+                    previousApp.activate()
+                    let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                    self?.session.logEvent(
+                        event: "switcher.focus.restored",
+                        context: [
+                            "app_bundle_id": previousApp.bundleIdentifier ?? "unknown",
+                            "method": "app_activation",
+                            "restore_ms": "\(restoreMs)"
+                        ]
+                    )
+                }
             }
         }
-
-        // Fallback: activate the previously active app
-        if let previousApp = previouslyActiveApp {
-            previousApp.activate()
-            session.logEvent(
-                event: "switcher.focus.restored",
-                context: [
-                    "app_bundle_id": previousApp.bundleIdentifier ?? "unknown",
-                    "method": "app_activation"
-                ]
-            )
-        }
-
-        previouslyActiveApp = nil
     }
 
     // MARK: - Private Configuration
@@ -444,18 +496,57 @@ final class SwitcherPanelController: NSObject {
             ]
         )
 
-        // Dismiss without restoring previous focus (we're switching to this project)
-        dismiss(reason: .projectSelected)
+        // Show progress and disable interaction during activation
+        setStatus(message: "Activating \(project.name)...", level: .info)
+        searchField.isEnabled = false
+        tableView.isEnabled = false
 
-        // Activate the project (opens IDE/Chrome, moves to workspace, focuses IDE)
-        let result = projectManager.selectProject(projectId: project.id)
-        if case .failure(let error) = result {
-            session.logEvent(
-                event: "switcher.project.activation_failed",
-                level: .error,
-                message: "\(error)",
-                context: ["project_id": project.id]
-            )
+        // Run activation on background thread (it polls for windows, up to 10s)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = self?.projectManager.selectProject(projectId: project.id)
+
+            DispatchQueue.main.async {
+                guard let self else { return }
+
+                self.searchField.isEnabled = true
+                self.tableView.isEnabled = true
+
+                switch result {
+                case .success:
+                    // Dismiss without restoring previous focus (we're switching to this project)
+                    self.dismiss(reason: .projectSelected)
+                case .failure(let error):
+                    self.setStatus(message: self.projectErrorMessage(error), level: .error)
+                    self.session.logEvent(
+                        event: "switcher.project.activation_failed",
+                        level: .error,
+                        message: "\(error)",
+                        context: ["project_id": project.id]
+                    )
+                case .none:
+                    break
+                }
+            }
+        }
+    }
+
+    /// Converts ProjectError to a user-friendly message.
+    private func projectErrorMessage(_ error: ProjectError) -> String {
+        switch error {
+        case .projectNotFound(let id):
+            return "Project not found: \(id)"
+        case .configNotLoaded:
+            return "Config not loaded"
+        case .aeroSpaceError(let detail):
+            return "AeroSpace error: \(detail)"
+        case .ideLaunchFailed(let detail):
+            return "IDE launch failed: \(detail)"
+        case .chromeLaunchFailed(let detail):
+            return "Chrome launch failed: \(detail)"
+        case .noActiveProject:
+            return "No active project"
+        case .noPreviousWindow:
+            return "No previous window"
         }
     }
 
@@ -636,6 +727,26 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
             session.logEvent(event: "switcher.action.escape")
             dismiss(reason: .escape)
+            return true
+        }
+
+        // Forward arrow keys to table view for navigation
+        if commandSelector == #selector(NSResponder.moveUp(_:)) {
+            let currentRow = tableView.selectedRow
+            if currentRow > 0 {
+                tableView.selectRowIndexes(IndexSet(integer: currentRow - 1), byExtendingSelection: false)
+                tableView.scrollRowToVisible(currentRow - 1)
+            }
+            return true
+        }
+
+        if commandSelector == #selector(NSResponder.moveDown(_:)) {
+            let currentRow = tableView.selectedRow
+            let maxRow = tableView.numberOfRows - 1
+            if currentRow < maxRow {
+                tableView.selectRowIndexes(IndexSet(integer: currentRow + 1), byExtendingSelection: false)
+                tableView.scrollRowToVisible(currentRow + 1)
+            }
             return true
         }
 

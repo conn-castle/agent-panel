@@ -75,28 +75,28 @@ final class DoctorWindowController {
     // MARK: - Window Setup
 
     private func setupWindow() {
-        let panel = makePanel()
+        let windowInstance = makeWindow()
         let textViewInstance = makeTextView()
         let buttonsInstance = makeButtons()
         let contentView = makeContentView(textView: textViewInstance, buttons: buttonsInstance)
-        panel.contentView = contentView
-        panel.isReleasedWhenClosed = false
+        windowInstance.contentView = contentView
+        windowInstance.isReleasedWhenClosed = false
 
-        window = panel
+        window = windowInstance
         textView = textViewInstance
         buttons = buttonsInstance
     }
 
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
+    private func makeWindow() -> NSWindow {
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
-            styleMask: [.titled, .closable, .resizable],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        panel.title = "Doctor"
-        panel.center()
-        return panel
+        window.title = "Doctor"
+        window.center()
+        return window
     }
 
     private func makeContentView(textView: NSTextView, buttons: DoctorButtons) -> NSView {

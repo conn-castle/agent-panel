@@ -75,7 +75,7 @@ Incomplete:
 - [x] Implement activation orchestration with tests for success/failure scenarios (including partial failures and cleanup).
 - [x] Implement "close project" in core with tests. (Core API complete; wiring to UI pending.)
 - [x] Implement "exit to previous window" — return focus to the last non-project window without closing the project.
-- [ ] Wire switcher selection to activation and update UI messaging (progress + failures).
+- [x] Wire switcher selection to activation and update UI messaging (progress + failures).
 - [ ] Ensure agent-layer is supported: if `useAgentLayer = true`, Doctor verifies it is installed/usable; if missing, route users to onboarding instead of dead ends.
 - [x] Remove CLI-only items from the public API. `ApCore` class removed; CLI now uses `ProjectManager` directly. Comprehensive public API audit completed: `ApWindow` and 20+ internal types made internal; CORE_API.md updated to match actual public surface.
 
