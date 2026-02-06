@@ -94,7 +94,7 @@ final class SwitcherPanelController: NSObject {
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 360),
-            styleMask: [.titled, .closable],
+            styleMask: [.nonactivatingPanel, .titled, .closable],
             backing: .buffered,
             defer: false
         )
@@ -275,6 +275,21 @@ final class SwitcherPanelController: NSObject {
         }
     }
 
+    /// Focuses the IDE window after panel dismissal.
+    /// Called after project selection to focus the IDE once the panel is closed.
+    private func focusIdeWindow(windowId: Int) {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            if self?.projectManager.focusWindow(windowId: windowId) == true {
+                DispatchQueue.main.async {
+                    self?.session.logEvent(
+                        event: "switcher.ide.focused",
+                        context: ["window_id": "\(windowId)"]
+                    )
+                }
+            }
+        }
+    }
+
     // MARK: - Private Configuration
 
     /// Configures the switcher panel presentation behavior.
@@ -371,9 +386,13 @@ final class SwitcherPanelController: NSObject {
     }
 
     /// Shows the panel and focuses the search field.
+    ///
+    /// The panel uses `.nonactivatingPanel` style mask which allows it to receive keyboard
+    /// input without activating the owning app. This prevents workspace switching when the
+    /// switcher is invoked from a different workspace. The system handles keyboard focus
+    /// via "key focus theft" - the panel becomes key while the previous app remains active.
     private func showPanel() {
         panel.center()
-        NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(searchField)
@@ -501,30 +520,37 @@ final class SwitcherPanelController: NSObject {
         searchField.isEnabled = false
         tableView.isEnabled = false
 
-        // Run activation on background thread (it polls for windows, up to 10s)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = self?.projectManager.selectProject(projectId: project.id)
+        // Run activation asynchronously (Chrome and IDE setup run in parallel)
+        // Pass the pre-captured focus to avoid redundant AeroSpace calls while panel is visible
+        guard let focusForExit = capturedFocus else {
+            setStatus(message: "Could not capture focus", level: .error)
+            searchField.isEnabled = true
+            tableView.isEnabled = true
+            return
+        }
+        let projectId = project.id
+        Task { [weak self] in
+            guard let self else { return }
 
-            DispatchQueue.main.async {
-                guard let self else { return }
+            let result = await self.projectManager.selectProject(projectId: projectId, preCapturedFocus: focusForExit)
 
+            await MainActor.run {
                 self.searchField.isEnabled = true
                 self.tableView.isEnabled = true
 
                 switch result {
-                case .success:
-                    // Dismiss without restoring previous focus (we're switching to this project)
+                case .success(let ideWindowId):
+                    // Dismiss first, then focus the IDE (avoids panel close stealing focus)
                     self.dismiss(reason: .projectSelected)
+                    self.focusIdeWindow(windowId: ideWindowId)
                 case .failure(let error):
                     self.setStatus(message: self.projectErrorMessage(error), level: .error)
                     self.session.logEvent(
                         event: "switcher.project.activation_failed",
                         level: .error,
                         message: "\(error)",
-                        context: ["project_id": project.id]
+                        context: ["project_id": projectId]
                     )
-                case .none:
-                    break
                 }
             }
         }
@@ -547,6 +573,8 @@ final class SwitcherPanelController: NSObject {
             return "No active project"
         case .noPreviousWindow:
             return "No previous window"
+        case .windowNotFound(let detail):
+            return "Window not found: \(detail)"
         }
     }
 

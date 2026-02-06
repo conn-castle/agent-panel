@@ -289,13 +289,29 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                switch manager.selectProject(projectId: projectId) {
+                guard let capturedFocus = manager.captureCurrentFocus() else {
+                    output.stderr("error: Could not capture current focus")
+                    return ApExitCode.failure.rawValue
+                }
+                // Bridge async selectProject to sync CLI using semaphore
+                let semaphore = DispatchSemaphore(value: 0)
+                var result: Result<Int, ProjectError>?
+                Task {
+                    result = await manager.selectProject(projectId: projectId, preCapturedFocus: capturedFocus)
+                    semaphore.signal()
+                }
+                semaphore.wait()
+
+                switch result {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
                 case .success:
                     output.stdout("Selected project: \(projectId)")
                     return ApExitCode.ok.rawValue
+                case .none:
+                    output.stderr("error: Unexpected nil result")
+                    return ApExitCode.failure.rawValue
                 }
             }
 
@@ -481,6 +497,8 @@ private func formatProjectError(_ error: ProjectError) -> String {
         return "No active project"
     case .noPreviousWindow:
         return "No previous window to return to"
+    case .windowNotFound(let detail):
+        return "Window not found: \(detail)"
     }
 }
 

@@ -180,14 +180,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else {
                 return
             }
-            NSApp.activate(ignoringOtherApps: true)
+            // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
+            // without activating the app (and therefore without switching workspaces).
             self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
     /// Toggles the switcher panel from the global hotkey.
     private func toggleSwitcher() {
-        // Capture both the previously active app AND focus state BEFORE we activate AgentPanel.
+        // Capture both the previously active app AND focus state BEFORE we show the switcher.
         // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
         let capturedFocus = projectManager.captureCurrentFocus()
@@ -199,7 +200,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 event: "switcher.hotkey.invoked",
                 context: ["hotkey": "Cmd+Shift+Space"]
             )
-            NSApp.activate(ignoringOtherApps: true)
+            // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
+            // without activating the app (and therefore without switching workspaces).
             self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }

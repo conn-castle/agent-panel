@@ -193,6 +193,7 @@ protocol AeroSpaceProviding {
     func closeWorkspace(name: String) -> Result<Void, ApCoreError>
     func listChromeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError>
     func listVSCodeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError>
+    func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError>
     func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError>
     func focusedWindow() -> Result<ApWindow, ApCoreError>
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
