@@ -358,7 +358,8 @@ public final class ProjectManager {
             appBundleId: ApChromeLauncher.bundleId,
             projectId: projectId,
             launchAction: { self.chromeLauncher.openNewWindow(identifier: projectId) },
-            windowLabel: "Chrome"
+            windowLabel: "Chrome",
+            eventSource: "chrome"
         ) {
         case .failure(let error):
             return .failure(error)
@@ -371,7 +372,8 @@ public final class ProjectManager {
             appBundleId: ApVSCodeLauncher.bundleId,
             projectId: projectId,
             launchAction: { self.ideLauncher.openNewWindow(identifier: projectId, projectPath: project.path) },
-            windowLabel: "VS Code"
+            windowLabel: "VS Code",
+            eventSource: "vscode"
         ) {
         case .failure(let error):
             return .failure(error)
@@ -509,29 +511,31 @@ public final class ProjectManager {
     ///   - projectId: Project ID used for the window token.
     ///   - launchAction: Closure that launches a new window if none exists.
     ///   - windowLabel: Human-readable label for logging (e.g., "Chrome", "VS Code").
+    ///   - eventSource: Stable log event key source (e.g., "chrome", "vscode").
     /// - Returns: The found or launched window on success.
     private func findOrLaunchWindow(
         appBundleId: String,
         projectId: String,
         launchAction: () -> Result<Void, ApCoreError>,
-        windowLabel: String
+        windowLabel: String,
+        eventSource: String
     ) async -> Result<ApWindow, ProjectError> {
         // Find existing tagged window (global search with fallback)
         if let window = findWindowByToken(appBundleId: appBundleId, projectId: projectId) {
-            logEvent("select.\(windowLabel.lowercased())_found", context: ["window_id": "\(window.windowId)"])
+            logEvent(Self.activationWindowEventName(source: eventSource, action: "found"), context: ["window_id": "\(window.windowId)"])
             return .success(window)
         }
 
         // Launch a new window
         switch launchAction() {
         case .failure(let error):
-            logEvent("select.\(windowLabel.lowercased())_launch_failed", level: .error, context: ["error": error.message])
+            logEvent(Self.activationWindowEventName(source: eventSource, action: "launch_failed"), level: .error, context: ["error": error.message])
             let projectError: ProjectError = windowLabel == "Chrome"
                 ? .chromeLaunchFailed(detail: "\(windowLabel) launch failed: \(error.message)")
                 : .ideLaunchFailed(detail: "\(windowLabel) launch failed: \(error.message)")
             return .failure(projectError)
         case .success:
-            logEvent("select.\(windowLabel.lowercased())_launched", context: ["project_id": projectId])
+            logEvent(Self.activationWindowEventName(source: eventSource, action: "launched"), context: ["project_id": projectId])
         }
 
         // Poll until window appears
@@ -654,5 +658,12 @@ public final class ProjectManager {
 
     private func logEvent(_ event: String, level: LogLevel = .info, message: String? = nil, context: [String: String]? = nil) {
         _ = logger.log(event: "project_manager.\(event)", level: level, message: message, context: context)
+    }
+
+    /// Builds an activation event name from a stable source key and action.
+    ///
+    /// Example: `select.chrome_found`, `select.vscode_launch_failed`.
+    static func activationWindowEventName(source: String, action: String) -> String {
+        "select.\(source)_\(action)"
     }
 }

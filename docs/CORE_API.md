@@ -113,8 +113,8 @@ The activation sequence is **strictly sequential** and mirrors the proven shell-
 flow (see `docs/using_aerospace.md` § "Project Activation Command Sequence"):
 
 1. Find or launch tagged Chrome window
-2. Move Chrome to workspace (no focus follow)
-3. Find or launch tagged VS Code window
+2. Find or launch tagged VS Code window
+3. Move Chrome to workspace (no focus follow)
 4. Move VS Code to workspace (with focus follow)
 5. Verify both windows arrived in workspace
 6. Focus workspace (`summon-workspace` with fallback)
@@ -175,9 +175,10 @@ public final class ProjectManager {
 
     /// Activates a project by ID (sequential flow).
     ///
-    /// Runs the full activation sequence: find/launch Chrome → move to workspace →
-    /// find/launch VS Code → move to workspace (focus follows) → verify workspace
-    /// membership → focus workspace → focus IDE → verify focus stability.
+    /// Runs the full activation sequence: find/launch Chrome → find/launch VS Code
+    /// → move Chrome to workspace → move VS Code to workspace (focus follows)
+    /// → verify workspace membership → focus workspace → focus IDE
+    /// → verify focus stability.
     ///
     /// - Parameters:
     ///   - projectId: The project ID to activate.

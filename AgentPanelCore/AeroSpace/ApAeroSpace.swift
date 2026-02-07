@@ -343,11 +343,16 @@ public struct ApAeroSpace {
             executable: "aerospace",
             arguments: ["summon-workspace", trimmed]
         )
-        switch summonResult {
-        case .success(let result) where result.exitCode == 0:
-            return .success(())
-        default:
-            break // fall through to workspace command
+        if !Self.shouldAttemptCompatibilityFallback(summonResult) {
+            switch summonResult {
+            case .success(let result):
+                if result.exitCode == 0 {
+                    return .success(())
+                }
+                return .failure(commandError("aerospace summon-workspace \(trimmed)", result: result))
+            case .failure(let error):
+                return .failure(error)
+            }
         }
 
         // Fallback to workspace command
@@ -387,11 +392,16 @@ public struct ApAeroSpace {
                 "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
             ]
         )
-        switch globalResult {
-        case .success(let result) where result.exitCode == 0:
-            return parseWindowSummaries(output: result.stdout)
-        default:
-            break // fall through to focused monitor
+        if !Self.shouldAttemptCompatibilityFallback(globalResult) {
+            switch globalResult {
+            case .success(let result):
+                if result.exitCode == 0 {
+                    return parseWindowSummaries(output: result.stdout)
+                }
+                return .failure(commandError("aerospace list-windows --app-bundle-id \(bundleId)", result: result))
+            case .failure(let error):
+                return .failure(error)
+            }
         }
 
         // Fallback: focused monitor only
@@ -421,11 +431,21 @@ public struct ApAeroSpace {
                 executable: "aerospace",
                 arguments: ["move-node-to-workspace", "--focus-follows-window", "--window-id", "\(windowId)", trimmed]
             )
-            switch focusFollowsResult {
-            case .success(let result) where result.exitCode == 0:
-                return .success(())
-            default:
-                break // fall through to plain move
+            if !Self.shouldAttemptCompatibilityFallback(focusFollowsResult) {
+                switch focusFollowsResult {
+                case .success(let result):
+                    if result.exitCode == 0 {
+                        return .success(())
+                    }
+                    return .failure(
+                        commandError(
+                            "aerospace move-node-to-workspace --focus-follows-window --window-id \(windowId) \(trimmed)",
+                            result: result
+                        )
+                    )
+                case .failure(let error):
+                    return .failure(error)
+                }
             }
         }
 
@@ -701,6 +721,19 @@ public struct ApAeroSpace {
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n")
             return .success(output)
+        }
+    }
+
+    /// Returns true when a primary command result should trigger a compatibility fallback.
+    ///
+    /// Fallback is attempted only for non-zero command exits. Hard command-run failures
+    /// (for example executable resolution failures) do not fall back.
+    static func shouldAttemptCompatibilityFallback(_ result: Result<ApCommandResult, ApCoreError>) -> Bool {
+        switch result {
+        case .success(let output):
+            return output.exitCode != 0
+        case .failure:
+            return false
         }
     }
 }
