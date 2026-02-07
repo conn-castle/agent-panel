@@ -323,20 +323,110 @@ public struct ApAeroSpace {
         }
     }
 
+    // MARK: - Workspace Focus
+
+    /// Focuses a workspace by name.
+    ///
+    /// Uses `summon-workspace` (preferred, pulls workspace to current monitor) with
+    /// fallback to `workspace` (switches to workspace wherever it is).
+    ///
+    /// - Parameter name: Workspace name to focus.
+    /// - Returns: Success or an error.
+    func focusWorkspace(name: String) -> Result<Void, ApCoreError> {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(validationError("Workspace name cannot be empty."))
+        }
+
+        // Try summon-workspace first (preferred for multi-monitor)
+        let summonResult = commandRunner.run(
+            executable: "aerospace",
+            arguments: ["summon-workspace", trimmed]
+        )
+        switch summonResult {
+        case .success(let result) where result.exitCode == 0:
+            return .success(())
+        default:
+            break // fall through to workspace command
+        }
+
+        // Fallback to workspace command
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["workspace", trimmed]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                return .failure(commandError("aerospace workspace \(trimmed)", result: result))
+            }
+            return .success(())
+        }
+    }
+
     // MARK: - Windows
+
+    /// Returns windows for the given app across all monitors.
+    ///
+    /// Searches globally first (no `--monitor` flag). If that fails (older AeroSpace builds),
+    /// falls back to `--monitor focused`. This is the one exception to the "prefer scoped
+    /// queries" guidance — tagged-window resolution needs global scope.
+    ///
+    /// - Parameter bundleId: App bundle identifier to filter.
+    /// - Returns: Window list or an error.
+    func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> {
+        // Preferred: global search (no --monitor flag)
+        let globalResult = commandRunner.run(
+            executable: "aerospace",
+            arguments: [
+                "list-windows",
+                "--app-bundle-id",
+                bundleId,
+                "--format",
+                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+            ]
+        )
+        switch globalResult {
+        case .success(let result) where result.exitCode == 0:
+            return parseWindowSummaries(output: result.stdout)
+        default:
+            break // fall through to focused monitor
+        }
+
+        // Fallback: focused monitor only
+        return listWindowsOnFocusedMonitor(appBundleId: bundleId)
+    }
 
     /// Moves a window into the provided workspace.
     /// - Parameters:
     ///   - workspace: Destination workspace name.
     ///   - windowId: AeroSpace window id to move.
+    ///   - focusFollows: When true, includes `--focus-follows-window` so focus moves
+    ///     with the window into the target workspace. Falls back to a plain move if
+    ///     the flag is not supported.
     /// - Returns: Success or an error.
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> {
+    func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool = false) -> Result<Void, ApCoreError> {
         let trimmed = workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(validationError("Workspace name cannot be empty."))
         }
         guard windowId > 0 else {
             return .failure(validationError("Window ID must be positive."))
+        }
+
+        if focusFollows {
+            // Try with --focus-follows-window first; fall back to plain move
+            let focusFollowsResult = commandRunner.run(
+                executable: "aerospace",
+                arguments: ["move-node-to-workspace", "--focus-follows-window", "--window-id", "\(windowId)", trimmed]
+            )
+            switch focusFollowsResult {
+            case .success(let result) where result.exitCode == 0:
+                return .success(())
+            default:
+                break // fall through to plain move
+            }
         }
 
         switch commandRunner.run(

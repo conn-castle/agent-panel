@@ -575,6 +575,8 @@ final class SwitcherPanelController: NSObject {
             return "No previous window"
         case .windowNotFound(let detail):
             return "Window not found: \(detail)"
+        case .focusUnstable(let detail):
+            return "Focus unstable: \(detail)"
         }
     }
 

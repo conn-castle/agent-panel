@@ -35,6 +35,9 @@ public enum ProjectError: Error, Equatable, Sendable {
 
     /// Expected window not found after setup.
     case windowNotFound(detail: String)
+
+    /// Focus could not be stabilized on the IDE window.
+    case focusUnstable(detail: String)
 }
 
 // Note: CapturedFocus and internal protocols (AeroSpaceProviding,
@@ -167,6 +170,25 @@ public final class ProjectManager {
         focusWindow(windowId: focus.windowId)
     }
 
+    /// Focuses a workspace by name.
+    ///
+    /// Uses `summon-workspace` (preferred, pulls workspace to current monitor) with
+    /// fallback to `workspace` (switches to workspace wherever it is).
+    ///
+    /// - Parameter name: Workspace name to focus.
+    /// - Returns: True if the workspace was focused successfully.
+    @discardableResult
+    public func focusWorkspace(name: String) -> Bool {
+        switch aerospace.focusWorkspace(name: name) {
+        case .failure(let error):
+            logEvent("focus.workspace.failed", level: .warn, message: error.message, context: ["workspace": name])
+            return false
+        case .success:
+            logEvent("focus.workspace.succeeded", context: ["workspace": name])
+            return true
+        }
+    }
+
     /// Focuses a window by its AeroSpace window ID.
     @discardableResult
     public func focusWindow(windowId: Int) -> Bool {
@@ -178,6 +200,38 @@ public final class ProjectManager {
             logEvent("focus.restored", context: ["window_id": "\(windowId)"])
             return true
         }
+    }
+
+    /// Focuses a window and polls until focus is stable.
+    ///
+    /// Re-asserts focus if macOS steals it during the polling window.
+    ///
+    /// - Parameters:
+    ///   - windowId: AeroSpace window ID to focus.
+    ///   - timeout: Maximum time to wait for stable focus.
+    ///   - pollInterval: Interval between focus checks.
+    /// - Returns: True if focus is stable within the timeout.
+    @discardableResult
+    public func focusWindowStable(
+        windowId: Int,
+        timeout: TimeInterval = 10.0,
+        pollInterval: TimeInterval = 0.1
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            switch aerospace.focusedWindow() {
+            case .success(let focused) where focused.windowId == windowId:
+                return true
+            default:
+                // Re-assert focus (macOS can steal it briefly during Space/app switches)
+                _ = aerospace.focusWindow(windowId: windowId)
+            }
+
+            try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+        }
+
+        return false
     }
 
     // MARK: - Project Sorting
@@ -258,20 +312,28 @@ public final class ProjectManager {
 
     // MARK: - Project Operations
 
-    /// Activates a project by ID.
+    /// Activates a project by ID (sequential flow).
     ///
-    /// Steps:
+    /// Runs the full activation sequence matching the proven shell-script order exactly:
     /// 1. Look up project in config
     /// 2. Store pre-captured focus (for later exit)
-    /// 3. Run Chrome and IDE setup in parallel (find, launch if needed, move to workspace)
-    /// 4. Verify both windows arrived in workspace
-    /// 5. Record activation
+    /// 3. Find or launch Chrome (do NOT move yet)
+    /// 4. Find or launch VS Code (do NOT move yet)
+    /// 5. Move Chrome to workspace (no focus follow)
+    /// 6. Move VS Code to workspace (with focus follow)
+    /// 7. Verify both windows arrived in workspace
+    /// 8. Focus workspace (poll until confirmed)
+    /// 9. Focus IDE window + verify stability
+    ///
+    /// The order is critical: both windows must exist before any moves happen.
+    /// Moving Chrome before VS Code is launched can cause VS Code to open on
+    /// a different macOS Space.
     ///
     /// - Parameters:
     ///   - projectId: The project ID to activate.
     ///   - preCapturedFocus: Focus state captured before showing UI, used for restoring
     ///     focus when exiting the project later.
-    /// - Returns: The IDE window ID on success, for focusing after UI dismissal.
+    /// - Returns: The IDE window ID on success, for post-dismissal focusing.
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<Int, ProjectError> {
         guard config != nil else {
             return .failure(.configNotLoaded)
@@ -289,16 +351,15 @@ public final class ProjectManager {
             capturedProjectExitFocus = preCapturedFocus
         }
 
-        // Run Chrome and IDE setup in parallel
-        async let chromeResult = prepareChrome(projectId: projectId, targetWorkspace: targetWorkspace)
-        async let ideResult = prepareIde(projectId: projectId, targetWorkspace: targetWorkspace, projectPath: project.path)
+        // --- Phase 1: Find or launch all windows (no moves yet) ---
 
-        // Wait for both to complete
-        let (chrome, ide) = await (chromeResult, ideResult)
-
-        // Check for errors
         let chromeWindow: ApWindow
-        switch chrome {
+        switch await findOrLaunchWindow(
+            appBundleId: ApChromeLauncher.bundleId,
+            projectId: projectId,
+            launchAction: { self.chromeLauncher.openNewWindow(identifier: projectId) },
+            windowLabel: "Chrome"
+        ) {
         case .failure(let error):
             return .failure(error)
         case .success(let window):
@@ -306,17 +367,48 @@ public final class ProjectManager {
         }
 
         let ideWindow: ApWindow
-        switch ide {
+        switch await findOrLaunchWindow(
+            appBundleId: ApVSCodeLauncher.bundleId,
+            projectId: projectId,
+            launchAction: { self.ideLauncher.openNewWindow(identifier: projectId, projectPath: project.path) },
+            windowLabel: "VS Code"
+        ) {
         case .failure(let error):
             return .failure(error)
         case .success(let window):
             ideWindow = window
         }
 
-        // Verify both windows are in the workspace
+        // --- Phase 2: Move windows to workspace (Chrome first, then VS Code) ---
+
+        let chromeWindowId = chromeWindow.windowId
+        let ideWindowId = ideWindow.windowId
+
+        if chromeWindow.workspace != targetWorkspace {
+            logEvent("select.chrome_moving", context: ["window_id": "\(chromeWindowId)", "workspace": targetWorkspace])
+            switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: chromeWindowId, focusFollows: false) {
+            case .failure(let error):
+                return .failure(.aeroSpaceError(detail: error.message))
+            case .success:
+                logEvent("select.chrome_moved", context: ["workspace": targetWorkspace])
+            }
+        }
+
+        if ideWindow.workspace != targetWorkspace {
+            logEvent("select.vscode_moving", context: ["window_id": "\(ideWindowId)", "workspace": targetWorkspace, "focus_follows": "true"])
+            switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: ideWindowId, focusFollows: true) {
+            case .failure(let error):
+                return .failure(.aeroSpaceError(detail: error.message))
+            case .success:
+                logEvent("select.vscode_moved", context: ["workspace": targetWorkspace])
+            }
+        }
+
+        // --- Phase 3: Verify, focus workspace, focus IDE ---
+
         switch await pollForWindowsInWorkspace(
-            chromeWindowId: chromeWindow.windowId,
-            ideWindowId: ideWindow.windowId,
+            chromeWindowId: chromeWindowId,
+            ideWindowId: ideWindowId,
             workspace: targetWorkspace
         ) {
         case .failure(let error):
@@ -325,11 +417,24 @@ public final class ProjectManager {
             break
         }
 
+        if !(await ensureWorkspaceFocused(name: targetWorkspace)) {
+            let detail = "Workspace \(targetWorkspace) could not be focused within timeout"
+            logEvent("select.workspace_focus_failed", level: .error, message: detail)
+            return .failure(.aeroSpaceError(detail: detail))
+        }
+
+        _ = aerospace.focusWindow(windowId: ideWindowId)
+        if !(await focusWindowStable(windowId: ideWindowId)) {
+            let detail = "IDE window \(ideWindowId) could not be stably focused in workspace \(targetWorkspace)"
+            logEvent("select.focus_unstable", level: .error, message: detail)
+            return .failure(.focusUnstable(detail: detail))
+        }
+
         // Record activation
         recordActivation(projectId: projectId)
-        logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindow.windowId)"])
+        logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindowId)"])
 
-        return .success(ideWindow.windowId)
+        return .success(ideWindowId)
     }
 
     /// Closes a project by ID and restores focus to the previous non-project window.
@@ -392,157 +497,102 @@ public final class ProjectManager {
         return .success(())
     }
 
-    // MARK: - Async Window Setup
+    // MARK: - Sequential Window Setup
 
-    /// Prepares a Chrome window for the project: finds or launches, then moves to target workspace.
+    /// Finds an existing tagged window or launches a new one and polls until it appears.
+    ///
+    /// This helper handles find/launch/poll only — it does NOT move the window.
+    /// The caller is responsible for moving the window to the target workspace.
+    ///
     /// - Parameters:
-    ///   - projectId: The project ID.
-    ///   - targetWorkspace: The workspace to move the window to.
-    /// - Returns: The Chrome window on success.
-    private func prepareChrome(projectId: String, targetWorkspace: String) async -> Result<ApWindow, ProjectError> {
-        // Find existing Chrome window
-        var chromeWindow = findChromeWindow(projectId: projectId)
-
-        // Launch if not found
-        if chromeWindow == nil {
-            switch chromeLauncher.openNewWindow(identifier: projectId) {
-            case .failure(let error):
-                logEvent("select.chrome_launch_failed", level: .error, context: ["error": error.message])
-                return .failure(.chromeLaunchFailed(detail: error.message))
-            case .success:
-                logEvent("select.chrome_launched", context: ["project_id": projectId])
-            }
-
-            // Poll until window appears
-            switch await pollForChromeWindow(projectId: projectId) {
-            case .failure(let error):
-                return .failure(error)
-            case .success(let window):
-                chromeWindow = window
-            }
+    ///   - appBundleId: Bundle ID to search for (e.g., Chrome or VS Code).
+    ///   - projectId: Project ID used for the window token.
+    ///   - launchAction: Closure that launches a new window if none exists.
+    ///   - windowLabel: Human-readable label for logging (e.g., "Chrome", "VS Code").
+    /// - Returns: The found or launched window on success.
+    private func findOrLaunchWindow(
+        appBundleId: String,
+        projectId: String,
+        launchAction: () -> Result<Void, ApCoreError>,
+        windowLabel: String
+    ) async -> Result<ApWindow, ProjectError> {
+        // Find existing tagged window (global search with fallback)
+        if let window = findWindowByToken(appBundleId: appBundleId, projectId: projectId) {
+            logEvent("select.\(windowLabel.lowercased())_found", context: ["window_id": "\(window.windowId)"])
+            return .success(window)
         }
 
-        guard let window = chromeWindow else {
-            return .failure(.chromeLaunchFailed(detail: "Chrome window not found"))
+        // Launch a new window
+        switch launchAction() {
+        case .failure(let error):
+            logEvent("select.\(windowLabel.lowercased())_launch_failed", level: .error, context: ["error": error.message])
+            let projectError: ProjectError = windowLabel == "Chrome"
+                ? .chromeLaunchFailed(detail: "\(windowLabel) launch failed: \(error.message)")
+                : .ideLaunchFailed(detail: "\(windowLabel) launch failed: \(error.message)")
+            return .failure(projectError)
+        case .success:
+            logEvent("select.\(windowLabel.lowercased())_launched", context: ["project_id": projectId])
         }
 
-        // Move to workspace if needed (auto-creates workspace)
-        if window.workspace != targetWorkspace {
-            switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: window.windowId) {
-            case .failure(let error):
-                return .failure(.aeroSpaceError(detail: error.message))
-            case .success:
-                logEvent("select.chrome_moved", context: ["workspace": targetWorkspace])
-            }
-            // Return window with updated workspace
-            return .success(ApWindow(
-                windowId: window.windowId,
-                appBundleId: window.appBundleId,
-                workspace: targetWorkspace,
-                windowTitle: window.windowTitle
-            ))
-        }
-
-        return .success(window)
-    }
-
-    /// Prepares an IDE window for the project: finds or launches, then moves to target workspace.
-    /// - Parameters:
-    ///   - projectId: The project ID.
-    ///   - targetWorkspace: The workspace to move the window to.
-    ///   - projectPath: The path to open in the IDE.
-    /// - Returns: The IDE window on success.
-    private func prepareIde(projectId: String, targetWorkspace: String, projectPath: String) async -> Result<ApWindow, ProjectError> {
-        // Find existing IDE window
-        var ideWindow = findIdeWindow(projectId: projectId)
-
-        // Launch if not found
-        if ideWindow == nil {
-            switch ideLauncher.openNewWindow(identifier: projectId, projectPath: projectPath) {
-            case .failure(let error):
-                logEvent("select.ide_launch_failed", level: .error, context: ["error": error.message])
-                return .failure(.ideLaunchFailed(detail: error.message))
-            case .success:
-                logEvent("select.ide_launched", context: ["project_id": projectId])
-            }
-
-            // Poll until window appears
-            switch await pollForIdeWindow(projectId: projectId) {
-            case .failure(let error):
-                return .failure(error)
-            case .success(let window):
-                ideWindow = window
-            }
-        }
-
-        guard let window = ideWindow else {
-            return .failure(.ideLaunchFailed(detail: "IDE window not found"))
-        }
-
-        // Move to workspace if needed (auto-creates workspace)
-        if window.workspace != targetWorkspace {
-            switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: window.windowId) {
-            case .failure(let error):
-                return .failure(.aeroSpaceError(detail: error.message))
-            case .success:
-                logEvent("select.ide_moved", context: ["workspace": targetWorkspace])
-            }
-            // Return window with updated workspace
-            return .success(ApWindow(
-                windowId: window.windowId,
-                appBundleId: window.appBundleId,
-                workspace: targetWorkspace,
-                windowTitle: window.windowTitle
-            ))
-        }
-
-        return .success(window)
+        // Poll until window appears
+        return await pollForWindowByToken(appBundleId: appBundleId, projectId: projectId, windowLabel: windowLabel)
     }
 
     // MARK: - Private Helpers
 
-    private func findChromeWindow(projectId: String) -> ApWindow? {
-        guard case .success(let windows) = aerospace.listChromeWindowsOnFocusedMonitor() else {
+    /// Polls until the target workspace is confirmed focused.
+    ///
+    /// Matches the shell script's `ensure_workspace_focused`: repeatedly calls
+    /// `summon-workspace`/`workspace` and verifies via `list-workspaces --focused`
+    /// until the target workspace is reported, with a bounded timeout.
+    private func ensureWorkspaceFocused(name: String) async -> Bool {
+        let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
+
+        while Date() < deadline {
+            // Check if already focused
+            if case .success(let workspaces) = aerospace.listWorkspacesFocused(),
+               workspaces.contains(name) {
+                logEvent("focus.workspace.verified", context: ["workspace": name])
+                return true
+            }
+
+            // Attempt to focus (summon-workspace with fallback to workspace)
+            _ = aerospace.focusWorkspace(name: name)
+
+            try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
+        }
+
+        return false
+    }
+
+    /// Finds a tagged window for the given app across all monitors.
+    private func findWindowByToken(appBundleId: String, projectId: String) -> ApWindow? {
+        guard case .success(let windows) = aerospace.listWindowsForApp(bundleId: appBundleId) else {
             return nil
         }
         let token = "\(ApIdeToken.prefix)\(projectId)"
         return windows.first { $0.windowTitle.contains(token) }
     }
 
-    private func findIdeWindow(projectId: String) -> ApWindow? {
-        guard case .success(let windows) = aerospace.listVSCodeWindowsOnFocusedMonitor() else {
-            return nil
-        }
-        let token = "\(ApIdeToken.prefix)\(projectId)"
-        return windows.first { $0.windowTitle.contains(token) }
-    }
-
-    private func pollForChromeWindow(projectId: String) async -> Result<ApWindow, ProjectError> {
+    /// Polls for a tagged window to appear after launch.
+    private func pollForWindowByToken(
+        appBundleId: String,
+        projectId: String,
+        windowLabel: String
+    ) async -> Result<ApWindow, ProjectError> {
         let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
 
         while Date() < deadline {
-            if let window = findChromeWindow(projectId: projectId) {
+            if let window = findWindowByToken(appBundleId: appBundleId, projectId: projectId) {
                 return .success(window)
             }
             try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
         }
 
-        return .failure(.chromeLaunchFailed(detail: "Chrome window did not appear within timeout"))
+        return .failure(.windowNotFound(detail: "\(windowLabel) window did not appear within timeout"))
     }
 
-    private func pollForIdeWindow(projectId: String) async -> Result<ApWindow, ProjectError> {
-        let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
-
-        while Date() < deadline {
-            if let window = findIdeWindow(projectId: projectId) {
-                return .success(window)
-            }
-            try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
-        }
-
-        return .failure(.ideLaunchFailed(detail: "IDE window did not appear within timeout"))
-    }
-
+    /// Polls until both windows are in the target workspace.
     private func pollForWindowsInWorkspace(chromeWindowId: Int, ideWindowId: Int, workspace: String) async -> Result<Void, ProjectError> {
         let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
 

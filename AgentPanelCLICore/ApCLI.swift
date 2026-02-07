@@ -499,6 +499,8 @@ private func formatProjectError(_ error: ProjectError) -> String {
         return "No previous window to return to"
     case .windowNotFound(let detail):
         return "Window not found: \(detail)"
+    case .focusUnstable(let detail):
+        return "Focus unstable: \(detail)"
     }
 }
 

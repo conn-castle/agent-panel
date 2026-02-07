@@ -27,11 +27,17 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-02-05 pm-tests: ProjectManager lacks test coverage
+- Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
+    Priority: High. Area: App/Switcher Tests
+    Description: Recent regressions involved `windowClose`/termination-triggered focus restore and app activation fallback behavior, but there is no dedicated test target validating switcher dismiss semantics.
+    Next step: Add App-layer tests (or extract testable policy helpers) covering `dismiss` reason handling and prohibiting app-activation fallback on project handoff/termination paths.
+    Notes: Existing ProjectManager tests do not cover AppKit panel lifecycle paths.
+
+- Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
     Priority: High. Area: Tests
-    Description: `ProjectManager` is the single point of entry for all project operations but has no tests. Previous tests covered the now-deleted SessionManager, ProjectLifecycle, and ProjectSorter separately.
-    Next step: Create `ProjectManagerTests.swift` covering: config loading, project sorting, project selection, focus capture/restore, recency tracking.
-    Notes: ProjectManager consolidates all project operations; comprehensive tests are essential before MVP.
+    Description: Focus and selection tests now exist, but `ProjectManager` still lacks coverage for config loading, sorting, recency persistence, and close/exit lifecycle paths.
+    Next step: Add targeted tests for load/sort/recency and close/exit behavior, including failure paths.
+    Notes: ProjectManager consolidates all project operations; broad coverage is still needed before MVP completion.
 
 - Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
     Priority: Medium. Area: Config/UX

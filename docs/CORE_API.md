@@ -109,6 +109,18 @@ public struct DataPaths: Sendable {
 
 Single point of entry for all project operations.
 
+The activation sequence is **strictly sequential** and mirrors the proven shell-script
+flow (see `docs/using_aerospace.md` § "Project Activation Command Sequence"):
+
+1. Find or launch tagged Chrome window
+2. Move Chrome to workspace (no focus follow)
+3. Find or launch tagged VS Code window
+4. Move VS Code to workspace (with focus follow)
+5. Verify both windows arrived in workspace
+6. Focus workspace (`summon-workspace` with fallback)
+7. Focus IDE window
+8. Verify focus stability (poll)
+
 ```swift
 public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces.
@@ -134,13 +146,47 @@ public final class ProjectManager {
     @discardableResult
     public func restoreFocus(_ focus: CapturedFocus) -> Bool
 
+    /// Focuses a workspace by name.
+    /// Uses `summon-workspace` (preferred, pulls workspace to current monitor)
+    /// with fallback to `workspace` (switches to workspace wherever it is).
+    @discardableResult
+    public func focusWorkspace(name: String) -> Bool
+
+    /// Focuses a window by its AeroSpace window ID.
+    @discardableResult
+    public func focusWindow(windowId: Int) -> Bool
+
+    /// Focuses a window and polls until focus is stable.
+    /// Re-asserts focus if macOS steals it during the polling window.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window ID to focus.
+    ///   - timeout: Maximum time to wait for stable focus (default: 10s).
+    ///   - pollInterval: Interval between focus checks (default: 100ms).
+    /// - Returns: True if focus is stable within the timeout.
+    @discardableResult
+    public func focusWindowStable(
+        windowId: Int,
+        timeout: TimeInterval,
+        pollInterval: TimeInterval
+    ) async -> Bool
+
     /// Returns projects sorted and filtered for display.
     public func sortedProjects(query: String) -> [ProjectConfig]
 
-    /// Activates a project by ID.
-    public func selectProject(projectId: String) -> Result<Void, ProjectError>
+    /// Activates a project by ID (sequential flow).
+    ///
+    /// Runs the full activation sequence: find/launch Chrome → move to workspace →
+    /// find/launch VS Code → move to workspace (focus follows) → verify workspace
+    /// membership → focus workspace → focus IDE → verify focus stability.
+    ///
+    /// - Parameters:
+    ///   - projectId: The project ID to activate.
+    ///   - preCapturedFocus: Focus state captured before showing UI, used for restoring
+    ///     focus when exiting the project later.
+    /// - Returns: The IDE window ID on success, for post-dismissal focusing.
+    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<Int, ProjectError>
 
-    /// Closes a project by ID.
+    /// Closes a project by ID and restores focus to the previous non-project window.
     public func closeProject(projectId: String) -> Result<Void, ProjectError>
 
     /// Exits to the last non-project window without closing the project.
@@ -155,6 +201,8 @@ public enum ProjectError: Error, Equatable, Sendable {
     case chromeLaunchFailed(detail: String)
     case noActiveProject
     case noPreviousWindow
+    case windowNotFound(detail: String)
+    case focusUnstable(detail: String)
 }
 ```
 
@@ -297,6 +345,31 @@ public struct ApAeroSpace {
     /// Starts AeroSpace.
     public func start() -> Result<Void, ApCoreError>
 }
+```
+
+#### Internal AeroSpace Operations (used by ProjectManager)
+
+These methods are internal to `AgentPanelCore` and not part of the public API. They are
+documented here because they implement the activation command sequence.
+
+```swift
+// Window resolution — global search with fallback to focused monitor.
+// Matches: aerospace list-windows --app-bundle-id <id> --format <fmt>
+//          || aerospace list-windows --monitor focused --app-bundle-id <id> --format <fmt>
+func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
+
+// Workspace focus — summon-workspace with fallback to workspace.
+// Matches: aerospace summon-workspace <name>
+//          || aerospace workspace <name>
+func focusWorkspace(name: String) -> Result<Void, ApCoreError>
+
+// Move window with optional focus-follows.
+// Matches: aerospace move-node-to-workspace [--focus-follows-window] --window-id <id> <ws>
+func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError>
+
+// Focused window query (used for stability polling).
+// Matches: aerospace list-windows --focused --format <fmt>
+func focusedWindow() -> Result<ApWindow, ApCoreError>
 ```
 
 ### AeroSpace Config Manager

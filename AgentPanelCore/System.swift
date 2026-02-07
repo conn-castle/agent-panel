@@ -376,7 +376,6 @@ struct ApChromeLauncher {
         let windowTitle = ApChromeLauncher.escapeForAppleScriptString("\(ApIdeToken.prefix)\(trimmed)")
         let script = [
             "tell application \"Google Chrome\"",
-            "activate",
             "set newWindow to make new window",
             "set URL of active tab of newWindow to \"https://example.com\"",
             "set given name of newWindow to \"\(windowTitle)\"",

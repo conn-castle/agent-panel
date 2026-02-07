@@ -188,7 +188,150 @@ If your habit is `list-windows --all`, switch to:
 3. `--workspace visible` (everything you can currently see)
 4. `--monitor focused` (current monitor only)
 
-Then add `--app-bundle-id` / `--pid`, and use `--format` to output only what you need. This matches the project’s own guidance to prefer `--monitor focused` over global queries in multi-monitor setups. ([Nikita Bobko][1])
+Then add `--app-bundle-id` / `--pid`, and use `--format` to output only what you need. In AgentPanel, this remains the default guidance for ad-hoc queries; the project activation path is an explicit exception (see below). ([Nikita Bobko][1])
+
+---
+
+# Project Activation Command Sequence
+
+This section documents the exact AeroSpace commands and sequencing used by the proven activation flow (reference: `scripts/open_castle_capital_ai_fund.sh`). The Swift implementation must mirror this sequence.
+
+## Overview
+
+Activation is **strictly sequential**. Each step must complete before the next begins. Chrome is set up first (without focus follow), then VS Code (with focus follow so the final focus lands in the target workspace on the IDE window).
+
+## Window format
+
+All `list-windows` calls use a consistent `--format`:
+
+```sh
+aerospace list-windows ... --format "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+```
+
+Fields are separated by `||` (double pipe). Parsing splits on `||` to extract: window ID, bundle ID, workspace name, and window title.
+
+## Window token
+
+Each project window is tagged with `AP:<project-id>` in the window title. Chrome uses AppleScript `given name`; VS Code uses a `.code-workspace` file with `window.title` containing the token.
+
+## Step 1: Find or launch tagged windows
+
+### Window resolution (global search with fallback)
+
+Search **all monitors** first. If that fails (older AeroSpace builds), fall back to `--monitor focused`:
+
+```sh
+# Preferred: global search
+aerospace list-windows --app-bundle-id <bundle-id> --format <format>
+
+# Fallback: focused monitor only
+aerospace list-windows --monitor focused --app-bundle-id <bundle-id> --format <format>
+```
+
+This is the one exception to the "prefer scoped queries" guidance above — tagged-window resolution needs global scope to find windows that may be on any monitor or workspace.
+
+### Chrome launch (AppleScript)
+
+If no tagged Chrome window exists, launch one via `osascript`:
+
+```applescript
+tell application "Google Chrome"
+  set newWindow to make new window
+  set URL of active tab of newWindow to "https://example.com"
+  set given name of newWindow to "AP:<project-id>"
+end tell
+```
+
+### VS Code launch (workspace file)
+
+If no tagged VS Code window exists:
+
+1. Write a `.code-workspace` file to `~/.local/state/agent-panel/vscode/<project-id>.code-workspace`:
+
+```json
+{
+  "folders": [{ "path": "<project-path>" }],
+  "settings": {
+    "window.title": "AP:<project-id> - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
+  }
+}
+```
+
+2. Launch with `code --new-window <workspace-file>`.
+
+### Poll until window appears
+
+After launch, poll `list-windows` (using the global-with-fallback pattern) until a window matching the token appears, with a 10-second timeout and 100ms interval.
+
+## Step 2: Move windows to workspace (sequential)
+
+Move **Chrome first** (no focus follow), then **VS Code** (with focus follow):
+
+```sh
+# Chrome: move without following focus
+aerospace move-node-to-workspace --window-id <chrome-id> <workspace>
+
+# VS Code: move with focus follow (lands focus in target workspace)
+aerospace move-node-to-workspace --focus-follows-window --window-id <ide-id> <workspace>
+```
+
+The `--focus-follows-window` flag on the IDE move is critical — it shifts the user's view to the target workspace so subsequent focus commands operate in the right context.
+
+**Fallback:** If `--focus-follows-window` is not supported, fall back to a plain move:
+
+```sh
+aerospace move-node-to-workspace --window-id <ide-id> <workspace>
+```
+
+## Step 3: Verify windows arrived
+
+Poll `list-windows --workspace <workspace>` until both window IDs appear, with a 10-second timeout:
+
+```sh
+aerospace list-windows --workspace <workspace> --format <format>
+```
+
+## Step 4: Focus workspace
+
+Use `summon-workspace` (preferred for multi-monitor) with fallback to `workspace`:
+
+```sh
+# Preferred: pulls workspace to current monitor
+aerospace summon-workspace <workspace>
+
+# Fallback: switches to workspace wherever it is
+aerospace workspace <workspace>
+```
+
+Verify by polling `list-workspaces --focused` until the target workspace is reported:
+
+```sh
+aerospace list-workspaces --focused --format "%{workspace}"
+```
+
+## Step 5: Focus IDE window
+
+```sh
+aerospace focus --window-id <ide-window-id>
+```
+
+## Step 6: Verify focus stability
+
+Poll `list-windows --focused` repeatedly. If the focused window ID matches the target, focus is stable. If focus is lost (macOS or another app steals it), re-assert with `aerospace focus --window-id`:
+
+```sh
+# Check current focus
+aerospace list-windows --focused --format <format>
+
+# Re-assert if stolen
+aerospace focus --window-id <ide-window-id>
+```
+
+The shell script uses a 10-second timeout with 100ms polling interval. If focus cannot be verified within the timeout, activation fails loudly.
+
+### Focus trace (diagnostic only)
+
+If focus verification fails, the shell script runs a diagnostic trace: 40 samples at 50ms intervals, logging both the AeroSpace focused window and the macOS frontmost app (via `osascript`). This is diagnostic output only — it does not affect the activation result.
 
 [1]: https://nikitabobko.github.io/AeroSpace/commands "AeroSpace Commands"
 [2]: https://nikitabobko.github.io/AeroSpace/guide "AeroSpace Guide"

@@ -187,16 +187,23 @@ protocol AeroSpaceHealthChecking {
 
 /// Internal protocol for AeroSpace operations.
 protocol AeroSpaceProviding {
+    // Workspace queries
     func workspaceExists(_ name: String) -> Result<Bool, ApCoreError>
     func listWorkspacesFocused() -> Result<[String], ApCoreError>
     func createWorkspace(_ name: String) -> Result<Void, ApCoreError>
     func closeWorkspace(name: String) -> Result<Void, ApCoreError>
-    func listChromeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError>
-    func listVSCodeWindowsOnFocusedMonitor() -> Result<[ApWindow], ApCoreError>
+
+    // Window queries — global search with fallback to focused monitor
+    func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError>
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError>
     func focusedWindow() -> Result<ApWindow, ApCoreError>
+
+    // Window actions
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
+    func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError>
+
+    // Workspace actions
+    func focusWorkspace(name: String) -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for IDE launching.

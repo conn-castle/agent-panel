@@ -28,6 +28,11 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-06 a1b2c3: Move current window to active project
+    Priority: Medium. Area: Project Management / UX
+    Description: Add a dropdown menu item to move the most recently focused window to the currently active project's workspace.
+    Acceptance criteria: Selecting "Move to Active Project" in the menu bar dropdown successfully moves the focused window to the active project via AeroSpace.
+
 - Backlog 2026-02-05 f3e1d2: Visual health indicator in AP menu bar icon
     Priority: High. Area: Diagnostics/UX
     Description: Update the Agent Panel menu bar icon to reflect system health (e.g., Red for errors, Yellow for warnings) after a Doctor run.
