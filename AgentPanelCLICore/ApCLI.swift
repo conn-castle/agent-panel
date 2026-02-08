@@ -293,14 +293,18 @@ public struct ApCLI {
                     output.stderr("error: Could not capture current focus")
                     return ApExitCode.failure.rawValue
                 }
-                // Bridge async selectProject to sync CLI using semaphore
+                // Bridge async selectProject to sync CLI using semaphore with timeout
                 let semaphore = DispatchSemaphore(value: 0)
                 var result: Result<Int, ProjectError>?
                 Task {
                     result = await manager.selectProject(projectId: projectId, preCapturedFocus: capturedFocus)
                     semaphore.signal()
                 }
-                semaphore.wait()
+                let timeoutResult = semaphore.wait(timeout: .now() + 30)
+                if timeoutResult == .timedOut {
+                    output.stderr("error: Project activation timed out after 30 seconds")
+                    return ApExitCode.failure.rawValue
+                }
 
                 switch result {
                 case .failure(let error):

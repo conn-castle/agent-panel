@@ -40,6 +40,7 @@
 		7919C7784417EA01E40569C4 /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
 		958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */; };
+		E2F3A4B5C6D7E89012345678 /* AeroSpaceFallbackBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */; };
 		98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D35ABD3022669F375FDB52F /* ApCLI.swift */; };
 		B28936C2D4FA7AE9CA34DF4A /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = DA4BB8B60939EF907169EAD7 /* TOMLDecoder */; };
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
@@ -123,6 +124,7 @@
 /* Begin PBXFileReference section */
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFallbackDecisionTests.swift; sourceTree = "<group>"; };
+		F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFallbackBehaviorTests.swift; sourceTree = "<group>"; };
 		2D35ABD3022669F375FDB52F /* ApCLI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCLI.swift; sourceTree = "<group>"; };
 		2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorWindowController.swift; sourceTree = "<group>"; };
 		2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelAppKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -218,6 +220,7 @@
 		1037EE7F169B2E890205D145 /* AgentPanelCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */,
 				2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */,
 				FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */,
 				B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */,
@@ -610,6 +613,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2F3A4B5C6D7E89012345678 /* AeroSpaceFallbackBehaviorTests.swift in Sources */,
 				958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */,
 				3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */,
 				45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */,

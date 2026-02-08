@@ -27,6 +27,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-08 cli-runner-tests: CLI runner tests missing for new ProjectManager commands
+    Priority: Medium. Area: CLI Tests
+    Description: `ApCLIRunnerTests` only covers `version`, `doctor`, and `help` commands. The new `show-config`, `list-projects`, `select-project`, `close-project`, and `return` commands lack CLI-runner-level tests validating success and failure paths through the ProjectManager bridge.
+    Next step: Add CLI runner tests for each new command with mock ProjectManager, covering both success and error cases (including the async semaphore bridge for `select-project`).
+
 - Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
     Priority: High. Area: App/Switcher Tests
     Description: Recent regressions involved `windowClose`/termination-triggered focus restore and app activation fallback behavior, but there is no dedicated test target validating switcher dismiss semantics.

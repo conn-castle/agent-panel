@@ -262,7 +262,7 @@ final class ProjectRowView: NSTableCellView {
     }
 
     private func updateCloseButtonAppearance() {
-        let emphasized = isHovered
+        let emphasized = isHovered || isRowSelected
         let alpha: CGFloat
         if canClose {
             alpha = emphasized ? 0.72 : 0.38
@@ -437,12 +437,14 @@ func highlightedProjectName(_ name: String, query: String) -> NSAttributedString
         return attributed
     }
 
-    let lowerName = name.lowercased()
-    let lowerQuery = trimmedQuery.lowercased()
-    var searchStart = lowerName.startIndex
+    var searchStart = name.startIndex
 
-    while searchStart < lowerName.endIndex,
-          let range = lowerName.range(of: lowerQuery, range: searchStart..<lowerName.endIndex) {
+    while searchStart < name.endIndex,
+          let range = name.range(
+              of: trimmedQuery,
+              options: [.caseInsensitive, .diacriticInsensitive],
+              range: searchStart..<name.endIndex
+          ) {
         let nsRange = NSRange(range, in: name)
         attributed.addAttributes(
             [

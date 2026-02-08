@@ -32,7 +32,7 @@ struct ApWorkspaceSummary: Equatable, Sendable {
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
     /// AeroSpace bundle identifier for Launch Services lookups.
-    static let bundleIdentifier = "bobko.aerospace"
+    public static let bundleIdentifier = "bobko.aerospace"
 
     /// Legacy app path for fallback detection.
     private static let legacyAppPath = "/Applications/AeroSpace.app"
@@ -43,7 +43,7 @@ public struct ApAeroSpace {
     /// Interval between readiness checks during startup.
     private static let readinessCheckInterval: TimeInterval = 0.25
 
-    private let commandRunner: ApSystemCommandRunner
+    private let commandRunner: CommandRunning
     private let appDiscovery: AppDiscovering
 
     /// Creates a new AeroSpace wrapper with default dependencies.
@@ -57,7 +57,7 @@ public struct ApAeroSpace {
     ///   - commandRunner: Command runner for CLI operations.
     ///   - appDiscovery: App discovery for installation checks.
     init(
-        commandRunner: ApSystemCommandRunner,
+        commandRunner: CommandRunning,
         appDiscovery: AppDiscovering
     ) {
         self.commandRunner = commandRunner
@@ -812,12 +812,31 @@ public struct ApAeroSpace {
 
     /// Returns true when a primary command result should trigger a compatibility fallback.
     ///
-    /// Fallback is attempted only for non-zero command exits. Hard command-run failures
-    /// (for example executable resolution failures) do not fall back.
+    /// Fallback is attempted only for non-zero command exits whose output suggests a
+    /// CLI version or flag incompatibility (e.g. "unknown option", "unrecognized command").
+    /// Hard command-run failures (for example executable resolution failures) do not fall back,
+    /// and neither do non-zero exits caused by operational errors (workspace not found, etc.).
     static func shouldAttemptCompatibilityFallback(_ result: Result<ApCommandResult, ApCoreError>) -> Bool {
         switch result {
         case .success(let output):
-            return output.exitCode != 0
+            guard output.exitCode != 0 else {
+                return false
+            }
+            let diagnosticText = (output.stderr + "\n" + output.stdout).lowercased()
+            let compatibilityIndicators = [
+                "unknown option",
+                "unknown flag",
+                "unknown command",
+                "unknown subcommand",
+                "unrecognized option",
+                "unrecognised option",
+                "unrecognized command",
+                "invalid option",
+                "no such option",
+                "no such command",
+                "mandatory option is not specified"
+            ]
+            return compatibilityIndicators.contains { diagnosticText.contains($0) }
         case .failure:
             return false
         }

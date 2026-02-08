@@ -123,8 +123,28 @@ struct ApCommandResult: Equatable, Sendable {
     }
 }
 
+/// Command execution interface for testability.
+///
+/// Production code uses `ApSystemCommandRunner`; tests can supply a mock.
+protocol CommandRunning {
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?
+    ) -> Result<ApCommandResult, ApCoreError>
+}
+
+extension CommandRunning {
+    func run(
+        executable: String,
+        arguments: [String]
+    ) -> Result<ApCommandResult, ApCoreError> {
+        run(executable: executable, arguments: arguments, timeoutSeconds: 5)
+    }
+}
+
 /// Runs external commands with executable path resolution for GUI environments.
-struct ApSystemCommandRunner {
+struct ApSystemCommandRunner: CommandRunning {
     private let executableResolver: ExecutableResolver
 
     /// Creates a command runner with the default executable resolver.

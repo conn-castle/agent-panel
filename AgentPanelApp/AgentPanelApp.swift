@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if checker.isApplicationRunning(bundleIdentifier: "bobko.aerospace") {
+        if checker.isApplicationRunning(bundleIdentifier: ApAeroSpace.bundleIdentifier) {
             logAppEvent(event: "aerospace.autostart.skipped", message: "Already running")
             return
         }
