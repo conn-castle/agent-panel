@@ -6,37 +6,23 @@ import AgentPanelCore
 public enum ApHelpTopic: Equatable {
     case root
     case doctor
-    case listWorkspaces
     case showConfig
-    case newWorkspace
-    case newIde
-    case newChrome
-    case listIde
-    case listChrome
-    case listWindows
-    case focusedWindow
-    case moveWindow
-    case focusWindow
-    case closeWorkspace
+    case listProjects
+    case selectProject
+    case closeProject
+    case returnToWindow
 }
 
 /// Commands supported by the ap CLI.
-public enum ApCommand {
+public enum ApCommand: Equatable {
     case help(ApHelpTopic)
     case version
     case doctor
-    case listWorkspaces
     case showConfig
-    case newWorkspace(String)
-    case newIde(String)
-    case newChrome(String)
-    case listIde
-    case listChrome
-    case listWindows(String)
-    case focusedWindow
-    case moveWindow(String, Int)
-    case focusWindow(Int)
-    case closeWorkspace(String)
+    case listProjects(String?)  // Optional search query
+    case selectProject(String)
+    case closeProject(String)
+    case returnToWindow
 }
 
 /// Parse errors for ap CLI arguments.
@@ -81,78 +67,34 @@ public struct ApArgumentParser {
                 helpTopic: .doctor,
                 arguments: Array(arguments.dropFirst())
             )
-        case "list-workspaces":
-            return parseNoArgumentCommand(
-                command: .listWorkspaces,
-                helpTopic: .listWorkspaces,
-                arguments: Array(arguments.dropFirst())
-            )
         case "show-config":
             return parseNoArgumentCommand(
                 command: .showConfig,
                 helpTopic: .showConfig,
                 arguments: Array(arguments.dropFirst())
             )
-        case "new-workspace":
-            return parseSingleArgumentCommand(
-                commandBuilder: { .newWorkspace($0) },
-                helpTopic: .newWorkspace,
+        case "list-projects":
+            return parseOptionalArgumentCommand(
+                commandBuilder: { .listProjects($0) },
+                helpTopic: .listProjects,
                 arguments: Array(arguments.dropFirst())
             )
-        case "new-ide":
+        case "select-project":
             return parseSingleArgumentCommand(
-                commandBuilder: { .newIde($0) },
-                helpTopic: .newIde,
+                commandBuilder: { .selectProject($0) },
+                helpTopic: .selectProject,
                 arguments: Array(arguments.dropFirst())
             )
-        case "new-chrome":
+        case "close-project":
             return parseSingleArgumentCommand(
-                commandBuilder: { .newChrome($0) },
-                helpTopic: .newChrome,
+                commandBuilder: { .closeProject($0) },
+                helpTopic: .closeProject,
                 arguments: Array(arguments.dropFirst())
             )
-        case "list-ide":
+        case "return":
             return parseNoArgumentCommand(
-                command: .listIde,
-                helpTopic: .listIde,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "list-chrome":
-            return parseNoArgumentCommand(
-                command: .listChrome,
-                helpTopic: .listChrome,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "list-windows":
-            return parseSingleArgumentCommand(
-                commandBuilder: { .listWindows($0) },
-                helpTopic: .listWindows,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "focused-window":
-            return parseNoArgumentCommand(
-                command: .focusedWindow,
-                helpTopic: .focusedWindow,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "move-window":
-            return parseTwoArgumentCommand(
-                commandBuilder: { workspace, windowId in
-                    .moveWindow(workspace, windowId)
-                },
-                helpTopic: .moveWindow,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "focus-window":
-            return parseSingleIntArgumentCommand(
-                commandBuilder: { .focusWindow($0) },
-                helpTopic: .focusWindow,
-                arguments: Array(arguments.dropFirst())
-            )
-        case "close-workspace":
-            return parseSingleArgumentCommand(
-                commandBuilder: { .closeWorkspace($0) },
-                helpTopic: .closeWorkspace,
+                command: .returnToWindow,
+                helpTopic: .returnToWindow,
                 arguments: Array(arguments.dropFirst())
             )
         default:
@@ -197,7 +139,7 @@ public struct ApArgumentParser {
             return .success(commandBuilder(arg))
         }
 
-        if arguments.count == 0 {
+        if arguments.isEmpty {
             return .failure(
                 ApParseError(message: "missing argument", usageTopic: helpTopic)
             )
@@ -211,69 +153,21 @@ public struct ApArgumentParser {
         )
     }
 
-    /// Parses commands that require two arguments (besides --help).
-    private func parseTwoArgumentCommand(
-        commandBuilder: (String, Int) -> ApCommand,
+    /// Parses commands that accept an optional argument (besides --help).
+    private func parseOptionalArgumentCommand(
+        commandBuilder: (String?) -> ApCommand,
         helpTopic: ApHelpTopic,
         arguments: [String]
     ) -> Result<ApCommand, ApParseError> {
-        if arguments.count == 1, let arg = arguments.first, arg == "-h" || arg == "--help" {
-            return .success(.help(helpTopic))
+        if arguments.isEmpty {
+            return .success(commandBuilder(nil))
         }
 
-        if arguments.count == 2 {
-            let workspace = arguments[0]
-            let windowIdRaw = arguments[1]
-            guard let windowId = Int(windowIdRaw) else {
-                return .failure(
-                    ApParseError(
-                        message: "window id must be an integer: \(windowIdRaw)",
-                        usageTopic: helpTopic
-                    )
-                )
-            }
-            return .success(commandBuilder(workspace, windowId))
-        }
-
-        if arguments.count == 0 {
-            return .failure(
-                ApParseError(message: "missing arguments", usageTopic: helpTopic)
-            )
-        }
-
-        return .failure(
-            ApParseError(
-                message: "unexpected arguments: \(arguments.joined(separator: " "))",
-                usageTopic: helpTopic
-            )
-        )
-    }
-
-    /// Parses commands that require a single integer argument (besides --help).
-    private func parseSingleIntArgumentCommand(
-        commandBuilder: (Int) -> ApCommand,
-        helpTopic: ApHelpTopic,
-        arguments: [String]
-    ) -> Result<ApCommand, ApParseError> {
         if arguments.count == 1, let arg = arguments.first {
             if arg == "-h" || arg == "--help" {
                 return .success(.help(helpTopic))
             }
-            guard let value = Int(arg) else {
-                return .failure(
-                    ApParseError(
-                        message: "argument must be an integer: \(arg)",
-                        usageTopic: helpTopic
-                    )
-                )
-            }
-            return .success(commandBuilder(value))
-        }
-
-        if arguments.count == 0 {
-            return .failure(
-                ApParseError(message: "missing argument", usageTopic: helpTopic)
-            )
+            return .success(commandBuilder(arg))
         }
 
         return .failure(
@@ -308,40 +202,19 @@ public struct ApCLIOutput {
     )
 }
 
-/// Interface for core command execution (testable abstraction).
-public protocol ApCoreCommanding {
-    var config: Config { get }
-    func listWorkspaces() -> Result<[String], ApCoreError>
-    func newWorkspace(name: String) -> Result<Void, ApCoreError>
-    func newIde(identifier: String) -> Result<Void, ApCoreError>
-    func newChrome(identifier: String) -> Result<Void, ApCoreError>
-    func listIdeWindows() -> Result<[ApWindow], ApCoreError>
-    func listChromeWindows() -> Result<[ApWindow], ApCoreError>
-    func listWindowsWorkspace(_ workspace: String) -> Result<[ApWindow], ApCoreError>
-    func focusedWindow() -> Result<ApWindow, ApCoreError>
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError>
-    func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
-    func closeWorkspace(name: String) -> Result<Void, ApCoreError>
-}
-
-extension ApCore: ApCoreCommanding {}
-
 /// Dependencies for the CLI runner.
 public struct ApCLIDependencies {
     public let version: () -> String
-    public let configLoader: () -> Result<ConfigLoadResult, ConfigError>
-    public let coreFactory: (Config) -> ApCoreCommanding
+    public let projectManagerFactory: () -> ProjectManager
     public let doctorRunner: () -> DoctorReport
 
     public init(
         version: @escaping () -> String,
-        configLoader: @escaping () -> Result<ConfigLoadResult, ConfigError>,
-        coreFactory: @escaping (Config) -> ApCoreCommanding,
+        projectManagerFactory: @escaping () -> ProjectManager,
         doctorRunner: @escaping () -> DoctorReport
     ) {
         self.version = version
-        self.configLoader = configLoader
-        self.coreFactory = coreFactory
+        self.projectManagerFactory = projectManagerFactory
         self.doctorRunner = doctorRunner
     }
 }
@@ -374,177 +247,111 @@ public struct ApCLI {
         case .help(let topic):
             output.stdout(usageText(for: topic))
             return ApExitCode.ok.rawValue
+
         case .version:
             output.stdout("ap \(dependencies.version())")
             return ApExitCode.ok.rawValue
+
         case .doctor:
             let report = dependencies.doctorRunner()
             output.stdout(report.rendered())
             return report.hasFailures ? ApExitCode.failure.rawValue : ApExitCode.ok.rawValue
-        case .listWorkspaces:
-            return runCoreWorkspacesCommand { core in
-                core.listWorkspaces()
-            }
+
         case .showConfig:
-            return runShowConfigCommand()
-        case .newWorkspace(let name):
-            return runCoreCommand { core in
-                core.newWorkspace(name: name)
-            }
-        case .newIde(let identifier):
-            return runCoreCommand { core in
-                core.newIde(identifier: identifier)
-            }
-        case .newChrome(let identifier):
-            return runCoreCommand { core in
-                core.newChrome(identifier: identifier)
-            }
-        case .listIde:
-            return runCoreWindowsCommand { core in
-                core.listIdeWindows()
-            }
-        case .listChrome:
-            return runCoreWindowsCommand { core in
-                core.listChromeWindows()
-            }
-        case .listWindows(let workspace):
-            return runCoreWindowsCommand { core in
-                core.listWindowsWorkspace(workspace)
-            }
-        case .focusedWindow:
-            return runCoreWindowCommand { core in
-                core.focusedWindow()
-            }
-        case .moveWindow(let workspace, let windowId):
-            return runCoreCommand { core in
-                core.moveWindowToWorkspace(workspace: workspace, windowId: windowId)
-            }
-        case .focusWindow(let windowId):
-            return runCoreCommand { core in
-                core.focusWindow(windowId: windowId)
-            }
-        case .closeWorkspace(let workspace):
-            return runCoreCommand { core in
-                core.closeWorkspace(name: workspace)
-            }
-        }
-    }
-
-    private enum ConfigLoadFailure: Error {
-        case message(String)
-
-        var message: String {
-            switch self {
-            case .message(let value):
-                return value
-            }
-        }
-    }
-
-    private func loadConfig() -> Result<Config, ConfigLoadFailure> {
-        switch dependencies.configLoader() {
-        case .failure(let error):
-            return .failure(.message(error.message))
-        case .success(let result):
-            guard let config = result.config else {
-                let firstFail = result.findings.first { $0.severity == .fail }
-                let message = firstFail?.title ?? "Config validation failed"
-                return .failure(.message(message))
-            }
-            return .success(config)
-        }
-    }
-
-    private func runCoreCommand(_ execute: (ApCoreCommanding) -> Result<Void, ApCoreError>) -> Int32 {
-        switch loadConfig() {
-        case .failure(let error):
-            output.stderr("error: \(error.message)")
-            return ApExitCode.failure.rawValue
-        case .success(let config):
-            let core = dependencies.coreFactory(config)
-            switch execute(core) {
+            let manager = dependencies.projectManagerFactory()
+            switch manager.loadConfig() {
             case .failure(let error):
-                output.stderr("error: \(error.message)")
+                output.stderr("error: \(formatConfigError(error))")
+                return ApExitCode.failure.rawValue
+            case .success(let config):
+                output.stdout(formatConfig(config))
+                return ApExitCode.ok.rawValue
+            }
+
+        case .listProjects(let query):
+            let manager = dependencies.projectManagerFactory()
+            switch manager.loadConfig() {
+            case .failure(let error):
+                output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                return ApExitCode.ok.rawValue
-            }
-        }
-    }
-
-    private func runCoreWindowsCommand(
-        _ execute: (ApCoreCommanding) -> Result<[ApWindow], ApCoreError>
-    ) -> Int32 {
-        switch loadConfig() {
-        case .failure(let error):
-            output.stderr("error: \(error.message)")
-            return ApExitCode.failure.rawValue
-        case .success(let config):
-            let core = dependencies.coreFactory(config)
-            switch execute(core) {
-            case .failure(let error):
-                output.stderr("error: \(error.message)")
-                return ApExitCode.failure.rawValue
-            case .success(let windows):
-                for window in windows {
-                    output.stdout(formatWindowLine(window))
+                let projects = manager.sortedProjects(query: query ?? "")
+                for project in projects {
+                    output.stdout(formatProjectLine(project))
                 }
                 return ApExitCode.ok.rawValue
             }
-        }
-    }
 
-    private func runCoreWindowCommand(
-        _ execute: (ApCoreCommanding) -> Result<ApWindow, ApCoreError>
-    ) -> Int32 {
-        switch loadConfig() {
-        case .failure(let error):
-            output.stderr("error: \(error.message)")
-            return ApExitCode.failure.rawValue
-        case .success(let config):
-            let core = dependencies.coreFactory(config)
-            switch execute(core) {
+        case .selectProject(let projectId):
+            let manager = dependencies.projectManagerFactory()
+            switch manager.loadConfig() {
             case .failure(let error):
-                output.stderr("error: \(error.message)")
+                output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
-            case .success(let window):
-                output.stdout(formatWindowLine(window))
-                return ApExitCode.ok.rawValue
-            }
-        }
-    }
-
-    private func runCoreWorkspacesCommand(
-        _ execute: (ApCoreCommanding) -> Result<[String], ApCoreError>
-    ) -> Int32 {
-        switch loadConfig() {
-        case .failure(let error):
-            output.stderr("error: \(error.message)")
-            return ApExitCode.failure.rawValue
-        case .success(let config):
-            let core = dependencies.coreFactory(config)
-            switch execute(core) {
-            case .failure(let error):
-                output.stderr("error: \(error.message)")
-                return ApExitCode.failure.rawValue
-            case .success(let workspaces):
-                for workspace in workspaces {
-                    output.stdout(workspace)
+            case .success:
+                guard let capturedFocus = manager.captureCurrentFocus() else {
+                    output.stderr("error: Could not capture current focus")
+                    return ApExitCode.failure.rawValue
                 }
-                return ApExitCode.ok.rawValue
-            }
-        }
-    }
+                // Bridge async selectProject to sync CLI using semaphore with timeout
+                let semaphore = DispatchSemaphore(value: 0)
+                var result: Result<Int, ProjectError>?
+                Task {
+                    result = await manager.selectProject(projectId: projectId, preCapturedFocus: capturedFocus)
+                    semaphore.signal()
+                }
+                let timeoutResult = semaphore.wait(timeout: .now() + 30)
+                if timeoutResult == .timedOut {
+                    output.stderr("error: Project activation timed out after 30 seconds")
+                    return ApExitCode.failure.rawValue
+                }
 
-    private func runShowConfigCommand() -> Int32 {
-        switch loadConfig() {
-        case .failure(let error):
-            output.stderr("error: \(error.message)")
-            return ApExitCode.failure.rawValue
-        case .success(let config):
-            let core = dependencies.coreFactory(config)
-            output.stdout(formatConfig(core.config))
-            return ApExitCode.ok.rawValue
+                switch result {
+                case .failure(let error):
+                    output.stderr("error: \(formatProjectError(error))")
+                    return ApExitCode.failure.rawValue
+                case .success:
+                    output.stdout("Selected project: \(projectId)")
+                    return ApExitCode.ok.rawValue
+                case .none:
+                    output.stderr("error: Unexpected nil result")
+                    return ApExitCode.failure.rawValue
+                }
+            }
+
+        case .closeProject(let projectId):
+            let manager = dependencies.projectManagerFactory()
+            switch manager.loadConfig() {
+            case .failure(let error):
+                output.stderr("error: \(formatConfigError(error))")
+                return ApExitCode.failure.rawValue
+            case .success:
+                switch manager.closeProject(projectId: projectId) {
+                case .failure(let error):
+                    output.stderr("error: \(formatProjectError(error))")
+                    return ApExitCode.failure.rawValue
+                case .success:
+                    output.stdout("Closed project: \(projectId)")
+                    return ApExitCode.ok.rawValue
+                }
+            }
+
+        case .returnToWindow:
+            let manager = dependencies.projectManagerFactory()
+            switch manager.loadConfig() {
+            case .failure(let error):
+                output.stderr("error: \(formatConfigError(error))")
+                return ApExitCode.failure.rawValue
+            case .success:
+                switch manager.exitToNonProjectWindow() {
+                case .failure(let error):
+                    output.stderr("error: \(formatProjectError(error))")
+                    return ApExitCode.failure.rawValue
+                case .success:
+                    output.stdout("Returned to previous window")
+                    return ApExitCode.ok.rawValue
+                }
+            }
         }
     }
 }
@@ -560,19 +367,12 @@ func usageText(for topic: ApHelpTopic) -> String {
           ap <command> [args]
 
         Commands:
-          doctor
-          list-workspaces
-          show-config
-          new-workspace <name>
-          new-ide <identifier>
-          new-chrome <identifier>
-          list-ide
-          list-chrome
-          list-windows <workspace>
-          focused-window
-          move-window <workspace> <window-id>
-          focus-window <window-id>
-          close-workspace <workspace>
+          doctor              Run diagnostic checks
+          show-config         Show current configuration
+          list-projects [q]   List projects (optionally filtered by query)
+          select-project <id> Activate a project
+          close-project <id>  Close a project and return to previous window
+          return              Return to previous window without closing project
 
         Options:
           -h, --help      Show help
@@ -583,13 +383,7 @@ func usageText(for topic: ApHelpTopic) -> String {
         Usage:
           ap doctor
 
-        Options:
-          -h, --help   Show help
-        """
-    case .listWorkspaces:
-        return """
-        Usage:
-          ap list-workspaces
+        Run diagnostic checks for AgentPanel dependencies.
 
         Options:
           -h, --help   Show help
@@ -599,85 +393,55 @@ func usageText(for topic: ApHelpTopic) -> String {
         Usage:
           ap show-config
 
-        Options:
-          -h, --help   Show help
-        """
-    case .newWorkspace:
-        return """
-        Usage:
-          ap new-workspace <name>
+        Display the current AgentPanel configuration.
 
         Options:
           -h, --help   Show help
         """
-    case .newIde:
+    case .listProjects:
         return """
         Usage:
-          ap new-ide <identifier>
+          ap list-projects [query]
+
+        List all projects, optionally filtered by a search query.
+        Projects are sorted by recency (most recently used first).
 
         Options:
           -h, --help   Show help
         """
-    case .listIde:
+    case .selectProject:
         return """
         Usage:
-          ap list-ide
+          ap select-project <project-id>
+
+        Activate a project by its ID. This will:
+        - Create/focus the project's workspace
+        - Open Chrome and VS Code windows if needed
+        - Move windows to the workspace
+        - Focus the IDE window
 
         Options:
           -h, --help   Show help
         """
-    case .newChrome:
+    case .closeProject:
         return """
         Usage:
-          ap new-chrome <identifier>
+          ap close-project <project-id>
+
+        Close a project by its ID. This will:
+        - Close all windows in the project's workspace
+        - Return focus to the previous non-project window
 
         Options:
           -h, --help   Show help
         """
-    case .listChrome:
+    case .returnToWindow:
         return """
         Usage:
-          ap list-chrome
+          ap return
 
-        Options:
-          -h, --help   Show help
-        """
-    case .listWindows:
-        return """
-        Usage:
-          ap list-windows <workspace>
-
-        Options:
-          -h, --help   Show help
-        """
-    case .focusedWindow:
-        return """
-        Usage:
-          ap focused-window
-
-        Options:
-          -h, --help   Show help
-        """
-    case .moveWindow:
-        return """
-        Usage:
-          ap move-window <workspace> <window-id>
-
-        Options:
-          -h, --help   Show help
-        """
-    case .focusWindow:
-        return """
-        Usage:
-          ap focus-window <window-id>
-
-        Options:
-          -h, --help   Show help
-        """
-    case .closeWorkspace:
-        return """
-        Usage:
-          ap close-workspace <workspace>
+        Return to the previous non-project window without closing the current project.
+        Use this to temporarily leave a project while keeping it open.
 
         Options:
           -h, --help   Show help
@@ -685,8 +449,8 @@ func usageText(for topic: ApHelpTopic) -> String {
     }
 }
 
-private func formatWindowLine(_ window: ApWindow) -> String {
-    "\(window.windowId)\t\(window.appBundleId)\t\(window.workspace)\t\(window.windowTitle)"
+private func formatProjectLine(_ project: ProjectConfig) -> String {
+    "\(project.id)\t\(project.name)\t\(project.path)"
 }
 
 private func formatConfig(_ config: Config) -> String {
@@ -707,8 +471,44 @@ private func formatConfig(_ config: Config) -> String {
     return lines.joined(separator: "\n")
 }
 
+private func formatConfigError(_ error: ConfigLoadError) -> String {
+    switch error {
+    case .fileNotFound(let path):
+        return "Config file not found: \(path)"
+    case .readFailed(let path, let detail):
+        return "Failed to read config at \(path): \(detail)"
+    case .parseFailed(let detail):
+        return "Failed to parse config: \(detail)"
+    case .validationFailed(let findings):
+        let firstFail = findings.first { $0.severity == .fail }
+        return firstFail?.title ?? "Config validation failed"
+    }
+}
+
+private func formatProjectError(_ error: ProjectError) -> String {
+    switch error {
+    case .projectNotFound(let projectId):
+        return "Project not found: \(projectId)"
+    case .configNotLoaded:
+        return "Config not loaded"
+    case .aeroSpaceError(let detail):
+        return "AeroSpace error: \(detail)"
+    case .ideLaunchFailed(let detail):
+        return "IDE launch failed: \(detail)"
+    case .chromeLaunchFailed(let detail):
+        return "Chrome launch failed: \(detail)"
+    case .noActiveProject:
+        return "No active project"
+    case .noPreviousWindow:
+        return "No previous window to return to"
+    case .windowNotFound(let detail):
+        return "Window not found: \(detail)"
+    case .focusUnstable(let detail):
+        return "Focus unstable: \(detail)"
+    }
+}
+
 /// Prints text to stderr.
 private func printStderr(_ text: String) {
     FileHandle.standardError.write(Data((text + "\n").utf8))
 }
-

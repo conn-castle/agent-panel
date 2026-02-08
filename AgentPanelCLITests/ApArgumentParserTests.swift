@@ -10,10 +10,7 @@ final class ApArgumentParserTests: XCTestCase {
         case .failure(let error):
             XCTFail("Unexpected parse error: \(error.message)")
         case .success(let command):
-            if case .help(.root) = command {
-                return
-            }
-            XCTFail("Expected root help, got \(command)")
+            XCTAssertEqual(command, .help(.root))
         }
     }
 
@@ -24,10 +21,7 @@ final class ApArgumentParserTests: XCTestCase {
         case .failure(let error):
             XCTFail("Unexpected parse error: \(error.message)")
         case .success(let command):
-            if case .version = command {
-                return
-            }
-            XCTFail("Expected version command, got \(command)")
+            XCTAssertEqual(command, .version)
         }
     }
 
@@ -38,22 +32,96 @@ final class ApArgumentParserTests: XCTestCase {
         case .failure(let error):
             XCTFail("Unexpected parse error: \(error.message)")
         case .success(let command):
-            if case .help(.doctor) = command {
-                return
-            }
-            XCTFail("Expected doctor help, got \(command)")
+            XCTAssertEqual(command, .help(.doctor))
         }
     }
 
-    func testMissingArgumentReportsUsage() {
+    func testDoctorCommand() {
         let parser = ApArgumentParser()
 
-        switch parser.parse(arguments: ["new-workspace"]) {
+        switch parser.parse(arguments: ["doctor"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .doctor)
+        }
+    }
+
+    func testShowConfigCommand() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["show-config"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .showConfig)
+        }
+    }
+
+    func testListProjectsNoQuery() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["list-projects"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .listProjects(nil))
+        }
+    }
+
+    func testListProjectsWithQuery() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["list-projects", "foo"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .listProjects("foo"))
+        }
+    }
+
+    func testSelectProjectCommand() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["select-project", "my-project"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .selectProject("my-project"))
+        }
+    }
+
+    func testSelectProjectMissingArgument() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["select-project"]) {
         case .success(let command):
             XCTFail("Expected parse error, got \(command)")
         case .failure(let error):
             XCTAssertEqual(error.message, "missing argument")
-            XCTAssertEqual(error.usageTopic, .newWorkspace)
+            XCTAssertEqual(error.usageTopic, .selectProject)
+        }
+    }
+
+    func testCloseProjectCommand() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["close-project", "my-project"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .closeProject("my-project"))
+        }
+    }
+
+    func testReturnCommand() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["return"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .returnToWindow)
         }
     }
 
@@ -69,27 +137,15 @@ final class ApArgumentParserTests: XCTestCase {
         }
     }
 
-    func testMoveWindowRejectsNonIntegerWindowId() {
+    func testMissingCommandReportsUsage() {
         let parser = ApArgumentParser()
 
-        switch parser.parse(arguments: ["move-window", "workspace", "abc"]) {
+        switch parser.parse(arguments: []) {
         case .success(let command):
             XCTFail("Expected parse error, got \(command)")
         case .failure(let error):
-            XCTAssertEqual(error.message, "window id must be an integer: abc")
-            XCTAssertEqual(error.usageTopic, .moveWindow)
-        }
-    }
-
-    func testFocusWindowRejectsNonIntegerArgument() {
-        let parser = ApArgumentParser()
-
-        switch parser.parse(arguments: ["focus-window", "abc"]) {
-        case .success(let command):
-            XCTFail("Expected parse error, got \(command)")
-        case .failure(let error):
-            XCTAssertEqual(error.message, "argument must be an integer: abc")
-            XCTAssertEqual(error.usageTopic, .focusWindow)
+            XCTAssertEqual(error.message, "missing command")
+            XCTAssertEqual(error.usageTopic, .root)
         }
     }
 }

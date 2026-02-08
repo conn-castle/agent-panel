@@ -9,6 +9,26 @@
 
 import Foundation
 
+/// Minimal window data returned by AeroSpace queries.
+struct ApWindow: Equatable {
+    /// AeroSpace window id.
+    let windowId: Int
+    /// App bundle identifier for the window.
+    let appBundleId: String
+    /// Workspace name for the window.
+    let workspace: String
+    /// Window title as reported by AeroSpace.
+    let windowTitle: String
+}
+
+/// Workspace summary data returned by AeroSpace queries.
+struct ApWorkspaceSummary: Equatable, Sendable {
+    /// Workspace name.
+    let workspace: String
+    /// True when this workspace is focused.
+    let isFocused: Bool
+}
+
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
     /// AeroSpace bundle identifier for Launch Services lookups.
@@ -23,16 +43,22 @@ public struct ApAeroSpace {
     /// Interval between readiness checks during startup.
     private static let readinessCheckInterval: TimeInterval = 0.25
 
-    private let commandRunner: ApSystemCommandRunner
+    private let commandRunner: CommandRunning
     private let appDiscovery: AppDiscovering
 
-    /// Creates a new AeroSpace wrapper.
+    /// Creates a new AeroSpace wrapper with default dependencies.
+    public init() {
+        self.commandRunner = ApSystemCommandRunner()
+        self.appDiscovery = LaunchServicesAppDiscovery()
+    }
+
+    /// Creates a new AeroSpace wrapper with custom dependencies.
     /// - Parameters:
     ///   - commandRunner: Command runner for CLI operations.
     ///   - appDiscovery: App discovery for installation checks.
-    public init(
-        commandRunner: ApSystemCommandRunner = ApSystemCommandRunner(),
-        appDiscovery: AppDiscovering = LaunchServicesAppDiscovery()
+    init(
+        commandRunner: CommandRunning,
+        appDiscovery: AppDiscovering
     ) {
         self.commandRunner = commandRunner
         self.appDiscovery = appDiscovery
@@ -40,7 +66,7 @@ public struct ApAeroSpace {
 
     /// Returns the path to AeroSpace.app if installed.
     /// Uses Launch Services to find the app by bundle ID, with fallback to legacy path.
-    public var appPath: String? {
+    var appPath: String? {
         // Try Launch Services first (handles all install locations)
         if let url = appDiscovery.applicationURL(bundleIdentifier: Self.bundleIdentifier) {
             return url.path
@@ -78,6 +104,15 @@ public struct ApAeroSpace {
     /// Starts the AeroSpace application.
     /// - Returns: Success or an error.
     public func start() -> Result<Void, ApCoreError> {
+        guard !Thread.isMainThread else {
+            return .failure(
+                ApCoreError(
+                    category: .command,
+                    message: "AeroSpace start must run off the main thread."
+                )
+            )
+        }
+
         switch commandRunner.run(executable: "open", arguments: ["-a", "AeroSpace"], timeoutSeconds: 10) {
         case .failure(let error):
             return .failure(error)
@@ -110,7 +145,7 @@ public struct ApAeroSpace {
 
     /// Reloads the AeroSpace configuration.
     /// - Returns: Success or an error.
-    public func reloadConfig() -> Result<Void, ApCoreError> {
+    func reloadConfig() -> Result<Void, ApCoreError> {
         switch commandRunner.run(executable: "aerospace", arguments: ["reload-config"]) {
         case .failure(let error):
             return .failure(error)
@@ -143,7 +178,7 @@ public struct ApAeroSpace {
 
     /// Checks whether the installed aerospace CLI supports required commands and flags.
     /// - Returns: Success when compatible, or an error describing missing support.
-    public func checkCompatibility() -> Result<Void, ApCoreError> {
+    func checkCompatibility() -> Result<Void, ApCoreError> {
         let checks: [(command: String, requiredFlags: [String])] = [
             ("list-workspaces", ["--all", "--focused"]),
             ("list-windows", ["--monitor", "--workspace", "--focused", "--app-bundle-id", "--format"]),
@@ -187,7 +222,7 @@ public struct ApAeroSpace {
 
     /// Returns a list of focused AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
-    public func listWorkspacesFocused() -> Result<[String], ApCoreError> {
+    func listWorkspacesFocused() -> Result<[String], ApCoreError> {
         switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--focused"]) {
         case .failure(let error):
             return .failure(error)
@@ -222,6 +257,28 @@ public struct ApAeroSpace {
                 .filter { !$0.isEmpty }
 
             return .success(workspaces)
+        }
+    }
+
+    /// Returns all AeroSpace workspaces with focus metadata in a single query.
+    /// - Returns: Workspace summaries on success, or an error.
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["list-workspaces", "--all", "--format", "%{workspace}||%{workspace-is-focused}"]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                return .failure(
+                    commandError(
+                        "aerospace list-workspaces --all --format %{workspace}||%{workspace-is-focused}",
+                        result: result
+                    )
+                )
+            }
+            return parseWorkspaceSummaries(output: result.stdout)
         }
     }
 
@@ -305,20 +362,130 @@ public struct ApAeroSpace {
         }
     }
 
+    // MARK: - Workspace Focus
+
+    /// Focuses a workspace by name.
+    ///
+    /// Uses `summon-workspace` (preferred, pulls workspace to current monitor) with
+    /// fallback to `workspace` (switches to workspace wherever it is).
+    ///
+    /// - Parameter name: Workspace name to focus.
+    /// - Returns: Success or an error.
+    func focusWorkspace(name: String) -> Result<Void, ApCoreError> {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .failure(validationError("Workspace name cannot be empty."))
+        }
+
+        // Try summon-workspace first (preferred for multi-monitor)
+        let summonResult = commandRunner.run(
+            executable: "aerospace",
+            arguments: ["summon-workspace", trimmed]
+        )
+        if !Self.shouldAttemptCompatibilityFallback(summonResult) {
+            switch summonResult {
+            case .success(let result):
+                if result.exitCode == 0 {
+                    return .success(())
+                }
+                return .failure(commandError("aerospace summon-workspace \(trimmed)", result: result))
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
+
+        // Fallback to workspace command
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["workspace", trimmed]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                return .failure(commandError("aerospace workspace \(trimmed)", result: result))
+            }
+            return .success(())
+        }
+    }
+
     // MARK: - Windows
+
+    /// Returns windows for the given app across all monitors.
+    ///
+    /// Searches globally first (no `--monitor` flag). If that fails (older AeroSpace builds),
+    /// falls back to `--monitor focused`. This is the one exception to the "prefer scoped
+    /// queries" guidance — tagged-window resolution needs global scope.
+    ///
+    /// - Parameter bundleId: App bundle identifier to filter.
+    /// - Returns: Window list or an error.
+    func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> {
+        // Preferred: global search (no --monitor flag)
+        let globalResult = commandRunner.run(
+            executable: "aerospace",
+            arguments: [
+                "list-windows",
+                "--app-bundle-id",
+                bundleId,
+                "--format",
+                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+            ]
+        )
+        if !Self.shouldAttemptCompatibilityFallback(globalResult) {
+            switch globalResult {
+            case .success(let result):
+                if result.exitCode == 0 {
+                    return parseWindowSummaries(output: result.stdout)
+                }
+                return .failure(commandError("aerospace list-windows --app-bundle-id \(bundleId)", result: result))
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
+
+        // Fallback: focused monitor only
+        return listWindowsOnFocusedMonitor(appBundleId: bundleId)
+    }
 
     /// Moves a window into the provided workspace.
     /// - Parameters:
     ///   - workspace: Destination workspace name.
     ///   - windowId: AeroSpace window id to move.
+    ///   - focusFollows: When true, includes `--focus-follows-window` so focus moves
+    ///     with the window into the target workspace. Falls back to a plain move if
+    ///     the flag is not supported.
     /// - Returns: Success or an error.
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> {
+    func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool = false) -> Result<Void, ApCoreError> {
         let trimmed = workspace.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(validationError("Workspace name cannot be empty."))
         }
         guard windowId > 0 else {
             return .failure(validationError("Window ID must be positive."))
+        }
+
+        if focusFollows {
+            // Try with --focus-follows-window first; fall back to plain move
+            let focusFollowsResult = commandRunner.run(
+                executable: "aerospace",
+                arguments: ["move-node-to-workspace", "--focus-follows-window", "--window-id", "\(windowId)", trimmed]
+            )
+            if !Self.shouldAttemptCompatibilityFallback(focusFollowsResult) {
+                switch focusFollowsResult {
+                case .success(let result):
+                    if result.exitCode == 0 {
+                        return .success(())
+                    }
+                    return .failure(
+                        commandError(
+                            "aerospace move-node-to-workspace --focus-follows-window --window-id \(windowId) \(trimmed)",
+                            result: result
+                        )
+                    )
+                case .failure(let error):
+                    return .failure(error)
+                }
+            }
         }
 
         switch commandRunner.run(
@@ -576,6 +743,53 @@ public struct ApAeroSpace {
         return .success(windows)
     }
 
+    /// Parses workspace summaries from formatted AeroSpace output.
+    ///
+    /// Expected format: `<workspace>||<is-focused>`
+    /// where fields are separated by `||` (double pipe), and focus values are `true` or `false`.
+    ///
+    /// - Parameter output: Output from `aerospace list-workspaces --all --format`.
+    /// - Returns: Parsed workspace summaries or an error.
+    private func parseWorkspaceSummaries(output: String) -> Result<[ApWorkspaceSummary], ApCoreError> {
+        let lines = output.split(whereSeparator: \.isNewline)
+        var workspaces: [ApWorkspaceSummary] = []
+        workspaces.reserveCapacity(lines.count)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+
+            guard let separator = trimmed.range(of: "||") else {
+                return .failure(parseError(
+                    "Unexpected workspace summary format.",
+                    detail: "Expected '<workspace>||<is-focused>', got: \(trimmed)"
+                ))
+            }
+
+            let workspace = String(trimmed[..<separator.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let focusToken = String(trimmed[separator.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            let isFocused: Bool
+            switch focusToken {
+            case "true":
+                isFocused = true
+            case "false":
+                isFocused = false
+            default:
+                return .failure(parseError(
+                    "Unexpected workspace focus value.",
+                    detail: "Expected 'true' or 'false', got: \(focusToken)"
+                ))
+            }
+
+            workspaces.append(ApWorkspaceSummary(workspace: workspace, isFocused: isFocused))
+        }
+
+        return .success(workspaces)
+    }
+
     /// Returns help output for a CLI command.
     /// - Parameter command: AeroSpace command name to query.
     /// - Returns: Help output or an error.
@@ -595,19 +809,51 @@ public struct ApAeroSpace {
             return .success(output)
         }
     }
+
+    /// Returns true when a primary command result should trigger a compatibility fallback.
+    ///
+    /// Fallback is attempted only for non-zero command exits whose output suggests a
+    /// CLI version or flag incompatibility (e.g. "unknown option", "unrecognized command").
+    /// Hard command-run failures (for example executable resolution failures) do not fall back,
+    /// and neither do non-zero exits caused by operational errors (workspace not found, etc.).
+    static func shouldAttemptCompatibilityFallback(_ result: Result<ApCommandResult, ApCoreError>) -> Bool {
+        switch result {
+        case .success(let output):
+            guard output.exitCode != 0 else {
+                return false
+            }
+            let diagnosticText = (output.stderr + "\n" + output.stdout).lowercased()
+            let compatibilityIndicators = [
+                "unknown option",
+                "unknown flag",
+                "unknown command",
+                "unknown subcommand",
+                "unrecognized option",
+                "unrecognised option",
+                "unrecognized command",
+                "invalid option",
+                "no such option",
+                "no such command",
+                "mandatory option is not specified"
+            ]
+            return compatibilityIndicators.contains { diagnosticText.contains($0) }
+        case .failure:
+            return false
+        }
+    }
 }
 
 // MARK: - AeroSpaceHealthChecking Conformance
 
 extension ApAeroSpace: AeroSpaceHealthChecking {
     /// Returns the installation status of AeroSpace.
-    public func installStatus() -> AeroSpaceInstallStatus {
+    func installStatus() -> AeroSpaceInstallStatus {
         AeroSpaceInstallStatus(isInstalled: isAppInstalled(), appPath: appPath)
     }
 
     /// Checks whether the installed aerospace CLI is compatible.
     /// Translates the internal Result type to the intent-based AeroSpaceCompatibility enum.
-    public func healthCheckCompatibility() -> AeroSpaceCompatibility {
+    func healthCheckCompatibility() -> AeroSpaceCompatibility {
         guard isCliAvailable() else {
             return .cliUnavailable
         }
@@ -621,7 +867,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Installs AeroSpace via Homebrew.
     /// - Returns: True if installation succeeded.
-    public func healthInstallViaHomebrew() -> Bool {
+    func healthInstallViaHomebrew() -> Bool {
         switch installViaHomebrew() {
         case .success:
             return true
@@ -632,7 +878,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Starts AeroSpace.
     /// - Returns: True if start succeeded.
-    public func healthStart() -> Bool {
+    func healthStart() -> Bool {
         switch start() {
         case .success:
             return true
@@ -643,7 +889,7 @@ extension ApAeroSpace: AeroSpaceHealthChecking {
 
     /// Reloads the AeroSpace configuration.
     /// - Returns: True if reload succeeded.
-    public func healthReloadConfig() -> Bool {
+    func healthReloadConfig() -> Bool {
         switch reloadConfig() {
         case .success:
             return true

@@ -9,7 +9,7 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
     case fail = "FAIL"
 
     /// Sort order for display purposes (failures first).
-    public var sortOrder: Int {
+    var sortOrder: Int {
         switch self {
         case .fail: return 0
         case .warn: return 1
@@ -21,9 +21,9 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
 /// A single Doctor finding rendered in the report.
 public struct DoctorFinding: Equatable, Sendable {
     public let severity: DoctorSeverity
-    public let title: String
-    public let bodyLines: [String]
-    public let snippet: String?
+    let title: String
+    let bodyLines: [String]
+    let snippet: String?
 
     /// Creates a Doctor finding.
     /// - Parameters:
@@ -33,7 +33,7 @@ public struct DoctorFinding: Equatable, Sendable {
     ///   - fix: Optional "Fix:" guidance for the user.
     ///   - bodyLines: Additional lines to render verbatim after the title.
     ///   - snippet: Optional copy/paste snippet to resolve the finding.
-    public init(
+    init(
         severity: DoctorSeverity,
         title: String,
         detail: String? = nil,
@@ -56,26 +56,12 @@ public struct DoctorFinding: Equatable, Sendable {
 }
 
 /// Report metadata rendered in the Doctor header.
-public struct DoctorMetadata: Equatable, Sendable {
-    public let timestamp: String
-    public let agentPanelVersion: String
-    public let macOSVersion: String
-    public let aerospaceApp: String
-    public let aerospaceCli: String
-
-    public init(
-        timestamp: String,
-        agentPanelVersion: String,
-        macOSVersion: String,
-        aerospaceApp: String,
-        aerospaceCli: String
-    ) {
-        self.timestamp = timestamp
-        self.agentPanelVersion = agentPanelVersion
-        self.macOSVersion = macOSVersion
-        self.aerospaceApp = aerospaceApp
-        self.aerospaceCli = aerospaceCli
-    }
+struct DoctorMetadata: Equatable, Sendable {
+    let timestamp: String
+    let agentPanelVersion: String
+    let macOSVersion: String
+    let aerospaceApp: String
+    let aerospaceCli: String
 }
 
 /// Action availability for Doctor UI buttons.
@@ -84,7 +70,7 @@ public struct DoctorActionAvailability: Equatable, Sendable {
     public let canStartAeroSpace: Bool
     public let canReloadAeroSpaceConfig: Bool
 
-    public init(
+    init(
         canInstallAeroSpace: Bool,
         canStartAeroSpace: Bool,
         canReloadAeroSpaceConfig: Bool
@@ -95,7 +81,7 @@ public struct DoctorActionAvailability: Equatable, Sendable {
     }
 
     /// Returns a disabled action set.
-    public static let none = DoctorActionAvailability(
+    static let none = DoctorActionAvailability(
         canInstallAeroSpace: false,
         canStartAeroSpace: false,
         canReloadAeroSpaceConfig: false
@@ -104,11 +90,11 @@ public struct DoctorActionAvailability: Equatable, Sendable {
 
 /// A structured Doctor report.
 public struct DoctorReport: Equatable, Sendable {
-    public let metadata: DoctorMetadata
+    let metadata: DoctorMetadata
     public let findings: [DoctorFinding]
     public let actions: DoctorActionAvailability
 
-    public init(
+    init(
         metadata: DoctorMetadata,
         findings: [DoctorFinding],
         actions: DoctorActionAvailability = .none
@@ -120,7 +106,19 @@ public struct DoctorReport: Equatable, Sendable {
 
     /// Returns true when the report contains any FAIL findings.
     public var hasFailures: Bool {
-        findings.contains { $0.severity == .fail }
+        overallSeverity == .fail
+    }
+
+    /// Returns the worst severity present in findings (FAIL > WARN > PASS).
+    /// When no findings are present, returns PASS.
+    public var overallSeverity: DoctorSeverity {
+        if findings.contains(where: { $0.severity == .fail }) {
+            return .fail
+        }
+        if findings.contains(where: { $0.severity == .warn }) {
+            return .warn
+        }
+        return .pass
     }
 
     /// Renders the report as a human-readable string for CLI and App display.

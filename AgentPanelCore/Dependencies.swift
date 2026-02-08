@@ -2,6 +2,26 @@ import Carbon
 import CoreServices
 import Foundation
 
+// MARK: - Focus Operations
+
+/// Represents a captured window focus state for restoration.
+///
+/// Used to save the currently focused window before showing UI (like the switcher)
+/// and restore it when the UI is dismissed without a selection.
+public struct CapturedFocus: Sendable, Equatable {
+    /// AeroSpace window ID.
+    public let windowId: Int
+
+    /// App bundle identifier of the focused window.
+    public let appBundleId: String
+
+    /// Creates a captured focus state.
+    init(windowId: Int, appBundleId: String) {
+        self.windowId = windowId
+        self.appBundleId = appBundleId
+    }
+}
+
 // MARK: - Running Application Checking
 
 /// Running application lookup interface for Doctor policies.
@@ -32,7 +52,7 @@ public protocol HotkeyStatusProviding {
 /// - Logger: createDirectory, appendFile, fileExists, fileSize, removeItem, moveItem
 /// - ExecutableResolver: isExecutableFile
 /// - StateStore: fileExists, readFile, createDirectory, writeFile
-public protocol FileSystem {
+protocol FileSystem {
     func fileExists(at url: URL) -> Bool
     func isExecutableFile(at url: URL) -> Bool
     func readFile(at url: URL) throws -> Data
@@ -45,30 +65,30 @@ public protocol FileSystem {
 }
 
 /// Default file system implementation backed by FileManager.
-public struct DefaultFileSystem: FileSystem {
+struct DefaultFileSystem: FileSystem {
     private let fileManager: FileManager
 
-    public init(fileManager: FileManager = .default) {
+    init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
 
-    public func fileExists(at url: URL) -> Bool {
+    func fileExists(at url: URL) -> Bool {
         fileManager.fileExists(atPath: url.path)
     }
 
-    public func isExecutableFile(at url: URL) -> Bool {
+    func isExecutableFile(at url: URL) -> Bool {
         fileManager.isExecutableFile(atPath: url.path)
     }
 
-    public func readFile(at url: URL) throws -> Data {
+    func readFile(at url: URL) throws -> Data {
         try Data(contentsOf: url)
     }
 
-    public func createDirectory(at url: URL) throws {
+    func createDirectory(at url: URL) throws {
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
     }
 
-    public func fileSize(at url: URL) throws -> UInt64 {
+    func fileSize(at url: URL) throws -> UInt64 {
         let attributes = try fileManager.attributesOfItem(atPath: url.path)
         guard let size = attributes[.size] as? NSNumber else {
             throw NSError(
@@ -80,15 +100,15 @@ public struct DefaultFileSystem: FileSystem {
         return size.uint64Value
     }
 
-    public func removeItem(at url: URL) throws {
+    func removeItem(at url: URL) throws {
         try fileManager.removeItem(at: url)
     }
 
-    public func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
         try fileManager.moveItem(at: sourceURL, to: destinationURL)
     }
 
-    public func appendFile(at url: URL, data: Data) throws {
+    func appendFile(at url: URL, data: Data) throws {
         if fileManager.fileExists(atPath: url.path) {
             let handle = try FileHandle(forWritingTo: url)
             defer { try? handle.close() }
@@ -99,7 +119,7 @@ public struct DefaultFileSystem: FileSystem {
         }
     }
 
-    public func writeFile(at url: URL, data: Data) throws {
+    func writeFile(at url: URL, data: Data) throws {
         try data.write(to: url, options: .atomic)
     }
 }
@@ -107,20 +127,20 @@ public struct DefaultFileSystem: FileSystem {
 // MARK: - AeroSpace Health Checking
 
 /// Result of an AeroSpace installation check.
-public struct AeroSpaceInstallStatus: Equatable, Sendable {
+struct AeroSpaceInstallStatus: Equatable, Sendable {
     /// True if AeroSpace.app is installed.
-    public let isInstalled: Bool
+    let isInstalled: Bool
     /// Path to AeroSpace.app, if installed.
-    public let appPath: String?
+    let appPath: String?
 
-    public init(isInstalled: Bool, appPath: String?) {
+    init(isInstalled: Bool, appPath: String?) {
         self.isInstalled = isInstalled
         self.appPath = appPath
     }
 }
 
 /// Result of an AeroSpace compatibility check.
-public enum AeroSpaceCompatibility: Equatable, Sendable {
+enum AeroSpaceCompatibility: Equatable, Sendable {
     /// AeroSpace CLI is compatible.
     case compatible
     /// AeroSpace CLI is not available.
@@ -136,7 +156,7 @@ public enum AeroSpaceCompatibility: Equatable, Sendable {
 ///
 /// Method names use a `health` prefix to avoid collision with the existing
 /// `Result`-returning methods on ApAeroSpace (e.g., `healthStart()` vs `start()`).
-public protocol AeroSpaceHealthChecking {
+protocol AeroSpaceHealthChecking {
     // MARK: - Health Checks
 
     /// Returns the installation status of AeroSpace.
@@ -163,20 +183,63 @@ public protocol AeroSpaceHealthChecking {
     func healthReloadConfig() -> Bool
 }
 
+// MARK: - Internal Protocols (for testability)
+
+/// Internal protocol for AeroSpace operations.
+protocol AeroSpaceProviding {
+    // Workspace queries
+    func getWorkspaces() -> Result<[String], ApCoreError>
+    func workspaceExists(_ name: String) -> Result<Bool, ApCoreError>
+    func listWorkspacesFocused() -> Result<[String], ApCoreError>
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError>
+    func createWorkspace(_ name: String) -> Result<Void, ApCoreError>
+    func closeWorkspace(name: String) -> Result<Void, ApCoreError>
+
+    // Window queries — global search with fallback to focused monitor
+    func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
+    func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError>
+    func focusedWindow() -> Result<ApWindow, ApCoreError>
+
+    // Window actions
+    func focusWindow(windowId: Int) -> Result<Void, ApCoreError>
+    func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError>
+
+    // Workspace actions
+    func focusWorkspace(name: String) -> Result<Void, ApCoreError>
+}
+
+/// Internal protocol for IDE launching.
+protocol IdeLauncherProviding {
+    /// Opens a new VS Code window with a tagged title for precise identification.
+    /// - Parameters:
+    ///   - identifier: Project identifier embedded in the window title as `AP:<identifier>`.
+    ///   - projectPath: Optional path to the project folder. If provided, opens VS Code at this path.
+    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError>
+}
+
+/// Internal protocol for Chrome launching.
+protocol ChromeLauncherProviding {
+    func openNewWindow(identifier: String) -> Result<Void, ApCoreError>
+}
+
+extension ApAeroSpace: AeroSpaceProviding {}
+extension ApVSCodeLauncher: IdeLauncherProviding {}
+extension ApChromeLauncher: ChromeLauncherProviding {}
+
 // MARK: - App Discovery
 
 /// Application discovery interface for Launch Services lookups.
-public protocol AppDiscovering {
+protocol AppDiscovering {
     func applicationURL(bundleIdentifier: String) -> URL?
     func applicationURL(named appName: String) -> URL?
     func bundleIdentifier(forApplicationAt url: URL) -> String?
 }
 
 /// Launch Services-backed application discovery implementation.
-public struct LaunchServicesAppDiscovery: AppDiscovering {
-    public init() {}
+struct LaunchServicesAppDiscovery: AppDiscovering {
+    init() {}
 
-    public func applicationURL(bundleIdentifier: String) -> URL? {
+    func applicationURL(bundleIdentifier: String) -> URL? {
         guard let unmanaged = LSCopyApplicationURLsForBundleIdentifier(bundleIdentifier as CFString, nil) else {
             return nil
         }
@@ -184,7 +247,7 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
         return urls.firstObject as? URL
     }
 
-    public func applicationURL(named appName: String) -> URL? {
+    func applicationURL(named appName: String) -> URL? {
         let bundleName = appName.hasSuffix(".app") ? appName : "\(appName).app"
         let fileManager = FileManager.default
         let searchRoots = applicationSearchRoots(fileManager: fileManager)
@@ -201,7 +264,7 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
         return nil
     }
 
-    public func bundleIdentifier(forApplicationAt url: URL) -> String? {
+    func bundleIdentifier(forApplicationAt url: URL) -> String? {
         Bundle(url: url)?.bundleIdentifier
     }
 
@@ -277,26 +340,26 @@ public struct LaunchServicesAppDiscovery: AppDiscovering {
 // MARK: - Hotkey Checking
 
 /// Result of a hotkey registration check.
-public struct HotkeyCheckResult: Equatable, Sendable {
-    public let isAvailable: Bool
-    public let errorCode: Int32?
+struct HotkeyCheckResult: Equatable, Sendable {
+    let isAvailable: Bool
+    let errorCode: Int32?
 
-    public init(isAvailable: Bool, errorCode: Int32?) {
+    init(isAvailable: Bool, errorCode: Int32?) {
         self.isAvailable = isAvailable
         self.errorCode = errorCode
     }
 }
 
 /// Hotkey availability checker used by Doctor.
-public protocol HotkeyChecking {
+protocol HotkeyChecking {
     func checkCommandShiftSpace() -> HotkeyCheckResult
 }
 
 /// Carbon-based hotkey checker for Cmd+Shift+Space.
-public struct CarbonHotkeyChecker: HotkeyChecking {
-    public init() {}
+struct CarbonHotkeyChecker: HotkeyChecking {
+    init() {}
 
-    public func checkCommandShiftSpace() -> HotkeyCheckResult {
+    func checkCommandShiftSpace() -> HotkeyCheckResult {
         let signature = OSType(0x41504354) // "APCT"
         let hotKeyId = EventHotKeyID(signature: signature, id: 1)
         let modifiers = UInt32(cmdKey | shiftKey)
@@ -326,15 +389,15 @@ public struct CarbonHotkeyChecker: HotkeyChecking {
 // MARK: - Date Providing
 
 /// Date provider used by Doctor for timestamps.
-public protocol DateProviding {
+protocol DateProviding {
     func now() -> Date
 }
 
 /// Default date provider backed by Date().
-public struct SystemDateProvider: DateProviding {
-    public init() {}
+struct SystemDateProvider: DateProviding {
+    init() {}
 
-    public func now() -> Date {
+    func now() -> Date {
         Date()
     }
 }
@@ -342,20 +405,20 @@ public struct SystemDateProvider: DateProviding {
 // MARK: - Environment Providing
 
 /// Environment accessor used by Doctor.
-public protocol EnvironmentProviding {
+protocol EnvironmentProviding {
     func value(forKey key: String) -> String?
     func allValues() -> [String: String]
 }
 
 /// Default environment provider backed by the current process environment.
-public struct ProcessEnvironment: EnvironmentProviding {
-    public init() {}
+struct ProcessEnvironment: EnvironmentProviding {
+    init() {}
 
-    public func value(forKey key: String) -> String? {
+    func value(forKey key: String) -> String? {
         ProcessInfo.processInfo.environment[key]
     }
 
-    public func allValues() -> [String: String] {
+    func allValues() -> [String: String] {
         ProcessInfo.processInfo.environment
     }
 }

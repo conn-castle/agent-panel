@@ -85,52 +85,6 @@ final class SwitcherSession {
         )
     }
 
-    /// Logs a config load failure for diagnostics.
-    /// - Parameter error: The configuration error.
-    func logConfigFailure(_ error: ConfigError) {
-        let configPath = DataPaths.default().configFile.path
-        logEvent(
-            event: "switcher.config.failure",
-            level: .error,
-            message: error.message,
-            context: ["config_path": configPath]
-        )
-    }
-
-    /// Logs config findings failure for diagnostics.
-    /// - Parameter findings: Config findings to log.
-    func logConfigFindingsFailure(_ findings: [ConfigFinding]) {
-        let configPath = DataPaths.default().configFile.path
-        let primary = findings.first
-        logEvent(
-            event: "switcher.config.failure",
-            level: .error,
-            message: primary?.title,
-            context: [
-                "finding_count": "\(findings.count)",
-                "config_path": configPath
-            ]
-        )
-    }
-
-    /// Logs config warnings for diagnostics.
-    /// - Parameters:
-    ///   - projectCount: Number of projects loaded.
-    ///   - warningCount: Number of warnings found.
-    func logConfigWarnings(projectCount: Int, warningCount: Int) {
-        let configPath = DataPaths.default().configFile.path
-        logEvent(
-            event: "switcher.config.warnings",
-            level: .warn,
-            message: "Config warnings detected.",
-            context: [
-                "project_count": "\(projectCount)",
-                "warning_count": "\(warningCount)",
-                "config_path": configPath
-            ]
-        )
-    }
-
     /// Logs successful config load summaries.
     /// - Parameter projectCount: Number of projects loaded.
     func logConfigLoaded(projectCount: Int) {

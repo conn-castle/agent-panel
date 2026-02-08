@@ -1,6 +1,6 @@
 import XCTest
 @testable import AgentPanelCLICore
-import AgentPanelCore
+@testable import AgentPanelCore
 
 final class ApCLIRunnerTests: XCTestCase {
 
@@ -8,8 +8,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "9.9.9" },
-            configLoader: { XCTFail("configLoader should not be called"); return .failure(ConfigError(kind: .fileNotFound, message: "")) },
-            coreFactory: { _ in XCTFail("coreFactory should not be called"); return StubCore() },
+            projectManagerFactory: { ProjectManager() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
         let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
@@ -25,8 +24,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "unused")) },
-            coreFactory: { _ in StubCore() },
+            projectManagerFactory: { ProjectManager() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
         let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
@@ -38,12 +36,26 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertTrue(output.stderr.last?.contains("Usage:") ?? false)
     }
 
+    func testDoctorSuccessReturnsOkExit() {
+        let output = OutputRecorder()
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { ProjectManager() },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["doctor"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertTrue(output.stdout.first?.contains("AgentPanel Doctor Report") ?? false)
+    }
+
     func testDoctorFailureReturnsFailureExit() {
         let output = OutputRecorder()
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "unused")) },
-            coreFactory: { _ in StubCore() },
+            projectManagerFactory: { ProjectManager() },
             doctorRunner: { makeDoctorReport(hasFailures: true) }
         )
         let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
@@ -54,97 +66,34 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertTrue(output.stdout.first?.contains("AgentPanel Doctor Report") ?? false)
     }
 
-    func testListWorkspacesSuccessRunsCoreCommand() {
+    func testHelpCommandOutputsUsage() {
         let output = OutputRecorder()
-        let stubCore = StubCore()
-        stubCore.listWorkspacesResult = .success(["ap-test", "ap-demo"])
-
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .success(makeValidConfigLoadResult()) },
-            coreFactory: { _ in stubCore },
+            projectManagerFactory: { ProjectManager() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
         let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
 
-        let exitCode = cli.run(arguments: ["list-workspaces"])
+        let exitCode = cli.run(arguments: ["--help"])
 
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
-        XCTAssertTrue(stubCore.listWorkspacesCalled)
-        XCTAssertEqual(output.stdout, ["ap-test", "ap-demo"])
-        XCTAssertTrue(output.stderr.isEmpty)
+        XCTAssertTrue(output.stdout.first?.contains("ap (AgentPanel CLI)") ?? false)
     }
 
-    func testListWorkspacesFailurePrintsError() {
+    func testSelectProjectHelpOutputsUsage() {
         let output = OutputRecorder()
-        let stubCore = StubCore()
-        stubCore.listWorkspacesResult = .failure(ApCoreError(message: "boom"))
-
         let deps = ApCLIDependencies(
             version: { "0.0.0" },
-            configLoader: { .success(makeValidConfigLoadResult()) },
-            coreFactory: { _ in stubCore },
+            projectManagerFactory: { ProjectManager() },
             doctorRunner: { makeDoctorReport(hasFailures: false) }
         )
         let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
 
-        let exitCode = cli.run(arguments: ["list-workspaces"])
-
-        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
-        XCTAssertEqual(output.stderr, ["error: boom"])
-    }
-
-    func testConfigLoadFailurePrintsError() {
-        let output = OutputRecorder()
-        let deps = ApCLIDependencies(
-            version: { "0.0.0" },
-            configLoader: { .failure(ConfigError(kind: .fileNotFound, message: "config missing")) },
-            coreFactory: { _ in StubCore() },
-            doctorRunner: { makeDoctorReport(hasFailures: false) }
-        )
-        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
-
-        let exitCode = cli.run(arguments: ["show-config"])
-
-        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
-        XCTAssertEqual(output.stderr, ["error: config missing"])
-    }
-
-    func testConfigValidationFailurePrintsFirstFail() {
-        let output = OutputRecorder()
-        let deps = ApCLIDependencies(
-            version: { "0.0.0" },
-            configLoader: { .success(makeInvalidConfigLoadResult()) },
-            coreFactory: { _ in StubCore() },
-            doctorRunner: { makeDoctorReport(hasFailures: false) }
-        )
-        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
-
-        let exitCode = cli.run(arguments: ["show-config"])
-
-        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
-        XCTAssertEqual(output.stderr, ["error: No [[project]] entries"])
-    }
-
-    func testListIdeOutputsTabSeparatedWindows() {
-        let output = OutputRecorder()
-        let stubCore = StubCore()
-        stubCore.listIdeWindowsResult = .success([
-            ApWindow(windowId: 1, appBundleId: "com.test.App", workspace: "ws", windowTitle: "Title")
-        ])
-
-        let deps = ApCLIDependencies(
-            version: { "0.0.0" },
-            configLoader: { .success(makeValidConfigLoadResult()) },
-            coreFactory: { _ in stubCore },
-            doctorRunner: { makeDoctorReport(hasFailures: false) }
-        )
-        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
-
-        let exitCode = cli.run(arguments: ["list-ide"])
+        let exitCode = cli.run(arguments: ["select-project", "--help"])
 
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
-        XCTAssertEqual(output.stdout, ["1\tcom.test.App\tws\tTitle"])
+        XCTAssertTrue(output.stdout.first?.contains("select-project") ?? false)
     }
 }
 
@@ -160,55 +109,6 @@ private final class OutputRecorder {
             stderr: { [weak self] line in self?.stderr.append(line) }
         )
     }
-}
-
-private final class StubCore: ApCoreCommanding {
-    var stubConfig: Config = Config(projects: [])
-    var config: Config { stubConfig }
-
-    var listWorkspacesCalled = false
-    var listWorkspacesResult: Result<[String], ApCoreError> = .success([])
-    var listIdeWindowsResult: Result<[ApWindow], ApCoreError> = .success([])
-
-    func listWorkspaces() -> Result<[String], ApCoreError> {
-        listWorkspacesCalled = true
-        return listWorkspacesResult
-    }
-
-    func newWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
-    func newIde(identifier: String) -> Result<Void, ApCoreError> { .success(()) }
-    func newChrome(identifier: String) -> Result<Void, ApCoreError> { .success(()) }
-    func listIdeWindows() -> Result<[ApWindow], ApCoreError> { listIdeWindowsResult }
-    func listChromeWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
-    func listWindowsWorkspace(_ workspace: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
-    func focusedWindow() -> Result<ApWindow, ApCoreError> {
-        .failure(ApCoreError(message: "not implemented"))
-    }
-    func moveWindowToWorkspace(workspace: String, windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
-    func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
-    func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
-}
-
-private func makeValidConfigLoadResult() -> ConfigLoadResult {
-    let project = ProjectConfig(
-        id: "test",
-        name: "Test",
-        path: "/tmp/test",
-        color: "blue",
-        useAgentLayer: false
-    )
-    let config = Config(projects: [project])
-    return ConfigLoadResult(config: config, findings: [], projects: config.projects)
-}
-
-private func makeInvalidConfigLoadResult() -> ConfigLoadResult {
-    let finding = ConfigFinding(
-        severity: .fail,
-        title: "No [[project]] entries",
-        detail: nil,
-        fix: nil
-    )
-    return ConfigLoadResult(config: nil, findings: [finding], projects: [])
 }
 
 private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {

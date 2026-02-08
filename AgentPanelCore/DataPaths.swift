@@ -5,11 +5,11 @@ import Foundation
 /// Provides path resolution for config, state, and logs. Does not perform I/O.
 public struct DataPaths: Sendable {
     /// User home directory used as the root for derived paths.
-    public let homeDirectory: URL
+    let homeDirectory: URL
 
     /// Creates a DataPaths rooted at the provided home directory.
     /// - Parameter homeDirectory: Home directory as a file URL.
-    public init(homeDirectory: URL) {
+    init(homeDirectory: URL) {
         precondition(homeDirectory.isFileURL, "homeDirectory must be a file URL")
         self.homeDirectory = homeDirectory.standardizedFileURL
     }
@@ -31,26 +31,31 @@ public struct DataPaths: Sendable {
     // MARK: - State paths
 
     /// Returns `~/.local/state/agent-panel/vscode`.
-    public var vscodeWorkspaceDirectory: URL {
+    var vscodeWorkspaceDirectory: URL {
         stateDirectory.appendingPathComponent("vscode", isDirectory: true)
     }
 
     /// Returns `~/.local/state/agent-panel/vscode/<projectId>.code-workspace`.
     /// - Parameter projectId: Project identifier used to name the workspace file.
     /// - Returns: URL for the generated VS Code workspace file.
-    public func vscodeWorkspaceFile(projectId: String) -> URL {
+    func vscodeWorkspaceFile(projectId: String) -> URL {
         vscodeWorkspaceDirectory.appendingPathComponent("\(projectId).code-workspace", isDirectory: false)
     }
 
     /// Returns `~/.local/state/agent-panel/state.json`.
-    public var stateFile: URL {
+    var stateFile: URL {
         stateDirectory.appendingPathComponent("state.json", isDirectory: false)
+    }
+
+    /// Returns `~/.local/state/agent-panel/recent-projects.json`.
+    var recentProjectsFile: URL {
+        stateDirectory.appendingPathComponent("recent-projects.json", isDirectory: false)
     }
 
     // MARK: - Log paths
 
     /// Returns `~/.local/state/agent-panel/logs`.
-    public var logsDirectory: URL {
+    var logsDirectory: URL {
         stateDirectory.appendingPathComponent("logs", isDirectory: true)
     }
 

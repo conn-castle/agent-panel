@@ -7,9 +7,9 @@ import Foundation
 /// GUI applications on macOS do not inherit the user's shell PATH environment.
 /// This resolver checks standard installation paths and falls back to a login
 /// shell `which` lookup for non-standard locations.
-public struct ExecutableResolver {
+struct ExecutableResolver {
     /// Standard search paths for macOS executables.
-    public static let standardSearchPaths: [String] = [
+    static let standardSearchPaths: [String] = [
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "/usr/bin",
@@ -27,7 +27,7 @@ public struct ExecutableResolver {
     /// - Parameters:
     ///   - fileSystem: File system accessor for existence and executable checks.
     ///   - searchPaths: Paths to search for executables.
-    public init(
+    init(
         fileSystem: FileSystem = DefaultFileSystem(),
         searchPaths: [String] = ExecutableResolver.standardSearchPaths
     ) {
@@ -38,7 +38,7 @@ public struct ExecutableResolver {
     /// Resolves an executable name to its full path.
     /// - Parameter name: Executable name (e.g., "brew", "aerospace", "code").
     /// - Returns: Full path to executable, or nil if not found.
-    public func resolve(_ name: String) -> String? {
+    func resolve(_ name: String) -> String? {
         // If already an absolute path, verify it exists and is executable
         if name.hasPrefix("/") {
             let url = URL(fileURLWithPath: name)
@@ -103,33 +103,53 @@ public struct ExecutableResolver {
 // MARK: - Command Execution
 
 /// Result of executing an external command.
-public struct ApCommandResult: Equatable, Sendable {
+struct ApCommandResult: Equatable, Sendable {
     /// Process termination status.
-    public let exitCode: Int32
+    let exitCode: Int32
     /// Captured standard output.
-    public let stdout: String
+    let stdout: String
     /// Captured standard error.
-    public let stderr: String
+    let stderr: String
 
     /// Creates a new command result.
     /// - Parameters:
     ///   - exitCode: Process termination status.
     ///   - stdout: Captured standard output.
     ///   - stderr: Captured standard error.
-    public init(exitCode: Int32, stdout: String, stderr: String) {
+    init(exitCode: Int32, stdout: String, stderr: String) {
         self.exitCode = exitCode
         self.stdout = stdout
         self.stderr = stderr
     }
 }
 
+/// Command execution interface for testability.
+///
+/// Production code uses `ApSystemCommandRunner`; tests can supply a mock.
+protocol CommandRunning {
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?
+    ) -> Result<ApCommandResult, ApCoreError>
+}
+
+extension CommandRunning {
+    func run(
+        executable: String,
+        arguments: [String]
+    ) -> Result<ApCommandResult, ApCoreError> {
+        run(executable: executable, arguments: arguments, timeoutSeconds: 5)
+    }
+}
+
 /// Runs external commands with executable path resolution for GUI environments.
-public struct ApSystemCommandRunner {
+struct ApSystemCommandRunner: CommandRunning {
     private let executableResolver: ExecutableResolver
 
     /// Creates a command runner with the default executable resolver.
     /// - Parameter executableResolver: Resolver for finding executable paths.
-    public init(executableResolver: ExecutableResolver = ExecutableResolver()) {
+    init(executableResolver: ExecutableResolver = ExecutableResolver()) {
         self.executableResolver = executableResolver
     }
 
@@ -139,7 +159,7 @@ public struct ApSystemCommandRunner {
     ///   - arguments: Arguments to pass to the executable.
     ///   - timeoutSeconds: Timeout in seconds. Defaults to 5s. Pass nil to wait indefinitely.
     /// - Returns: Captured output on success, or an error.
-    public func run(
+    func run(
         executable: String,
         arguments: [String],
         timeoutSeconds: TimeInterval? = 5
@@ -268,6 +288,11 @@ public struct ApSystemCommandRunner {
 
 // MARK: - IDE Launchers
 
+/// Shared IDE token prefix used to tag new IDE windows.
+enum ApIdeToken {
+    static let prefix = "AP:"
+}
+
 /// Launches new VS Code windows with a tagged window title.
 struct ApVSCodeLauncher {
     /// VS Code bundle identifier used for filtering windows.
@@ -285,15 +310,21 @@ struct ApVSCodeLauncher {
         self.commandRunner = commandRunner
     }
 
-    /// Opens a new VS Code window tagged with the provided identifier.
-    /// - Parameter identifier: Identifier embedded in the window title token.
+    /// Opens a new VS Code window with a tagged title for precise identification.
+    ///
+    /// Creates a `.code-workspace` file with a custom `window.title` setting containing
+    /// `AP:<identifier>` so we can reliably find this window later using AeroSpace.
+    ///
+    /// - Parameters:
+    ///   - identifier: Identifier embedded in the window title as `AP:<identifier>`.
+    ///   - projectPath: Optional path to the project folder. If provided, opens VS Code at this path.
     /// - Returns: Success or an error.
-    func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
-        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+    func openNewWindow(identifier: String, projectPath: String? = nil) -> Result<Void, ApCoreError> {
+        let trimmedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedId.isEmpty else {
             return .failure(ApCoreError(message: "Identifier cannot be empty."))
         }
-        if trimmed.contains("/") {
+        if trimmedId.contains("/") {
             return .failure(ApCoreError(message: "Identifier cannot contain '/'."))
         }
 
@@ -304,12 +335,18 @@ struct ApVSCodeLauncher {
         // - ${rootName}: workspace folder name
         // - ${appName}: application name
         // We prefix the title with "AP:<identifier>" so we can detect/move the correct window later.
-        let windowTitle = "\(ApIdeToken.prefix)\(trimmed) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
+        let windowTitle = "\(ApIdeToken.prefix)\(trimmedId) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
         let workspaceDirectory = dataStore.vscodeWorkspaceDirectory
-        let workspaceURL = workspaceDirectory.appendingPathComponent("\(trimmed).code-workspace")
+        let workspaceURL = workspaceDirectory.appendingPathComponent("\(trimmedId).code-workspace")
+
+        // Build folders array - empty if no projectPath, otherwise include the project folder
+        var folders: [[String: String]] = []
+        if let projectPath = projectPath?.trimmingCharacters(in: .whitespacesAndNewlines), !projectPath.isEmpty {
+            folders.append(["path": projectPath])
+        }
 
         let payload: [String: Any] = [
-            "folders": [],
+            "folders": folders,
             "settings": ["window.title": windowTitle]
         ]
 
@@ -359,7 +396,6 @@ struct ApChromeLauncher {
         let windowTitle = ApChromeLauncher.escapeForAppleScriptString("\(ApIdeToken.prefix)\(trimmed)")
         let script = [
             "tell application \"Google Chrome\"",
-            "activate",
             "set newWindow to make new window",
             "set URL of active tab of newWindow to \"https://example.com\"",
             "set given name of newWindow to \"\(windowTitle)\"",

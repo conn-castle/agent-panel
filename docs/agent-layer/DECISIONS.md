@@ -61,10 +61,11 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Pipe buffers are ~64KB. If a process fills the buffer and blocks, waiting for termination before reading creates a deadlock.
     Tradeoffs: More complex thread synchronization.
 
-- Decision 2026-02-04 e2ee3b6: SessionManager as single source of truth for state
+- Decision 2026-02-04 e2ee3b6: SessionManager as single source of truth for state (SUPERSEDED)
     Decision: All state persistence (AppState, FocusHistory) and focus capture/restore flows through SessionManager in Core. App sets FocusOperationsProviding after config load.
     Reason: Consolidates state ownership in Core, eliminating duplicate state management in App/SwitcherPanelController. Enforces API boundaries via Swift access control.
     Tradeoffs: App must call setFocusOperations() after loading config; focus operations unavailable until then.
+    **Superseded 2026-02-05:** SessionManager removed in favor of ProjectManager. FocusOperationsProviding protocol eliminated; ProjectManager uses AeroSpace directly for focus operations (CLI-based, no AppKit needed).
 
 - Decision 2026-02-04 intentapi: Intent-based protocol pattern for cross-layer APIs
     Decision: Protocols crossing layer boundaries (Core↔App) use intent-based signatures like `captureCurrentFocus() -> CapturedFocus?` instead of implementation-specific types like `focusedWindow() -> ApWindow?`.
@@ -75,3 +76,18 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Create `AgentPanelAppKit` static framework containing `AppKitRunningApplicationChecker`. Both App and CLI depend on this shared module. Removes previous duplication in `AgentPanelApp/AppKitIntegration.swift` and `AgentPanelCLI/AppKitIntegration.swift`.
     Reason: Single source of truth for AppKit integration code; clean layering (Core → AppKit → App/CLI); no manual sync required.
     Tradeoffs: One additional build target; marginal complexity for small codebase, but scales if more AppKit integration is needed later.
+
+- Decision 2026-02-05 pubaudit: Minimal public API surface in Core
+    Decision: Make internal everything not directly used by App or CLI. Internal types include: `AgentPanel.appBundleIdentifier`, `ApCoreErrorCategory`, error factory functions, `ExecutableResolver`, `ApCommandResult`, `ApSystemCommandRunner`, `FileSystem`, `DefaultFileSystem`, `AppDiscovering`, `LaunchServicesAppDiscovery`, `HotkeyChecking`, `CarbonHotkeyChecker`, `DateProviding`, `SystemDateProvider`, `EnvironmentProviding`, `ProcessEnvironment`, `AeroSpaceInstallStatus`, `AeroSpaceCompatibility`, `AeroSpaceHealthChecking`, `IdNormalizer`, `ConfigLoadResult`, `ConfigLoader`, `ConfigError`, `ConfigErrorKind`, `LogEntry`, `DoctorMetadata`. Internal struct properties: `ApCoreError.category/detail/command/exitCode`, `ConfigFinding.detail/fix`, `DoctorFinding.title/bodyLines/snippet`. Internal static members: `ProjectColorPalette.named/sortedNames`, `DoctorActionAvailability.none`, `DoctorSeverity.sortOrder`, `DoctorReport.metadata`. Most `AeroSpaceConfigManager` and `DataPaths` methods/properties internal. All constructors internal where App/CLI never constructs directly. Dead code removed from SwitcherSession.
+    Reason: Minimize public API surface; hide implementation details; cleaner module boundary; prevent accidental coupling to internal types.
+    Tradeoffs: Tests must use `@testable import`; CORE_API.md must be kept in sync manually.
+
+- Decision 2026-02-08 wsstate: Single-query workspace state in ProjectManager
+    Decision: Replace split active/open workspace lookups with `ProjectManager.workspaceState()`, backed by one AeroSpace command: `list-workspaces --all --format "%{workspace}||%{workspace-is-focused}"`.
+    Reason: Removes redundant CLI calls and guarantees active/open values are derived from one consistent snapshot instead of two separately timed queries.
+    Tradeoffs: Depends on `workspace-is-focused` format support; parser contract must remain stable with AeroSpace output.
+
+- Decision 2026-02-08 startbg: AeroSpace start must not run on main thread
+    Decision: Enforce off-main-thread execution for `ApAeroSpace.start()` and run Doctor/startup AeroSpace actions on a background queue before updating UI.
+    Reason: Startup readiness polling is synchronous and can block up to the configured timeout; keeping it off the main thread prevents UI stalls.
+    Tradeoffs: Doctor/start actions become asynchronous from the app UI perspective and require callback-style UI updates.

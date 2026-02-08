@@ -3,14 +3,42 @@ import XCTest
 
 final class DoctorReportRenderingTests: XCTestCase {
 
-    func testRenderedSortsFindingsBySeverityWithStableOrder() {
-        let metadata = DoctorMetadata(
-            timestamp: "2024-01-01T00:00:00.000Z",
-            agentPanelVersion: "dev",
-            macOSVersion: "macOS 15.7 (Test)",
-            aerospaceApp: "NOT FOUND",
-            aerospaceCli: "NOT FOUND"
+    func testOverallSeverityReturnsFailWhenAnyFindingFails() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [
+                DoctorFinding(severity: .pass, title: "Pass"),
+                DoctorFinding(severity: .warn, title: "Warn"),
+                DoctorFinding(severity: .fail, title: "Fail")
+            ]
         )
+
+        XCTAssertEqual(report.overallSeverity, .fail)
+        XCTAssertTrue(report.hasFailures)
+    }
+
+    func testOverallSeverityReturnsWarnWhenNoFailuresExist() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [
+                DoctorFinding(severity: .pass, title: "Pass"),
+                DoctorFinding(severity: .warn, title: "Warn")
+            ]
+        )
+
+        XCTAssertEqual(report.overallSeverity, .warn)
+        XCTAssertFalse(report.hasFailures)
+    }
+
+    func testOverallSeverityReturnsPassWhenFindingsAreEmpty() {
+        let report = DoctorReport(metadata: makeMetadata(), findings: [])
+
+        XCTAssertEqual(report.overallSeverity, .pass)
+        XCTAssertFalse(report.hasFailures)
+    }
+
+    func testRenderedSortsFindingsBySeverityWithStableOrder() {
+        let metadata = makeMetadata(aerospaceApp: "NOT FOUND", aerospaceCli: "NOT FOUND")
 
         let findings: [DoctorFinding] = [
             DoctorFinding(severity: .pass, title: "Pass A"),
@@ -36,13 +64,7 @@ final class DoctorReportRenderingTests: XCTestCase {
     }
 
     func testRenderedIncludesSummaryCounts() {
-        let metadata = DoctorMetadata(
-            timestamp: "2024-01-01T00:00:00.000Z",
-            agentPanelVersion: "dev",
-            macOSVersion: "macOS 15.7 (Test)",
-            aerospaceApp: "AVAILABLE",
-            aerospaceCli: "AVAILABLE"
-        )
+        let metadata = makeMetadata()
 
         let findings: [DoctorFinding] = [
             DoctorFinding(severity: .pass, title: "Pass A"),
@@ -57,13 +79,7 @@ final class DoctorReportRenderingTests: XCTestCase {
     }
 
     func testRenderedIncludesSnippetAsTomlBlock() {
-        let metadata = DoctorMetadata(
-            timestamp: "2024-01-01T00:00:00.000Z",
-            agentPanelVersion: "dev",
-            macOSVersion: "macOS 15.7 (Test)",
-            aerospaceApp: "AVAILABLE",
-            aerospaceCli: "AVAILABLE"
-        )
+        let metadata = makeMetadata()
 
         let finding = DoctorFinding(
             severity: .fail,
@@ -83,13 +99,7 @@ final class DoctorReportRenderingTests: XCTestCase {
     }
 
     func testRenderedIncludesBodyLinesWhenTitleEmpty() {
-        let metadata = DoctorMetadata(
-            timestamp: "2024-01-01T00:00:00.000Z",
-            agentPanelVersion: "dev",
-            macOSVersion: "macOS 15.7 (Test)",
-            aerospaceApp: "AVAILABLE",
-            aerospaceCli: "AVAILABLE"
-        )
+        let metadata = makeMetadata()
 
         let finding = DoctorFinding(
             severity: .pass,
@@ -103,5 +113,17 @@ final class DoctorReportRenderingTests: XCTestCase {
         XCTAssertTrue(rendered.contains("Raw line 1"))
         XCTAssertTrue(rendered.contains("Raw line 2"))
     }
-}
 
+    private func makeMetadata(
+        aerospaceApp: String = "AVAILABLE",
+        aerospaceCli: String = "AVAILABLE"
+    ) -> DoctorMetadata {
+        DoctorMetadata(
+            timestamp: "2024-01-01T00:00:00.000Z",
+            agentPanelVersion: "dev",
+            macOSVersion: "macOS 15.7 (Test)",
+            aerospaceApp: aerospaceApp,
+            aerospaceCli: aerospaceCli
+        )
+    }
+}

@@ -27,23 +27,28 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-02-04 state-health: SessionManager.stateHealthIssue never surfaced in App
-    Priority: Medium. Area: App/UX
-    Description: `SessionManager.stateHealthIssue` is documented as requiring a user warning when non-nil, but the App never checks it. State saves can be blocked silently with only log output.
-    Next step: Add UI handling in App to check `stateHealthIssue` after SessionManager init and display appropriate warning/recovery prompt.
-    Notes: Documented in CORE_API.md Session Management section.
+- Issue 2026-02-08 cli-runner-tests: CLI runner tests missing for new ProjectManager commands
+    Priority: Medium. Area: CLI Tests
+    Description: `ApCLIRunnerTests` only covers `version`, `doctor`, and `help` commands. The new `show-config`, `list-projects`, `select-project`, `close-project`, and `return` commands lack CLI-runner-level tests validating success and failure paths through the ProjectManager bridge.
+    Next step: Add CLI runner tests for each new command with mock ProjectManager, covering both success and error cases (including the async semaphore bridge for `select-project`).
+
+- Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
+    Priority: High. Area: App/Switcher Tests
+    Description: Recent regressions involved `windowClose`/termination-triggered focus restore and app activation fallback behavior, but there is no dedicated test target validating switcher dismiss semantics.
+    Next step: Add App-layer tests (or extract testable policy helpers) covering `dismiss` reason handling and prohibiting app-activation fallback on project handoff/termination paths.
+    Notes: Existing ProjectManager tests do not cover AppKit panel lifecycle paths.
+
+- Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
+    Priority: High. Area: Tests
+    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and close/exit lifecycle paths; current tests are mostly helper-level.
+    Next step: Add targeted tests for load/sort/recency and close/exit behavior, including failure paths.
+    Notes: ProjectManager consolidates all project operations; broad coverage is still needed before MVP completion.
 
 - Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
     Priority: Medium. Area: Config/UX
     Description: `Config.loadDefault()` returns `Result<Config, ConfigLoadError>` which cannot convey warnings. If config is valid but has warnings (e.g., deprecated fields), they are silently dropped.
     Next step: Either change return type to include warnings, or add a separate `Config.loadDefaultWithWarnings()` method that returns warnings alongside the config.
     Notes: SwitcherPanelController clears status on success, so even if warnings were returned they'd need explicit handling.
-
-- Issue 2026-02-04 apcore-config: ApCore stores config but never uses it
-    Priority: Medium. Area: Architecture
-    Description: `ApCore.init(config:)` requires a `Config` parameter and stores it, but none of the methods use it. All operations are config-agnostic AeroSpace/window operations.
-    Next step: Phase 2 should either use config for project-aware operations or reconsider whether ApCore should require config.
-    Notes: Related to Phase 2 separation of concerns and project lifecycle work.
 
 - Issue 2026-02-03 doctorsev: Doctor VS Code/Chrome checks should FAIL when a project needs them
     Priority: Medium. Area: Doctor

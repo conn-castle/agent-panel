@@ -24,10 +24,10 @@ public enum AeroSpaceConfigStatus: String, Sendable {
 /// Manages the AeroSpace configuration file.
 public struct AeroSpaceConfigManager {
     /// Marker comment that identifies configs managed by AgentPanel.
-    public static let managedByMarker = "# Managed by AgentPanel - do not edit manually"
+    static let managedByMarker = "# Managed by AgentPanel - do not edit manually"
 
     /// Resource name for the safe config template.
-    public static let safeConfigResourceName = "aerospace-safe"
+    private static let safeConfigResourceName = "aerospace-safe"
 
     /// Default path to the AeroSpace config file.
     public static var configPath: String {
@@ -37,7 +37,7 @@ public struct AeroSpaceConfigManager {
     }
 
     /// Path for backing up existing configs before overwriting.
-    public static var backupPath: String {
+    private static var backupPath: String {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".aerospace.toml.agentpanel-backup")
             .path
@@ -46,14 +46,19 @@ public struct AeroSpaceConfigManager {
     private let fileManager: FileManager
 
     /// Creates a config manager.
+    public init() {
+        self.fileManager = .default
+    }
+
+    /// Creates a config manager with a custom file manager.
     /// - Parameter fileManager: File manager to use for file operations.
-    public init(fileManager: FileManager = .default) {
+    init(fileManager: FileManager) {
         self.fileManager = fileManager
     }
 
     /// Loads the safe AeroSpace config from the app bundle.
     /// - Returns: The config content, or nil if not found.
-    public func loadSafeConfigFromBundle() -> String? {
+    private func loadSafeConfigFromBundle() -> String? {
         guard let url = Bundle.main.url(forResource: Self.safeConfigResourceName, withExtension: "toml") else {
             return nil
         }
@@ -61,13 +66,13 @@ public struct AeroSpaceConfigManager {
     }
 
     /// Returns true if the AeroSpace config file exists.
-    public func configExists() -> Bool {
+    private func configExists() -> Bool {
         fileManager.fileExists(atPath: Self.configPath)
     }
 
     /// Returns true if the existing config is managed by AgentPanel.
     /// - Returns: True if the config starts with the managed-by marker, false otherwise.
-    public func configIsManagedByAgentPanel() -> Result<Bool, ApCoreError> {
+    private func configIsManagedByAgentPanel() -> Result<Bool, ApCoreError> {
         guard configExists() else {
             return .success(false)
         }
@@ -85,7 +90,7 @@ public struct AeroSpaceConfigManager {
 
     /// Backs up the existing config file if it exists.
     /// - Returns: Success, or an error if backup fails.
-    public func backupExistingConfig() -> Result<Void, ApCoreError> {
+    private func backupExistingConfig() -> Result<Void, ApCoreError> {
         guard configExists() else {
             return .success(())
         }
