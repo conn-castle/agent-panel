@@ -132,6 +132,9 @@ public final class ProjectManager {
     /// The currently active project, derived from the focused workspace.
     public var activeProject: ProjectConfig? { get }
 
+    /// Returns project IDs that currently have open AgentPanel workspaces.
+    public func openProjectIds() -> Result<Set<String>, ProjectError>
+
     /// Creates a ProjectManager with default dependencies.
     public init()
 

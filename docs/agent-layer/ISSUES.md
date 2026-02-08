@@ -35,7 +35,7 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
     Priority: High. Area: Tests
-    Description: Focus and selection tests now exist, but `ProjectManager` still lacks coverage for config loading, sorting, recency persistence, and close/exit lifecycle paths.
+    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and close/exit lifecycle paths; current tests are mostly helper-level.
     Next step: Add targeted tests for load/sort/recency and close/exit behavior, including failure paths.
     Notes: ProjectManager consolidates all project operations; broad coverage is still needed before MVP completion.
 

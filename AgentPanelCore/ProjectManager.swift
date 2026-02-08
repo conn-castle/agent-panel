@@ -97,6 +97,25 @@ public final class ProjectManager {
         return projects.first { $0.id == projectId }
     }
 
+    /// Returns the set of project IDs that currently have open AeroSpace workspaces.
+    public func openProjectIds() -> Result<Set<String>, ProjectError> {
+        let workspaces: [String]
+        switch aerospace.getWorkspaces() {
+        case .failure(let error):
+            logEvent("open_project_ids.failed", level: .warn, message: error.message)
+            return .failure(.aeroSpaceError(detail: error.message))
+        case .success(let result):
+            workspaces = result
+        }
+
+        var ids = Set<String>()
+        for ws in workspaces where ws.hasPrefix(Self.workspacePrefix) {
+            ids.insert(String(ws.dropFirst(Self.workspacePrefix.count)))
+        }
+
+        return .success(ids)
+    }
+
     // MARK: - Initialization
 
     /// Creates a ProjectManager with default dependencies.

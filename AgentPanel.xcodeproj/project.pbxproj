@@ -50,6 +50,7 @@
 		E1A3D5707DC2114E42745583 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D8C73BDF50CEB78DBA5853 /* System.swift */; };
 		E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */; };
 		E6AB4DCAB965EE715A11593A /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
+		F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */; };
 		FF90DD97E05DB53306719BAA /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935CD37A022BA8B71683DE72 /* Doctor.swift */; };
 /* End PBXBuildFile section */
 
@@ -157,6 +158,7 @@
 		D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelCLICore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataPaths.swift; sourceTree = "<group>"; };
 		D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
+		D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerOpenProjectIdsTests.swift; sourceTree = "<group>"; };
 		D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		D9708BB20B7C2071A1EE21D7 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApAeroSpace.swift; sourceTree = "<group>"; };
@@ -227,6 +229,7 @@
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
 				FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */,
+				D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
 			);
 			path = AgentPanelCoreTests;
@@ -618,6 +621,7 @@
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
 				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
 				483837094975998B931C20D2 /* ProjectManagerLogEventNameTests.swift in Sources */,
+				F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -20,10 +20,15 @@ final class SwitcherPanel: NSPanel {
     }
 }
 
-/// Table cell view for displaying a project row with color swatch.
+/// Table cell view for displaying a project row with color swatch and optional close button.
 final class ProjectRowView: NSTableCellView {
     let swatchView = NSView()
     let nameLabel = NSTextField(labelWithString: "")
+    let activeLabel = NSTextField(labelWithString: "active")
+    let closeButton = NSButton(frame: .zero)
+
+    /// Called when the close button is clicked.
+    var onClose: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -42,8 +47,25 @@ final class ProjectRowView: NSTableCellView {
 
         nameLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
+        nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [swatchView, nameLabel])
+        activeLabel.font = NSFont.systemFont(ofSize: 10, weight: .regular)
+        activeLabel.textColor = .secondaryLabelColor
+        activeLabel.translatesAutoresizingMaskIntoConstraints = false
+        activeLabel.isHidden = true
+
+        closeButton.bezelStyle = .inline
+        closeButton.isBordered = false
+        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Close project")
+        closeButton.imagePosition = .imageOnly
+        closeButton.contentTintColor = .secondaryLabelColor
+        closeButton.target = self
+        closeButton.action = #selector(closeButtonPressed)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.isHidden = true
+        closeButton.setContentHuggingPriority(.required, for: .horizontal)
+
+        let stack = NSStackView(views: [swatchView, nameLabel, activeLabel, closeButton])
         stack.orientation = .horizontal
         stack.spacing = 10
         stack.alignment = .centerY
@@ -54,11 +76,17 @@ final class ProjectRowView: NSTableCellView {
         NSLayoutConstraint.activate([
             swatchView.widthAnchor.constraint(equalToConstant: 12),
             swatchView.heightAnchor.constraint(equalToConstant: 12),
+            closeButton.widthAnchor.constraint(equalToConstant: 16),
+            closeButton.heightAnchor.constraint(equalToConstant: 16),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 4),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
         ])
+    }
+
+    @objc private func closeButtonPressed() {
+        onClose?()
     }
 }
 
@@ -67,18 +95,27 @@ final class ProjectRowView: NSTableCellView {
 /// Creates or reuses a project cell for display.
 /// - Parameters:
 ///   - project: Project to display.
+///   - isActive: Whether this project is the currently active one.
+///   - isOpen: Whether this project has an open workspace.
+///   - onClose: Callback when the close button is clicked.
 ///   - tableView: Table view for cell reuse.
 /// - Returns: Configured table cell view.
-func projectCell(for project: ProjectConfig, tableView: NSTableView) -> NSTableCellView {
+func projectCell(
+    for project: ProjectConfig,
+    isActive: Bool,
+    isOpen: Bool,
+    onClose: (() -> Void)?,
+    tableView: NSTableView
+) -> NSTableCellView {
     let identifier = NSUserInterfaceItemIdentifier("ProjectRow")
     if let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? ProjectRowView {
-        configureProjectCell(cell, project: project)
+        configureProjectCell(cell, project: project, isActive: isActive, isOpen: isOpen, onClose: onClose)
         return cell
     }
 
     let cell = ProjectRowView()
     cell.identifier = identifier
-    configureProjectCell(cell, project: project)
+    configureProjectCell(cell, project: project, isActive: isActive, isOpen: isOpen, onClose: onClose)
     return cell
 }
 
@@ -86,9 +123,21 @@ func projectCell(for project: ProjectConfig, tableView: NSTableView) -> NSTableC
 /// - Parameters:
 ///   - cell: Cell to configure.
 ///   - project: Project providing display data.
-func configureProjectCell(_ cell: ProjectRowView, project: ProjectConfig) {
+///   - isActive: Whether this project is the currently active one.
+///   - isOpen: Whether this project has an open workspace.
+///   - onClose: Callback when the close button is clicked.
+func configureProjectCell(
+    _ cell: ProjectRowView,
+    project: ProjectConfig,
+    isActive: Bool,
+    isOpen: Bool,
+    onClose: (() -> Void)?
+) {
     cell.nameLabel.stringValue = project.name
     cell.swatchView.layer?.backgroundColor = nsColor(from: project.color).cgColor
+    cell.activeLabel.isHidden = !isActive
+    cell.closeButton.isHidden = !isOpen
+    cell.onClose = onClose
 }
 
 /// Creates or reuses an empty state cell for display.
