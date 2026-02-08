@@ -86,3 +86,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Replace split active/open workspace lookups with `ProjectManager.workspaceState()`, backed by one AeroSpace command: `list-workspaces --all --format "%{workspace}||%{workspace-is-focused}"`.
     Reason: Removes redundant CLI calls and guarantees active/open values are derived from one consistent snapshot instead of two separately timed queries.
     Tradeoffs: Depends on `workspace-is-focused` format support; parser contract must remain stable with AeroSpace output.
+
+- Decision 2026-02-08 startbg: AeroSpace start must not run on main thread
+    Decision: Enforce off-main-thread execution for `ApAeroSpace.start()` and run Doctor/startup AeroSpace actions on a background queue before updating UI.
+    Reason: Startup readiness polling is synchronous and can block up to the configured timeout; keeping it off the main thread prevents UI stalls.
+    Tradeoffs: Doctor/start actions become asynchronous from the app UI perspective and require callback-style UI updates.

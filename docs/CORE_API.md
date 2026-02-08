@@ -349,6 +349,7 @@ public struct ApAeroSpace {
     public func installViaHomebrew() -> Result<Void, ApCoreError>
 
     /// Starts AeroSpace.
+    /// Must be called off the main thread.
     public func start() -> Result<Void, ApCoreError>
 }
 ```

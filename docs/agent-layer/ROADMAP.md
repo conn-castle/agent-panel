@@ -80,9 +80,8 @@ Incomplete:
 ### Tasks
 - [x] Wire "close project" to the UI; closing a project returns the user to the most recent non-project window.
 - [x] Add keybind to toggle back to most recent macOS space or non-project window.
-- [ ] Show a loading indicator / progress status during project startup (especially for slow Chrome launches).
 - [ ] Visual health indicator in AP menu bar icon — icon state reflects Doctor results (e.g., red for errors, yellow for warnings).
-- [ ] Add dropdown menu item to move the currently focused window to the active project's workspace.
+- [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
 
 ### Exit criteria
 - Users can close a project from the UI and are returned to a non-project context.

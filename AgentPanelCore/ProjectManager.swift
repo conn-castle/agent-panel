@@ -691,24 +691,65 @@ public final class ProjectManager {
     }
 
     private func loadRecency() {
-        guard let data = try? Data(contentsOf: recencyFilePath),
-              let ids = try? JSONDecoder().decode([String].self, from: data) else {
+        let path = recencyFilePath.path
+        guard FileManager.default.fileExists(atPath: path) else {
             recentProjectIds = []
             return
         }
-        recentProjectIds = ids
+
+        do {
+            let data = try Data(contentsOf: recencyFilePath)
+            let ids = try JSONDecoder().decode([String].self, from: data)
+            recentProjectIds = ids
+        } catch {
+            recentProjectIds = []
+            logEvent(
+                "recency.load_failed",
+                level: .warn,
+                message: String(describing: error),
+                context: ["path": path]
+            )
+        }
     }
 
     private func saveRecency() {
-        guard let data = try? JSONEncoder().encode(recentProjectIds) else {
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(recentProjectIds)
+        } catch {
+            logEvent(
+                "recency.encode_failed",
+                level: .warn,
+                message: String(describing: error),
+                context: ["path": recencyFilePath.path]
+            )
             return
         }
 
         // Ensure directory exists
         let directory = recencyFilePath.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            logEvent(
+                "recency.directory_create_failed",
+                level: .warn,
+                message: String(describing: error),
+                context: ["path": directory.path]
+            )
+            return
+        }
 
-        try? data.write(to: recencyFilePath)
+        do {
+            try data.write(to: recencyFilePath, options: .atomic)
+        } catch {
+            logEvent(
+                "recency.write_failed",
+                level: .warn,
+                message: String(describing: error),
+                context: ["path": recencyFilePath.path]
+            )
+        }
     }
 
     // MARK: - Logging

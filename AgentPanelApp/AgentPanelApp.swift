@@ -107,15 +107,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         logAppEvent(event: "aerospace.autostart.starting")
-        switch aerospace.start() {
-        case .success:
-            logAppEvent(event: "aerospace.autostart.success")
-        case .failure(let error):
-            logAppEvent(
-                event: "aerospace.autostart.failed",
-                level: .error,
-                message: error.message
-            )
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            switch aerospace.start() {
+            case .success:
+                self?.logAppEvent(event: "aerospace.autostart.success")
+            case .failure(let error):
+                self?.logAppEvent(
+                    event: "aerospace.autostart.failed",
+                    level: .error,
+                    message: error.message
+                )
+            }
         }
     }
 
@@ -320,14 +322,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   - requestedEvent: Event name to log before the action.
     ///   - completedEvent: Event name to log after the action.
     private func runDoctorAction(
-        _ action: (Doctor) -> DoctorReport,
+        _ action: @escaping (Doctor) -> DoctorReport,
         requestedEvent: String,
         completedEvent: String
     ) {
         logAppEvent(event: requestedEvent)
-        let report = action(makeDoctor())
-        showDoctorReport(report)
-        logDoctorSummary(report, event: completedEvent)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let report = action(self.makeDoctor())
+            DispatchQueue.main.async {
+                self.showDoctorReport(report)
+                self.logDoctorSummary(report, event: completedEvent)
+            }
+        }
     }
 
     /// Installs AeroSpace via Homebrew and refreshes the report.

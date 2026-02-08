@@ -104,6 +104,15 @@ public struct ApAeroSpace {
     /// Starts the AeroSpace application.
     /// - Returns: Success or an error.
     public func start() -> Result<Void, ApCoreError> {
+        guard !Thread.isMainThread else {
+            return .failure(
+                ApCoreError(
+                    category: .command,
+                    message: "AeroSpace start must run off the main thread."
+                )
+            )
+        }
+
         switch commandRunner.run(executable: "open", arguments: ["-a", "AeroSpace"], timeoutSeconds: 10) {
         case .failure(let error):
             return .failure(error)

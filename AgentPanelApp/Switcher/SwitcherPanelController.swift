@@ -92,6 +92,88 @@ private enum SwitcherListRow {
     }
 }
 
+/// Builder for grouped switcher rows and selection indices.
+private enum SwitcherListModelBuilder {
+    /// Builds grouped rows from current filter and workspace state.
+    static func buildRows(
+        filteredProjects: [ProjectConfig],
+        activeProjectId: String?,
+        openIds: Set<String>,
+        query: String
+    ) -> [SwitcherListRow] {
+        var rows: [SwitcherListRow] = []
+
+        if activeProjectId != nil {
+            rows.append(.sectionHeader(title: "Actions"))
+            rows.append(.backAction)
+        }
+
+        if let activeProjectId,
+           let currentProject = filteredProjects.first(where: { $0.id == activeProjectId }) {
+            rows.append(.sectionHeader(title: "Current"))
+            rows.append(
+                .project(
+                    project: currentProject,
+                    isCurrent: true,
+                    isOpen: openIds.contains(currentProject.id)
+                )
+            )
+        }
+
+        let recentProjects = filteredProjects.filter { $0.id != activeProjectId }
+        if !recentProjects.isEmpty {
+            rows.append(.sectionHeader(title: "Recent"))
+            for project in recentProjects {
+                rows.append(
+                    .project(
+                        project: project,
+                        isCurrent: false,
+                        isOpen: openIds.contains(project.id)
+                    )
+                )
+            }
+        }
+
+        if rows.isEmpty {
+            let message = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "No projects available"
+                : "No matching projects"
+            rows = [.emptyState(message: message)]
+        }
+
+        return rows
+    }
+
+    /// Returns the row index for a stable selection key.
+    static func rowIndex(forSelectionKey selectionKey: String, in rows: [SwitcherListRow]) -> Int? {
+        rows.firstIndex(where: { $0.selectionKey == selectionKey && $0.isSelectable })
+    }
+
+    /// Returns the default selection index for open/filter states.
+    static func defaultSelectionIndex(in rows: [SwitcherListRow], preferCurrentProject: Bool) -> Int? {
+        if preferCurrentProject,
+           let currentProjectIndex = rows.firstIndex(where: {
+               if case .project(_, let isCurrent, _) = $0 {
+                   return isCurrent
+               }
+               return false
+           }) {
+            return currentProjectIndex
+        }
+
+        if let firstProjectIndex = rows.firstIndex(where: {
+            if case .project = $0 {
+                return true
+            }
+            return false
+        }) {
+            return firstProjectIndex
+        }
+
+        return rows.firstIndex(where: { $0.isSelectable })
+    }
+}
+
 // MARK: - Controller
 
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
@@ -121,10 +203,11 @@ final class SwitcherPanelController: NSObject {
     private var expectsVisible: Bool = false
     private var pendingVisibilityCheckToken: UUID?
     private var previouslyActiveApp: NSRunningApplication?
-    private var suppressNextTableAction: Bool = false
+    private var suppressedActionEventTimestamp: TimeInterval?
     private var isDismissing: Bool = false
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
+    private var restoreFocusTask: Task<Void, Never>?
 
     /// The captured focus state before the switcher opened.
     /// Used for restore-on-cancel via ProjectManager.
@@ -153,7 +236,7 @@ final class SwitcherPanelController: NSObject {
             backing: .buffered,
             defer: false
         )
-        self.titleLabel = NSTextField(labelWithString: "Project Switcher")
+        self.titleLabel = NSTextField(labelWithString: "Agent Panel Switcher")
         self.searchField = NSSearchField()
         self.tableView = NSTableView()
         self.scrollView = NSScrollView()
@@ -173,6 +256,7 @@ final class SwitcherPanelController: NSObject {
 
     deinit {
         removeKeyEventMonitor()
+        restoreFocusTask?.cancel()
     }
 
     // MARK: - Public Interface
@@ -215,6 +299,7 @@ final class SwitcherPanelController: NSObject {
         let initialQuery = shouldReuseQuery ? lastDismissedQuery : ""
 
         // Use provided previousApp, or fall back to current frontmost (less reliable)
+        restoreFocusTask?.cancel()
         previouslyActiveApp = previousApp ?? NSWorkspace.shared.frontmostApplication
         resetState(initialQuery: initialQuery)
         expectsVisible = true
@@ -265,13 +350,21 @@ final class SwitcherPanelController: NSObject {
 
     /// Dismisses the switcher panel and clears transient state.
     func dismiss(reason: SwitcherDismissReason = .unknown) {
-        guard !isDismissing else { return }
+        guard !isDismissing else {
+            session.logEvent(
+                event: "switcher.dismiss.reentrant_blocked",
+                level: .warn,
+                context: ["reason": reason.rawValue]
+            )
+            return
+        }
         isDismissing = true
         defer { isDismissing = false }
 
         removeKeyEventMonitor()
         expectsVisible = false
         pendingVisibilityCheckToken = nil
+        restoreFocusTask?.cancel()
         session.end(reason: reason)
 
         // Save query for short-term reopen convenience.
@@ -311,20 +404,23 @@ final class SwitcherPanelController: NSObject {
     private func restorePreviousFocus() {
         let focus = capturedFocus
         let previousApp = previouslyActiveApp
+        let projectManager = self.projectManager
+        let session = self.session
 
         // Clear references immediately so they're not reused
         previouslyActiveApp = nil
 
-        // Run focus restore on background thread to avoid blocking UI
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        restoreFocusTask?.cancel()
+        restoreFocusTask = Task.detached(priority: .userInitiated) {
+            guard !Task.isCancelled else { return }
             let restoreStart = CFAbsoluteTimeGetCurrent()
 
             // Try AeroSpace restore first via ProjectManager
             if let focus {
-                if self?.projectManager.restoreFocus(focus) == true {
+                if projectManager.restoreFocus(focus) {
                     let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
-                    DispatchQueue.main.async {
-                        self?.session.logEvent(
+                    await MainActor.run {
+                        session.logEvent(
                             event: "switcher.focus.restored",
                             context: [
                                 "window_id": "\(focus.windowId)",
@@ -336,8 +432,8 @@ final class SwitcherPanelController: NSObject {
                     return
                 } else {
                     let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
-                    DispatchQueue.main.async {
-                        self?.session.logEvent(
+                    await MainActor.run {
+                        session.logEvent(
                             event: "switcher.focus.restore_failed",
                             level: .warn,
                             message: "AeroSpace focus restore failed, falling back to app activation.",
@@ -351,11 +447,12 @@ final class SwitcherPanelController: NSObject {
             }
 
             // Fallback: activate the previously active app (must be on main thread)
-            DispatchQueue.main.async {
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
                 if let previousApp {
                     previousApp.activate()
                     let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
-                    self?.session.logEvent(
+                    session.logEvent(
                         event: "switcher.focus.restored",
                         context: [
                             "app_bundle_id": previousApp.bundleIdentifier ?? "unknown",
@@ -387,7 +484,7 @@ final class SwitcherPanelController: NSObject {
 
     /// Configures the switcher panel presentation behavior.
     private func configurePanel() {
-        panel.title = "Project Switcher"
+        panel.title = "Agent Panel Switcher"
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
@@ -631,7 +728,12 @@ final class SwitcherPanelController: NSObject {
         }
 
         filteredProjects = projectManager.sortedProjects(query: query)
-        rebuildRows(query: query)
+        rows = SwitcherListModelBuilder.buildRows(
+            filteredProjects: filteredProjects,
+            activeProjectId: activeProjectId,
+            openIds: openIds,
+            query: query
+        )
         tableView.reloadData()
         restoreSelection(
             preferredSelectionKey: fallbackSelectionKey,
@@ -660,95 +762,24 @@ final class SwitcherPanelController: NSObject {
         }
     }
 
-    /// Rebuilds grouped rows from the current filtered project list.
-    private func rebuildRows(query: String) {
-        rows = []
-
-        let hasBackAction = activeProjectId != nil
-
-        if hasBackAction {
-            rows.append(.sectionHeader(title: "Actions"))
-            rows.append(.backAction)
-        }
-
-        if let activeProjectId,
-           let currentProject = filteredProjects.first(where: { $0.id == activeProjectId }) {
-            rows.append(.sectionHeader(title: "Current"))
-            rows.append(
-                .project(
-                    project: currentProject,
-                    isCurrent: true,
-                    isOpen: openIds.contains(currentProject.id)
-                )
-            )
-        }
-
-        let recentProjects = filteredProjects.filter { $0.id != activeProjectId }
-        if !recentProjects.isEmpty {
-            rows.append(.sectionHeader(title: "Recent"))
-            for project in recentProjects {
-                rows.append(
-                    .project(
-                        project: project,
-                        isCurrent: false,
-                        isOpen: openIds.contains(project.id)
-                    )
-                )
-            }
-        }
-
-        if rows.isEmpty {
-            let message = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "No projects available"
-                : "No matching projects"
-            rows = [.emptyState(message: message)]
-        }
-    }
-
     /// Restores selection by key, with a fallback default selection policy.
     private func restoreSelection(preferredSelectionKey: String?, useDefaultSelection: Bool) {
         if let preferredSelectionKey,
-           let preferredRow = rowIndex(forSelectionKey: preferredSelectionKey) {
+           let preferredRow = SwitcherListModelBuilder.rowIndex(forSelectionKey: preferredSelectionKey, in: rows) {
             tableView.selectRowIndexes(IndexSet(integer: preferredRow), byExtendingSelection: false)
             tableView.scrollRowToVisible(preferredRow)
             return
         }
 
-        if useDefaultSelection {
-            if let currentProjectIndex = rows.firstIndex(where: {
-                if case .project(_, let isCurrent, _) = $0 {
-                    return isCurrent
-                }
-                return false
-            }) {
-                tableView.selectRowIndexes(IndexSet(integer: currentProjectIndex), byExtendingSelection: false)
-                tableView.scrollRowToVisible(currentProjectIndex)
-                return
-            }
-
-            if let firstProjectIndex = rows.firstIndex(where: {
-                if case .project = $0 {
-                    return true
-                }
-                return false
-            }) {
-                tableView.selectRowIndexes(IndexSet(integer: firstProjectIndex), byExtendingSelection: false)
-                tableView.scrollRowToVisible(firstProjectIndex)
-                return
-            }
-        }
-
-        if let firstSelectable = rows.firstIndex(where: { $0.isSelectable }) {
-            tableView.selectRowIndexes(IndexSet(integer: firstSelectable), byExtendingSelection: false)
-            tableView.scrollRowToVisible(firstSelectable)
+        if let fallbackRow = SwitcherListModelBuilder.defaultSelectionIndex(
+            in: rows,
+            preferCurrentProject: useDefaultSelection
+        ) {
+            tableView.selectRowIndexes(IndexSet(integer: fallbackRow), byExtendingSelection: false)
+            tableView.scrollRowToVisible(fallbackRow)
         } else {
             tableView.deselectAll(nil)
         }
-    }
-
-    /// Returns the index of a row for a stable selection key.
-    private func rowIndex(forSelectionKey selectionKey: String) -> Int? {
-        rows.firstIndex(where: { $0.selectionKey == selectionKey && $0.isSelectable })
     }
 
     /// Returns the currently selected row model.
@@ -887,10 +918,7 @@ final class SwitcherPanelController: NSObject {
 
     /// Handles close button clicks from a project row.
     private func handleCloseProjectButtonClick(projectId: String, rowIndex: Int) {
-        suppressNextTableAction = true
-        DispatchQueue.main.async { [weak self] in
-            self?.suppressNextTableAction = false
-        }
+        suppressedActionEventTimestamp = NSApp.currentEvent?.timestamp
 
         let projectName = allProjects.first(where: { $0.id == projectId })?.name ?? projectId
         performCloseProject(
@@ -1077,7 +1105,11 @@ final class SwitcherPanelController: NSObject {
 
     /// Updates footer hints based on row selection and available actions.
     private func updateFooterHints() {
-        var parts: [String] = ["\u{21A9} Switch"]
+        var parts: [String] = ["esc Dismiss"]
+
+        if let selectedProject = selectedProjectRow(), selectedProject.isOpen {
+            parts.append("\u{2318}\u{232B} Close Project")
+        }
 
         if rows.contains(where: {
             if case .backAction = $0 {
@@ -1088,13 +1120,9 @@ final class SwitcherPanelController: NSObject {
             parts.append("\u{21E7}\u{21A9} Back to Previous Window")
         }
 
-        parts.append("esc Dismiss")
+        parts.append("\u{21A9} Switch")
 
-        if let selectedProject = selectedProjectRow(), selectedProject.isOpen {
-            parts.append("\u{2318}\u{232B} Close Project")
-        }
-
-        keybindHintLabel.stringValue = parts.joined(separator: "    ")
+        keybindHintLabel.stringValue = parts.joined(separator: "      ")
     }
 
     // MARK: - Key Event Monitor
@@ -1271,10 +1299,14 @@ final class SwitcherPanelController: NSObject {
     /// Handles single-click actions on selectable rows.
     @objc private func handleTableViewAction(_ sender: Any?) {
         guard panel.isVisible else { return }
-        if suppressNextTableAction {
-            suppressNextTableAction = false
+
+        if let suppressedTimestamp = suppressedActionEventTimestamp,
+           let currentTimestamp = NSApp.currentEvent?.timestamp,
+           abs(currentTimestamp - suppressedTimestamp) < 0.0001 {
+            suppressedActionEventTimestamp = nil
             return
         }
+        suppressedActionEventTimestamp = nil
         handlePrimaryAction()
     }
 }
