@@ -249,6 +249,7 @@ public struct DoctorReport: Equatable, Sendable {
     public let findings: [DoctorFinding]
     public let actions: DoctorActionAvailability
 
+    public var overallSeverity: DoctorSeverity { get }
     public var hasFailures: Bool { get }
     public func rendered() -> String
 }

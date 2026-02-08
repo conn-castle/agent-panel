@@ -213,6 +213,10 @@ final class SwitcherPanelController: NSObject {
     /// Used for restore-on-cancel via ProjectManager.
     private var capturedFocus: CapturedFocus?
 
+    /// Called when a project operation fails (select, close, exit, workspace query, config load).
+    /// Used by AppDelegate to trigger a background health indicator refresh.
+    var onProjectOperationFailed: (() -> Void)?
+
     /// Creates a switcher panel controller.
     /// - Parameters:
     ///   - logger: Logger used for switcher diagnostics.
@@ -650,6 +654,7 @@ final class SwitcherPanelController: NSObject {
                 level: .error,
                 message: configErrorMessage
             )
+            onProjectOperationFailed?()
 
         case .success(let config):
             allProjects = config.projects
@@ -677,6 +682,7 @@ final class SwitcherPanelController: NSObject {
                 level: .warn,
                 message: "\(error)"
             )
+            onProjectOperationFailed?()
         }
     }
 
@@ -879,6 +885,7 @@ final class SwitcherPanelController: NSObject {
                         message: "\(error)",
                         context: ["project_id": projectId]
                     )
+                    self.onProjectOperationFailed?()
                 }
             }
         }
@@ -970,6 +977,7 @@ final class SwitcherPanelController: NSObject {
                 message: "\(error)",
                 context: ["project_id": projectId]
             )
+            onProjectOperationFailed?()
         }
     }
 
@@ -1028,6 +1036,7 @@ final class SwitcherPanelController: NSObject {
                 level: .error,
                 message: "\(error)"
             )
+            onProjectOperationFailed?()
             NSSound.beep()
 
             // Refresh row validity in case active-project state changed.

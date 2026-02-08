@@ -5,6 +5,7 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 ## What works
 
 - Menu bar app (background agent)
+- Menu bar health indicator reflects latest Doctor severity (PASS/WARN/FAIL)
 - Global switcher (Cmd+Shift+Space) to list/filter/activate projects
 - Project activation: opens IDE + Chrome, organizes windows in AeroSpace workspace
 - Doctor UI in the app menu

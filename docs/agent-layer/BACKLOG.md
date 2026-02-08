@@ -28,6 +28,12 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-06 c2d3e4: Persist and restore project Chrome tabs
+    Priority: Medium. Area: Browser Integration / Persistence
+    Description: Track Chrome tabs opened during a project session and allow the project to automatically reopen all associated tabs upon activation.
+    Acceptance criteria: Project activation restores the set of Chrome tabs from the previous session; tab URLs are persisted across app restarts.
+    Notes: May require Chrome remote debugging or AppleScript integration.
+
 - Backlog 2026-02-05 e2c1b4: Automatic Doctor run on operational errors
     Priority: Medium. Area: Diagnostics
     Description: Automatically trigger a `doctor` run when an error occurs during normal operation (e.g., project startup failure, command error).

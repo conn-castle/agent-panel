@@ -11,6 +11,14 @@ private enum MenuTiming {
     static let menuDismissDelaySeconds: TimeInterval = 0.05
 }
 
+/// Menu bar indicator constants.
+private enum MenuBarHealthIndicator {
+    static let symbolName = "square.stack"
+    static let accessibilityDescription = "AgentPanel health indicator"
+    /// Minimum interval between background Doctor refreshes to avoid spamming CLI calls.
+    static let refreshDebounceSeconds: TimeInterval = 30.0
+}
+
 @main
 struct AgentPanelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -34,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
+    private var doctorIndicatorSeverity: DoctorSeverity?
+    private var isHealthRefreshInFlight: Bool = false
+    private var lastHealthRefreshAt: Date?
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager()
 
@@ -56,9 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func completeAppSetup() {
         NSApp.setActivationPolicy(.accessory)
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "AP"
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
+        updateMenuBarHealthIndicator(severity: nil)
 
         self.switcherController = makeSwitcherController()
 
@@ -75,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Auto-start AeroSpace if installed but not running
         ensureAeroSpaceRunning()
+        refreshHealthInBackground(trigger: "startup", force: true)
 
         let dataStore = DataPaths.default()
         logAppEvent(
@@ -125,6 +137,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
+        let aboutItem = NSMenuItem(
+            title: "About Agent Panel",
+            action: #selector(showAbout),
+            keyEquivalent: ""
+        )
+        menu.addItem(aboutItem)
+
+        menu.addItem(.separator())
+
         let hotkeyWarningItem = NSMenuItem(
             title: "Hotkey unavailable",
             action: nil,
@@ -171,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
+        refreshHealthInBackground(trigger: "switcher_open")
         // Capture both the previously active app AND focus state BEFORE the menu dismisses
         // and before we activate. This ensures restore-on-cancel returns to the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
@@ -194,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
         let capturedFocus = projectManager.captureCurrentFocus()
+        refreshHealthInBackground(trigger: "switcher_toggle")
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -210,7 +233,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates a new SwitcherPanelController instance.
     private func makeSwitcherController() -> SwitcherPanelController {
-        SwitcherPanelController(logger: logger, projectManager: projectManager)
+        let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
+        controller.onProjectOperationFailed = { [weak self] in
+            self?.refreshHealthInBackground(trigger: "project_operation_failed")
+        }
+        return controller
     }
 
     /// Ensures the switcher controller exists for menu/hotkey actions.
@@ -244,6 +271,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Updates the menu bar icon using the latest Doctor severity.
+    ///
+    /// For pending (nil) and pass states, the image uses template rendering so macOS
+    /// handles light/dark menu bar appearance automatically. For warn/fail, palette
+    /// colors are baked into the symbol configuration so the color is always visible
+    /// regardless of menu bar appearance.
+    ///
+    /// - Parameter severity: Worst severity from the latest Doctor report. Nil means pending/unknown.
+    private func updateMenuBarHealthIndicator(severity: DoctorSeverity?) {
+        doctorIndicatorSeverity = severity
+        guard let button = statusItem?.button else {
+            return
+        }
+
+        button.title = ""
+        button.imagePosition = .imageOnly
+        button.contentTintColor = nil
+
+        let sizeConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+
+        let image: NSImage?
+        switch severity {
+        case .fail:
+            let colorConfig = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            image = NSImage(
+                systemSymbolName: MenuBarHealthIndicator.symbolName,
+                accessibilityDescription: MenuBarHealthIndicator.accessibilityDescription
+            )?.withSymbolConfiguration(sizeConfig.applying(colorConfig))
+            image?.isTemplate = false
+        case .warn:
+            let colorConfig = NSImage.SymbolConfiguration(paletteColors: [.systemOrange])
+            image = NSImage(
+                systemSymbolName: MenuBarHealthIndicator.symbolName,
+                accessibilityDescription: MenuBarHealthIndicator.accessibilityDescription
+            )?.withSymbolConfiguration(sizeConfig.applying(colorConfig))
+            image?.isTemplate = false
+        case .pass, .none:
+            image = NSImage(
+                systemSymbolName: MenuBarHealthIndicator.symbolName,
+                accessibilityDescription: MenuBarHealthIndicator.accessibilityDescription
+            )?.withSymbolConfiguration(sizeConfig)
+            image?.isTemplate = true
+        }
+
+        button.image = image
+    }
+
     /// Writes a structured log entry for app-level events.
     /// - Parameters:
     ///   - event: Event name to log.
@@ -268,24 +342,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let warnCount = report.findings.filter { $0.severity == .warn }.count
         let failCount = report.findings.filter { $0.severity == .fail }.count
 
-        let level: LogLevel
-        if failCount > 0 {
-            level = .error
-        } else if warnCount > 0 {
-            level = .warn
+        let level: LogLevel = {
+            switch report.overallSeverity {
+            case .fail:
+                return .error
+            case .warn:
+                return .warn
+            case .pass:
+                return .info
+            }
+        }()
+
+        var context: [String: String] = [
+            "pass_count": "\(passCount)",
+            "warn_count": "\(warnCount)",
+            "fail_count": "\(failCount)"
+        ]
+        context["overall_severity"] = report.overallSeverity.rawValue
+        if let doctorIndicatorSeverity {
+            context["menu_bar_severity"] = doctorIndicatorSeverity.rawValue
         } else {
-            level = .info
+            context["menu_bar_severity"] = "PENDING"
         }
 
         logAppEvent(
             event: event,
             level: level,
-            context: [
-                "pass_count": "\(passCount)",
-                "warn_count": "\(warnCount)",
-                "fail_count": "\(failCount)"
-            ]
+            context: context
         )
+    }
+
+    /// Runs Doctor in the background and updates the menu bar health indicator.
+    ///
+    /// Debounced: skips the run if a refresh is already in flight or if the last
+    /// refresh completed less than `MenuBarHealthIndicator.refreshDebounceSeconds` ago.
+    /// Pass `force: true` to bypass debouncing (used for startup).
+    ///
+    /// - Parameters:
+    ///   - trigger: Log event name suffix describing what triggered the refresh.
+    ///   - force: When true, bypasses the debounce window (e.g., for startup).
+    private func refreshHealthInBackground(trigger: String, force: Bool = false) {
+        guard !isHealthRefreshInFlight else {
+            logAppEvent(
+                event: "doctor.refresh.skipped",
+                context: ["trigger": trigger, "reason": "in_flight"]
+            )
+            return
+        }
+
+        if !force, let lastRefresh = lastHealthRefreshAt,
+           Date().timeIntervalSince(lastRefresh) < MenuBarHealthIndicator.refreshDebounceSeconds {
+            logAppEvent(
+                event: "doctor.refresh.skipped",
+                context: ["trigger": trigger, "reason": "debounced"]
+            )
+            return
+        }
+
+        isHealthRefreshInFlight = true
+        logAppEvent(event: "doctor.refresh.requested", context: ["trigger": trigger])
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let report = self.makeDoctor().run()
+            DispatchQueue.main.async {
+                self.isHealthRefreshInFlight = false
+                self.lastHealthRefreshAt = Date()
+                self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
+                self.logDoctorSummary(report, event: "doctor.refresh.completed")
+            }
+        }
     }
 
     /// Creates a Doctor instance with the current hotkey status provider.
@@ -299,9 +425,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Runs Doctor and presents the report in a modal-style panel.
     @objc private func runDoctor() {
         logAppEvent(event: "doctor.run.requested")
-        let report = makeDoctor().run()
-        showDoctorReport(report)
-        logDoctorSummary(report, event: "doctor.run.completed")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let report = self.makeDoctor().run()
+            DispatchQueue.main.async {
+                self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
+                self.showDoctorReport(report)
+                self.logDoctorSummary(report, event: "doctor.run.completed")
+            }
+        }
     }
 
     /// Copies the current Doctor report to the clipboard.
@@ -331,6 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let report = action(self.makeDoctor())
             DispatchQueue.main.async {
+                self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
                 self.showDoctorReport(report)
                 self.logDoctorSummary(report, event: completedEvent)
             }
@@ -368,6 +501,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func closeDoctorWindow() {
         logAppEvent(event: "doctor.window.closed")
         doctorController?.close()
+    }
+
+    /// Shows the standard About panel with app name and version.
+    @objc private func showAbout() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Agent Panel",
+            .applicationVersion: AgentPanel.version
+        ])
     }
 
     /// Terminates the app.

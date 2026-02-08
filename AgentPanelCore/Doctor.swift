@@ -106,7 +106,19 @@ public struct DoctorReport: Equatable, Sendable {
 
     /// Returns true when the report contains any FAIL findings.
     public var hasFailures: Bool {
-        findings.contains { $0.severity == .fail }
+        overallSeverity == .fail
+    }
+
+    /// Returns the worst severity present in findings (FAIL > WARN > PASS).
+    /// When no findings are present, returns PASS.
+    public var overallSeverity: DoctorSeverity {
+        if findings.contains(where: { $0.severity == .fail }) {
+            return .fail
+        }
+        if findings.contains(where: { $0.severity == .warn }) {
+            return .warn
+        }
+        return .pass
     }
 
     /// Renders the report as a human-readable string for CLI and App display.
