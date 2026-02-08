@@ -191,6 +191,7 @@ protocol AeroSpaceProviding {
     func getWorkspaces() -> Result<[String], ApCoreError>
     func workspaceExists(_ name: String) -> Result<Bool, ApCoreError>
     func listWorkspacesFocused() -> Result<[String], ApCoreError>
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError>
     func createWorkspace(_ name: String) -> Result<Void, ApCoreError>
     func closeWorkspace(name: String) -> Result<Void, ApCoreError>
 

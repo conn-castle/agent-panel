@@ -2,58 +2,82 @@ import Foundation
 import XCTest
 @testable import AgentPanelCore
 
-final class ProjectManagerOpenProjectIdsTests: XCTestCase {
+final class ProjectManagerWorkspaceStateTests: XCTestCase {
 
-    func testOpenProjectIdsReturnsPrefixedWorkspaceIds() {
-        let aerospace = OpenProjectIdsAeroSpaceStub(
-            getWorkspacesResult: .success(["ap-alpha", "main", "ap-beta", "ap-alpha"])
+    func testWorkspaceStateReturnsOpenProjectIdsAndActiveProjectId() {
+        let aerospace = WorkspaceStateAeroSpaceStub(
+            listWorkspacesWithFocusResult: .success([
+                ApWorkspaceSummary(workspace: "main", isFocused: false),
+                ApWorkspaceSummary(workspace: "ap-alpha", isFocused: false),
+                ApWorkspaceSummary(workspace: "ap-beta", isFocused: true),
+                ApWorkspaceSummary(workspace: "ap-alpha", isFocused: false)
+            ])
         )
         let manager = makeManager(aerospace: aerospace)
 
-        switch manager.openProjectIds() {
-        case .success(let ids):
-            XCTAssertEqual(ids, Set(["alpha", "beta"]))
+        switch manager.workspaceState() {
+        case .success(let state):
+            XCTAssertEqual(state.activeProjectId, "beta")
+            XCTAssertEqual(state.openProjectIds, Set(["alpha", "beta"]))
         case .failure(let error):
             XCTFail("Unexpected error: \(error)")
         }
     }
 
-    func testOpenProjectIdsReturnsAeroSpaceFailureWhenWorkspaceQueryFails() {
-        let aerospace = OpenProjectIdsAeroSpaceStub(
-            getWorkspacesResult: .failure(ApCoreError(message: "workspace query failed"))
+    func testWorkspaceStateIgnoresFocusedNonProjectWorkspace() {
+        let aerospace = WorkspaceStateAeroSpaceStub(
+            listWorkspacesWithFocusResult: .success([
+                ApWorkspaceSummary(workspace: "main", isFocused: true),
+                ApWorkspaceSummary(workspace: "ap-alpha", isFocused: false)
+            ])
         )
         let manager = makeManager(aerospace: aerospace)
 
-        switch manager.openProjectIds() {
-        case .success(let ids):
-            XCTFail("Expected failure, got ids: \(ids)")
+        switch manager.workspaceState() {
+        case .success(let state):
+            XCTAssertNil(state.activeProjectId)
+            XCTAssertEqual(state.openProjectIds, Set(["alpha"]))
+        case .failure(let error):
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testWorkspaceStateReturnsAeroSpaceFailureWhenWorkspaceQueryFails() {
+        let aerospace = WorkspaceStateAeroSpaceStub(
+            listWorkspacesWithFocusResult: .failure(ApCoreError(message: "workspace query failed"))
+        )
+        let manager = makeManager(aerospace: aerospace)
+
+        switch manager.workspaceState() {
+        case .success(let state):
+            XCTFail("Expected failure, got state: \(state)")
         case .failure(let error):
             XCTAssertEqual(error, .aeroSpaceError(detail: "workspace query failed"))
         }
     }
 
-    private func makeManager(aerospace: OpenProjectIdsAeroSpaceStub) -> ProjectManager {
+    private func makeManager(aerospace: WorkspaceStateAeroSpaceStub) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .appendingPathComponent("pm-open-ids-\(UUID().uuidString).json")
+            .appendingPathComponent("pm-workspace-state-\(UUID().uuidString).json")
         return ProjectManager(
             aerospace: aerospace,
-            ideLauncher: OpenProjectIdsIdeLauncherStub(),
-            chromeLauncher: OpenProjectIdsChromeLauncherStub(),
-            logger: OpenProjectIdsLoggerStub(),
+            ideLauncher: WorkspaceStateIdeLauncherStub(),
+            chromeLauncher: WorkspaceStateChromeLauncherStub(),
+            logger: WorkspaceStateLoggerStub(),
             recencyFilePath: recencyFilePath
         )
     }
 }
 
-private final class OpenProjectIdsAeroSpaceStub: AeroSpaceProviding {
-    let getWorkspacesResult: Result<[String], ApCoreError>
+private final class WorkspaceStateAeroSpaceStub: AeroSpaceProviding {
+    let listWorkspacesWithFocusResult: Result<[ApWorkspaceSummary], ApCoreError>
 
-    init(getWorkspacesResult: Result<[String], ApCoreError>) {
-        self.getWorkspacesResult = getWorkspacesResult
+    init(listWorkspacesWithFocusResult: Result<[ApWorkspaceSummary], ApCoreError>) {
+        self.listWorkspacesWithFocusResult = listWorkspacesWithFocusResult
     }
 
     func getWorkspaces() -> Result<[String], ApCoreError> {
-        getWorkspacesResult
+        .success([])
     }
 
     func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> {
@@ -62,6 +86,10 @@ private final class OpenProjectIdsAeroSpaceStub: AeroSpaceProviding {
 
     func listWorkspacesFocused() -> Result<[String], ApCoreError> {
         .success([])
+    }
+
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> {
+        listWorkspacesWithFocusResult
     }
 
     func createWorkspace(_ name: String) -> Result<Void, ApCoreError> {
@@ -97,19 +125,19 @@ private final class OpenProjectIdsAeroSpaceStub: AeroSpaceProviding {
     }
 }
 
-private struct OpenProjectIdsIdeLauncherStub: IdeLauncherProviding {
+private struct WorkspaceStateIdeLauncherStub: IdeLauncherProviding {
     func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError> {
         .success(())
     }
 }
 
-private struct OpenProjectIdsChromeLauncherStub: ChromeLauncherProviding {
+private struct WorkspaceStateChromeLauncherStub: ChromeLauncherProviding {
     func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
         .success(())
     }
 }
 
-private struct OpenProjectIdsLoggerStub: AgentPanelLogging {
+private struct WorkspaceStateLoggerStub: AgentPanelLogging {
     func log(
         event: String,
         level: LogLevel,

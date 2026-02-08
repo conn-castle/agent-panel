@@ -21,6 +21,14 @@ struct ApWindow: Equatable {
     let windowTitle: String
 }
 
+/// Workspace summary data returned by AeroSpace queries.
+struct ApWorkspaceSummary: Equatable, Sendable {
+    /// Workspace name.
+    let workspace: String
+    /// True when this workspace is focused.
+    let isFocused: Bool
+}
+
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
     /// AeroSpace bundle identifier for Launch Services lookups.
@@ -240,6 +248,28 @@ public struct ApAeroSpace {
                 .filter { !$0.isEmpty }
 
             return .success(workspaces)
+        }
+    }
+
+    /// Returns all AeroSpace workspaces with focus metadata in a single query.
+    /// - Returns: Workspace summaries on success, or an error.
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> {
+        switch commandRunner.run(
+            executable: "aerospace",
+            arguments: ["list-workspaces", "--all", "--format", "%{workspace}||%{workspace-is-focused}"]
+        ) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                return .failure(
+                    commandError(
+                        "aerospace list-workspaces --all --format %{workspace}||%{workspace-is-focused}",
+                        result: result
+                    )
+                )
+            }
+            return parseWorkspaceSummaries(output: result.stdout)
         }
     }
 
@@ -702,6 +732,53 @@ public struct ApAeroSpace {
         }
 
         return .success(windows)
+    }
+
+    /// Parses workspace summaries from formatted AeroSpace output.
+    ///
+    /// Expected format: `<workspace>||<is-focused>`
+    /// where fields are separated by `||` (double pipe), and focus values are `true` or `false`.
+    ///
+    /// - Parameter output: Output from `aerospace list-workspaces --all --format`.
+    /// - Returns: Parsed workspace summaries or an error.
+    private func parseWorkspaceSummaries(output: String) -> Result<[ApWorkspaceSummary], ApCoreError> {
+        let lines = output.split(whereSeparator: \.isNewline)
+        var workspaces: [ApWorkspaceSummary] = []
+        workspaces.reserveCapacity(lines.count)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                continue
+            }
+
+            guard let separator = trimmed.range(of: "||") else {
+                return .failure(parseError(
+                    "Unexpected workspace summary format.",
+                    detail: "Expected '<workspace>||<is-focused>', got: \(trimmed)"
+                ))
+            }
+
+            let workspace = String(trimmed[..<separator.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let focusToken = String(trimmed[separator.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            let isFocused: Bool
+            switch focusToken {
+            case "true":
+                isFocused = true
+            case "false":
+                isFocused = false
+            default:
+                return .failure(parseError(
+                    "Unexpected workspace focus value.",
+                    detail: "Expected 'true' or 'false', got: \(focusToken)"
+                ))
+            }
+
+            workspaces.append(ApWorkspaceSummary(workspace: workspace, isFocused: isFocused))
+        }
+
+        return .success(workspaces)
     }
 
     /// Returns help output for a CLI command.

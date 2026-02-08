@@ -40,6 +40,24 @@ public enum ProjectError: Error, Equatable, Sendable {
     case focusUnstable(detail: String)
 }
 
+/// Snapshot of AgentPanel workspace state from a single AeroSpace query.
+public struct ProjectWorkspaceState: Equatable, Sendable {
+    /// The currently focused AgentPanel project ID, if any.
+    public let activeProjectId: String?
+
+    /// Set of AgentPanel project IDs with open workspaces.
+    public let openProjectIds: Set<String>
+
+    /// Creates a workspace state snapshot.
+    /// - Parameters:
+    ///   - activeProjectId: Focused AgentPanel project ID, if present.
+    ///   - openProjectIds: Open AgentPanel project workspace IDs.
+    public init(activeProjectId: String?, openProjectIds: Set<String>) {
+        self.activeProjectId = activeProjectId
+        self.openProjectIds = openProjectIds
+    }
+}
+
 // Note: CapturedFocus and internal protocols (AeroSpaceProviding,
 // IdeLauncherProviding, ChromeLauncherProviding) are defined in Dependencies.swift
 
@@ -85,35 +103,37 @@ public final class ProjectManager {
         config?.projects ?? []
     }
 
-    /// The currently active project, derived from the focused workspace.
-    public var activeProject: ProjectConfig? {
-        guard case .success(let workspaces) = aerospace.listWorkspacesFocused(),
-              let focused = workspaces.first,
-              focused.hasPrefix(Self.workspacePrefix) else {
-            return nil
-        }
-
-        let projectId = String(focused.dropFirst(Self.workspacePrefix.count))
-        return projects.first { $0.id == projectId }
-    }
-
-    /// Returns the set of project IDs that currently have open AeroSpace workspaces.
-    public func openProjectIds() -> Result<Set<String>, ProjectError> {
-        let workspaces: [String]
-        switch aerospace.getWorkspaces() {
+    /// Returns the open + focused AgentPanel workspace state from a single AeroSpace query.
+    public func workspaceState() -> Result<ProjectWorkspaceState, ProjectError> {
+        let workspaceSummaries: [ApWorkspaceSummary]
+        switch aerospace.listWorkspacesWithFocus() {
         case .failure(let error):
-            logEvent("open_project_ids.failed", level: .warn, message: error.message)
+            logEvent("workspace_state.failed", level: .warn, message: error.message)
             return .failure(.aeroSpaceError(detail: error.message))
         case .success(let result):
-            workspaces = result
+            workspaceSummaries = result
         }
 
-        var ids = Set<String>()
-        for ws in workspaces where ws.hasPrefix(Self.workspacePrefix) {
-            ids.insert(String(ws.dropFirst(Self.workspacePrefix.count)))
+        var openProjectIds = Set<String>()
+        var activeProjectId: String?
+
+        for summary in workspaceSummaries {
+            guard let projectId = Self.projectId(fromWorkspace: summary.workspace) else {
+                continue
+            }
+
+            openProjectIds.insert(projectId)
+            if summary.isFocused, activeProjectId == nil {
+                activeProjectId = projectId
+            }
         }
 
-        return .success(ids)
+        return .success(
+            ProjectWorkspaceState(
+                activeProjectId: activeProjectId,
+                openProjectIds: openProjectIds
+            )
+        )
     }
 
     // MARK: - Initialization
@@ -495,7 +515,15 @@ public final class ProjectManager {
 
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError> {
-        guard activeProject != nil else {
+        let state: ProjectWorkspaceState
+        switch workspaceState() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let snapshot):
+            state = snapshot
+        }
+
+        guard state.activeProjectId != nil else {
             logEvent("exit.no_active_project", level: .warn)
             return .failure(.noActiveProject)
         }
@@ -563,6 +591,16 @@ public final class ProjectManager {
 
     // MARK: - Private Helpers
 
+    /// Returns an AgentPanel project ID from a workspace name.
+    /// - Parameter workspace: Raw AeroSpace workspace name.
+    /// - Returns: Project ID when workspace uses the `ap-` prefix, otherwise nil.
+    private static func projectId(fromWorkspace workspace: String) -> String? {
+        guard workspace.hasPrefix(Self.workspacePrefix) else {
+            return nil
+        }
+        return String(workspace.dropFirst(Self.workspacePrefix.count))
+    }
+
     /// Polls until the target workspace is confirmed focused.
     ///
     /// Matches the shell script's `ensure_workspace_focused`: repeatedly calls
@@ -573,8 +611,8 @@ public final class ProjectManager {
 
         while Date() < deadline {
             // Check if already focused
-            if case .success(let workspaces) = aerospace.listWorkspacesFocused(),
-               workspaces.contains(name) {
+            if case .success(let workspaces) = aerospace.listWorkspacesWithFocus(),
+               workspaces.contains(where: { $0.workspace == name && $0.isFocused }) {
                 logEvent("focus.workspace.verified", context: ["workspace": name])
                 return true
             }

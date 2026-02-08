@@ -129,11 +129,8 @@ public final class ProjectManager {
     /// All projects from config, or empty if config not loaded.
     public var projects: [ProjectConfig] { get }
 
-    /// The currently active project, derived from the focused workspace.
-    public var activeProject: ProjectConfig? { get }
-
-    /// Returns project IDs that currently have open AgentPanel workspaces.
-    public func openProjectIds() -> Result<Set<String>, ProjectError>
+    /// Returns open + focused AgentPanel workspace state from one AeroSpace query.
+    public func workspaceState() -> Result<ProjectWorkspaceState, ProjectError>
 
     /// Creates a ProjectManager with default dependencies.
     public init()
@@ -195,6 +192,11 @@ public final class ProjectManager {
 
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError>
+}
+
+public struct ProjectWorkspaceState: Equatable, Sendable {
+    public let activeProjectId: String?
+    public let openProjectIds: Set<String>
 }
 
 public enum ProjectError: Error, Equatable, Sendable {
@@ -361,6 +363,10 @@ documented here because they implement the activation command sequence.
 // Matches: aerospace list-windows --app-bundle-id <id> --format <fmt>
 //          || aerospace list-windows --monitor focused --app-bundle-id <id> --format <fmt>
 func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
+
+// Workspace summary query (single call for all + focused metadata).
+// Matches: aerospace list-workspaces --all --format "%{workspace}||%{workspace-is-focused}"
+func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError>
 
 // Workspace focus — summon-workspace with fallback to workspace.
 // Matches: aerospace summon-workspace <name>
