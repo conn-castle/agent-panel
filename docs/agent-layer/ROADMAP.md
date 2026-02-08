@@ -71,32 +71,58 @@ Incomplete:
 - Switcher wired to activation with progress and failure messaging.
 - Public API audit: CLI-only items removed; 20+ internal types made internal; CORE_API.md updated.
 
-## Phase 4 — UX polish
+## Phase 4 ✅ — UX polish
+- Wired "close project" into the UI and restored users to non-project context on close.
+- Added keybind behavior to toggle back to the most recent macOS space or non-project window.
+- Added visual menu bar health indication driven by Doctor results.
+
+## Phase 5 — Daily-driver required features
 
 ### Goal
-- Polish the user experience for project lifecycle, making close/switch workflows smooth and adding visual feedback.
-- Wire remaining core capabilities (close project, return to non-project window) into the UI.
+- Complete required day-to-day features needed before release hardening.
+- Ensure these flows are reliable enough for regular daily use.
 
 ### Tasks
-- [x] Wire "close project" to the UI; closing a project returns the user to the most recent non-project window.
-- [x] Add keybind to toggle back to most recent macOS space or non-project window.
-- [x] Visual health indicator in AP menu bar icon — icon state reflects Doctor results (e.g., red for errors, yellow for warnings).
-- [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
+- [ ] Implement project Chrome tab persistence/restore: track Chrome tabs opened during a project session and reopen associated tabs when the project is activated again.
+- [ ] Persist project tab URL sets across app restarts so reactivation can restore the previous Chrome tab set after relaunch.
+- [ ] Get Agent Layer launcher working for projects with `useAgentLayer = true`, including clear failure surfacing when launch prerequisites are missing.
 
 ### Exit criteria
-- Users can close a project from the UI and are returned to a non-project context.
-- A keybind reliably toggles focus back to the previous space or non-project window.
-- Visual feedback (loader, health icon) is present and accurate during startup and after Doctor runs.
+- Chrome tab persistence/restore works reliably for project activation and reactivation.
+- Chrome tab URL sets are persisted across app restarts and restored on later activation.
+- The chosen Chrome integration path (for example remote debugging or AppleScript) is implemented and documented.
+- Agent Layer launcher flow is functional for `useAgentLayer = true` projects with clear failure surfacing.
+- Test coverage includes successful and failure paths for both features.
 
-## Phase 5 — Release: agent-layer support, packaging, tests, documentation
+## Phase 6 — Extra non-required features
 
 ### Goal
-- Support agent-layer end-to-end, including Doctor checks and onboarding when required.
-- Ship a release-quality build with deterministic install/upgrade via Homebrew (per current decisions).
-- Ensure tests, docs, and onboarding are polished enough for first external users.
+- Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
 
 ### Tasks
-- [ ] Ensure agent-layer is supported: if `useAgentLayer = true`, Doctor verifies it is installed/usable; if missing, route users to onboarding instead of dead ends.
+- [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
+- [ ] Favorites/stars for projects (persisted) and UI affordances.
+- [ ] Fuzzy search with ranking in the switcher.
+- [ ] Auto-start at login (opt-in).
+- [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure), either in the background or by surfacing a diagnostic report.
+- [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
+- [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed).
+
+### Exit criteria
+- Optional UX features are implemented without regressing required daily-driver workflows.
+- Operational failures trigger automatic diagnostics in a predictable, documented way.
+- AeroSpace icon visibility can be configured without disabling functional behavior.
+- Chrome/VS Code visual correlation is present for projects where the feature is enabled.
+- Behavior and limitations are documented where needed.
+- New behavior is covered by tests.
+
+## Phase 7 — Release: packaging, verification, and documentation
+
+### Goal
+- Ship a release-quality build with deterministic install/upgrade and scripted release steps.
+- Finalize release readiness across packaging, CI gates, and onboarding documentation.
+
+### Tasks
 - [ ] Decide distribution shape: Homebrew cask/app + formula/CLI (or a single package) and document it in README.
 - [ ] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
 - [ ] Add release scripts (e.g., `scripts/archive.sh`, `scripts/notarize.sh`, and a one-command `scripts/release.sh`) for archive/export/notarize/staple.
@@ -105,25 +131,23 @@ Incomplete:
 - [ ] Validate onboarding on a fresh machine using README + Doctor only (no tribal knowledge).
 
 ### Exit criteria
-- If a project requires agent-layer and it is missing, onboarding can install/enable it and Doctor passes afterwards.
 - A release can be produced via scripts and installed via Homebrew; upgrades are deterministic.
 - A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
 - CI is green and a release checklist exists.
 
-## Phase 6 — Future: UX + extensibility
+## Phase 8 — Future post-release features
 
 ### Goal
-- Implement post-MVP user-facing features and extensibility improvements.
+- Track larger post-release product features that are intentionally deferred until after release.
 
 ### Tasks
-- [ ] Auto-start at login (opt-in) and optional "restore last project" behavior.
-- [ ] Fuzzy search with ranking in the switcher.
-- [ ] Favorites/stars for projects (persisted) and UI affordances.
-- [ ] Add project flow in the UI (including "+" button) that writes to config safely.
-- [ ] Add/edit projects in a GUI (all config options in form).
+- [ ] Allow Switcher usage when `config.toml` is missing by providing an "Open Project..." flow that adds the selected folder to config and activates it, while preserving config ordering rules and reporting failures clearly.
+- [ ] Open project workspaces on dedicated macOS Spaces with a defined strategy (one space per workspace vs all project workspaces on a single dedicated space), and make the selected behavior reliable.
+- [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
 - [ ] Custom IDE support: config `[[ide]]` blocks (app path, bundle id, etc) and project `ide = "vscode" | "<custom>"`.
 - [ ] Better integration with existing AeroSpace config (non-destructive merge; avoid overwriting).
-- [ ] Optional: direct-download distribution (`.zip`/`.dmg`) if/when we revisit the Homebrew-only install decision.
 
 ### Exit criteria
-- Phase 6 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
+- Missing-config onboarding path allows users to add and open a project from Switcher with explicit error surfacing and no silent defaults.
+- Dedicated-space behavior is deterministic and matches the selected configuration strategy.
+- Phase 8 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
