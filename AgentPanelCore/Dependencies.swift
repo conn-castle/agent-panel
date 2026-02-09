@@ -15,10 +15,14 @@ public struct CapturedFocus: Sendable, Equatable {
     /// App bundle identifier of the focused window.
     public let appBundleId: String
 
+    /// AeroSpace workspace name the window was on (e.g., "main", "ap-myproject").
+    public let workspace: String
+
     /// Creates a captured focus state.
-    init(windowId: Int, appBundleId: String) {
+    init(windowId: Int, appBundleId: String, workspace: String) {
         self.windowId = windowId
         self.appBundleId = appBundleId
+        self.workspace = workspace
     }
 }
 

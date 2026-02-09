@@ -252,6 +252,7 @@ public struct ResolvedTabs: Equatable, Sendable {
 public struct CapturedFocus: Sendable, Equatable {
     public let windowId: Int
     public let appBundleId: String
+    public let workspace: String
 }
 ```
 

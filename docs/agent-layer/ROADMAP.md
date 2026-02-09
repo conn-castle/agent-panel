@@ -85,6 +85,9 @@ Incomplete:
 ### Tasks
 - [x] Implement project Chrome tab persistence/restore: track Chrome tabs opened during a project session and reopen associated tabs when the project is activated again.
 - [x] Persist project tab URL sets across app restarts so reactivation can restore the previous Chrome tab set after relaunch.
+- [ ] Make the agent layer configuration have a default value of false. It can be globally set to true, and individual projects can then be set to false.
+- [x] Fix focus issues for going back to latest non-project window.
+- [ ] Enable setting up SSH projects for VSCode. Ensure this is documented in README, since this will be a core feature. The approach will be to look at the path and see if it starts with `ssh-remote+`. For example, `path = "ssh-remote+nconn@happy-mac.local /Users/nconn/Documents/git-repos/local-ml-sleep"`. Then the project can be opened with the following command `code --new-window --remote ssh-remote+nconn@happy-mac.local /Users/nconn/Documents/git-repos/local-ml-sleep`.
 - [ ] Get Agent Layer launcher working for projects with `useAgentLayer = true`, including clear failure surfacing when launch prerequisites are missing.
 
 ### Exit criteria
@@ -106,7 +109,7 @@ Incomplete:
 - [ ] Auto-start at login (opt-in).
 - [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure), either in the background or by surfacing a diagnostic report.
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
-- [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed).
+- [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed). Also, need to actually set VS Code project color, since that's not done today.
 
 ### Exit criteria
 - Optional UX features are implemented without regressing required daily-driver workflows.

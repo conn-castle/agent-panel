@@ -27,6 +27,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-09 doctor-focus: Closing Doctor window does not restore previous focus
+    Priority: Medium. Area: UI/UX
+    Description: When the Doctor window is closed, the application does not restore focus to the window that was focused before the Doctor was opened. It should return focus to the previous application/window to ensure a smooth workflow.
+    Next step: Capture the currently focused window before showing the Doctor window and restore it upon closing.
+
 - Issue 2026-02-08 cli-runner-tests: CLI runner tests missing for new ProjectManager commands
     Priority: Medium. Area: CLI Tests
     Description: `ApCLIRunnerTests` only covers `version`, `doctor`, and `help` commands. The new `show-config`, `list-projects`, `select-project`, `close-project`, and `return` commands lack CLI-runner-level tests validating success and failure paths through the ProjectManager bridge.
@@ -40,9 +45,9 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
     Priority: High. Area: Tests
-    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and the full activation path; current tests cover workspace-state queries and chrome-tab close paths.
+    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and the full activation path; current tests cover workspace-state queries, chrome-tab close paths, and focus stack behavior.
     Next step: Add targeted tests for load/sort/recency and the full selectProject activation flow, including single-phase Chrome launch with resolved URLs.
-    Notes: Chrome tab close tests added (2026-02-08) covering snapshot-is-truth behavior (all URLs saved verbatim, snapshot preserved on capture failure, stale snapshot deletion on empty capture). Resolver tests updated to remove dead snapshot-filtering branch. Activation-path tests (deferred URL resolution, Chrome launch fallback) still needed.
+    Notes: Chrome tab close tests added (2026-02-08). Focus stack tests added (2026-02-09) covering FocusStack unit tests and ProjectManager focus integration (exit-project-space semantic, project-to-project filtering, stale entry handling, close/reopen cycles). Activation-path tests (deferred URL resolution, Chrome launch fallback) still needed.
 
 - Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
     Priority: Medium. Area: Config/UX

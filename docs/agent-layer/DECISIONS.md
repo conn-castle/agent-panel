@@ -102,6 +102,11 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Restoring tabs into an existing Chrome window would disrupt user's current tab state. The intent is to reconstruct the tab set only when starting from scratch.
     Tradeoffs: If the user manually closes all tabs in an existing Chrome window, reactivating the project won't restore them (user must close and reactivate the project).
 
+- Decision 2026-02-09 focusstack: LIFO FocusStack replaces single-slot capturedProjectExitFocus
+    Decision: Replace single `CapturedFocus?` slot with a LIFO `FocusStack` of non-project window entries. Add `workspace` field to `CapturedFocus`. Filter on push: only non-project windows (workspace not prefixed with `ap-`) are recorded. Pop discards stale (destroyed) windows automatically. No rollback on activation failure.
+    Reason: Single-slot design lost the return-to window after close→reopen→close cycles. Stack enables "exit project space" semantic: Z (main) → A (ap-alpha) → B (ap-beta) → exit returns to Z, not A.
+    Tradeoffs: Focus stack is not persisted (window IDs don't survive restarts); test-only `pushFocusForTest` helper added for injection.
+
 - Decision 2026-02-08 snaptruth: Snapshot-is-truth for Chrome tab persistence (supersedes filtering approach)
     Decision: Save ALL captured Chrome tab URLs verbatim on close (no filtering of pinned/always-open tabs). On activation with an existing snapshot, restore snapshot URLs directly. Always-open + default tabs are only used for cold start (no snapshot). Stale snapshots are deleted only when capture returns empty (Chrome window confirmed gone); capture failures preserve the existing snapshot. Chrome launches with real tabs in a single AppleScript (no example.com placeholder). URL resolution is deferred until after confirming Chrome needs a fresh launch. If tab-restore launch fails, Chrome falls back to launching without tabs.
     Reason: Exact-match URL filtering is unreliable because Chrome redirects URLs (e.g., `todoist.com/` → `todoist.com/app/today`), git remote URLs differ from web URLs, and other dynamic URL changes. Single-phase launch eliminates visible flashing.

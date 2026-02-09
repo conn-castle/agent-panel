@@ -75,6 +75,54 @@ public struct ProjectCloseSuccess: Equatable, Sendable {
 // Note: CapturedFocus and internal protocols (AeroSpaceProviding,
 // IdeLauncherProviding, ChromeLauncherProviding) are defined in Dependencies.swift
 
+// MARK: - FocusStack
+
+/// LIFO stack of non-project focus entries for "exit project space" restoration.
+///
+/// Only non-project windows should be pushed (the caller is responsible for filtering).
+/// Not persisted to disk — window IDs don't survive app restarts.
+struct FocusStack {
+    private var entries: [CapturedFocus] = []
+    private let maxSize: Int
+
+    init(maxSize: Int = 20) {
+        self.maxSize = maxSize
+    }
+
+    /// Pushes a focus entry onto the stack.
+    ///
+    /// Deduplicates: if the top entry already matches this windowId, the push is skipped.
+    /// Enforces maxSize by dropping the oldest (first) entry when full.
+    mutating func push(_ focus: CapturedFocus) {
+        // Deduplicate consecutive pushes of the same window
+        if let top = entries.last, top.windowId == focus.windowId {
+            return
+        }
+        entries.append(focus)
+        // Enforce max size — drop oldest
+        if entries.count > maxSize {
+            entries.removeFirst(entries.count - maxSize)
+        }
+    }
+
+    /// Pops entries from the top until one passes the validity check.
+    ///
+    /// Invalid entries (stale windows) are discarded. Returns nil if the stack
+    /// is exhausted without finding a valid entry.
+    mutating func popFirstValid(isValid: (CapturedFocus) -> Bool) -> CapturedFocus? {
+        while let entry = entries.popLast() {
+            if isValid(entry) {
+                return entry
+            }
+            // Entry invalid (window gone), discard and try next
+        }
+        return nil
+    }
+
+    var isEmpty: Bool { entries.isEmpty }
+    var count: Int { entries.count }
+}
+
 // MARK: - ProjectManager
 
 /// Single point of entry for all project operations.
@@ -101,8 +149,8 @@ public final class ProjectManager {
     private var recentProjectIds: [String] = []
     private let recencyFilePath: URL
 
-    // Focus capture for project exit
-    private var capturedProjectExitFocus: CapturedFocus?
+    // Focus stack for "exit project space" restoration (non-project windows only)
+    private var focusStack = FocusStack()
 
     // Internal dependencies
     private let aerospace: AeroSpaceProviding
@@ -200,6 +248,16 @@ public final class ProjectManager {
         self.config = config
     }
 
+    /// Pushes a focus entry directly onto the focus stack (no filtering).
+    ///
+    /// Test-only helper for injecting known stack state. Does NOT replicate
+    /// the project-workspace filtering from `selectProject` — that logic is
+    /// tested via integration tests that drive through `selectProject` directly.
+    /// Internal; accessible via @testable import.
+    func pushFocusForTest(_ focus: CapturedFocus) {
+        focusStack.push(focus)
+    }
+
     /// Loads configuration from the default path.
     ///
     /// Call this before using other methods. Returns the config on success.
@@ -226,10 +284,11 @@ public final class ProjectManager {
             logEvent("focus.capture.failed", level: .warn, message: error.message)
             return nil
         case .success(let window):
-            let captured = CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId)
+            let captured = CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId, workspace: window.workspace)
             logEvent("focus.captured", context: [
                 "window_id": "\(captured.windowId)",
-                "app_bundle_id": captured.appBundleId
+                "app_bundle_id": captured.appBundleId,
+                "workspace": captured.workspace
             ])
             return captured
         }
@@ -417,9 +476,16 @@ public final class ProjectManager {
 
         let targetWorkspace = Self.workspacePrefix + projectId
 
-        // Store pre-captured focus for later exit (only if we haven't already)
-        if capturedProjectExitFocus == nil {
-            capturedProjectExitFocus = preCapturedFocus
+        // Push pre-captured focus for "exit project space" restoration.
+        // Only push if the user is coming from outside project space.
+        // Project-to-project switches (ap-* workspace) are not recorded.
+        if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
+            focusStack.push(preCapturedFocus)
+        } else {
+            logEvent("focus.push_skipped_project_workspace", context: [
+                "workspace": preCapturedFocus.workspace,
+                "window_id": "\(preCapturedFocus.windowId)"
+            ])
         }
 
         // --- Phase 1: Find or launch all windows (no moves yet) ---
@@ -572,15 +638,16 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to the previous non-project window
-        if let focus = capturedProjectExitFocus {
-            let restored = restoreFocus(focus)
-            if restored {
-                logEvent("close.focus_restored", context: ["window_id": "\(focus.windowId)"])
-            } else {
-                logEvent("close.focus_restore_failed", level: .warn, context: ["window_id": "\(focus.windowId)"])
-            }
-            capturedProjectExitFocus = nil
+        // Restore focus to the previous non-project window (pop from focus stack)
+        if let focus = focusStack.popFirstValid(isValid: { entry in
+            self.focusWindow(windowId: entry.windowId)
+        }) {
+            logEvent("close.focus_restored", context: [
+                "window_id": "\(focus.windowId)",
+                "workspace": focus.workspace
+            ])
+        } else {
+            logEvent("close.focus_restore_exhausted", level: .warn)
         }
 
         logEvent("close.completed", context: ["project_id": projectId])
@@ -602,22 +669,19 @@ public final class ProjectManager {
             return .failure(.noActiveProject)
         }
 
-        guard let focus = capturedProjectExitFocus else {
+        if let focus = focusStack.popFirstValid(isValid: { entry in
+            self.focusWindow(windowId: entry.windowId)
+        }) {
+            logEvent("exit.focus_restored", context: [
+                "window_id": "\(focus.windowId)",
+                "workspace": focus.workspace
+            ])
+            logEvent("exit.completed")
+            return .success(())
+        } else {
             logEvent("exit.no_previous_window", level: .warn)
             return .failure(.noPreviousWindow)
         }
-
-        let restored = restoreFocus(focus)
-        if restored {
-            logEvent("exit.focus_restored")
-        } else {
-            logEvent("exit.focus_restore_failed", level: .warn)
-        }
-
-        capturedProjectExitFocus = nil
-        logEvent("exit.completed")
-
-        return .success(())
     }
 
     // MARK: - Sequential Window Setup
