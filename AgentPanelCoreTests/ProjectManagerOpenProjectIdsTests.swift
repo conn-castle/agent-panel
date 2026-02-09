@@ -57,12 +57,17 @@ final class ProjectManagerWorkspaceStateTests: XCTestCase {
     }
 
     private func makeManager(aerospace: WorkspaceStateAeroSpaceStub) -> ProjectManager {
-        let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let recencyFilePath = tempDir
             .appendingPathComponent("pm-workspace-state-\(UUID().uuidString).json")
+        let chromeTabsDir = tempDir.appendingPathComponent("chrome-tabs-\(UUID().uuidString)", isDirectory: true)
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: WorkspaceStateIdeLauncherStub(),
             chromeLauncher: WorkspaceStateChromeLauncherStub(),
+            chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
+            chromeTabCapture: WorkspaceStateTabCaptureStub(),
+            gitRemoteResolver: WorkspaceStateGitRemoteStub(),
             logger: WorkspaceStateLoggerStub(),
             recencyFilePath: recencyFilePath
         )
@@ -132,8 +137,20 @@ private struct WorkspaceStateIdeLauncherStub: IdeLauncherProviding {
 }
 
 private struct WorkspaceStateChromeLauncherStub: ChromeLauncherProviding {
-    func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, initialURLs: [String]) -> Result<Void, ApCoreError> {
         .success(())
+    }
+}
+
+private struct WorkspaceStateTabCaptureStub: ChromeTabCapturing {
+    func captureTabURLs(windowTitle: String) -> Result<[String], ApCoreError> {
+        .success([])
+    }
+}
+
+private struct WorkspaceStateGitRemoteStub: GitRemoteResolving {
+    func resolve(projectPath: String) -> String? {
+        nil
     }
 }
 

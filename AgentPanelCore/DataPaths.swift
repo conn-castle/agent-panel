@@ -52,6 +52,18 @@ public struct DataPaths: Sendable {
         stateDirectory.appendingPathComponent("recent-projects.json", isDirectory: false)
     }
 
+    /// Returns `~/.local/state/agent-panel/chrome-tabs/`.
+    var chromeTabsDirectory: URL {
+        stateDirectory.appendingPathComponent("chrome-tabs", isDirectory: true)
+    }
+
+    /// Returns `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`.
+    /// - Parameter projectId: Project identifier used to name the snapshot file.
+    /// - Returns: URL for the project's Chrome tab snapshot file.
+    func chromeTabsFile(projectId: String) -> URL {
+        chromeTabsDirectory.appendingPathComponent("\(projectId).json", isDirectory: false)
+    }
+
     // MARK: - Log paths
 
     /// Returns `~/.local/state/agent-panel/logs`.

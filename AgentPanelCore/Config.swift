@@ -53,12 +53,30 @@ enum IdNormalizer {
 
 // MARK: - Config Models
 
+/// Global Chrome tab configuration.
+public struct ChromeConfig: Equatable, Sendable {
+    /// URLs always opened as leftmost tabs on every fresh Chrome window creation.
+    public let pinnedTabs: [String]
+    /// URLs opened when no tab history exists for a project.
+    public let defaultTabs: [String]
+    /// When true, auto-detect git remote URL and add it as an always-open tab.
+    public let openGitRemote: Bool
+
+    init(pinnedTabs: [String] = [], defaultTabs: [String] = [], openGitRemote: Bool = false) {
+        self.pinnedTabs = pinnedTabs
+        self.defaultTabs = defaultTabs
+        self.openGitRemote = openGitRemote
+    }
+}
+
 /// Full parsed configuration for AgentPanel.
 public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
+    public let chrome: ChromeConfig
 
-    init(projects: [ProjectConfig]) {
+    init(projects: [ProjectConfig], chrome: ChromeConfig = ChromeConfig()) {
         self.projects = projects
+        self.chrome = chrome
     }
 }
 
@@ -69,13 +87,27 @@ public struct ProjectConfig: Equatable, Sendable {
     public let path: String
     public let color: String
     public let useAgentLayer: Bool
+    /// Per-project URLs always opened as leftmost tabs.
+    public let chromePinnedTabs: [String]
+    /// Per-project URLs opened when no tab history exists.
+    public let chromeDefaultTabs: [String]
 
-    init(id: String, name: String, path: String, color: String, useAgentLayer: Bool) {
+    init(
+        id: String,
+        name: String,
+        path: String,
+        color: String,
+        useAgentLayer: Bool,
+        chromePinnedTabs: [String] = [],
+        chromeDefaultTabs: [String] = []
+    ) {
         self.id = id
         self.name = name
         self.path = path
         self.color = color
         self.useAgentLayer = useAgentLayer
+        self.chromePinnedTabs = chromePinnedTabs
+        self.chromeDefaultTabs = chromeDefaultTabs
     }
 }
 
@@ -219,18 +251,33 @@ struct ConfigLoader {
     private static let starterConfigTemplate = """
 # AgentPanel configuration
 #
+# [chrome] (optional) — Global Chrome tab settings
+# - pinnedTabs: URLs always opened as leftmost tabs in every fresh Chrome window
+# - defaultTabs: URLs opened when no tab history exists for a project
+# - openGitRemote: auto-detect git remote URL and add it as an always-open tab (default: false)
+#
 # Each [[project]] entry describes one local git repo.
 # - name: Display name (id is derived by lowercasing and replacing non [a-z0-9] with '-')
 # - path: Absolute path to the repo on this machine
 # - color: "#RRGGBB" or a named color (\(ProjectColorPalette.sortedNames.joined(separator: ", ")))
 # - useAgentLayer: true if the repo uses an .agent-layer folder
+# - chromePinnedTabs: (optional) per-project URLs always opened as leftmost tabs
+# - chromeDefaultTabs: (optional) per-project URLs opened when no tab history exists
 #
 # Example:
+#
+# [chrome]
+# pinnedTabs = ["https://dashboard.example.com"]
+# defaultTabs = ["https://docs.example.com"]
+# openGitRemote = true
+#
 # [[project]]
 # name = "AgentPanel"
 # path = "/Users/you/src/agent-panel"
 # color = "indigo"
 # useAgentLayer = true
+# chromePinnedTabs = ["https://api.example.com"]
+# chromeDefaultTabs = ["https://jira.example.com"]
 """
 
     /// Loads and parses the default config file.
@@ -305,16 +352,63 @@ struct ConfigParser {
     private static func parse(table: TOMLTable) -> ConfigLoadResult {
         var findings: [ConfigFinding] = []
 
+        let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let projectOutcomes = parseProjects(table: table, findings: &findings)
         let parsedProjects = projectOutcomes.compactMap { $0.config }
 
         let validationFailed = findings.contains { $0.severity == .fail }
-        let config: Config? = validationFailed ? nil : Config(projects: parsedProjects)
+        let config: Config? = validationFailed
+            ? nil
+            : Config(projects: parsedProjects, chrome: chromeConfig)
 
         return ConfigLoadResult(
             config: config,
             findings: findings,
             projects: parsedProjects
+        )
+    }
+
+    // MARK: - Chrome Section Parsing
+
+    private static func parseChromeSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> ChromeConfig {
+        guard table.contains(key: "chrome") else {
+            return ChromeConfig()
+        }
+
+        guard let chromeTable = try? table.table(forKey: "chrome") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[chrome] must be a table",
+                fix: "Use [chrome] as a TOML table section."
+            ))
+            return ChromeConfig()
+        }
+
+        let pinnedTabs = readOptionalStringArray(
+            from: chromeTable, key: "pinnedTabs",
+            label: "chrome.pinnedTabs", findings: &findings
+        )
+        validateURLs(pinnedTabs, label: "chrome.pinnedTabs", findings: &findings)
+
+        let defaultTabs = readOptionalStringArray(
+            from: chromeTable, key: "defaultTabs",
+            label: "chrome.defaultTabs", findings: &findings
+        )
+        validateURLs(defaultTabs, label: "chrome.defaultTabs", findings: &findings)
+
+        let openGitRemote = readOptionalBool(
+            from: chromeTable, key: "openGitRemote",
+            defaultValue: false,
+            label: "chrome.openGitRemote", findings: &findings
+        )
+
+        return ChromeConfig(
+            pinnedTabs: pinnedTabs,
+            defaultTabs: defaultTabs,
+            openGitRemote: openGitRemote
         )
     }
 
@@ -474,6 +568,27 @@ struct ConfigParser {
             projectIsValid = false
         }
 
+        // Chrome tab fields (optional, default empty)
+        let chromePinnedTabs = readOptionalStringArray(
+            from: table, key: "chromePinnedTabs",
+            label: "project[\(index)].chromePinnedTabs", findings: &findings
+        )
+        if !chromePinnedTabs.isEmpty {
+            if !validateURLs(chromePinnedTabs, label: "project[\(index)].chromePinnedTabs", findings: &findings) {
+                projectIsValid = false
+            }
+        }
+
+        let chromeDefaultTabs = readOptionalStringArray(
+            from: table, key: "chromeDefaultTabs",
+            label: "project[\(index)].chromeDefaultTabs", findings: &findings
+        )
+        if !chromeDefaultTabs.isEmpty {
+            if !validateURLs(chromeDefaultTabs, label: "project[\(index)].chromeDefaultTabs", findings: &findings) {
+                projectIsValid = false
+            }
+        }
+
         guard let name, let path, let normalizedColor, let useAgentLayer, let derivedId, projectIsValid else {
             return ProjectOutcome(config: nil)
         }
@@ -483,7 +598,9 @@ struct ConfigParser {
             name: name,
             path: path,
             color: normalizedColor,
-            useAgentLayer: useAgentLayer
+            useAgentLayer: useAgentLayer,
+            chromePinnedTabs: chromePinnedTabs,
+            chromeDefaultTabs: chromeDefaultTabs
         )
         return ProjectOutcome(config: projectConfig)
     }
@@ -541,6 +658,90 @@ struct ConfigParser {
         }
 
         return trimmed
+    }
+
+    /// Reads an optional string array value. Returns empty array when key is absent.
+    /// Records a failure if any element is not a string.
+    private static func readOptionalStringArray(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> [String] {
+        guard table.contains(key: key) else {
+            return []
+        }
+
+        guard let array = try? table.array(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be an array of strings",
+                fix: "Set \(label) to an array of strings, e.g. [\"https://example.com\"]."
+            ))
+            return []
+        }
+
+        var result: [String] = []
+        for i in 0..<array.count {
+            guard let value = try? array.string(atIndex: i) else {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "\(label)[\(i)] must be a string",
+                    fix: "Ensure all elements in \(label) are strings."
+                ))
+                continue
+            }
+            result.append(value)
+        }
+        return result
+    }
+
+    /// Reads an optional boolean value. Returns default when key is absent.
+    private static func readOptionalBool(
+        from table: TOMLTable,
+        key: String,
+        defaultValue: Bool,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Bool {
+        guard table.contains(key: key) else {
+            return defaultValue
+        }
+
+        guard let value = try? table.bool(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be a boolean",
+                fix: "Set \(label) to true or false."
+            ))
+            return defaultValue
+        }
+
+        return value
+    }
+
+    /// Validates that all URLs in the array start with http:// or https://.
+    /// Returns true if all valid, false if any invalid (adds findings for invalids).
+    @discardableResult
+    private static func validateURLs(
+        _ urls: [String],
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Bool {
+        var allValid = true
+        for (index, url) in urls.enumerated() {
+            let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.hasPrefix("http://") && !trimmed.hasPrefix("https://") {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "\(label)[\(index)] is not a valid URL",
+                    detail: "Got \"\(trimmed)\". URLs must start with http:// or https://.",
+                    fix: "Use a full URL starting with http:// or https://."
+                ))
+                allValid = false
+            }
+        }
+        return allValid
     }
 
     /// Reads a required boolean value or records a failure.

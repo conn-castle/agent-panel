@@ -40,15 +40,22 @@
 		7919C7784417EA01E40569C4 /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
 		958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */; };
-		E2F3A4B5C6D7E89012345678 /* AeroSpaceFallbackBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */; };
 		98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D35ABD3022669F375FDB52F /* ApCLI.swift */; };
 		B28936C2D4FA7AE9CA34DF4A /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = DA4BB8B60939EF907169EAD7 /* TOMLDecoder */; };
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
+		BB0000000000000000000001 /* ChromeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* ChromeTabs.swift */; };
+		BB0000000000000000000002 /* ChromeConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* ChromeConfigTests.swift */; };
+		BB0000000000000000000003 /* ChromeTabStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* ChromeTabStoreTests.swift */; };
+		BB0000000000000000000004 /* ChromeTabResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000004 /* ChromeTabResolverTests.swift */; };
+		BB0000000000000000000005 /* ChromeTabCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000005 /* ChromeTabCaptureTests.swift */; };
+		BB0000000000000000000006 /* GitRemoteResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006 /* GitRemoteResolverTests.swift */; };
+		BB0000000000000000000007 /* ProjectManagerChromeTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000007 /* ProjectManagerChromeTabTests.swift */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
 		D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9708BB20B7C2071A1EE21D7 /* main.swift */; };
 		E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */; };
 		E1A3D5707DC2114E42745583 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D8C73BDF50CEB78DBA5853 /* System.swift */; };
+		E2F3A4B5C6D7E89012345678 /* AeroSpaceFallbackBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */; };
 		E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */; };
 		E6AB4DCAB965EE715A11593A /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */; };
@@ -146,6 +153,13 @@
 		97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigLoaderTests.swift; sourceTree = "<group>"; };
 		99CC898051808DC63C4089ED /* DataPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataPathsTests.swift; sourceTree = "<group>"; };
 		9E0C3DAA0280728917003498 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		AA0000000000000000000001 /* ChromeTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabs.swift; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* ChromeConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeConfigTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* ChromeTabStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabStoreTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000004 /* ChromeTabResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabResolverTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000005 /* ChromeTabCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabCaptureTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000006 /* GitRemoteResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRemoteResolverTests.swift; sourceTree = "<group>"; };
+		AA0000000000000000000007 /* ProjectManagerChromeTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerChromeTabTests.swift; sourceTree = "<group>"; };
 		A8AFEA52B096500A617A9783 /* LoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerTests.swift; sourceTree = "<group>"; };
 		B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandTimeoutTests.swift; sourceTree = "<group>"; };
@@ -222,6 +236,10 @@
 			children = (
 				F1A2B3C4D5E6F78901234567 /* AeroSpaceFallbackBehaviorTests.swift */,
 				2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */,
+				AA0000000000000000000002 /* ChromeConfigTests.swift */,
+				AA0000000000000000000005 /* ChromeTabCaptureTests.swift */,
+				AA0000000000000000000004 /* ChromeTabResolverTests.swift */,
+				AA0000000000000000000003 /* ChromeTabStoreTests.swift */,
 				FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */,
 				B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */,
 				97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */,
@@ -229,8 +247,10 @@
 				99CC898051808DC63C4089ED /* DataPathsTests.swift */,
 				B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */,
 				4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */,
+				AA0000000000000000000006 /* GitRemoteResolverTests.swift */,
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
+				AA0000000000000000000007 /* ProjectManagerChromeTabTests.swift */,
 				FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */,
 				D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
@@ -249,6 +269,7 @@
 		1B913158E38EFD90924724ED /* AgentPanelCore */ = {
 			isa = PBXGroup;
 			children = (
+				AA0000000000000000000001 /* ChromeTabs.swift */,
 				1A646649932F90C2FCB262BD /* Config.swift */,
 				D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */,
 				691139171C62F83E4E0CC709 /* Dependencies.swift */,
@@ -572,6 +593,7 @@
 			files = (
 				255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */,
 				D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */,
+				BB0000000000000000000001 /* ChromeTabs.swift in Sources */,
 				5141A819B89EBFC8A69B9211 /* Config.swift in Sources */,
 				1F6C1865590F67A36D702863 /* DataPaths.swift in Sources */,
 				65822A51B623A24EA742CF9C /* Dependencies.swift in Sources */,
@@ -615,6 +637,10 @@
 			files = (
 				E2F3A4B5C6D7E89012345678 /* AeroSpaceFallbackBehaviorTests.swift in Sources */,
 				958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */,
+				BB0000000000000000000002 /* ChromeConfigTests.swift in Sources */,
+				BB0000000000000000000005 /* ChromeTabCaptureTests.swift in Sources */,
+				BB0000000000000000000004 /* ChromeTabResolverTests.swift in Sources */,
+				BB0000000000000000000003 /* ChromeTabStoreTests.swift in Sources */,
 				3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */,
 				45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */,
 				4D56806E02C971D273BD392D /* ConfigLoaderTests.swift in Sources */,
@@ -622,8 +648,10 @@
 				18F5AE94B0A5B02A2A773CFB /* DataPathsTests.swift in Sources */,
 				12346D4F33A1FB23A5C18AC4 /* DoctorReportRenderingTests.swift in Sources */,
 				2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */,
+				BB0000000000000000000006 /* GitRemoteResolverTests.swift in Sources */,
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
 				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
+				BB0000000000000000000007 /* ProjectManagerChromeTabTests.swift in Sources */,
 				483837094975998B931C20D2 /* ProjectManagerLogEventNameTests.swift in Sources */,
 				F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,

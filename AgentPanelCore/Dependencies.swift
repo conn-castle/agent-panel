@@ -219,7 +219,28 @@ protocol IdeLauncherProviding {
 
 /// Internal protocol for Chrome launching.
 protocol ChromeLauncherProviding {
-    func openNewWindow(identifier: String) -> Result<Void, ApCoreError>
+    /// Opens a new Chrome window tagged with the provided identifier.
+    /// - Parameters:
+    ///   - identifier: Project identifier embedded in the window title token.
+    ///   - initialURLs: URLs to open in the new window. First URL becomes the active tab,
+    ///     remaining URLs open as additional tabs. If empty, opens Chrome's default new tab page.
+    func openNewWindow(identifier: String, initialURLs: [String]) -> Result<Void, ApCoreError>
+}
+
+/// Internal protocol for Chrome tab capture.
+protocol ChromeTabCapturing {
+    /// Captures the URLs of all tabs in the Chrome window matching the given title.
+    /// - Parameter windowTitle: The window title to match.
+    /// - Returns: Array of tab URLs on success, or an error.
+    func captureTabURLs(windowTitle: String) -> Result<[String], ApCoreError>
+}
+
+/// Internal protocol for git remote URL resolution.
+protocol GitRemoteResolving {
+    /// Resolves the git remote origin URL at the given path.
+    /// - Parameter projectPath: Absolute path to the project directory.
+    /// - Returns: The remote URL if one exists, nil otherwise.
+    func resolve(projectPath: String) -> String?
 }
 
 extension ApAeroSpace: AeroSpaceProviding {}

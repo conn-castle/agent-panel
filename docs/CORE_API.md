@@ -40,9 +40,16 @@ public struct ApCoreError: Error, Equatable, Sendable {
 ```swift
 public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
+    public let chrome: ChromeConfig
 
     /// Loads and validates configuration from the default path.
     public static func loadDefault() -> Result<Config, ConfigLoadError>
+}
+
+public struct ChromeConfig: Equatable, Sendable {
+    public let pinnedTabs: [String]
+    public let defaultTabs: [String]
+    public let openGitRemote: Bool
 }
 
 public struct ProjectConfig: Equatable, Sendable {
@@ -51,6 +58,8 @@ public struct ProjectConfig: Equatable, Sendable {
     public let path: String
     public let color: String  // Named color or hex (#RRGGBB)
     public let useAgentLayer: Bool
+    public let chromePinnedTabs: [String]
+    public let chromeDefaultTabs: [String]
 }
 
 public enum ConfigLoadError: Error, Equatable, Sendable {
@@ -112,14 +121,15 @@ Single point of entry for all project operations.
 The activation sequence is **strictly sequential** and mirrors the proven shell-script
 flow (see `docs/using_aerospace.md` § "Project Activation Command Sequence"):
 
-1. Find or launch tagged Chrome window
-2. Find or launch tagged VS Code window
-3. Move Chrome to workspace (no focus follow)
-4. Move VS Code to workspace (with focus follow)
-5. Verify both windows arrived in workspace
-6. Focus workspace (`summon-workspace` with fallback)
-7. Focus IDE window
-8. Verify focus stability (poll)
+1. Check for existing tagged Chrome window
+2. If no existing window: resolve initial Chrome tab URLs (from snapshot or cold-start defaults), launch Chrome with URLs (with fallback to empty tabs on failure)
+3. Find or launch tagged VS Code window
+4. Move Chrome to workspace (no focus follow)
+5. Move VS Code to workspace (with focus follow)
+6. Verify both windows arrived in workspace
+7. Focus workspace (`summon-workspace` with fallback)
+8. Focus IDE window
+9. Verify focus stability (poll)
 
 ```swift
 public final class ProjectManager {
@@ -184,11 +194,11 @@ public final class ProjectManager {
     ///   - projectId: The project ID to activate.
     ///   - preCapturedFocus: Focus state captured before showing UI, used for restoring
     ///     focus when exiting the project later.
-    /// - Returns: The IDE window ID on success, for post-dismissal focusing.
-    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<Int, ProjectError>
+    /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
+    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
 
     /// Closes a project by ID and restores focus to the previous non-project window.
-    public func closeProject(projectId: String) -> Result<Void, ProjectError>
+    public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
 
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError>
@@ -209,6 +219,30 @@ public enum ProjectError: Error, Equatable, Sendable {
     case noPreviousWindow
     case windowNotFound(detail: String)
     case focusUnstable(detail: String)
+}
+
+public struct ProjectActivationSuccess: Equatable, Sendable {
+    public let ideWindowId: Int
+    public let tabRestoreWarning: String?
+}
+
+public struct ProjectCloseSuccess: Equatable, Sendable {
+    public let tabCaptureWarning: String?
+}
+```
+
+### Chrome Tab Types
+
+```swift
+public struct ChromeTabSnapshot: Codable, Equatable, Sendable {
+    public let urls: [String]
+    public let capturedAt: Date
+}
+
+public struct ResolvedTabs: Equatable, Sendable {
+    public let alwaysOpenURLs: [String]
+    public let regularURLs: [String]
+    public var orderedURLs: [String] { get }  // alwaysOpenURLs + regularURLs
 }
 ```
 

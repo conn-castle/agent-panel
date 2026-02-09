@@ -58,6 +58,20 @@ public struct ProjectWorkspaceState: Equatable, Sendable {
     }
 }
 
+/// Success result from project activation.
+public struct ProjectActivationSuccess: Equatable, Sendable {
+    /// AeroSpace window ID for the IDE window (used for post-dismissal focusing).
+    public let ideWindowId: Int
+    /// Warning message if tab restore failed (non-fatal).
+    public let tabRestoreWarning: String?
+}
+
+/// Success result from project close.
+public struct ProjectCloseSuccess: Equatable, Sendable {
+    /// Warning message if tab capture failed (non-fatal).
+    public let tabCaptureWarning: String?
+}
+
 // Note: CapturedFocus and internal protocols (AeroSpaceProviding,
 // IdeLauncherProviding, ChromeLauncherProviding) are defined in Dependencies.swift
 
@@ -94,6 +108,9 @@ public final class ProjectManager {
     private let aerospace: AeroSpaceProviding
     private let ideLauncher: IdeLauncherProviding
     private let chromeLauncher: ChromeLauncherProviding
+    private let chromeTabStore: ChromeTabStore
+    private let chromeTabCapture: ChromeTabCapturing
+    private let gitRemoteResolver: GitRemoteResolving
     private let logger: AgentPanelLogging
 
     // MARK: - Public Properties
@@ -140,11 +157,15 @@ public final class ProjectManager {
 
     /// Creates a ProjectManager with default dependencies.
     public init() {
+        let dataPaths = DataPaths.default()
         self.aerospace = ApAeroSpace()
         self.ideLauncher = ApVSCodeLauncher()
         self.chromeLauncher = ApChromeLauncher()
+        self.chromeTabStore = ChromeTabStore(directory: dataPaths.chromeTabsDirectory)
+        self.chromeTabCapture = ApChromeTabController()
+        self.gitRemoteResolver = GitRemoteResolver()
         self.logger = AgentPanelLogger()
-        self.recencyFilePath = DataPaths.default().recentProjectsFile
+        self.recencyFilePath = dataPaths.recentProjectsFile
 
         loadRecency()
     }
@@ -154,12 +175,18 @@ public final class ProjectManager {
         aerospace: AeroSpaceProviding,
         ideLauncher: IdeLauncherProviding,
         chromeLauncher: ChromeLauncherProviding,
+        chromeTabStore: ChromeTabStore,
+        chromeTabCapture: ChromeTabCapturing,
+        gitRemoteResolver: GitRemoteResolving,
         logger: AgentPanelLogging,
         recencyFilePath: URL
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
         self.chromeLauncher = chromeLauncher
+        self.chromeTabStore = chromeTabStore
+        self.chromeTabCapture = chromeTabCapture
+        self.gitRemoteResolver = gitRemoteResolver
         self.logger = logger
         self.recencyFilePath = recencyFilePath
 
@@ -167,6 +194,11 @@ public final class ProjectManager {
     }
 
     // MARK: - Configuration
+
+    /// Sets config directly for testing (internal; accessible via @testable import).
+    func loadTestConfig(_ config: Config) {
+        self.config = config
+    }
 
     /// Loads configuration from the default path.
     ///
@@ -372,8 +404,8 @@ public final class ProjectManager {
     ///   - projectId: The project ID to activate.
     ///   - preCapturedFocus: Focus state captured before showing UI, used for restoring
     ///     focus when exiting the project later.
-    /// - Returns: The IDE window ID on success, for post-dismissal focusing.
-    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<Int, ProjectError> {
+    /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
+    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError> {
         guard config != nil else {
             return .failure(.configNotLoaded)
         }
@@ -393,17 +425,49 @@ public final class ProjectManager {
         // --- Phase 1: Find or launch all windows (no moves yet) ---
 
         let chromeWindow: ApWindow
-        switch await findOrLaunchWindow(
-            appBundleId: ApChromeLauncher.bundleId,
-            projectId: projectId,
-            launchAction: { self.chromeLauncher.openNewWindow(identifier: projectId) },
-            windowLabel: "Chrome",
-            eventSource: "chrome"
-        ) {
-        case .failure(let error):
-            return .failure(error)
-        case .success(let window):
-            chromeWindow = window
+        var chromeFreshlyLaunched = false
+        var tabRestoreWarning: String?
+
+        // Check for existing Chrome window first (avoids resolving URLs when not needed)
+        if let existingWindow = findWindowByToken(appBundleId: ApChromeLauncher.bundleId, projectId: projectId) {
+            logEvent(Self.activationWindowEventName(source: "chrome", action: "found"), context: ["window_id": "\(existingWindow.windowId)"])
+            chromeWindow = existingWindow
+        } else {
+            // Chrome needs a fresh launch — resolve URLs now
+            let chromeInitialURLs = resolveInitialURLs(project: project, projectId: projectId)
+
+            switch await findOrLaunchWindow(
+                appBundleId: ApChromeLauncher.bundleId,
+                projectId: projectId,
+                launchAction: { self.chromeLauncher.openNewWindow(identifier: projectId, initialURLs: chromeInitialURLs) },
+                windowLabel: "Chrome",
+                eventSource: "chrome"
+            ) {
+            case .failure(let error):
+                // If launch-with-tabs failed and we had tabs, retry without tabs
+                if !chromeInitialURLs.isEmpty {
+                    logEvent("select.chrome_tab_launch_failed", level: .warn, message: "\(error)")
+                    switch await findOrLaunchWindow(
+                        appBundleId: ApChromeLauncher.bundleId,
+                        projectId: projectId,
+                        launchAction: { self.chromeLauncher.openNewWindow(identifier: projectId, initialURLs: []) },
+                        windowLabel: "Chrome",
+                        eventSource: "chrome"
+                    ) {
+                    case .failure(let fallbackError):
+                        return .failure(fallbackError)
+                    case .success(let outcome):
+                        chromeWindow = outcome.window
+                        chromeFreshlyLaunched = outcome.wasLaunched
+                        tabRestoreWarning = "Chrome launched without tabs (tab restore failed)"
+                    }
+                } else {
+                    return .failure(error)
+                }
+            case .success(let outcome):
+                chromeWindow = outcome.window
+                chromeFreshlyLaunched = outcome.wasLaunched
+            }
         }
 
         let ideWindow: ApWindow
@@ -416,8 +480,8 @@ public final class ProjectManager {
         ) {
         case .failure(let error):
             return .failure(error)
-        case .success(let window):
-            ideWindow = window
+        case .success(let outcome):
+            ideWindow = outcome.window
         }
 
         // --- Phase 2: Move windows to workspace (Chrome first, then VS Code) ---
@@ -471,15 +535,22 @@ public final class ProjectManager {
             return .failure(.focusUnstable(detail: detail))
         }
 
+        if chromeFreshlyLaunched {
+            logEvent("select.chrome_fresh_launch", context: ["project_id": projectId])
+        }
+
         // Record activation
         recordActivation(projectId: projectId)
         logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindowId)"])
 
-        return .success(ideWindowId)
+        return .success(ProjectActivationSuccess(
+            ideWindowId: ideWindowId,
+            tabRestoreWarning: tabRestoreWarning
+        ))
     }
 
     /// Closes a project by ID and restores focus to the previous non-project window.
-    public func closeProject(projectId: String) -> Result<Void, ProjectError> {
+    public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
         guard config != nil else {
             return .failure(.configNotLoaded)
         }
@@ -487,6 +558,9 @@ public final class ProjectManager {
         guard projects.contains(where: { $0.id == projectId }) else {
             return .failure(.projectNotFound(projectId: projectId))
         }
+
+        // Capture Chrome tabs before closing (non-fatal)
+        let tabCaptureWarning = performTabCapture(projectId: projectId)
 
         let workspace = Self.workspacePrefix + projectId
 
@@ -510,7 +584,7 @@ public final class ProjectManager {
         }
 
         logEvent("close.completed", context: ["project_id": projectId])
-        return .success(())
+        return .success(ProjectCloseSuccess(tabCaptureWarning: tabCaptureWarning))
     }
 
     /// Exits to the last non-project window without closing the project.
@@ -548,6 +622,12 @@ public final class ProjectManager {
 
     // MARK: - Sequential Window Setup
 
+    /// Outcome from find-or-launch: the window and whether it was freshly launched.
+    private struct FindOrLaunchOutcome {
+        let window: ApWindow
+        let wasLaunched: Bool
+    }
+
     /// Finds an existing tagged window or launches a new one and polls until it appears.
     ///
     /// This helper handles find/launch/poll only — it does NOT move the window.
@@ -559,18 +639,18 @@ public final class ProjectManager {
     ///   - launchAction: Closure that launches a new window if none exists.
     ///   - windowLabel: Human-readable label for logging (e.g., "Chrome", "VS Code").
     ///   - eventSource: Stable log event key source (e.g., "chrome", "vscode").
-    /// - Returns: The found or launched window on success.
+    /// - Returns: The found or launched window on success, with a flag indicating whether it was freshly launched.
     private func findOrLaunchWindow(
         appBundleId: String,
         projectId: String,
         launchAction: () -> Result<Void, ApCoreError>,
         windowLabel: String,
         eventSource: String
-    ) async -> Result<ApWindow, ProjectError> {
+    ) async -> Result<FindOrLaunchOutcome, ProjectError> {
         // Find existing tagged window (global search with fallback)
         if let window = findWindowByToken(appBundleId: appBundleId, projectId: projectId) {
             logEvent(Self.activationWindowEventName(source: eventSource, action: "found"), context: ["window_id": "\(window.windowId)"])
-            return .success(window)
+            return .success(FindOrLaunchOutcome(window: window, wasLaunched: false))
         }
 
         // Launch a new window
@@ -587,6 +667,7 @@ public final class ProjectManager {
 
         // Poll until window appears
         return await pollForWindowByToken(appBundleId: appBundleId, projectId: projectId, windowLabel: windowLabel)
+            .map { FindOrLaunchOutcome(window: $0, wasLaunched: true) }
     }
 
     // MARK: - Private Helpers
@@ -674,6 +755,96 @@ public final class ProjectManager {
         }
 
         return .failure(.aeroSpaceError(detail: "Windows did not arrive in workspace within timeout"))
+    }
+
+    // MARK: - Chrome Tab Operations
+
+    /// Resolves the initial URLs for a fresh Chrome window.
+    ///
+    /// If a saved snapshot exists, uses it verbatim (complete tab state from last session).
+    /// If no snapshot exists (cold start), uses always-open + defaults from config.
+    ///
+    /// - Parameters:
+    ///   - project: Project configuration.
+    ///   - projectId: Project identifier.
+    /// - Returns: Ordered list of URLs to open, or empty if none.
+    private func resolveInitialURLs(project: ProjectConfig, projectId: String) -> [String] {
+        guard let config else { return [] }
+
+        // Load saved tab snapshot
+        let snapshot: ChromeTabSnapshot?
+        switch chromeTabStore.load(projectId: projectId) {
+        case .success(let loaded):
+            snapshot = loaded
+        case .failure(let error):
+            logEvent("select.tab_snapshot_load_failed", level: .warn, message: error.message)
+            snapshot = nil
+        }
+
+        // If snapshot exists, restore it verbatim (it IS the complete tab state)
+        if let snapshot, !snapshot.urls.isEmpty {
+            return snapshot.urls
+        }
+
+        // Cold start: use always-open + defaults from config
+        let gitRemoteURL: String?
+        if config.chrome.openGitRemote {
+            gitRemoteURL = gitRemoteResolver.resolve(projectPath: project.path)
+        } else {
+            gitRemoteURL = nil
+        }
+
+        let resolvedTabs = ChromeTabResolver.resolve(
+            config: config.chrome,
+            project: project,
+            gitRemoteURL: gitRemoteURL
+        )
+        return resolvedTabs.orderedURLs
+    }
+
+    /// Captures Chrome tab URLs before closing a project.
+    ///
+    /// Saves ALL captured URLs verbatim (no filtering). If the Chrome window is gone
+    /// (empty capture), deletes any stale snapshot from disk.
+    ///
+    /// - Returns: Warning message if capture failed, nil on success.
+    private func performTabCapture(projectId: String) -> String? {
+        guard config != nil else { return nil }
+
+        let windowTitle = "\(ApIdeToken.prefix)\(projectId)"
+
+        // Capture current tab URLs
+        let capturedURLs: [String]
+        switch chromeTabCapture.captureTabURLs(windowTitle: windowTitle) {
+        case .success(let urls):
+            capturedURLs = urls
+        case .failure(let error):
+            logEvent("close.tab_capture_failed", level: .warn, message: error.message)
+            // Don't delete snapshot on command failure (timeout, etc.) — only delete
+            // on empty success (window confirmed gone). A transient error shouldn't
+            // destroy a valid snapshot.
+            return "Tab capture failed: \(error.message)"
+        }
+
+        // If no tabs captured (window not found or empty), delete stale snapshot
+        guard !capturedURLs.isEmpty else {
+            _ = chromeTabStore.delete(projectId: projectId)
+            return nil
+        }
+
+        // Save ALL captured URLs verbatim (snapshot = complete truth)
+        let snapshot = ChromeTabSnapshot(urls: capturedURLs, capturedAt: Date())
+        switch chromeTabStore.save(snapshot: snapshot, projectId: projectId) {
+        case .success:
+            logEvent("close.tabs_captured", context: [
+                "project_id": projectId,
+                "tab_count": "\(capturedURLs.count)"
+            ])
+            return nil
+        case .failure(let error):
+            logEvent("close.tab_save_failed", level: .warn, message: error.message)
+            return "Tab save failed: \(error.message)"
+        }
     }
 
     // MARK: - Recency Tracking

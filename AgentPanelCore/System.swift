@@ -382,9 +382,12 @@ struct ApChromeLauncher {
     private let commandRunner = ApSystemCommandRunner()
 
     /// Opens a new Chrome window tagged with the provided identifier.
-    /// - Parameter identifier: Identifier embedded in the window title token.
+    /// - Parameters:
+    ///   - identifier: Identifier embedded in the window title token.
+    ///   - initialURLs: URLs to open in the new window. First URL becomes the active tab,
+    ///     remaining URLs open as additional tabs. If empty, opens Chrome's default new tab page.
     /// - Returns: Success or an error.
-    func openNewWindow(identifier: String) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, initialURLs: [String] = []) -> Result<Void, ApCoreError> {
         let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return .failure(ApCoreError(message: "Identifier cannot be empty."))
@@ -394,15 +397,28 @@ struct ApChromeLauncher {
         }
 
         let windowTitle = ApChromeLauncher.escapeForAppleScriptString("\(ApIdeToken.prefix)\(trimmed)")
-        let script = [
+
+        var scriptLines = [
             "tell application \"Google Chrome\"",
-            "set newWindow to make new window",
-            "set URL of active tab of newWindow to \"https://example.com\"",
-            "set given name of newWindow to \"\(windowTitle)\"",
-            "end tell"
+            "set newWindow to make new window"
         ]
 
-        switch commandRunner.run(executable: "osascript", arguments: ApChromeLauncher.scriptArguments(lines: script), timeoutSeconds: 10) {
+        if !initialURLs.isEmpty {
+            // Set first URL on the active tab (replaces Chrome's default new tab page)
+            let firstURL = ApChromeLauncher.escapeForAppleScriptString(initialURLs[0])
+            scriptLines.append("set URL of active tab of newWindow to \"\(firstURL)\"")
+
+            // Create additional tabs for remaining URLs
+            for url in initialURLs.dropFirst() {
+                let escapedURL = ApChromeLauncher.escapeForAppleScriptString(url)
+                scriptLines.append("tell newWindow to make new tab with properties {URL:\"\(escapedURL)\"}")
+            }
+        }
+
+        scriptLines.append("set given name of newWindow to \"\(windowTitle)\"")
+        scriptLines.append("end tell")
+
+        switch commandRunner.run(executable: "osascript", arguments: ApChromeLauncher.scriptArguments(lines: scriptLines), timeoutSeconds: 15) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):

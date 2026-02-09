@@ -83,8 +83,8 @@ Incomplete:
 - Ensure these flows are reliable enough for regular daily use.
 
 ### Tasks
-- [ ] Implement project Chrome tab persistence/restore: track Chrome tabs opened during a project session and reopen associated tabs when the project is activated again.
-- [ ] Persist project tab URL sets across app restarts so reactivation can restore the previous Chrome tab set after relaunch.
+- [x] Implement project Chrome tab persistence/restore: track Chrome tabs opened during a project session and reopen associated tabs when the project is activated again.
+- [x] Persist project tab URL sets across app restarts so reactivation can restore the previous Chrome tab set after relaunch.
 - [ ] Get Agent Layer launcher working for projects with `useAgentLayer = true`, including clear failure surfacing when launch prerequisites are missing.
 
 ### Exit criteria

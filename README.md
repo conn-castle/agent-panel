@@ -41,12 +41,21 @@ Until you add at least one `[[project]]`, Doctor will report config failures.
 ### Schema
 
 ```toml
+[chrome]
+pinnedTabs = ["https://dashboard.example.com"]   # optional; always-open tabs for all projects
+defaultTabs = ["https://docs.example.com"]        # optional; default tabs when no history
+openGitRemote = true                              # optional; auto-open git remote URL
+
 [[project]]
 name = "AgentPanel"                    # required; id derived from name
 path = "/Users/you/src/agent-panel"    # required; absolute path to the git repo
 color = "indigo"                       # required; "#RRGGBB" or named color
 useAgentLayer = true                   # required; repo uses an .agent-layer folder
+chromePinnedTabs = ["https://api.example.com"]    # optional; per-project always-open tabs
+chromeDefaultTabs = ["https://jira.example.com"]  # optional; per-project default tabs
 ```
+
+Chrome tab configuration is optional. When a project is activated and a fresh Chrome window is created, tabs are opened in a single step from the last captured snapshot (verbatim, preserving order). If no snapshot exists (cold start), tabs are computed from always-open URLs (global `pinnedTabs` + per-project `chromePinnedTabs` + git remote if enabled) followed by default tabs. All tab URLs are captured verbatim on project close and persisted across app restarts. If the Chrome window is manually closed before the project is closed, the stale snapshot is automatically deleted so the next activation uses cold-start defaults.
 
 The project id is derived by lowercasing the name and replacing any character outside a-z and 0-9 with `-`.
 Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, pink, purple, red, teal, white, yellow.
@@ -58,6 +67,7 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 - Logs (active): `~/.local/state/agent-panel/logs/agent-panel.log`
 - Logs (rotated): `~/.local/state/agent-panel/logs/agent-panel.log.1` … `agent-panel.log.5`
 - Logs format: JSON Lines with UTC ISO-8601 timestamps; rotation at 10 MiB
+- Chrome tab snapshots: `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`
 - VS Code workspaces (created by `ap new-ide <identifier>`): `~/.local/state/agent-panel/vscode/<identifier>.code-workspace`
 - AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`)
 

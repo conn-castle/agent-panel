@@ -40,9 +40,9 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
     Priority: High. Area: Tests
-    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and close/exit lifecycle paths; current tests are mostly helper-level.
-    Next step: Add targeted tests for load/sort/recency and close/exit behavior, including failure paths.
-    Notes: ProjectManager consolidates all project operations; broad coverage is still needed before MVP completion.
+    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and the full activation path; current tests cover workspace-state queries and chrome-tab close paths.
+    Next step: Add targeted tests for load/sort/recency and the full selectProject activation flow, including single-phase Chrome launch with resolved URLs.
+    Notes: Chrome tab close tests added (2026-02-08) covering snapshot-is-truth behavior (all URLs saved verbatim, snapshot preserved on capture failure, stale snapshot deletion on empty capture). Resolver tests updated to remove dead snapshot-filtering branch. Activation-path tests (deferred URL resolution, Chrome launch fallback) still needed.
 
 - Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
     Priority: Medium. Area: Config/UX
