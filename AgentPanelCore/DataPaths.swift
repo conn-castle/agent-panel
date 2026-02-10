@@ -30,18 +30,6 @@ public struct DataPaths: Sendable {
 
     // MARK: - State paths
 
-    /// Returns `~/.local/state/agent-panel/vscode`.
-    var vscodeWorkspaceDirectory: URL {
-        stateDirectory.appendingPathComponent("vscode", isDirectory: true)
-    }
-
-    /// Returns `~/.local/state/agent-panel/vscode/<projectId>.code-workspace`.
-    /// - Parameter projectId: Project identifier used to name the workspace file.
-    /// - Returns: URL for the generated VS Code workspace file.
-    func vscodeWorkspaceFile(projectId: String) -> URL {
-        vscodeWorkspaceDirectory.appendingPathComponent("\(projectId).code-workspace", isDirectory: false)
-    }
-
     /// Returns `~/.local/state/agent-panel/state.json`.
     var stateFile: URL {
         stateDirectory.appendingPathComponent("state.json", isDirectory: false)

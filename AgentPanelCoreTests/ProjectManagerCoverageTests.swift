@@ -101,7 +101,11 @@ final class ProjectManagerCoverageTests: XCTestCase {
         }
     }
 
-    private func makeManager(aerospace: SequencedAeroSpaceStub, chromeLauncher: ChromeLauncherProviding, recencyFilePath: URL) -> ProjectManager {
+    private func makeManager(
+        aerospace: SequencedAeroSpaceStub,
+        chromeLauncher: ChromeLauncherProviding,
+        recencyFilePath: URL
+    ) -> ProjectManager {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let chromeTabsDir = tmp.appendingPathComponent("pm-coverage-tabs-\(UUID().uuidString)", isDirectory: true)
         return ProjectManager(
@@ -298,4 +302,3 @@ final class ProjectManagerCoverageTests: XCTestCase {
         }
     }
 }
-

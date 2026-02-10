@@ -80,9 +80,9 @@ Incomplete:
 - Chrome tab persistence/restore via AppleScript with snapshot-is-truth design; URLs captured verbatim on close and restored on activate.
 - LIFO focus stack replacing single-slot design; "exit project space" returns to last non-project window.
 - Agent Layer config: global `[agentLayer] enabled` default (false), per-project override, SSH+AL mutual exclusion at parse time.
-- SSH projects: `project.remote` (ssh-remote+user@host) + remote absolute `project.path`; workspace uses `vscode-remote://...` folder URI + `remoteAuthority` key; Doctor validates via `ssh test -d`.
-- Agent Layer launcher: `ApAgentLayerVSCodeLauncher` creates workspace with `AP:<id>` tag, runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. Two-step approach avoids dual-window bug in `al vscode` (unconditionally appends `.` to code args). `ProjectManager` selects launcher based on `project.useAgentLayer`.
-- `CommandRunning` extended with `workingDirectory: String?` parameter; shared workspace helper `ApIdeToken.createWorkspaceFile()`.
+- SSH projects: `project.remote` (ssh-remote+user@host) + remote absolute `project.path`; writes remote `.vscode/settings.json` block via SSH (required for window identification), then launches `code --new-window --remote <authority> <remotePath>`. Doctor validates via `ssh test -d` and warns if remote settings.json missing AgentPanel block.
+- Agent Layer launcher: `ApAgentLayerVSCodeLauncher` injects `// >>> agent-panel` block in `.vscode/settings.json` with `AP:<id>` tag, runs `al sync` (CWD = project path) then `al vscode --no-sync --new-window` (CWD = project path). This preserves Agent Layer env vars like `CODEX_HOME` while avoiding the dual-window bug in `al vscode` by not passing a positional path. `ProjectManager` selects launcher based on `project.useAgentLayer`.
+- `CommandRunning` extended with `workingDirectory: String?` parameter.
 - Config hardening: SSH authority option injection rejected at parse time (authorities starting with `-`); local paths validated as absolute; Doctor ssh includes `--` option terminator for defense-in-depth.
 - PATH propagation: `ApSystemCommandRunner` builds augmented PATH (standard paths + login shell PATH + process PATH) with 5s timeout, user's `$SHELL` (validated as absolute path), deduplication, 2s pipe EOF timeout. Child processes receive this environment. Tested in `SystemCommandRunnerTests`.
 - Focus restore workspace fallback: `closeProject` and `exitToNonProjectWindow` fall back to first non-project workspace when focus stack is exhausted. Switcher dismiss tries workspace-level focus before app activation.
@@ -96,6 +96,7 @@ Incomplete:
 - Keep docs and internal APIs consistent as we refactor.
 
 ### Tasks
+- [ ] Fix light mode coloring. Currently the switcher only looks good in dark mode.
 - [ ] Window rescue for floating IDE/app windows: keep the “all windows floating” AeroSpace strategy, but when AgentPanel focuses/activates a project (and when restoring focus via `ap return` / close / exit), detect if the target VS Code (and optionally Chrome) window is mostly off-screen (e.g., only a 1px slice visible due to stale saved coordinates after monitor/Space changes) and automatically reposition it into a visible `NSScreen.visibleFrame` (clamp/center with padding; do not change tiling/layout). Implement via macOS Accessibility window frame control (AX position/size), map AeroSpace `window-id` to the corresponding AX window reliably, fail loudly with a clear error when Accessibility permission is missing, add a Doctor check + remediation guidance for the required permission, add unit tests for the geometry logic + integration tests covering activation/return/close paths, and document the behavior + permission requirement in README (`offscreen-window-rescue`).
 - [ ] Fix activation errors invisible when the panel dismisses during async launch (`activation-error-invisible`).
 - [ ] Add switcher dismiss/restore lifecycle tests (`switcher-lifecycle-tests`).
@@ -105,7 +106,7 @@ Incomplete:
 - [ ] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
 - [ ] Config: surface config warnings to UI (and/or CLI) (`config-warn`).
 - [ ] Doctor: restore previous focus when Doctor window closes (`doctor-focus`).
-- [ ] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
+- [x] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
 - [x] Add a first-class coverage command/script and document it in COMMANDS.md.
 - [x] Enforce > 90% test coverage as a hard gate in `scripts/test.sh`, CI, and a repo-managed git pre-commit hook.
 - [x] Raise test coverage to > 90% (as measured by the gate) by adding tests and refactoring for testability. (Hit 95.02% total selected on 2026-02-10.)
@@ -122,6 +123,7 @@ Incomplete:
 - Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
 
 ### Tasks
+- [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
 - [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
 - [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
 - [ ] Fuzzy search with ranking in the switcher.
@@ -129,6 +131,7 @@ Incomplete:
 - [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure), either in the background or by surfacing a diagnostic report.
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
 - [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed). Also, need to actually set VS Code project color, since that's not done today.
+- [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly.
 
 ### Exit criteria
 - Optional UX features are implemented without regressing required daily-driver workflows.

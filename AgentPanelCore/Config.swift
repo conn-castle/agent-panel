@@ -326,11 +326,11 @@ struct ConfigLoader {
     }
 
     /// Loads and parses a config file at the given URL.
-    static func load(from url: URL) -> Result<ConfigLoadResult, ConfigError> {
+    static func load(from url: URL, fileSystem: FileSystem = DefaultFileSystem()) -> Result<ConfigLoadResult, ConfigError> {
         let path = url.path
-        if !FileManager.default.fileExists(atPath: path) {
+        if !fileSystem.fileExists(at: url) {
             do {
-                try createStarterConfig(at: url)
+                try createStarterConfig(at: url, fileSystem: fileSystem)
             } catch {
                 return .failure(ConfigError(
                     kind: .createFailed,
@@ -345,7 +345,14 @@ struct ConfigLoader {
 
         let raw: String
         do {
-            raw = try String(contentsOf: url, encoding: .utf8)
+            let data = try fileSystem.readFile(at: url)
+            guard let decoded = String(data: data, encoding: .utf8) else {
+                return .failure(ConfigError(
+                    kind: .readFailed,
+                    message: "Failed to read config at \(path): file is not valid UTF-8."
+                ))
+            }
+            raw = decoded
         } catch {
             return .failure(ConfigError(
                 kind: .readFailed,
@@ -357,10 +364,13 @@ struct ConfigLoader {
     }
 
     /// Writes a starter config template at the provided location.
-    private static func createStarterConfig(at url: URL) throws {
+    private static func createStarterConfig(at url: URL, fileSystem: FileSystem) throws {
         let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try starterConfigTemplate.write(to: url, atomically: true, encoding: .utf8)
+        try fileSystem.createDirectory(at: directory)
+        guard let data = starterConfigTemplate.data(using: .utf8) else {
+            throw NSError(domain: "ConfigLoader", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode starter config as UTF-8"])
+        }
+        try fileSystem.writeFile(at: url, data: data)
     }
 }
 
@@ -653,39 +663,37 @@ struct ConfigParser {
         // Remote SSH validation (VS Code Remote-SSH)
         var normalizedRemote: String?
         if let remote {
-            if !remote.hasPrefix("ssh-remote+") {
+            switch ApSSHHelpers.parseRemoteAuthority(remote) {
+            case .success:
+                normalizedRemote = remote
+            case .failure(.missingPrefix):
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].remote: SSH remote authority must start with 'ssh-remote+'",
                     fix: "Use format: remote = \"ssh-remote+user@host\""
                 ))
                 projectIsValid = false
-            } else if remote.contains(where: { $0.isWhitespace }) {
+            case .failure(.containsWhitespace):
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].remote: SSH remote authority must not contain whitespace",
                     fix: "Use format: remote = \"ssh-remote+user@host\""
                 ))
                 projectIsValid = false
-            } else {
-                let authority = remote.dropFirst("ssh-remote+".count)
-                if authority.isEmpty {
-                    findings.append(ConfigFinding(
-                        severity: .fail,
-                        title: "project[\(index)].remote: SSH remote authority is missing host (expected ssh-remote+user@host)",
-                        fix: "Use format: remote = \"ssh-remote+user@host\""
-                    ))
-                    projectIsValid = false
-                } else if authority.hasPrefix("-") {
-                    findings.append(ConfigFinding(
-                        severity: .fail,
-                        title: "project[\(index)].remote: SSH remote authority must not start with '-'",
-                        fix: "Use format: remote = \"ssh-remote+user@host\""
-                    ))
-                    projectIsValid = false
-                } else {
-                    normalizedRemote = remote
-                }
+            case .failure(.missingTarget):
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority is missing host (expected ssh-remote+user@host)",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
+            case .failure(.targetStartsWithDash):
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority must not start with '-'",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
             }
         }
 

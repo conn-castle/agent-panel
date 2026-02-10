@@ -27,15 +27,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-02-09 vscode-settings-json: Replace workspace-based VS Code configuration with settings.json block
-    Priority: Medium. Area: IDE/Configuration
-    Description: Currently, the application uses workspace-based configuration for VS Code. This should be replaced with a block that can be directly added to the user's `settings.json` file to avoid the overhead and complexity of managing separate workspace files for each project.
-    Next step: Research how to programmatically manage custom blocks or profiles within `settings.json` and update ProjectManager to use this approach instead of `.code-workspace` files.
-
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE
-    Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window workspace.code-workspace` becomes `code --new-window workspace.code-workspace .` → two windows. Workaround implemented: AgentPanel now runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. This loses `CODEX_HOME` env var that `al vscode` normally sets (only needed by Codex VS Code extension).
-    Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg. Once fixed, consider reverting to `al vscode` for CODEX_HOME support.
+    Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
+    Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg, so path-based launches don't open two windows.
 
 - Issue 2026-02-09 activation-error-invisible: Activation errors invisible when panel closes during async launch
     Priority: High. Area: App/Switcher UX
@@ -52,11 +47,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: Currently, the Doctor does not flag unrecognized keys in `config.toml`. It should fail verification if the configuration contains unknown entries to prevent silent typos or configuration errors.
     Next step: Update the configuration loader or Doctor check to validate that all keys in `config.toml` are known schemas.
 
-- Issue 2026-02-09 doctor-summary-counts: Summarize Doctor failures and warnings with counts
-    Priority: Low. Area: Doctor/CLI
-    Description: The Doctor output lacks a high-level summary. It should provide a concise count of total failures and warnings at the end of the report to give the user a quick health overview.
-    Next step: Update the `DoctorReport` or the CLI rendering logic to track and print failure/warning counts.
-
 - Issue 2026-02-09 doctor-color-output: Color code the Doctor CLI output
     Priority: Low. Area: Doctor/CLI
     Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
@@ -67,22 +57,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: When the Doctor window is closed, the application does not restore focus to the window that was focused before the Doctor was opened. It should return focus to the previous application/window to ensure a smooth workflow.
     Next step: Capture the currently focused window before showing the Doctor window and restore it upon closing.
 
-- Issue 2026-02-08 cli-runner-tests: CLI runner tests missing for new ProjectManager commands
-    Priority: Medium. Area: CLI Tests
-    Description: `ApCLIRunnerTests` only covers `version`, `doctor`, and `help` commands. The new `show-config`, `list-projects`, `select-project`, `close-project`, and `return` commands lack CLI-runner-level tests validating success and failure paths through the ProjectManager bridge.
-    Next step: Add CLI runner tests for each new command with mock ProjectManager, covering both success and error cases (including the async semaphore bridge for `select-project`).
-
 - Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
     Priority: High. Area: App/Switcher Tests
     Description: Recent regressions involved `windowClose`/termination-triggered focus restore and app activation fallback behavior, but there is no dedicated test target validating switcher dismiss semantics.
     Next step: Add App-layer tests (or extract testable policy helpers) covering `dismiss` reason handling and prohibiting app-activation fallback on project handoff/termination paths.
     Notes: Existing ProjectManager tests do not cover AppKit panel lifecycle paths.
-
-- Issue 2026-02-05 pm-tests: ProjectManager coverage is still incomplete
-    Priority: High. Area: Tests
-    Description: `ProjectManager` still lacks direct operation tests for config loading, sorting, recency persistence, and the full activation path; current tests cover workspace-state queries, chrome-tab close paths, and focus stack behavior.
-    Next step: Add targeted tests for load/sort/recency and the full selectProject activation flow, including single-phase Chrome launch with resolved URLs.
-    Notes: Chrome tab close tests added (2026-02-08). Focus stack tests added (2026-02-09) covering FocusStack unit tests and ProjectManager focus integration (exit-project-space semantic, project-to-project filtering, stale entry handling, close/reopen cycles). Activation-path tests (deferred URL resolution, Chrome launch fallback) still needed.
 
 - Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
     Priority: Medium. Area: Config/UX

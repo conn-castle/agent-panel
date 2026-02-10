@@ -212,7 +212,7 @@ Fields are separated by `||` (double pipe). Parsing splits on `||` to extract: w
 
 ## Window token
 
-Each project window is tagged with `AP:<project-id>` in the window title. Chrome uses AppleScript `given name`; VS Code uses a `.code-workspace` file with `window.title` containing the token.
+Each project window is tagged with `AP:<project-id>` in the window title. Chrome uses AppleScript `given name`; VS Code uses a `// >>> agent-panel` block in `.vscode/settings.json` with `window.title` containing the token (for SSH projects, the file is written on the remote host via SSH).
 
 ## Step 1: Find or launch tagged windows
 
@@ -247,25 +247,28 @@ end tell
 
 If the tab-restore launch fails, Chrome falls back to launching without tabs (empty window with tag only) and a warning is surfaced to the caller.
 
-### VS Code launch (workspace file)
+### VS Code launch (settings.json block)
 
 If no tagged VS Code window exists:
 
-1. Write a `.code-workspace` file to `~/.local/state/agent-panel/vscode/<project-id>.code-workspace`:
+1. Inject a `// >>> agent-panel` block into the project's `.vscode/settings.json`:
 
-```json
+```jsonc
 {
-  "folders": [{ "path": "<project-path>" }],
-  "settings": {
-    "window.title": "AP:<project-id> - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
-  }
+  // >>> agent-panel
+  // Managed by AgentPanel. Do not edit this block manually.
+  "window.title": "AP:<project-id> - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}",
+  // <<< agent-panel
+  // ... rest of file preserved ...
 }
 ```
 
+   The block is always inserted at the top of the file (right after `{`). Existing content is preserved. If the file doesn't exist, it is created with the block. If an existing `// >>> agent-panel` block exists, it is replaced.
+
 2. Launch:
-   - **Direct projects:** `code --new-window <workspace-file>`
-   - **Agent Layer projects** (`useAgentLayer = true`): run `al sync` with working directory set to the project path, then `code --new-window <workspace-file>`. This avoids a current `al vscode` dual-window issue (tradeoff: Agent Layer env vars like `CODEX_HOME` are not set).
-   - **SSH projects:** Same as direct, but the workspace file uses a `vscode-remote://...` folder URI in `folders` (e.g., `"vscode-remote://ssh-remote+user@host/remote/absolute/path"`) and includes a top-level `remoteAuthority` key (e.g., `"ssh-remote+user@host"`) so VS Code connects via SSH Remote.
+   - **Direct projects:** `code --new-window <project-path>`
+   - **Agent Layer projects** (`useAgentLayer = true`): inject settings.json block, run `al sync` with working directory set to the project path, then `al vscode --no-sync --new-window` (working directory = project path). This avoids a current `al vscode` dual-window issue by not passing a positional path, and preserves Agent Layer env vars like `CODEX_HOME`.
+   - **SSH projects:** Write the settings.json block on the remote via SSH (read remote file → inject block → base64-encode → write). Then `code --new-window --remote <authority> <remote-path>`. If the SSH write fails, project activation fails loudly (no workspace fallback).
 
 ### Poll until window appears
 

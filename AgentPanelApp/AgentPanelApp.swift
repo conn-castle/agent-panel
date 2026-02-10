@@ -86,7 +86,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Auto-start AeroSpace if installed but not running
         ensureAeroSpaceRunning()
-        refreshHealthInBackground(trigger: "startup", force: true)
+
+        // Load config on the main thread (ProjectManager is not thread-safe), then
+        // ensure VS Code settings blocks in the background (may use SSH).
+        let configResult = projectManager.loadConfig()
+        let projects = (try? configResult.get())?.projects ?? []
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            if !projects.isEmpty {
+                let results = VSCodeSettingsBlocks.ensureAll(projects: projects)
+                for (projectId, result) in results {
+                    if case .failure(let error) = result {
+                        self?.logAppEvent(
+                            event: "settings_block.write_failed",
+                            level: .warn,
+                            message: error.message,
+                            context: ["project_id": projectId]
+                        )
+                    }
+                }
+            }
+
+            DispatchQueue.main.async {
+                self?.refreshHealthInBackground(trigger: "startup", force: true)
+            }
+        }
 
         let dataStore = DataPaths.default()
         logAppEvent(

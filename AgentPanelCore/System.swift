@@ -341,7 +341,9 @@ struct ApSystemCommandRunner: CommandRunning {
 
         // Wait for process with optional timeout
         let didTimeout: Bool
+        let timeoutSecondsForMessage: TimeInterval?
         if let timeoutSeconds = timeoutSeconds {
+            timeoutSecondsForMessage = timeoutSeconds
             let waitResult = completion.wait(timeout: .now() + timeoutSeconds)
             didTimeout = waitResult == .timedOut
             if didTimeout {
@@ -349,6 +351,7 @@ struct ApSystemCommandRunner: CommandRunning {
                 _ = completion.wait(timeout: .now() + 1)
             }
         } else {
+            timeoutSecondsForMessage = nil
             completion.wait()
             didTimeout = false
         }
@@ -368,9 +371,10 @@ struct ApSystemCommandRunner: CommandRunning {
         stderrHandle.readabilityHandler = nil
 
         if didTimeout {
+            let label = timeoutSecondsForMessage.map { "\($0)" } ?? "unknown"
             return .failure(
                 ApCoreError(
-                    message: "Command timed out after \(timeoutSeconds!)s: \(executable) \(arguments.joined(separator: " "))"
+                    message: "Command timed out after \(label)s: \(executable) \(arguments.joined(separator: " "))"
                 )
             )
         }
@@ -398,25 +402,56 @@ struct ApSystemCommandRunner: CommandRunning {
 /// Shared IDE token prefix used to tag new IDE windows.
 enum ApIdeToken {
     static let prefix = "AP:"
+}
 
-    /// Creates a `.code-workspace` file with `AP:<id>` window title tag.
-    ///
-    /// Both `ApVSCodeLauncher` and `ApAgentLayerVSCodeLauncher` use this to create
-    /// workspace files with consistent token-based window identification.
+/// Launches new VS Code windows with a tagged window title.
+///
+/// For local projects, injects an `AP:<id>` window title block into the project's
+/// `.vscode/settings.json` and opens `code --new-window <projectPath>`.
+///
+/// For SSH projects, writes settings.json on the remote via SSH, then opens:
+/// `code --new-window --remote <authority> <remotePath>`.
+///
+/// If remote settings.json cannot be written, the launch fails loudly (no workspace fallback).
+struct ApVSCodeLauncher {
+    /// VS Code bundle identifier used for filtering windows.
+    static let bundleId = "com.microsoft.VSCode"
+
+    private let commandRunner: CommandRunning
+    private let settingsManager: ApVSCodeSettingsManager
+
+    /// Creates a VS Code launcher.
+    /// - Parameters:
+    ///   - commandRunner: Command runner for launching VS Code and SSH commands.
+    ///   - fileSystem: File system for settings.json I/O.
+    ///   - settingsManager: Manager for .vscode/settings.json block injection.
+    init(
+        commandRunner: CommandRunning = ApSystemCommandRunner(),
+        fileSystem: FileSystem = DefaultFileSystem(),
+        settingsManager: ApVSCodeSettingsManager? = nil
+    ) {
+        self.commandRunner = commandRunner
+        self.settingsManager = settingsManager ?? ApVSCodeSettingsManager(
+            fileSystem: fileSystem,
+            commandRunner: commandRunner
+        )
+    }
+
+    /// Opens a new VS Code window with a tagged title for precise identification.
     ///
     /// - Parameters:
-    ///   - identifier: Project identifier (becomes `AP:<identifier>` in title). Must be non-empty and not contain `/`.
-    ///   - folders: Folder paths for workspace `folders` array.
-    ///   - remoteAuthority: Optional SSH remote authority (e.g., `ssh-remote+user@host`).
-    ///   - dataStore: Data paths for workspace file directory.
-    /// - Returns: URL of created workspace file on success, or an error.
-    static func createWorkspaceFile(
+    ///   - identifier: Identifier embedded in the window title as `AP:<identifier>`.
+    ///   - projectPath: Optional path to the project folder.
+    ///     - Local projects: local absolute path.
+    ///     - SSH projects: remote absolute path.
+    ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
+    ///     When set, requires SSH settings.json write to succeed (no workspace fallback).
+    /// - Returns: Success or an error.
+    func openNewWindow(
         identifier: String,
-        folders: [[String: String]],
-        remoteAuthority: String?,
-        dataStore: DataPaths,
-        fileSystem: FileSystem = DefaultFileSystem()
-    ) -> Result<URL, ApCoreError> {
+        projectPath: String? = nil,
+        remoteAuthority: String? = nil
+    ) -> Result<Void, ApCoreError> {
         let trimmedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedId.isEmpty else {
             return .failure(ApCoreError(message: "Identifier cannot be empty."))
@@ -425,110 +460,73 @@ enum ApIdeToken {
             return .failure(ApCoreError(message: "Identifier cannot contain '/'."))
         }
 
-        let windowTitle = "\(ApIdeToken.prefix)\(trimmedId) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
-        let workspaceDirectory = dataStore.vscodeWorkspaceDirectory
-        let workspaceURL = workspaceDirectory.appendingPathComponent("\(trimmedId).code-workspace")
-
-        var payload: [String: Any] = [
-            "folders": folders,
-            "settings": ["window.title": windowTitle]
-        ]
-        if let remoteAuthority {
-            payload["remoteAuthority"] = remoteAuthority
+        guard let projectPath = projectPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !projectPath.isEmpty else {
+            return .failure(ApCoreError(message: "Project path is required for VS Code launch."))
         }
 
-        do {
-            try fileSystem.createDirectory(at: workspaceDirectory)
-            let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
-            try fileSystem.writeFile(at: workspaceURL, data: data)
-        } catch {
-            return .failure(ApCoreError(message: "Failed to write workspace file: \(error.localizedDescription)"))
+        // Decide strategy
+        if let remoteAuthority = remoteAuthority?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !remoteAuthority.isEmpty {
+            // SSH project
+            return openSSHWindow(
+                identifier: trimmedId,
+                remotePath: projectPath,
+                remoteAuthority: remoteAuthority
+            )
         }
 
-        return .success(workspaceURL)
-    }
-}
-
-/// Launches new VS Code windows with a tagged window title.
-struct ApVSCodeLauncher {
-    /// VS Code bundle identifier used for filtering windows.
-    static let bundleId = "com.microsoft.VSCode"
-
-    private let dataStore: DataPaths
-    private let commandRunner: ApSystemCommandRunner
-    private let fileSystem: FileSystem
-
-    /// Creates a VS Code launcher.
-    /// - Parameters:
-    ///   - dataStore: Data store for workspace file paths.
-    ///   - commandRunner: Command runner for launching VS Code.
-    ///   - fileSystem: File system for workspace file creation.
-    init(
-        dataStore: DataPaths = .default(),
-        commandRunner: ApSystemCommandRunner = ApSystemCommandRunner(),
-        fileSystem: FileSystem = DefaultFileSystem()
-    ) {
-        self.dataStore = dataStore
-        self.commandRunner = commandRunner
-        self.fileSystem = fileSystem
+        // Local project with path: use settings.json
+        return openLocalWindow(identifier: trimmedId, projectPath: projectPath)
     }
 
-    /// Opens a new VS Code window with a tagged title for precise identification.
-    ///
-    /// Creates a `.code-workspace` file with a custom `window.title` setting containing
-    /// `AP:<identifier>` so we can reliably find this window later using AeroSpace.
-    ///
-    /// - Parameters:
-    ///   - identifier: Identifier embedded in the window title as `AP:<identifier>`.
-    ///   - projectPath: Optional path to the project folder.
-    ///     - Local projects: local absolute path.
-    ///     - SSH projects: remote absolute path.
-    ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
-    ///     When set, the workspace folder is opened via a `vscode-remote://` folder URI.
-    /// - Returns: Success or an error.
-    func openNewWindow(
+    // MARK: - Local project
+
+    private func openLocalWindow(
         identifier: String,
-        projectPath: String? = nil,
-        remoteAuthority: String? = nil
+        projectPath: String
     ) -> Result<Void, ApCoreError> {
-        var folders: [[String: String]] = []
-        let normalizedRemoteAuthority: String?
-        if let trimmed = remoteAuthority?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !trimmed.isEmpty {
-            normalizedRemoteAuthority = trimmed
-        } else {
-            normalizedRemoteAuthority = nil
+        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier) {
+        case .failure(let error):
+            return .failure(error)
+        case .success:
+            break
         }
 
-        if let projectPath = projectPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !projectPath.isEmpty {
-            if let normalizedRemoteAuthority {
-                folders.append([
-                    "uri": Self.vscodeRemoteFolderURI(
-                        remoteAuthority: normalizedRemoteAuthority,
-                        remotePath: projectPath
-                    )
-                ])
-            } else {
-                folders.append(["path": projectPath])
-            }
-        }
+        return launchCode(arguments: ["--new-window", projectPath])
+    }
 
-        let workspaceURL: URL
-        switch ApIdeToken.createWorkspaceFile(
-            identifier: identifier,
-            folders: folders,
-            remoteAuthority: normalizedRemoteAuthority,
-            dataStore: dataStore,
-            fileSystem: fileSystem
+    // MARK: - SSH project
+
+    private func openSSHWindow(
+        identifier: String,
+        remotePath: String,
+        remoteAuthority: String
+    ) -> Result<Void, ApCoreError> {
+        // Write settings.json on the remote host. Without this, we cannot reliably tag the
+        // window title for AeroSpace window identification.
+        switch settingsManager.writeRemoteSettings(
+            remoteAuthority: remoteAuthority,
+            remotePath: remotePath,
+            identifier: identifier
         ) {
         case .failure(let error):
             return .failure(error)
-        case .success(let url):
-            workspaceURL = url
+        case .success:
+            break
         }
 
-        switch commandRunner.run(executable: "code", arguments: ["--new-window", workspaceURL.path], timeoutSeconds: 10) {
+        return launchCode(arguments: [
+            "--new-window",
+            "--remote", remoteAuthority,
+            remotePath
+        ])
+    }
+
+    // MARK: - VS Code launch
+
+    private func launchCode(arguments: [String]) -> Result<Void, ApCoreError> {
+        switch commandRunner.run(executable: "code", arguments: arguments, timeoutSeconds: 10) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -541,25 +539,6 @@ struct ApVSCodeLauncher {
             }
             return .success(())
         }
-    }
-
-    /// Builds a `vscode-remote://` folder URI string for an SSH remote authority + remote path.
-    private static func vscodeRemoteFolderURI(remoteAuthority: String, remotePath: String) -> String {
-        let trimmedPath = remotePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let encoded = encodeRemotePathForURI(trimmedPath)
-        let normalizedPath = encoded.hasPrefix("/") ? encoded : "/\(encoded)"
-        return "vscode-remote://\(remoteAuthority)\(normalizedPath)"
-    }
-
-    /// Percent-encodes path segments while preserving `/` separators.
-    private static func encodeRemotePathForURI(_ path: String) -> String {
-        let segments = path.split(separator: "/", omittingEmptySubsequences: false)
-        return segments
-            .map { segment in
-                let raw = String(segment)
-                return raw.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? raw
-            }
-            .joined(separator: "/")
     }
 }
 
@@ -653,35 +632,41 @@ struct ApChromeLauncher {
 
 /// Launches VS Code for Agent Layer projects using a two-step approach.
 ///
-/// Used for projects with `useAgentLayer = true`. Creates the same `.code-workspace`
-/// file structure as `ApVSCodeLauncher` (with `AP:<id>` window title tag), then:
+/// Used for projects with `useAgentLayer = true`. Injects an `AP:<id>` window title
+/// block into the project's `.vscode/settings.json`, then:
 /// 1. Runs `al sync` with CWD = project path to regenerate agent layer config.
-/// 2. Runs `code --new-window <workspace>` to open VS Code with the tagged workspace.
+/// 2. Runs `al vscode --no-sync --new-window` (CWD = project path) to open VS Code with
+///    Agent Layer environment variables (including `CODEX_HOME`) configured.
 ///
-/// This two-step approach works around `al vscode` unconditionally appending "." to the
-/// `code` args, which causes two VS Code windows to open. See agent-layer issue for details.
+/// The agent-panel block coexists with agent-layer's own `// >>> agent-layer` block
+/// since `al sync` preserves content outside its markers.
+///
+/// We intentionally do not pass a positional path to `al vscode`: agent-layer's VS Code
+/// launcher appends "." to the `code` args. By setting CWD to the project path, "." maps
+/// to the repo root and avoids opening two VS Code windows.
 struct ApAgentLayerVSCodeLauncher {
-    private let dataStore: DataPaths
     private let commandRunner: CommandRunning
     private let executableResolver: ExecutableResolver
-    private let fileSystem: FileSystem
+    private let settingsManager: ApVSCodeSettingsManager
 
     /// Creates an Agent Layer VS Code launcher.
     /// - Parameters:
-    ///   - dataStore: Data store for workspace file paths.
-    ///   - commandRunner: Command runner for running `al sync` and `code --new-window`.
+    ///   - commandRunner: Command runner for running `al sync` and `al vscode`.
     ///   - executableResolver: Resolver for finding the `al` executable.
-    ///   - fileSystem: File system for workspace file creation.
+    ///   - fileSystem: File system for settings.json I/O.
+    ///   - settingsManager: Manager for .vscode/settings.json block injection.
     init(
-        dataStore: DataPaths = .default(),
         commandRunner: CommandRunning = ApSystemCommandRunner(),
         executableResolver: ExecutableResolver = ExecutableResolver(),
-        fileSystem: FileSystem = DefaultFileSystem()
+        fileSystem: FileSystem = DefaultFileSystem(),
+        settingsManager: ApVSCodeSettingsManager? = nil
     ) {
-        self.dataStore = dataStore
         self.commandRunner = commandRunner
         self.executableResolver = executableResolver
-        self.fileSystem = fileSystem
+        self.settingsManager = settingsManager ?? ApVSCodeSettingsManager(
+            fileSystem: fileSystem,
+            commandRunner: commandRunner
+        )
     }
 
     /// Opens a new VS Code window through the Agent Layer.
@@ -706,18 +691,12 @@ struct ApAgentLayerVSCodeLauncher {
             return .failure(ApCoreError(message: "Project path is required for Agent Layer launch."))
         }
 
-        let workspaceURL: URL
-        switch ApIdeToken.createWorkspaceFile(
-            identifier: identifier,
-            folders: [["path": projectPath]],
-            remoteAuthority: nil,
-            dataStore: dataStore,
-            fileSystem: fileSystem
-        ) {
+        // Inject AP:<id> window title into .vscode/settings.json
+        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier) {
         case .failure(let error):
             return .failure(error)
-        case .success(let url):
-            workspaceURL = url
+        case .success:
+            break
         }
 
         guard let alPath = executableResolver.resolve("al") else {
@@ -748,10 +727,10 @@ struct ApAgentLayerVSCodeLauncher {
             }
         }
 
-        // Step 2: Launch VS Code directly with the tagged workspace.
-        // We bypass `al vscode` because it unconditionally appends "." to the code args,
-        // causing two VS Code windows to open (one for workspace, one for CWD folder).
-        guard let codePath = executableResolver.resolve("code") else {
+        // Step 2: Launch VS Code via Agent Layer so `CODEX_HOME` and AL_* env vars are set.
+        // We avoid the `al vscode` dual-window bug by not passing a positional path. The
+        // agent-layer launcher appends ".", and since we set CWD to projectPath, "." maps to it.
+        guard executableResolver.resolve("code") != nil else {
             return .failure(ApCoreError(
                 category: .command,
                 message: "VS Code CLI (code) not found.",
@@ -760,9 +739,10 @@ struct ApAgentLayerVSCodeLauncher {
         }
 
         switch commandRunner.run(
-            executable: codePath,
-            arguments: ["--new-window", workspaceURL.path],
-            timeoutSeconds: 10
+            executable: alPath,
+            arguments: ["vscode", "--no-sync", "--new-window"],
+            timeoutSeconds: 10,
+            workingDirectory: projectPath
         ) {
         case .failure(let error):
             return .failure(error)
@@ -771,7 +751,7 @@ struct ApAgentLayerVSCodeLauncher {
                 let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                 let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
                 return .failure(
-                    ApCoreError(message: "code failed with exit code \(result.exitCode).\(suffix)")
+                    ApCoreError(message: "al vscode failed with exit code \(result.exitCode).\(suffix)")
                 )
             }
             return .success(())

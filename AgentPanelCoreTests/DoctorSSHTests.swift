@@ -470,18 +470,18 @@ final class DoctorSSHTests: XCTestCase {
 
         _ = doctor.run()
 
-        guard let args = runner.lastArguments else {
-            XCTFail("Expected ssh command to have been called")
-            return
+        // Doctor makes 2 SSH calls per SSH project: path check + settings check
+        // All SSH calls should include "--" option terminator
+        XCTAssertGreaterThanOrEqual(runner.allArguments.count, 1, "At least one SSH call expected")
+        for (index, args) in runner.allArguments.enumerated() {
+            guard let terminatorIndex = args.firstIndex(of: "--") else {
+                XCTFail("Expected '--' option terminator in SSH call \(index): \(args)")
+                continue
+            }
+            let authorityIndex = terminatorIndex + 1
+            XCTAssertTrue(authorityIndex < args.count, "Authority should follow '--' in call \(index)")
+            XCTAssertEqual(args[authorityIndex], "nconn@happy-mac.local")
         }
-        // Verify "--" appears before the authority
-        guard let terminatorIndex = args.firstIndex(of: "--") else {
-            XCTFail("Expected '--' option terminator in ssh arguments: \(args)")
-            return
-        }
-        let authorityIndex = terminatorIndex + 1
-        XCTAssertTrue(authorityIndex < args.count, "Authority should follow '--'")
-        XCTAssertEqual(args[authorityIndex], "nconn@happy-mac.local")
     }
 
     func testSSHCommandEscapesSingleQuotesInRemotePath() {
@@ -505,11 +505,128 @@ final class DoctorSSHTests: XCTestCase {
 
         _ = doctor.run()
 
-        guard let args = runner.lastArguments, let last = args.last else {
+        // First SSH call is the path check (test -d)
+        guard runner.allArguments.count >= 1 else {
             XCTFail("Expected ssh command to have been called")
             return
         }
+        let pathCheckArgs = runner.allArguments[0]
+        guard let last = pathCheckArgs.last else {
+            XCTFail("Expected path check args to be non-empty")
+            return
+        }
         XCTAssertTrue(last.contains("test -d '/Users/nconn/it'\\''s-project'"), "Unexpected ssh test arg: \(last)")
+    }
+
+    // MARK: - SSH settings.json block check
+
+    func testSSHSettingsBlockPresentPasses() {
+        let settingsContent = """
+        {
+          // >>> agent-panel
+          // Managed by AgentPanel. Do not edit this block manually.
+          "window.title": "AP:remote-ml - ${dirty}${activeEditorShort}",
+          // <<< agent-panel
+        }
+        """
+        let runner = SequentialCommandRunner(results: [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),       // path check
+            .success(ApCommandResult(exitCode: 0, stdout: settingsContent, stderr: ""))  // settings check
+        ])
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title.contains("Remote VS Code settings block present: remote-ml")
+        })
+    }
+
+    func testSSHSettingsBlockMissingWarns() {
+        let settingsContent = """
+        {
+          "editor.fontSize": 14
+        }
+        """
+        let runner = SequentialCommandRunner(results: [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),        // path check
+            .success(ApCommandResult(exitCode: 0, stdout: settingsContent, stderr: ""))  // settings check (no block)
+        ])
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.severity == .warn && $0.title.contains("Remote .vscode/settings.json missing AgentPanel block: remote-ml")
+        }
+        XCTAssertNotNil(finding)
+        // When file exists but block missing, snippet should be just the block (no outer braces)
+        XCTAssertNotNil(finding?.snippet)
+        XCTAssertTrue(finding?.snippet?.contains("// >>> agent-panel") == true)
+    }
+
+    func testSSHSettingsBlockSSHFails255Warns() {
+        let runner = SequentialCommandRunner(results: [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),        // path check
+            .success(ApCommandResult(exitCode: 255, stdout: "", stderr: "Connection refused"))  // settings check fails
+        ])
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.severity == .warn && $0.title.contains("Remote .vscode/settings.json missing AgentPanel block: remote-ml")
+        }
+        XCTAssertNotNil(finding)
+    }
+
+    func testSSHSettingsBlockSSHNotFoundWarns() {
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: false
+        )
+
+        let report = doctor.run()
+
+        // When ssh is not found, both path check and settings check should warn
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .warn && $0.title.contains("ssh not found")
+        })
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .warn && $0.title.contains("Cannot check remote VS Code settings")
+        })
+    }
+
+    func testSSHSettingsBlockSnippetUsesJsoncLanguage() {
+        let runner = SequentialCommandRunner(results: [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .failure(ApCoreError(message: "SSH failed"))
+        ])
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.severity == .warn && $0.title.contains("Remote .vscode/settings.json missing AgentPanel block")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertEqual(finding?.snippetLanguage, "jsonc")
     }
 
     // MARK: - Helpers
@@ -527,7 +644,7 @@ final class DoctorSSHTests: XCTestCase {
         toml: String? = nil,
         sshResult: Result<ApCommandResult, ApCoreError>,
         sshResolvable: Bool,
-        commandRunner: StubCommandRunner? = nil,
+        commandRunner: (any CommandRunning)? = nil,
         aerospaceHealth: AeroSpaceHealthChecking = StubAeroSpaceHealth()
     ) -> Doctor {
         let configDir = tempDir.appendingPathComponent(".config/agent-panel", isDirectory: true)
@@ -708,7 +825,8 @@ private struct SelectiveFileSystem: FileSystem {
 
 private class StubCommandRunner: CommandRunning {
     let result: Result<ApCommandResult, ApCoreError>
-    private(set) var lastArguments: [String]?
+    private(set) var allArguments: [[String]] = []
+    var lastArguments: [String]? { allArguments.last }
 
     init(result: Result<ApCommandResult, ApCoreError>) {
         self.result = result
@@ -720,7 +838,30 @@ private class StubCommandRunner: CommandRunning {
         timeoutSeconds: TimeInterval?,
         workingDirectory: String?
     ) -> Result<ApCommandResult, ApCoreError> {
-        lastArguments = arguments
+        allArguments.append(arguments)
         return result
+    }
+}
+
+/// Command runner that returns different results for sequential calls.
+private class SequentialCommandRunner: CommandRunning {
+    private var results: [Result<ApCommandResult, ApCoreError>]
+    private(set) var lastArguments: [String]?
+
+    init(results: [Result<ApCommandResult, ApCoreError>]) {
+        self.results = results
+    }
+
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        lastArguments = arguments
+        guard !results.isEmpty else {
+            return .failure(ApCoreError(message: "SequentialCommandRunner: no results left"))
+        }
+        return results.removeFirst()
     }
 }

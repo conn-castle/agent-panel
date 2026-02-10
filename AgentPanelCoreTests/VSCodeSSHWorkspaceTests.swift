@@ -1,22 +1,24 @@
 import XCTest
 @testable import AgentPanelCore
 
-/// Tests that ApVSCodeLauncher generates correct workspace files for SSH and local paths.
+/// Tests that ApVSCodeLauncher correctly manages VS Code configuration.
 ///
-/// These tests verify the workspace JSON contents (AP:<id> tag, remoteAuthority, folders).
-/// The command runner uses a sandboxed resolver that cannot find 'code', so VS Code
-/// is never actually launched — only the workspace file is inspected.
+/// Local projects: verifies settings.json injection with AP:<id> block.
+/// SSH projects: verifies SSH read/write command arguments and that SSH failures fail loudly.
+/// The command runner is mocked, so VS Code is never actually launched.
 final class VSCodeSSHWorkspaceTests: XCTestCase {
 
     private var tempDir: URL!
-    private var dataStore: DataPaths!
+    private var projectDir: URL!
 
     override func setUp() {
         super.setUp()
         tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("VSCodeSSHTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("VSCodeTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        dataStore = DataPaths(homeDirectory: tempDir)
+
+        projectDir = tempDir.appendingPathComponent("project", isDirectory: true)
+        try? FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
     }
 
     override func tearDown() {
@@ -24,95 +26,225 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - SSH workspace with remoteAuthority
+    // MARK: - Local project: settings.json injection
 
-    func testSSHPathGeneratesWorkspaceWithRemoteAuthority() {
-        let launcher = makeSandboxedLauncher()
+    func testLocalPathInjectsSettingsJSON() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))  // code --new-window
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
-        // openNewWindow will fail (resolver can't find 'code') but writes workspace first
+        let result = launcher.openNewWindow(
+            identifier: "local-project",
+            projectPath: projectDir.path
+        )
+
+        if case .failure(let error) = result {
+            XCTFail("Expected success, got: \(error.message)")
+            return
+        }
+
+        let content = readSettingsJSON(projectPath: projectDir.path)
+        XCTAssertNotNil(content, "settings.json should exist")
+        XCTAssertTrue(content?.contains("// >>> agent-panel") == true)
+        XCTAssertTrue(content?.contains("AP:local-project") == true)
+    }
+
+    func testLocalPathOpensCodeWithProjectPath() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))  // code --new-window
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
+
         _ = launcher.openNewWindow(
+            identifier: "local-project",
+            projectPath: projectDir.path
+        )
+
+        XCTAssertEqual(runner.calls.count, 1)
+        let codeCall = runner.calls[0]
+        XCTAssertEqual(codeCall.executable, "code")
+        XCTAssertEqual(codeCall.arguments, ["--new-window", projectDir.path])
+    }
+
+    func testLocalPathPreservesExistingSettings() {
+        // Pre-populate settings.json
+        let vscodeDir = URL(fileURLWithPath: projectDir.path).appendingPathComponent(".vscode")
+        try! FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
+        let settingsURL = vscodeDir.appendingPathComponent("settings.json")
+        try! """
+        {
+          \"editor.fontSize\": 14
+        }
+        """.write(to: settingsURL, atomically: true, encoding: .utf8)
+
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
+
+        _ = launcher.openNewWindow(identifier: "local", projectPath: projectDir.path)
+
+        let content = readSettingsJSON(projectPath: projectDir.path)
+        XCTAssertTrue(content?.contains("// >>> agent-panel") == true)
+        XCTAssertTrue(content?.contains("\"editor.fontSize\": 14") == true)
+    }
+
+    // MARK: - SSH project: successful remote write
+
+    func testSSHProjectSuccessfulRemoteWrite() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),  // SSH read
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),      // SSH write
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))       // code --new-window
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
+
+        let result = launcher.openNewWindow(
             identifier: "remote-ml",
             projectPath: "/Users/nconn/project",
             remoteAuthority: "ssh-remote+nconn@happy-mac.local"
         )
 
-        let workspace = readWorkspaceJSON("remote-ml")
-        XCTAssertNotNil(workspace, "Workspace file should exist")
+        if case .failure(let error) = result {
+            XCTFail("Expected success, got: \(error.message)")
+            return
+        }
 
-        let remoteAuthority = workspace?["remoteAuthority"] as? String
-        XCTAssertEqual(remoteAuthority, "ssh-remote+nconn@happy-mac.local")
+        XCTAssertEqual(runner.calls.count, 3)
 
-        let folders = workspace?["folders"] as? [[String: String]]
-        XCTAssertEqual(folders?.first?["uri"], "vscode-remote://ssh-remote+nconn@happy-mac.local/Users/nconn/project")
+        // SSH read command
+        let readCall = runner.calls[0]
+        XCTAssertEqual(readCall.executable, "ssh")
+        XCTAssertTrue(readCall.arguments.contains("--"))
+        XCTAssertTrue(readCall.arguments.contains("nconn@happy-mac.local"))
+        XCTAssertTrue(readCall.arguments.last?.contains("cat") == true)
+
+        // SSH write command
+        let writeCall = runner.calls[1]
+        XCTAssertEqual(writeCall.executable, "ssh")
+        XCTAssertTrue(writeCall.arguments.contains("--"))
+        XCTAssertTrue(writeCall.arguments.contains("nconn@happy-mac.local"))
+        XCTAssertTrue(writeCall.arguments.last?.contains("base64 -d") == true)
+
+        // VS Code launch with --remote
+        let codeCall = runner.calls[2]
+        XCTAssertEqual(codeCall.executable, "code")
+        XCTAssertEqual(codeCall.arguments, [
+            "--new-window",
+            "--remote", "ssh-remote+nconn@happy-mac.local",
+            "/Users/nconn/project"
+        ])
     }
 
-    // MARK: - Non-SSH path has no remoteAuthority
+    // MARK: - SSH project: failures fail loudly
 
-    func testNonSSHPathGeneratesWorkspaceWithoutRemoteAuthority() {
-        let launcher = makeSandboxedLauncher()
+    func testSSHProjectReadFailureReturnsErrorAndDoesNotLaunchCode() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .failure(ApCoreError(message: "SSH connection failed"))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
-        _ = launcher.openNewWindow(
-            identifier: "local-project",
-            projectPath: "/Users/test/project"
-        )
-
-        let workspace = readWorkspaceJSON("local-project")
-        XCTAssertNotNil(workspace, "Workspace file should exist")
-
-        XCTAssertNil(workspace?["remoteAuthority"])
-
-        let folders = workspace?["folders"] as? [[String: String]]
-        XCTAssertEqual(folders?.first?["path"], "/Users/test/project")
-    }
-
-    // MARK: - AP:<id> tag preserved for SSH workspaces
-
-    func testSSHWorkspacePreservesAPTag() {
-        let launcher = makeSandboxedLauncher()
-
-        _ = launcher.openNewWindow(
+        let result = launcher.openNewWindow(
             identifier: "remote-ml",
-            projectPath: "/remote/path",
-            remoteAuthority: "ssh-remote+nconn@host"
+            projectPath: "/Users/nconn/project",
+            remoteAuthority: "ssh-remote+nconn@happy-mac.local"
         )
 
-        let workspace = readWorkspaceJSON("remote-ml")
-        let settings = workspace?["settings"] as? [String: String]
-        let windowTitle = settings?["window.title"]
-        XCTAssertNotNil(windowTitle)
-        XCTAssertTrue(windowTitle?.hasPrefix("AP:remote-ml") == true,
-                       "Window title should start with AP:remote-ml, got: \(windowTitle ?? "nil")")
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("SSH read failed"))
+        }
+
+        XCTAssertEqual(runner.calls.count, 1, "Should not attempt code launch on SSH read failure")
+        XCTAssertEqual(runner.calls[0].executable, "ssh")
     }
 
-    func testSSHWorkspaceEncodesRemotePathSegmentsInURI() {
-        let launcher = makeSandboxedLauncher()
+    func testSSHProjectWriteFailureReturnsErrorAndDoesNotLaunchCode() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "Permission denied"))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
-        _ = launcher.openNewWindow(
-            identifier: "remote-ml-encoded",
-            projectPath: "/Users/nconn/my project#1",
-            remoteAuthority: "ssh-remote+nconn@host"
+        let result = launcher.openNewWindow(
+            identifier: "remote-ml",
+            projectPath: "/Users/nconn/project",
+            remoteAuthority: "ssh-remote+nconn@happy-mac.local"
         )
 
-        let workspace = readWorkspaceJSON("remote-ml-encoded")
-        XCTAssertNotNil(workspace, "Workspace file should exist")
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("SSH write failed"))
+        }
 
-        let remoteAuthority = workspace?["remoteAuthority"] as? String
-        XCTAssertEqual(remoteAuthority, "ssh-remote+nconn@host")
+        XCTAssertEqual(runner.calls.count, 2, "Should not attempt code launch on SSH write failure")
+        XCTAssertEqual(runner.calls[0].executable, "ssh")
+        XCTAssertEqual(runner.calls[1].executable, "ssh")
+    }
 
-        let folders = workspace?["folders"] as? [[String: String]]
-        XCTAssertEqual(folders?.first?["uri"], "vscode-remote://ssh-remote+nconn@host/Users/nconn/my%20project%231")
+    // MARK: - SSH command safety
+
+    func testSSHCommandIncludesOptionTerminator() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
+
+        _ = launcher.openNewWindow(
+            identifier: "test",
+            projectPath: "/remote/path",
+            remoteAuthority: "ssh-remote+user@host"
+        )
+
+        // Both SSH calls should include "--"
+        for i in 0..<2 {
+            let args = runner.calls[i].arguments
+            XCTAssertTrue(args.contains("--"), "SSH call \(i) should include '--' terminator: \(args)")
+        }
     }
 
     // MARK: - openNewWindow command execution behavior
 
-    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrEmpty() throws {
-        let launcher = try makeLauncherWithCodeStub(
-            "#!/bin/sh\nexit 2\n"
-        )
+    func testOpenNewWindowFailsWhenProjectPathNil() {
+        let runner = MockCommandRunner()
+        let launcher = makeLauncher(commandRunner: runner)
+
+        let result = launcher.openNewWindow(identifier: "no-path", projectPath: nil)
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("Project path is required"))
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrEmpty() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 2, stdout: "", stderr: ""))  // code fails
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
         let result = launcher.openNewWindow(
             identifier: "exit-empty-stderr",
-            projectPath: "/Users/test/project"
+            projectPath: projectDir.path
         )
 
         switch result {
@@ -123,14 +255,16 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         }
     }
 
-    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrIncluded() throws {
-        let launcher = try makeLauncherWithCodeStub(
-            "#!/bin/sh\necho boom 1>&2\nexit 3\n"
-        )
+    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrIncluded() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 3, stdout: "", stderr: "boom"))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
         let result = launcher.openNewWindow(
             identifier: "exit-with-stderr",
-            projectPath: "/Users/test/project"
+            projectPath: projectDir.path
         )
 
         switch result {
@@ -142,14 +276,16 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         }
     }
 
-    func testOpenNewWindowSucceedsWhenCodeExitZero() throws {
-        let launcher = try makeLauncherWithCodeStub(
-            "#!/bin/sh\nexit 0\n"
-        )
+    func testOpenNewWindowSucceedsWhenCodeExitZero() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
         let result = launcher.openNewWindow(
             identifier: "exit-zero",
-            projectPath: "/Users/test/project"
+            projectPath: projectDir.path
         )
 
         switch result {
@@ -160,10 +296,14 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         }
     }
 
-    func testOpenNewWindowTrimsRemoteAuthorityAndProjectPathWhenWritingWorkspace() throws {
-        let launcher = try makeLauncherWithCodeStub(
-            "#!/bin/sh\nexit 0\n"
-        )
+    func testOpenNewWindowTrimsRemoteAuthorityAndProjectPath() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let launcher = makeLauncher(commandRunner: runner)
 
         let result = launcher.openNewWindow(
             identifier: "trim-test",
@@ -175,185 +315,80 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
             return
         }
 
-        let workspace = readWorkspaceJSON("trim-test")
-        XCTAssertNotNil(workspace, "Workspace file should exist")
-
-        let remoteAuthority = workspace?["remoteAuthority"] as? String
-        XCTAssertEqual(remoteAuthority, "ssh-remote+u@h")
-
-        let folders = workspace?["folders"] as? [[String: String]]
-        XCTAssertEqual(folders?.first?["uri"], "vscode-remote://ssh-remote+u@h/Users/test/project")
+        // Verify SSH target was trimmed
+        let readCall = runner.calls[0]
+        XCTAssertTrue(readCall.arguments.contains("u@h"))
+        XCTAssertTrue(readCall.arguments.last?.contains("/Users/test/project") == true)
+        XCTAssertFalse(readCall.arguments.last?.contains(" /Users/test/project ") == true)
     }
 
-    func testOpenNewWindowReturnsErrorWhenWorkspaceFileWriteFails() {
+    func testOpenNewWindowReturnsErrorWhenSettingsWriteFails() {
         let failingFS = FailingFileSystem()
-        let resolver = ExecutableResolver(
-            fileSystem: EmptyFileSystem(),
-            searchPaths: [],
-            loginShellFallbackEnabled: false
+        let failingSettings = ApVSCodeSettingsManager(fileSystem: failingFS)
+        let runner = MockCommandRunner()
+        let launcher = ApVSCodeLauncher(
+            commandRunner: runner,
+            fileSystem: failingFS,
+            settingsManager: failingSettings
         )
-        let runner = ApSystemCommandRunner(executableResolver: resolver)
-        let launcher = ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner, fileSystem: failingFS)
 
         let result = launcher.openNewWindow(
-            identifier: "workspace-write-fails",
-            projectPath: "/Users/test/project"
+            identifier: "settings-write-fails",
+            projectPath: projectDir.path
         )
 
         switch result {
         case .success:
             XCTFail("Expected failure")
         case .failure(let error):
-            XCTAssertTrue(error.message.contains("Failed to write workspace file"))
+            XCTAssertTrue(error.message.contains("Failed to write .vscode/settings.json"))
         }
     }
 
     // MARK: - Helpers
 
-    /// Creates a launcher with a sandboxed resolver that cannot find 'code',
-    /// preventing VS Code from actually launching during tests.
-    private func makeSandboxedLauncher() -> ApVSCodeLauncher {
-        let emptyFS = EmptyFileSystem()
-        let resolver = ExecutableResolver(
-            fileSystem: emptyFS,
-            searchPaths: [],
-            loginShellFallbackEnabled: false
-        )
-        let runner = ApSystemCommandRunner(executableResolver: resolver)
-        return ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner)
+    private func makeLauncher(commandRunner: MockCommandRunner) -> ApVSCodeLauncher {
+        ApVSCodeLauncher(commandRunner: commandRunner)
     }
 
-    private func makeLauncherWithCodeStub(_ codeScript: String) throws -> ApVSCodeLauncher {
-        let binDir = tempDir.appendingPathComponent("bin", isDirectory: true)
-        try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
-
-        let codeURL = binDir.appendingPathComponent("code", isDirectory: false)
-        try codeScript.write(to: codeURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codeURL.path)
-
-        let resolver = ExecutableResolver(
-            searchPaths: [binDir.path],
-            loginShellFallbackEnabled: false
-        )
-        let runner = ApSystemCommandRunner(executableResolver: resolver)
-        return ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner)
-    }
-
-    // MARK: - createWorkspaceFile with injected FileSystem
-
-    func testCreateWorkspaceFileUsesInjectedFileSystem() {
-        let recorder = RecordingFileSystem()
-
-        let result = ApIdeToken.createWorkspaceFile(
-            identifier: "injected-fs",
-            folders: [["path": "/test/path"]],
-            remoteAuthority: nil,
-            dataStore: dataStore,
-            fileSystem: recorder
-        )
-
-        if case .failure(let error) = result {
-            XCTFail("Expected success, got: \(error.message)")
-            return
-        }
-        XCTAssertEqual(recorder.createDirectoryCalls.count, 1)
-        XCTAssertEqual(recorder.writeFileCalls.count, 1)
-        XCTAssertTrue(recorder.writeFileCalls.first?.url.lastPathComponent == "injected-fs.code-workspace")
-    }
-
-    func testCreateWorkspaceFileReturnsErrorOnFileSystemFailure() {
-        let failingFS = FailingFileSystem()
-
-        let result = ApIdeToken.createWorkspaceFile(
-            identifier: "fail-test",
-            folders: [],
-            remoteAuthority: nil,
-            dataStore: dataStore,
-            fileSystem: failingFS
-        )
-
-        if case .success = result {
-            XCTFail("Expected failure from failing file system")
-        }
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("Failed to write workspace file"))
-        }
-    }
-
-    func testCreateWorkspaceFileSlashInIdentifierFails() {
-        let result = ApIdeToken.createWorkspaceFile(
-            identifier: "bad/id",
-            folders: [],
-            remoteAuthority: nil,
-            dataStore: dataStore
-        )
-
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("cannot contain '/'"))
-        } else {
-            XCTFail("Expected failure for identifier with slash")
-        }
-    }
-
-    func testCreateWorkspaceFileEmptyIdentifierFails() {
-        let result = ApIdeToken.createWorkspaceFile(
-            identifier: "   ",
-            folders: [],
-            remoteAuthority: nil,
-            dataStore: dataStore
-        )
-
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("cannot be empty"))
-        } else {
-            XCTFail("Expected failure for empty identifier")
-        }
-    }
-
-    private func readWorkspaceJSON(_ identifier: String) -> [String: Any]? {
-        let workspaceURL = dataStore.vscodeWorkspaceDirectory
-            .appendingPathComponent("\(identifier).code-workspace")
-        guard let data = try? Data(contentsOf: workspaceURL) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    private func readSettingsJSON(projectPath: String) -> String? {
+        let settingsURL = URL(fileURLWithPath: projectPath)
+            .appendingPathComponent(".vscode/settings.json")
+        return try? String(contentsOf: settingsURL, encoding: .utf8)
     }
 }
 
-/// File system stub that reports no files exist — prevents executable resolution.
-private struct EmptyFileSystem: FileSystem {
-    func fileExists(at url: URL) -> Bool { false }
-    func isExecutableFile(at url: URL) -> Bool { false }
-    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
-    func createDirectory(at url: URL) throws {}
-    func fileSize(at url: URL) throws -> UInt64 { 0 }
-    func removeItem(at url: URL) throws {}
-    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
-    func appendFile(at url: URL, data: Data) throws {}
-    func writeFile(at url: URL, data: Data) throws {}
-}
+// MARK: - Test Doubles
 
-/// Records createDirectory and writeFile calls for verification.
-private final class RecordingFileSystem: FileSystem {
-    struct WriteCall {
-        let url: URL
-        let data: Data
+/// Mock command runner that records calls and returns pre-configured results.
+private final class MockCommandRunner: CommandRunning {
+    struct Call: Equatable {
+        let executable: String
+        let arguments: [String]
+        let workingDirectory: String?
     }
-    var createDirectoryCalls: [URL] = []
-    var writeFileCalls: [WriteCall] = []
 
-    func fileExists(at url: URL) -> Bool { false }
-    func isExecutableFile(at url: URL) -> Bool { false }
-    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
-    func createDirectory(at url: URL) throws { createDirectoryCalls.append(url) }
-    func fileSize(at url: URL) throws -> UInt64 { 0 }
-    func removeItem(at url: URL) throws {}
-    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
-    func appendFile(at url: URL, data: Data) throws {}
-    func writeFile(at url: URL, data: Data) throws { writeFileCalls.append(WriteCall(url: url, data: data)) }
+    var calls: [Call] = []
+    var results: [Result<ApCommandResult, ApCoreError>] = []
+
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        calls.append(Call(executable: executable, arguments: arguments, workingDirectory: workingDirectory))
+        guard !results.isEmpty else {
+            return .failure(ApCoreError(message: "MockCommandRunner: no results left"))
+        }
+        return results.removeFirst()
+    }
 }
 
-/// File system that throws on write — for testing error handling.
+/// File system that throws on createDirectory/write — for testing settings.json error handling.
 private struct FailingFileSystem: FileSystem {
     func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { true }
     func isExecutableFile(at url: URL) -> Bool { false }
     func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
     func createDirectory(at url: URL) throws {

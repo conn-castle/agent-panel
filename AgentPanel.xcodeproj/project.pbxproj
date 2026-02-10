@@ -19,6 +19,7 @@
 		17A33C82BE771A134F5317EC /* AgentLayerLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42F36263EBFB132E20DC2CD /* AgentLayerLauncherTests.swift */; };
 		18F5AE94B0A5B02A2A773CFB /* DataPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CC898051808DC63C4089ED /* DataPathsTests.swift */; };
 		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
+		1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */; };
 		1F6C1865590F67A36D702863 /* DataPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */; };
 		22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */; };
 		255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */; };
@@ -53,13 +54,16 @@
 		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
 		958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */; };
 		98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D35ABD3022669F375FDB52F /* ApCLI.swift */; };
+		9A65D206EB28E8E6C9DDEE52 /* SSHHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */; };
 		A44D8A06EE6BCC913FC8933C /* ChromeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930B37D5D8A0F77FABC52946 /* ChromeTabs.swift */; };
 		AB2458FE5903330BEECDED5B /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		B28936C2D4FA7AE9CA34DF4A /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = DA4BB8B60939EF907169EAD7 /* TOMLDecoder */; };
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
+		D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */; };
 		D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9708BB20B7C2071A1EE21D7 /* main.swift */; };
+		DB4DD95E24CF9477ABF998C6 /* VSCodeSettingsManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A6F5B4B87B51292A7B3F26 /* VSCodeSettingsManagerTests.swift */; };
 		DC1D6772FC0CC83095FB41F2 /* AppKitRunningApplicationCheckerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B15ECCB069CA875EE2198D9 /* AppKitRunningApplicationCheckerTests.swift */; };
 		E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */; };
 		E1A3D5707DC2114E42745583 /* System.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8D8C73BDF50CEB78DBA5853 /* System.swift */; };
@@ -171,7 +175,9 @@
 		7CBD0FE2C6DF91C6CEA318A9 /* DependenciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependenciesTests.swift; sourceTree = "<group>"; };
 		8375E9AD9F43075DD43C36F4 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
 		864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserTests.swift; sourceTree = "<group>"; };
+		87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeSettingsManager.swift; sourceTree = "<group>"; };
 		896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApArgumentParserTests.swift; sourceTree = "<group>"; };
+		8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeSettingsManagerRemoteTests.swift; sourceTree = "<group>"; };
 		8D9DD5D6EFEEEE1BAF5BA17E /* AeroSpaceFallbackBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFallbackBehaviorTests.swift; sourceTree = "<group>"; };
 		90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
 		91616BD52F8F0B9C3B94A6D4 /* ChromeTabResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabResolverTests.swift; sourceTree = "<group>"; };
@@ -195,9 +201,11 @@
 		BC700F71F91521277C58EA20 /* AgentPanel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPanel.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UTCTimestampTests.swift; sourceTree = "<group>"; };
 		BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApCLIRunnerTests.swift; sourceTree = "<group>"; };
+		BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHHelpers.swift; sourceTree = "<group>"; };
 		C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdNormalizationTests.swift; sourceTree = "<group>"; };
 		D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
 		D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelCLICore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D2A6F5B4B87B51292A7B3F26 /* VSCodeSettingsManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeSettingsManagerTests.swift; sourceTree = "<group>"; };
 		D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataPaths.swift; sourceTree = "<group>"; };
 		D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherSession.swift; sourceTree = "<group>"; };
 		D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerOpenProjectIdsTests.swift; sourceTree = "<group>"; };
@@ -292,6 +300,8 @@
 				D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */,
 				90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
+				8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */,
+				D2A6F5B4B87B51292A7B3F26 /* VSCodeSettingsManagerTests.swift */,
 				BABEBED25D4A01500C091AE4 /* VSCodeSSHWorkspaceTests.swift */,
 			);
 			path = AgentPanelCoreTests;
@@ -317,7 +327,9 @@
 				E06D0D92D76D722E481FBCAC /* Identity.swift */,
 				9E0C3DAA0280728917003498 /* Logger.swift */,
 				3CC240A74C38218E4C33B36B /* ProjectManager.swift */,
+				BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */,
 				B8D8C73BDF50CEB78DBA5853 /* System.swift */,
+				87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */,
 				D70EE9EFFE9128D41FD8C855 /* AeroSpace */,
 			);
 			path = AgentPanelCore;
@@ -642,7 +654,9 @@
 				5F2733E6786E0EF79EB6B6F6 /* Identity.swift in Sources */,
 				476AD5F6F072D635D7418FAB /* Logger.swift in Sources */,
 				0DDF42CE7E81D0B7064840F2 /* ProjectManager.swift in Sources */,
+				9A65D206EB28E8E6C9DDEE52 /* SSHHelpers.swift in Sources */,
 				E1A3D5707DC2114E42745583 /* System.swift in Sources */,
+				1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -705,6 +719,8 @@
 				22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
 				7FD3930962ACAD6D46827DF1 /* VSCodeSSHWorkspaceTests.swift in Sources */,
+				D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */,
+				DB4DD95E24CF9477ABF998C6 /* VSCodeSettingsManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
