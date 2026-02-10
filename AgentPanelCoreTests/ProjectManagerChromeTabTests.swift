@@ -210,6 +210,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         return ProjectManager(
             aerospace: PMAeroSpaceStub(),
             ideLauncher: PMIdeLauncherStub(),
+            agentLayerIdeLauncher: PMIdeLauncherStub(),
             chromeLauncher: PMChromeLauncherStub(),
             chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
             chromeTabCapture: chromeTabCapture,
@@ -258,7 +259,7 @@ private final class PMAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct PMIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError> { .success(()) }
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> { .success(()) }
 }
 
 private struct PMChromeLauncherStub: ChromeLauncherProviding {

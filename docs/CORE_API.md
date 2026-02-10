@@ -41,9 +41,15 @@ public struct ApCoreError: Error, Equatable, Sendable {
 public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
     public let chrome: ChromeConfig
+    public let agentLayer: AgentLayerConfig
 
     /// Loads and validates configuration from the default path.
     public static func loadDefault() -> Result<Config, ConfigLoadError>
+}
+
+public struct AgentLayerConfig: Equatable, Sendable {
+    /// Global default for `useAgentLayer` across all projects. Default: false.
+    public let enabled: Bool
 }
 
 public struct ChromeConfig: Equatable, Sendable {
@@ -55,11 +61,15 @@ public struct ChromeConfig: Equatable, Sendable {
 public struct ProjectConfig: Equatable, Sendable {
     public let id: String
     public let name: String
+    public let remote: String?  // Optional VS Code SSH remote authority (e.g., "ssh-remote+user@host")
     public let path: String
     public let color: String  // Named color or hex (#RRGGBB)
-    public let useAgentLayer: Bool
+    public let useAgentLayer: Bool  // Resolved: global default + per-project override
     public let chromePinnedTabs: [String]
     public let chromeDefaultTabs: [String]
+
+    /// True when `remote` is set (SSH remote project).
+    public var isSSH: Bool
 }
 
 public enum ConfigLoadError: Error, Equatable, Sendable {

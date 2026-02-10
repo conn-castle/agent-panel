@@ -27,6 +27,36 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
+    Priority: Low. Area: Agent Layer/IDE
+    Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window workspace.code-workspace` becomes `code --new-window workspace.code-workspace .` → two windows. Workaround implemented: AgentPanel now runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. This loses `CODEX_HOME` env var that `al vscode` normally sets (only needed by Codex VS Code extension).
+    Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg. Once fixed, consider reverting to `al vscode` for CODEX_HOME support.
+
+- Issue 2026-02-09 activation-error-invisible: Activation errors invisible when panel closes during async launch
+    Priority: High. Area: App/Switcher UX
+    Description: During `selectProject`, Chrome's new window steals focus from the switcher panel, triggering `windowDidResignKey` → `dismiss(reason: .windowClose)`. If the subsequent VS Code launch fails, the error status message is set on an already-dismissed panel, so the user sees no indication of failure.
+    Next step: Suppress `windowDidResignKey` dismissal while an activation task is in progress (add an `isActivating` guard). Alternatively, surface the error via a notification or menu bar indicator.
+
+- Issue 2026-02-09 fish-shell-path: Login shell PATH resolution may not work with fish shell
+    Priority: Low. Area: System/PATH
+    Description: `runLoginShellCommand` uses `$SHELL -l -c <command>` to resolve the login shell PATH. `$SHELL` is validated as an absolute path (non-absolute values fall back to `/bin/zsh`). Fish shell does not support the `-c` flag in the same way as bash/zsh. Users with `$SHELL=/usr/local/bin/fish` may get nil PATH resolution (safe — falls back to standard paths + process PATH).
+    Next step: If a fish user reports missing executables in child processes, add fish-specific PATH resolution (`fish -l -c 'echo $PATH'` uses space-separated entries, not colon-separated).
+
+- Issue 2026-02-09 doctor-unrecognized-config: Doctor should fail on unrecognized config.toml entries
+    Priority: Medium. Area: Doctor/Config
+    Description: Currently, the Doctor does not flag unrecognized keys in `config.toml`. It should fail verification if the configuration contains unknown entries to prevent silent typos or configuration errors.
+    Next step: Update the configuration loader or Doctor check to validate that all keys in `config.toml` are known schemas.
+
+- Issue 2026-02-09 doctor-summary-counts: Summarize Doctor failures and warnings with counts
+    Priority: Low. Area: Doctor/CLI
+    Description: The Doctor output lacks a high-level summary. It should provide a concise count of total failures and warnings at the end of the report to give the user a quick health overview.
+    Next step: Update the `DoctorReport` or the CLI rendering logic to track and print failure/warning counts.
+
+- Issue 2026-02-09 doctor-color-output: Color code the Doctor CLI output
+    Priority: Low. Area: Doctor/CLI
+    Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
+    Next step: Integrate a color-coding utility into the Doctor report rendering logic.
+
 - Issue 2026-02-09 doctor-focus: Closing Doctor window does not restore previous focus
     Priority: Medium. Area: UI/UX
     Description: When the Doctor window is closed, the application does not restore focus to the window that was focused before the Doctor was opened. It should return focus to the previous application/window to ensure a smooth workflow.

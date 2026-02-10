@@ -107,6 +107,31 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Single-slot design lost the return-to window after close→reopen→close cycles. Stack enables "exit project space" semantic: Z (main) → A (ap-alpha) → B (ap-beta) → exit returns to Z, not A.
     Tradeoffs: Focus stack is not persisted (window IDs don't survive restarts); test-only `pushFocusForTest` helper added for injection.
 
+- Decision 2026-02-09 allauncher: Agent Layer launcher uses `al sync` + direct `code` (two-step)
+    Decision: Both `ApVSCodeLauncher` and `ApAgentLayerVSCodeLauncher` create `.code-workspace` files via `ApIdeToken.createWorkspaceFile()`. AL launcher runs two steps: (1) `al sync` with CWD = project path (regenerates agent layer config from `.agent-layer/`), (2) `code --new-window <workspace>` (opens one VS Code window with AP tag). `ProjectManager.selectProject` chooses launcher via `project.useAgentLayer`.
+    Reason: `al vscode` unconditionally appends `.` (CWD) to the args it passes to `code` (`internal/clients/vscode/launch.go`), causing two VS Code windows. Splitting into `al sync` + direct `code` avoids the duplicate window. Token-based window identification (`AP:<id>` in workspace title) is uniform across all project types.
+    Tradeoffs: Loses `CODEX_HOME` env var that `al vscode` normally sets (only needed by Codex VS Code extension). SSH + AL is mutually exclusive (rejected at config parse time). Once `al vscode` is fixed upstream, can revert to single-command launch.
+
+- Decision 2026-02-09 cmdrunnerwd: CommandRunning protocol extended with workingDirectory
+    Decision: Add `workingDirectory: String?` as 4th parameter to `CommandRunning.run()`. Provide two convenience extensions (2-param and 3-param) that forward `workingDirectory: nil` to preserve all existing call sites.
+    Reason: AL launcher needs to set process working directory. Convenience extensions prevent breaking ~23 production and ~6 test call sites.
+    Tradeoffs: All mock `CommandRunning` implementations must implement the 4-param method; convenience extensions may mask unintended nil working directory.
+
+- Decision 2026-02-09 pathprop: Propagate augmented PATH to child processes
+    Decision: `ApSystemCommandRunner` builds an augmented environment at init by merging standard search paths, the user's login shell PATH (via `$SHELL -l -c 'echo $PATH'`), and the current process PATH (deduplicated, order preserved). Every child process receives this environment via `process.environment`. Login shell command has a 5-second semaphore timeout. `$SHELL` is validated as an absolute path (falls back to `/bin/zsh`). Pipe EOF wait uses a fixed 2-second timeout to avoid doubling the caller's timeout.
+    Reason: GUI apps inherit a minimal PATH. Child processes (e.g., `al vscode` calling `code`) also inherited this minimal PATH and failed. Uses `$SHELL` to support bash users. Bounded timeout prevents hangs from slow shell init files.
+    Tradeoffs: One login shell spawn per `ApSystemCommandRunner` construction (~50ms); cached as `let` property. Non-POSIX shells (fish) may return nil PATH (safe fallback).
+
+- Decision 2026-02-09 wsfallback: Workspace fallback when focus stack is exhausted
+    Decision: When `closeProject` or `exitToNonProjectWindow` exhausts the focus stack, fall back to focusing the first non-project workspace (workspace name not prefixed with `ap-`). Switcher dismiss adds a workspace-level fallback (`focusWorkspace(name: focus.workspace)`) between window focus failure and app activation.
+    Reason: Users were stranded with no focus change when closing a project without a prior non-project window. Workspace-level focus is a sensible "closest available" fallback.
+    Tradeoffs: Fallback may land the user on an arbitrary non-project workspace if multiple exist; this is better than no focus change.
+
+- Decision 2026-02-09 closefocus: Refresh captured focus after close-project in switcher
+    Decision: After `closeProject` succeeds in the switcher's `performCloseProject`, refresh `capturedFocus` by re-capturing current focus (post-close restoration) and update `previouslyActiveApp` to the frontmost application. If focus capture yields AgentPanel (or bundle ID is unavailable), clear both so dismiss does not attempt a stale restore.
+    Reason: `closeProject` already handles focus restoration (via focus stack or workspace fallback). The switcher's dismiss path could overwrite that with stale pre-switcher focus (including a just-destroyed project workspace). The switcher also stays open after close, so subsequent project selection must use the new non-project focus baseline.
+    Tradeoffs: If focus capture cannot determine a non-AgentPanel window, focus restoration on dismiss is disabled (safe default), and the user may need to reopen the switcher to recapture focus before activating a project.
+
 - Decision 2026-02-08 snaptruth: Snapshot-is-truth for Chrome tab persistence (supersedes filtering approach)
     Decision: Save ALL captured Chrome tab URLs verbatim on close (no filtering of pinned/always-open tabs). On activation with an existing snapshot, restore snapshot URLs directly. Always-open + default tabs are only used for cold start (no snapshot). Stale snapshots are deleted only when capture returns empty (Chrome window confirmed gone); capture failures preserve the existing snapshot. Chrome launches with real tabs in a single AppleScript (no example.com placeholder). URL resolution is deferred until after confirming Chrome needs a fresh launch. If tab-restore launch fails, Chrome falls back to launching without tabs.
     Reason: Exact-match URL filtering is unreliable because Chrome redirects URLs (e.g., `todoist.com/` → `todoist.com/app/today`), git remote URLs differ from web URLs, and other dynamic URL changes. Single-phase launch eliminates visible flashing.

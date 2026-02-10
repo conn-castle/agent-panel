@@ -257,7 +257,10 @@ If no tagged VS Code window exists:
 }
 ```
 
-2. Launch with `code --new-window <workspace-file>`.
+2. Launch:
+   - **Direct projects:** `code --new-window <workspace-file>`
+   - **Agent Layer projects** (`useAgentLayer = true`): run `al sync` with working directory set to the project path, then `code --new-window <workspace-file>`. This avoids a current `al vscode` dual-window issue (tradeoff: Agent Layer env vars like `CODEX_HOME` are not set).
+   - **SSH projects:** Same as direct, but the workspace file uses a `vscode-remote://...` folder URI in `folders` (e.g., `"vscode-remote://ssh-remote+user@host/remote/absolute/path"`) and includes a top-level `remoteAuthority` key (e.g., `"ssh-remote+user@host"`) so VS Code connects via SSH Remote.
 
 ### Poll until window appears
 

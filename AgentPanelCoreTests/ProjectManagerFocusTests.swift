@@ -305,6 +305,162 @@ final class ProjectManagerFocusTests: XCTestCase {
         XCTAssertEqual(captured?.workspace, "personal")
     }
 
+    // MARK: - Workspace fallback when focus stack exhausted
+
+    func testCloseProjectFallsBackToNonProjectWorkspaceWhenStackEmpty() {
+        let aero = FocusAeroSpaceStub()
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        // Non-project workspaces available; no focus stack entries
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
+            ApWorkspaceSummary(workspace: "1", isFocused: false),
+            ApWorkspaceSummary(workspace: "personal", isFocused: false)
+        ])
+
+        let result = manager.closeProject(projectId: "test")
+
+        if case .failure = result { XCTFail("Expected close to succeed") }
+        XCTAssertEqual(aero.focusedWorkspaces.last, "1", "Should fall back to first non-project workspace")
+    }
+
+    func testCloseProjectLogsExhaustedWhenOnlyProjectWorkspaces() {
+        let aero = FocusAeroSpaceStub()
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        // Only project workspaces — no fallback possible
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
+            ApWorkspaceSummary(workspace: "ap-other", isFocused: false)
+        ])
+
+        let result = manager.closeProject(projectId: "test")
+
+        // Close still succeeds (focus restoration is non-fatal)
+        if case .failure = result { XCTFail("Expected close to succeed") }
+        // No non-project workspace was focused
+        XCTAssertTrue(aero.focusedWorkspaces.isEmpty, "Should not attempt to focus a project workspace as fallback")
+    }
+
+    func testExitFallsBackToNonProjectWorkspaceWhenStackEmpty() {
+        let aero = FocusAeroSpaceStub()
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        // Currently in a project workspace with non-project workspaces available
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
+            ApWorkspaceSummary(workspace: "main", isFocused: false)
+        ])
+
+        let result = manager.exitToNonProjectWindow()
+
+        if case .failure = result { XCTFail("Expected exit to succeed via workspace fallback") }
+        XCTAssertEqual(aero.focusedWorkspaces.last, "main")
+    }
+
+    func testExitFailsWhenNoNonProjectWorkspace() {
+        let aero = FocusAeroSpaceStub()
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        // Only project workspaces
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+
+        let result = manager.exitToNonProjectWindow()
+
+        if case .success = result { XCTFail("Expected exit to fail when no non-project workspace") }
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .noPreviousWindow)
+        }
+    }
+
+    // MARK: - Launcher selection (useAgentLayer)
+
+    func testSelectProjectUsesAgentLayerLauncherWhenUseAgentLayerTrue() async {
+        let aero = FocusAeroSpaceStub()
+        let directLauncher = FocusIdeLauncherStub()
+        // AL launcher injects VS Code window into aero when called (simulates launch)
+        let alLauncher = FocusIdeLauncherStub()
+        alLauncher.onLaunch = { identifier in
+            let workspace = "ap-\(identifier)"
+            let ideWindow = ApWindow(
+                windowId: 101, appBundleId: "com.microsoft.VSCode",
+                workspace: workspace, windowTitle: "AP:\(identifier) - VS Code"
+            )
+            aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
+            aero.windowsByWorkspace[workspace] = (aero.windowsByWorkspace[workspace] ?? []) + [ideWindow]
+        }
+
+        let manager = makeFocusManagerWithSeparateLaunchers(
+            aerospace: aero,
+            ideLauncher: directLauncher,
+            agentLayerIdeLauncher: alLauncher
+        )
+
+        let project = ProjectConfig(
+            id: "al-project",
+            name: "AL Project",
+            path: "/Users/test/al-project",
+            color: "blue",
+            useAgentLayer: true,
+            chromePinnedTabs: [],
+            chromeDefaultTabs: []
+        )
+        loadTestConfig(manager: manager, projects: [project])
+        // Only set up Chrome window — VS Code must be launched via AL launcher
+        configureForActivationChromeOnly(aero: aero, projectId: "al-project")
+
+        let focus = CapturedFocus(windowId: 50, appBundleId: "com.apple.Finder", workspace: "main")
+        let result = await manager.selectProject(projectId: "al-project", preCapturedFocus: focus)
+
+        XCTAssertTrue(alLauncher.called, "Agent Layer launcher should have been called")
+        XCTAssertFalse(directLauncher.called, "Direct launcher should NOT have been called")
+        if case .failure(let error) = result {
+            XCTFail("Expected activation to succeed, got: \(error)")
+        }
+    }
+
+    func testSelectProjectUsesDirectLauncherWhenUseAgentLayerFalse() async {
+        let aero = FocusAeroSpaceStub()
+        let alLauncher = FocusIdeLauncherStub()
+        // Direct launcher injects VS Code window into aero when called (simulates launch)
+        let directLauncher = FocusIdeLauncherStub()
+        directLauncher.onLaunch = { identifier in
+            let workspace = "ap-\(identifier)"
+            let ideWindow = ApWindow(
+                windowId: 101, appBundleId: "com.microsoft.VSCode",
+                workspace: workspace, windowTitle: "AP:\(identifier) - VS Code"
+            )
+            aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
+            aero.windowsByWorkspace[workspace] = (aero.windowsByWorkspace[workspace] ?? []) + [ideWindow]
+        }
+
+        let manager = makeFocusManagerWithSeparateLaunchers(
+            aerospace: aero,
+            ideLauncher: directLauncher,
+            agentLayerIdeLauncher: alLauncher
+        )
+
+        let project = testProject(id: "normal-project")
+        loadTestConfig(manager: manager, projects: [project])
+        // Only set up Chrome window — VS Code must be launched via direct launcher
+        configureForActivationChromeOnly(aero: aero, projectId: "normal-project")
+
+        let focus = CapturedFocus(windowId: 50, appBundleId: "com.apple.Finder", workspace: "main")
+        let result = await manager.selectProject(projectId: "normal-project", preCapturedFocus: focus)
+
+        XCTAssertTrue(directLauncher.called, "Direct launcher should have been called")
+        XCTAssertFalse(alLauncher.called, "Agent Layer launcher should NOT have been called")
+        if case .failure(let error) = result {
+            XCTFail("Expected activation to succeed, got: \(error)")
+        }
+    }
+
     // MARK: - Helpers
 
     private func testProject(id: String = "test") -> ProjectConfig {
@@ -339,6 +495,7 @@ final class ProjectManagerFocusTests: XCTestCase {
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: ideLauncher,
+            agentLayerIdeLauncher: ideLauncher,
             chromeLauncher: chromeLauncher,
             chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
             chromeTabCapture: FocusTabCaptureStub(),
@@ -346,6 +503,59 @@ final class ProjectManagerFocusTests: XCTestCase {
             logger: FocusLoggerStub(),
             recencyFilePath: recencyFilePath
         )
+    }
+
+    private func makeFocusManagerWithSeparateLaunchers(
+        aerospace: FocusAeroSpaceStub = FocusAeroSpaceStub(),
+        ideLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
+        agentLayerIdeLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
+        chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub()
+    ) -> ProjectManager {
+        let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("pm-focus-recency-\(UUID().uuidString).json")
+        let chromeTabsDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("pm-focus-tabs-\(UUID().uuidString)", isDirectory: true)
+        return ProjectManager(
+            aerospace: aerospace,
+            ideLauncher: ideLauncher,
+            agentLayerIdeLauncher: agentLayerIdeLauncher,
+            chromeLauncher: chromeLauncher,
+            chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
+            chromeTabCapture: FocusTabCaptureStub(),
+            gitRemoteResolver: FocusGitRemoteStub(),
+            logger: FocusLoggerStub(),
+            recencyFilePath: recencyFilePath
+        )
+    }
+
+    /// Configures AeroSpace stub with Chrome window only (no VS Code).
+    ///
+    /// Used by launcher-selection tests where VS Code must be launched (not pre-existing).
+    /// Sets up Chrome, workspace focus, and focus stability for the IDE window (101).
+    private func configureForActivationChromeOnly(
+        aero: FocusAeroSpaceStub,
+        projectId: String,
+        chromeWindowId: Int = 100,
+        ideWindowId: Int = 101
+    ) {
+        let workspace = "ap-\(projectId)"
+        let chromeWindow = ApWindow(
+            windowId: chromeWindowId, appBundleId: "com.google.Chrome",
+            workspace: workspace, windowTitle: "AP:\(projectId) - Chrome"
+        )
+        let ideWindow = ApWindow(
+            windowId: ideWindowId, appBundleId: "com.microsoft.VSCode",
+            workspace: workspace, windowTitle: "AP:\(projectId) - VS Code"
+        )
+
+        // Chrome exists; VS Code does NOT (launcher must create it via onLaunch callback)
+        aero.windowsByBundleId["com.google.Chrome"] = [chromeWindow]
+        aero.windowsByWorkspace[workspace] = [chromeWindow]
+        aero.focusWindowSuccessIds.formUnion([chromeWindowId, ideWindowId])
+        aero.focusedWindowResult = .success(ideWindow)
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
     }
 
     /// Configures the AeroSpace stub for a successful selectProject activation.
@@ -414,13 +624,27 @@ private final class FocusAeroSpaceStub: AeroSpaceProviding {
         }
         return .failure(ApCoreError(category: .command, message: "window \(windowId) not found"))
     }
+    private(set) var focusedWorkspaces: [String] = []
+    var focusWorkspaceResult: Result<Void, ApCoreError> = .success(())
+
     func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> { .success(()) }
-    func focusWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
+    func focusWorkspace(name: String) -> Result<Void, ApCoreError> {
+        focusedWorkspaces.append(name)
+        return focusWorkspaceResult
+    }
 }
 
 private final class FocusIdeLauncherStub: IdeLauncherProviding {
     var result: Result<Void, ApCoreError> = .success(())
-    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError> { result }
+    private(set) var called = false
+    /// Optional callback invoked on launch — used to inject windows into AeroSpace stub.
+    var onLaunch: ((String) -> Void)?
+
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
+        called = true
+        onLaunch?(identifier)
+        return result
+    }
 }
 
 private struct FocusChromeLauncherStub: ChromeLauncherProviding {

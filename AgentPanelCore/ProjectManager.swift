@@ -155,6 +155,7 @@ public final class ProjectManager {
     // Internal dependencies
     private let aerospace: AeroSpaceProviding
     private let ideLauncher: IdeLauncherProviding
+    private let agentLayerIdeLauncher: IdeLauncherProviding
     private let chromeLauncher: ChromeLauncherProviding
     private let chromeTabStore: ChromeTabStore
     private let chromeTabCapture: ChromeTabCapturing
@@ -208,6 +209,7 @@ public final class ProjectManager {
         let dataPaths = DataPaths.default()
         self.aerospace = ApAeroSpace()
         self.ideLauncher = ApVSCodeLauncher()
+        self.agentLayerIdeLauncher = ApAgentLayerVSCodeLauncher()
         self.chromeLauncher = ApChromeLauncher()
         self.chromeTabStore = ChromeTabStore(directory: dataPaths.chromeTabsDirectory)
         self.chromeTabCapture = ApChromeTabController()
@@ -222,6 +224,7 @@ public final class ProjectManager {
     init(
         aerospace: AeroSpaceProviding,
         ideLauncher: IdeLauncherProviding,
+        agentLayerIdeLauncher: IdeLauncherProviding,
         chromeLauncher: ChromeLauncherProviding,
         chromeTabStore: ChromeTabStore,
         chromeTabCapture: ChromeTabCapturing,
@@ -231,6 +234,7 @@ public final class ProjectManager {
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
+        self.agentLayerIdeLauncher = agentLayerIdeLauncher
         self.chromeLauncher = chromeLauncher
         self.chromeTabStore = chromeTabStore
         self.chromeTabCapture = chromeTabCapture
@@ -537,10 +541,17 @@ public final class ProjectManager {
         }
 
         let ideWindow: ApWindow
+        let selectedIdeLauncher = project.useAgentLayer ? agentLayerIdeLauncher : ideLauncher
         switch await findOrLaunchWindow(
             appBundleId: ApVSCodeLauncher.bundleId,
             projectId: projectId,
-            launchAction: { self.ideLauncher.openNewWindow(identifier: projectId, projectPath: project.path) },
+            launchAction: {
+                selectedIdeLauncher.openNewWindow(
+                    identifier: projectId,
+                    projectPath: project.path,
+                    remoteAuthority: project.remote
+                )
+            },
             windowLabel: "VS Code",
             eventSource: "vscode"
         ) {
@@ -646,6 +657,8 @@ public final class ProjectManager {
                 "window_id": "\(focus.windowId)",
                 "workspace": focus.workspace
             ])
+        } else if let ws = fallbackToNonProjectWorkspace() {
+            logEvent("close.focus_fallback_workspace", context: ["workspace": ws])
         } else {
             logEvent("close.focus_restore_exhausted", level: .warn)
         }
@@ -678,10 +691,31 @@ public final class ProjectManager {
             ])
             logEvent("exit.completed")
             return .success(())
+        } else if let ws = fallbackToNonProjectWorkspace() {
+            logEvent("exit.focus_fallback_workspace", context: ["workspace": ws])
+            logEvent("exit.completed")
+            return .success(())
         } else {
             logEvent("exit.no_previous_window", level: .warn)
             return .failure(.noPreviousWindow)
         }
+    }
+
+    /// Falls back to focusing a non-project workspace when the focus stack is exhausted.
+    ///
+    /// Queries all workspaces and focuses the first one that is not an AgentPanel
+    /// project workspace (i.e., does not start with the workspace prefix).
+    ///
+    /// - Returns: The workspace name that was focused, or nil if no non-project workspace exists.
+    private func fallbackToNonProjectWorkspace() -> String? {
+        guard case .success(let workspaces) = aerospace.listWorkspacesWithFocus() else {
+            return nil
+        }
+        let nonProjectWorkspaces = workspaces.filter { !$0.workspace.hasPrefix(Self.workspacePrefix) }
+        guard let target = nonProjectWorkspaces.first else {
+            return nil
+        }
+        return focusWorkspace(name: target.workspace) ? target.workspace : nil
     }
 
     // MARK: - Sequential Window Setup
@@ -852,7 +886,7 @@ public final class ProjectManager {
 
         // Cold start: use always-open + defaults from config
         let gitRemoteURL: String?
-        if config.chrome.openGitRemote {
+        if config.chrome.openGitRemote, !project.isSSH {
             gitRemoteURL = gitRemoteResolver.resolve(projectPath: project.path)
         } else {
             gitRemoteURL = nil

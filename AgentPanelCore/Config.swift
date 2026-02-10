@@ -69,14 +69,26 @@ public struct ChromeConfig: Equatable, Sendable {
     }
 }
 
+/// Global Agent Layer configuration.
+public struct AgentLayerConfig: Equatable, Sendable {
+    /// When true, projects default to using Agent Layer unless overridden per-project.
+    public let enabled: Bool
+
+    init(enabled: Bool = false) {
+        self.enabled = enabled
+    }
+}
+
 /// Full parsed configuration for AgentPanel.
 public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
     public let chrome: ChromeConfig
+    public let agentLayer: AgentLayerConfig
 
-    init(projects: [ProjectConfig], chrome: ChromeConfig = ChromeConfig()) {
+    init(projects: [ProjectConfig], chrome: ChromeConfig = ChromeConfig(), agentLayer: AgentLayerConfig = AgentLayerConfig()) {
         self.projects = projects
         self.chrome = chrome
+        self.agentLayer = agentLayer
     }
 }
 
@@ -84,6 +96,11 @@ public struct Config: Equatable, Sendable {
 public struct ProjectConfig: Equatable, Sendable {
     public let id: String
     public let name: String
+    /// Optional VS Code remote authority (e.g., "ssh-remote+user@host") for SSH projects.
+    ///
+    /// When set, `path` is interpreted as a remote absolute path and VS Code is opened
+    /// via a `vscode-remote://` folder URI.
+    public let remote: String?
     public let path: String
     public let color: String
     public let useAgentLayer: Bool
@@ -92,9 +109,13 @@ public struct ProjectConfig: Equatable, Sendable {
     /// Per-project URLs opened when no tab history exists.
     public let chromeDefaultTabs: [String]
 
+    /// Whether this project uses an SSH remote (Remote-SSH).
+    public var isSSH: Bool { remote != nil }
+
     init(
         id: String,
         name: String,
+        remote: String? = nil,
         path: String,
         color: String,
         useAgentLayer: Bool,
@@ -103,6 +124,7 @@ public struct ProjectConfig: Equatable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.remote = remote
         self.path = path
         self.color = color
         self.useAgentLayer = useAgentLayer
@@ -251,20 +273,27 @@ struct ConfigLoader {
     private static let starterConfigTemplate = """
 # AgentPanel configuration
 #
+# [agentLayer] (optional) — Global Agent Layer settings
+# - enabled: default useAgentLayer value for all projects (default: false)
+#
 # [chrome] (optional) — Global Chrome tab settings
 # - pinnedTabs: URLs always opened as leftmost tabs in every fresh Chrome window
 # - defaultTabs: URLs opened when no tab history exists for a project
 # - openGitRemote: auto-detect git remote URL and add it as an always-open tab (default: false)
 #
-# Each [[project]] entry describes one local git repo.
+# Each [[project]] entry describes one git repo (local or SSH remote).
 # - name: Display name (id is derived by lowercasing and replacing non [a-z0-9] with '-')
-# - path: Absolute path to the repo on this machine
+# - remote: (optional) VS Code SSH remote authority (e.g., ssh-remote+user@host)
+# - path: Absolute path to the repo (local when remote is absent, remote path when remote is set)
 # - color: "#RRGGBB" or a named color (\(ProjectColorPalette.sortedNames.joined(separator: ", ")))
-# - useAgentLayer: true if the repo uses an .agent-layer folder
+# - useAgentLayer: (optional) override the global agentLayer.enabled default per project
 # - chromePinnedTabs: (optional) per-project URLs always opened as leftmost tabs
 # - chromeDefaultTabs: (optional) per-project URLs opened when no tab history exists
 #
 # Example:
+#
+# [agentLayer]
+# enabled = true
 #
 # [chrome]
 # pinnedTabs = ["https://dashboard.example.com"]
@@ -275,9 +304,15 @@ struct ConfigLoader {
 # name = "AgentPanel"
 # path = "/Users/you/src/agent-panel"
 # color = "indigo"
-# useAgentLayer = true
 # chromePinnedTabs = ["https://api.example.com"]
 # chromeDefaultTabs = ["https://jira.example.com"]
+#
+# [[project]]
+# name = "Remote ML"
+# remote = "ssh-remote+nconn@happy-mac.local"
+# path = "/Users/nconn/Documents/git-repos/local-ml"
+# color = "teal"
+# useAgentLayer = false
 """
 
     /// Loads and parses the default config file.
@@ -353,13 +388,18 @@ struct ConfigParser {
         var findings: [ConfigFinding] = []
 
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
-        let projectOutcomes = parseProjects(table: table, findings: &findings)
+        let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
+        let projectOutcomes = parseProjects(
+            table: table,
+            globalAgentLayerEnabled: agentLayerConfig.enabled,
+            findings: &findings
+        )
         let parsedProjects = projectOutcomes.compactMap { $0.config }
 
         let validationFailed = findings.contains { $0.severity == .fail }
         let config: Config? = validationFailed
             ? nil
-            : Config(projects: parsedProjects, chrome: chromeConfig)
+            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig)
 
         return ConfigLoadResult(
             config: config,
@@ -412,6 +452,34 @@ struct ConfigParser {
         )
     }
 
+    // MARK: - Agent Layer Section Parsing
+
+    private static func parseAgentLayerSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> AgentLayerConfig {
+        guard table.contains(key: "agentLayer") else {
+            return AgentLayerConfig()
+        }
+
+        guard let agentLayerTable = try? table.table(forKey: "agentLayer") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[agentLayer] must be a table",
+                fix: "Use [agentLayer] as a TOML table section."
+            ))
+            return AgentLayerConfig()
+        }
+
+        let enabled = readOptionalBool(
+            from: agentLayerTable, key: "enabled",
+            defaultValue: false,
+            label: "agentLayer.enabled", findings: &findings
+        )
+
+        return AgentLayerConfig(enabled: enabled)
+    }
+
     // MARK: - Project Parsing
 
     private struct ProjectOutcome {
@@ -420,6 +488,7 @@ struct ConfigParser {
 
     private static func parseProjects(
         table: TOMLTable,
+        globalAgentLayerEnabled: Bool,
         findings: inout [ConfigFinding]
     ) -> [ProjectOutcome] {
         guard table.contains(key: "project") else {
@@ -466,6 +535,7 @@ struct ConfigParser {
             let outcome = parseProject(
                 table: projectTable,
                 index: index,
+                globalAgentLayerEnabled: globalAgentLayerEnabled,
                 seenIds: &seenIds,
                 findings: &findings
             )
@@ -478,6 +548,7 @@ struct ConfigParser {
     private static func parseProject(
         table: TOMLTable,
         index: Int,
+        globalAgentLayerEnabled: Bool,
         seenIds: inout [String: Int],
         findings: inout [ConfigFinding]
     ) -> ProjectOutcome {
@@ -487,6 +558,12 @@ struct ConfigParser {
             from: table,
             key: "name",
             label: "project[\(index)].name",
+            findings: &findings
+        )
+        let remote = readOptionalNonEmptyString(
+            from: table,
+            key: "remote",
+            label: "project[\(index)].remote",
             findings: &findings
         )
         let path = readNonEmptyString(
@@ -501,9 +578,10 @@ struct ConfigParser {
             label: "project[\(index)].color",
             findings: &findings
         )
-        let useAgentLayer = readBool(
+        let useAgentLayer = readOptionalBool(
             from: table,
             key: "useAgentLayer",
+            defaultValue: globalAgentLayerEnabled,
             label: "project[\(index)].useAgentLayer",
             findings: &findings
         )
@@ -568,6 +646,85 @@ struct ConfigParser {
             projectIsValid = false
         }
 
+        // Remote SSH validation (VS Code Remote-SSH)
+        var normalizedRemote: String?
+        if let remote {
+            if !remote.hasPrefix("ssh-remote+") {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority must start with 'ssh-remote+'",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
+            } else if remote.contains(where: { $0.isWhitespace }) {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority must not contain whitespace",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
+            } else {
+                let authority = remote.dropFirst("ssh-remote+".count)
+                if authority.isEmpty {
+                    findings.append(ConfigFinding(
+                        severity: .fail,
+                        title: "project[\(index)].remote: SSH remote authority is missing host (expected ssh-remote+user@host)",
+                        fix: "Use format: remote = \"ssh-remote+user@host\""
+                    ))
+                    projectIsValid = false
+                } else if authority.hasPrefix("-") {
+                    findings.append(ConfigFinding(
+                        severity: .fail,
+                        title: "project[\(index)].remote: SSH remote authority must not start with '-'",
+                        fix: "Use format: remote = \"ssh-remote+user@host\""
+                    ))
+                    projectIsValid = false
+                } else {
+                    normalizedRemote = remote
+                }
+            }
+        }
+
+        if normalizedRemote != nil {
+            // SSH + Agent Layer mutual exclusion
+            if useAgentLayer {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)]: Agent Layer is not supported with SSH projects",
+                    fix: "Set useAgentLayer = false for this project (SSH projects cannot use Agent Layer)."
+                ))
+                projectIsValid = false
+            }
+
+            // Remote path must be absolute
+            if let path, !path.hasPrefix("/") {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].path: remote path must be an absolute path (starting with /)",
+                    fix: "Use a remote absolute path, e.g. /Users/you/src/project"
+                ))
+                projectIsValid = false
+            }
+        } else if let path {
+            if path.hasPrefix("ssh-remote+") {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].path: legacy SSH path format is not supported",
+                    detail: "Found an ssh-remote+ prefix in project.path but project.remote is not set.",
+                    fix: "Use remote = \"ssh-remote+user@host\" and path = \"/remote/absolute/path\""
+                ))
+                projectIsValid = false
+            } else if !path.hasPrefix("/") {
+                // Local path must be absolute
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].path: local path must be an absolute path (starting with /)",
+                    fix: "Use an absolute path, e.g. /Users/you/src/project"
+                ))
+                projectIsValid = false
+            }
+        }
+
         // Chrome tab fields (optional, default empty)
         let chromePinnedTabs = readOptionalStringArray(
             from: table, key: "chromePinnedTabs",
@@ -589,13 +746,14 @@ struct ConfigParser {
             }
         }
 
-        guard let name, let path, let normalizedColor, let useAgentLayer, let derivedId, projectIsValid else {
+        guard let name, let path, let normalizedColor, let derivedId, projectIsValid else {
             return ProjectOutcome(config: nil)
         }
 
         let projectConfig = ProjectConfig(
             id: derivedId,
             name: name,
+            remote: normalizedRemote,
             path: path,
             color: normalizedColor,
             useAgentLayer: useAgentLayer,
@@ -635,6 +793,40 @@ struct ConfigParser {
                 title: "\(label) is missing",
                 fix: "Set \(label) to a non-empty string."
             ))
+            return nil
+        }
+
+        guard let value = try? table.string(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be a string",
+                fix: "Set \(label) to a non-empty string."
+            ))
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) is empty",
+                fix: "Set \(label) to a non-empty string."
+            ))
+            return nil
+        }
+
+        return trimmed
+    }
+
+    /// Reads an optional non-empty string value. Returns nil when key is absent.
+    /// Records a failure if the value is present but not a string or empty.
+    private static func readOptionalNonEmptyString(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> String? {
+        guard table.contains(key: key) else {
             return nil
         }
 

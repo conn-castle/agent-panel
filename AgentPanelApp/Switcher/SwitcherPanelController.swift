@@ -435,6 +435,22 @@ final class SwitcherPanelController: NSObject {
                     }
                     return
                 } else {
+                    // Window gone — try focusing the workspace the user was on
+                    if projectManager.focusWorkspace(name: focus.workspace) {
+                        let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                        await MainActor.run {
+                            session.logEvent(
+                                event: "switcher.focus.restored",
+                                context: [
+                                    "workspace": focus.workspace,
+                                    "method": "workspace_fallback",
+                                    "restore_ms": "\(restoreMs)"
+                                ]
+                            )
+                        }
+                        return
+                    }
+
                     let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
                     await MainActor.run {
                         session.logEvent(
@@ -980,6 +996,22 @@ final class SwitcherPanelController: NSObject {
                 event: "switcher.close_project.succeeded",
                 context: ["project_id": projectId]
             )
+
+            // closeProject already restored focus (via focus stack or workspace fallback).
+            // Refresh captured focus so:
+            // - dismiss doesn't restore stale pre-switcher focus (which may have been destroyed)
+            // - a subsequent project selection pushes the correct non-project focus entry
+            let refreshedFocus = projectManager.captureCurrentFocus()
+            if let refreshedFocus,
+               let selfBundleId = Bundle.main.bundleIdentifier,
+               refreshedFocus.appBundleId != selfBundleId {
+                capturedFocus = refreshedFocus
+                previouslyActiveApp = NSWorkspace.shared.frontmostApplication
+            } else {
+                capturedFocus = nil
+                previouslyActiveApp = nil
+            }
+
             refreshWorkspaceState()
             applyFilter(
                 query: searchField.stringValue,

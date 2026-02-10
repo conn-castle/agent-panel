@@ -64,6 +64,7 @@ final class ProjectManagerWorkspaceStateTests: XCTestCase {
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: WorkspaceStateIdeLauncherStub(),
+            agentLayerIdeLauncher: WorkspaceStateIdeLauncherStub(),
             chromeLauncher: WorkspaceStateChromeLauncherStub(),
             chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
             chromeTabCapture: WorkspaceStateTabCaptureStub(),
@@ -131,7 +132,7 @@ private final class WorkspaceStateAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct WorkspaceStateIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
         .success(())
     }
 }

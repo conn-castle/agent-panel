@@ -18,7 +18,8 @@ private final class MockCommandRunner: CommandRunning {
     func run(
         executable: String,
         arguments: [String],
-        timeoutSeconds: TimeInterval?
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
     ) -> Result<ApCommandResult, ApCoreError> {
         calls.append(Call(executable: executable, arguments: arguments))
         guard !results.isEmpty else {

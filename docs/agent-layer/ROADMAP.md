@@ -76,26 +76,17 @@ Incomplete:
 - Added keybind behavior to toggle back to the most recent macOS space or non-project window.
 - Added visual menu bar health indication driven by Doctor results.
 
-## Phase 5 — Daily-driver required features
-
-### Goal
-- Complete required day-to-day features needed before release hardening.
-- Ensure these flows are reliable enough for regular daily use.
-
-### Tasks
-- [x] Implement project Chrome tab persistence/restore: track Chrome tabs opened during a project session and reopen associated tabs when the project is activated again.
-- [x] Persist project tab URL sets across app restarts so reactivation can restore the previous Chrome tab set after relaunch.
-- [ ] Make the agent layer configuration have a default value of false. It can be globally set to true, and individual projects can then be set to false.
-- [x] Fix focus issues for going back to latest non-project window.
-- [ ] Enable setting up SSH projects for VSCode. Ensure this is documented in README, since this will be a core feature. The approach will be to look at the path and see if it starts with `ssh-remote+`. For example, `path = "ssh-remote+nconn@happy-mac.local /Users/nconn/Documents/git-repos/local-ml-sleep"`. Then the project can be opened with the following command `code --new-window --remote ssh-remote+nconn@happy-mac.local /Users/nconn/Documents/git-repos/local-ml-sleep`.
-- [ ] Get Agent Layer launcher working for projects with `useAgentLayer = true`, including clear failure surfacing when launch prerequisites are missing.
-
-### Exit criteria
-- Chrome tab persistence/restore works reliably for project activation and reactivation.
-- Chrome tab URL sets are persisted across app restarts and restored on later activation.
-- The chosen Chrome integration path (for example remote debugging or AppleScript) is implemented and documented.
-- Agent Layer launcher flow is functional for `useAgentLayer = true` projects with clear failure surfacing.
-- Test coverage includes successful and failure paths for both features.
+## Phase 5 ✅ — Daily-driver required features
+- Chrome tab persistence/restore via AppleScript with snapshot-is-truth design; URLs captured verbatim on close and restored on activate.
+- LIFO focus stack replacing single-slot design; "exit project space" returns to last non-project window.
+- Agent Layer config: global `[agentLayer] enabled` default (false), per-project override, SSH+AL mutual exclusion at parse time.
+- SSH projects: `project.remote` (ssh-remote+user@host) + remote absolute `project.path`; workspace uses `vscode-remote://...` folder URI + `remoteAuthority` key; Doctor validates via `ssh test -d`.
+- Agent Layer launcher: `ApAgentLayerVSCodeLauncher` creates workspace with `AP:<id>` tag, runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. Two-step approach avoids dual-window bug in `al vscode` (unconditionally appends `.` to code args). `ProjectManager` selects launcher based on `project.useAgentLayer`.
+- `CommandRunning` extended with `workingDirectory: String?` parameter; shared workspace helper `ApIdeToken.createWorkspaceFile()`.
+- Config hardening: SSH authority option injection rejected at parse time (authorities starting with `-`); local paths validated as absolute; Doctor ssh includes `--` option terminator for defense-in-depth.
+- PATH propagation: `ApSystemCommandRunner` builds augmented PATH (standard paths + login shell PATH + process PATH) with 5s timeout, user's `$SHELL` (validated as absolute path), deduplication, 2s pipe EOF timeout. Child processes receive this environment. Tested in `SystemCommandRunnerTests`.
+- Focus restore workspace fallback: `closeProject` and `exitToNonProjectWindow` fall back to first non-project workspace when focus stack is exhausted. Switcher dismiss tries workspace-level focus before app activation.
+- Switcher refreshes captured focus after `closeProject` (to the newly restored focus) so dismiss and subsequent selections don't use stale pre-switcher focus.
 
 ## Phase 6 — Extra non-required features
 

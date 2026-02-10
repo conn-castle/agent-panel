@@ -217,8 +217,12 @@ protocol IdeLauncherProviding {
     /// Opens a new VS Code window with a tagged title for precise identification.
     /// - Parameters:
     ///   - identifier: Project identifier embedded in the window title as `AP:<identifier>`.
-    ///   - projectPath: Optional path to the project folder. If provided, opens VS Code at this path.
-    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError>
+    ///   - projectPath: Optional path to the project folder.
+    ///     - Local projects: local absolute path.
+    ///     - SSH projects: remote absolute path.
+    ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
+    ///     When set, the workspace folder is opened via a `vscode-remote://` folder URI.
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for Chrome launching.
@@ -249,6 +253,7 @@ protocol GitRemoteResolving {
 
 extension ApAeroSpace: AeroSpaceProviding {}
 extension ApVSCodeLauncher: IdeLauncherProviding {}
+extension ApAgentLayerVSCodeLauncher: IdeLauncherProviding {}
 extension ApChromeLauncher: ChromeLauncherProviding {}
 
 // MARK: - App Discovery

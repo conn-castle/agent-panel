@@ -46,16 +46,30 @@ pinnedTabs = ["https://dashboard.example.com"]   # optional; always-open tabs fo
 defaultTabs = ["https://docs.example.com"]        # optional; default tabs when no history
 openGitRemote = true                              # optional; auto-open git remote URL
 
+[agentLayer]
+enabled = true   # optional; global default for useAgentLayer (default: false)
+
 [[project]]
 name = "AgentPanel"                    # required; id derived from name
 path = "/Users/you/src/agent-panel"    # required; absolute path to the git repo
 color = "indigo"                       # required; "#RRGGBB" or named color
-useAgentLayer = true                   # required; repo uses an .agent-layer folder
+useAgentLayer = false                  # optional; overrides [agentLayer] enabled (default: global value)
 chromePinnedTabs = ["https://api.example.com"]    # optional; per-project always-open tabs
 chromeDefaultTabs = ["https://jira.example.com"]  # optional; per-project default tabs
+
+[[project]]
+name = "Remote ML"
+remote = "ssh-remote+nconn@happy-mac.local"     # SSH remote authority
+path = "/Users/nconn/project"                   # Remote absolute path
+color = "teal"
+useAgentLayer = false                           # required for SSH projects (mutually exclusive)
 ```
 
-Chrome tab configuration is optional. When a project is activated and a fresh Chrome window is created, tabs are opened in a single step from the last captured snapshot (verbatim, preserving order). If no snapshot exists (cold start), tabs are computed from always-open URLs (global `pinnedTabs` + per-project `chromePinnedTabs` + git remote if enabled) followed by default tabs. All tab URLs are captured verbatim on project close and persisted across app restarts. If the Chrome window is manually closed before the project is closed, the stale snapshot is automatically deleted so the next activation uses cold-start defaults.
+**Agent Layer:** The `[agentLayer]` section sets a global default for `useAgentLayer`. Each project can override this with an explicit `useAgentLayer = true` or `false`. When `useAgentLayer` is `true`, AgentPanel runs `al sync` (CWD = project path) and then launches VS Code via `code --new-window <workspace-file>`. This avoids a current `al vscode` dual-window issue. The `al` and `code` CLIs must be installed and on PATH.
+
+**SSH projects:** Set `project.remote` to a VS Code Remote-SSH authority (`ssh-remote+user@host`) and `project.path` to the remote absolute path. The workspace file uses a `vscode-remote://...` folder URI (and `remoteAuthority`) so VS Code opens the folder on the SSH host. SSH projects cannot use Agent Layer: set `useAgentLayer = false` for SSH projects (this is required when `[agentLayer] enabled = true`). Doctor validates SSH project paths via `ssh test -d`.
+
+**Chrome tabs:** Chrome tab configuration is optional. When a project is activated and a fresh Chrome window is created, tabs are opened in a single step from the last captured snapshot (verbatim, preserving order). If no snapshot exists (cold start), tabs are computed from always-open URLs (global `pinnedTabs` + per-project `chromePinnedTabs` + git remote if enabled) followed by default tabs. All tab URLs are captured verbatim on project close and persisted across app restarts. If the Chrome window is manually closed before the project is closed, the stale snapshot is automatically deleted so the next activation uses cold-start defaults.
 
 The project id is derived by lowercasing the name and replacing any character outside a-z and 0-9 with `-`.
 Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, pink, purple, red, teal, white, yellow.
@@ -91,9 +105,10 @@ Current checks include:
 - VS Code installed
 - Google Chrome installed
 - Logs directory status
-- AgentPanel config parses, and each `project.path` exists
+- AgentPanel config parses, and each local `project.path` exists
+- SSH project paths validated via `ssh test -d` (exit 0 = pass, 1 = fail, 255 = connection error)
 - Agent-layer CLI (`al`) installed (if any project has `useAgentLayer=true`)
-- Agent-layer directory exists for projects with `useAgentLayer=true`
+- Agent-layer directory exists for local projects with `useAgentLayer=true`
 - Hotkey registration status (app only)
 
 ## CLI (`ap`)
