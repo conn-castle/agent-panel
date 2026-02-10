@@ -144,6 +144,7 @@ public final class ProjectManager {
 
     // Config
     private var config: Config?
+    private let configLoader: () -> Result<Config, ConfigLoadError>
 
     // Recency tracking - simple list of project IDs, most recent first
     private var recentProjectIds: [String] = []
@@ -216,6 +217,7 @@ public final class ProjectManager {
         self.gitRemoteResolver = GitRemoteResolver()
         self.logger = AgentPanelLogger()
         self.recencyFilePath = dataPaths.recentProjectsFile
+        self.configLoader = { Config.loadDefault() }
 
         loadRecency()
     }
@@ -230,7 +232,8 @@ public final class ProjectManager {
         chromeTabCapture: ChromeTabCapturing,
         gitRemoteResolver: GitRemoteResolving,
         logger: AgentPanelLogging,
-        recencyFilePath: URL
+        recencyFilePath: URL,
+        configLoader: @escaping () -> Result<Config, ConfigLoadError> = { Config.loadDefault() }
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
@@ -241,6 +244,7 @@ public final class ProjectManager {
         self.gitRemoteResolver = gitRemoteResolver
         self.logger = logger
         self.recencyFilePath = recencyFilePath
+        self.configLoader = configLoader
 
         loadRecency()
     }
@@ -267,7 +271,7 @@ public final class ProjectManager {
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
     public func loadConfig() -> Result<Config, ConfigLoadError> {
-        switch Config.loadDefault() {
+        switch configLoader() {
         case .success(let loadedConfig):
             self.config = loadedConfig
             logEvent("config.loaded", context: ["project_count": "\(loadedConfig.projects.count)"])

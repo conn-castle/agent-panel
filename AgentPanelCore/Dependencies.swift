@@ -267,7 +267,13 @@ protocol AppDiscovering {
 
 /// Launch Services-backed application discovery implementation.
 struct LaunchServicesAppDiscovery: AppDiscovering {
-    init() {}
+    private let fileManager: FileManager
+    private let searchRootsOverride: [URL]?
+
+    init(fileManager: FileManager = .default, searchRootsOverride: [URL]? = nil) {
+        self.fileManager = fileManager
+        self.searchRootsOverride = searchRootsOverride
+    }
 
     func applicationURL(bundleIdentifier: String) -> URL? {
         guard let unmanaged = LSCopyApplicationURLsForBundleIdentifier(bundleIdentifier as CFString, nil) else {
@@ -279,8 +285,7 @@ struct LaunchServicesAppDiscovery: AppDiscovering {
 
     func applicationURL(named appName: String) -> URL? {
         let bundleName = appName.hasSuffix(".app") ? appName : "\(appName).app"
-        let fileManager = FileManager.default
-        let searchRoots = applicationSearchRoots(fileManager: fileManager)
+        let searchRoots = searchRootsOverride ?? applicationSearchRoots()
 
         for directory in searchRoots {
             if let directMatch = directMatch(bundleName: bundleName, in: directory, fileManager: fileManager) {
@@ -298,7 +303,7 @@ struct LaunchServicesAppDiscovery: AppDiscovering {
         Bundle(url: url)?.bundleIdentifier
     }
 
-    private func applicationSearchRoots(fileManager: FileManager) -> [URL] {
+    private func applicationSearchRoots() -> [URL] {
         var roots = fileManager.urls(for: .applicationDirectory, in: .allDomainsMask)
         let fallbackRoots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),

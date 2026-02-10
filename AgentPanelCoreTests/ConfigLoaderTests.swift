@@ -71,10 +71,7 @@ final class ConfigLoaderTests: XCTestCase {
 // MARK: - Config.loadDefault() Tests
 
 final class ConfigLoadDefaultTests: XCTestCase {
-    // Note: Config.loadDefault() uses DataPaths.default() which reads from ~/.config/agentpanel.
-    // These tests verify the error types and behavior, not the actual default path.
-
-    private func makeTempConfigDirectory() throws -> URL {
+    private func makeTempHomeDirectory() throws -> URL {
         let tempRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("agent-panel-tests", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -121,5 +118,102 @@ final class ConfigLoadDefaultTests: XCTestCase {
             XCTFail("Expected validationFailed case")
         }
     }
-}
 
+    func testLoadDefaultTranslatesFileNotFoundAndCreatesStarterConfig() throws {
+        let home = try makeTempHomeDirectory()
+        let dataStore = DataPaths(homeDirectory: home)
+
+        let result = Config.loadDefault(dataStore: dataStore)
+        switch result {
+        case .success(let config):
+            XCTFail("Expected fileNotFound failure, got config: \(config)")
+        case .failure(let error):
+            XCTAssertEqual(error, .fileNotFound(path: dataStore.configFile.path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: dataStore.configFile.path))
+        }
+    }
+
+    func testLoadDefaultTranslatesReadFailedWhenConfigPathIsDirectory() throws {
+        let home = try makeTempHomeDirectory()
+        let dataStore = DataPaths(homeDirectory: home)
+        try FileManager.default.createDirectory(at: dataStore.configFile, withIntermediateDirectories: true)
+
+        let result = Config.loadDefault(dataStore: dataStore)
+        switch result {
+        case .success(let config):
+            XCTFail("Expected readFailed failure, got config: \(config)")
+        case .failure(let error):
+            guard case .readFailed(let path, _) = error else {
+                XCTFail("Expected readFailed, got: \(error)")
+                return
+            }
+            XCTAssertEqual(path, dataStore.configFile.path)
+        }
+    }
+
+    func testLoadDefaultTranslatesParseFailedWhenTomlInvalid() throws {
+        let home = try makeTempHomeDirectory()
+        let dataStore = DataPaths(homeDirectory: home)
+        try FileManager.default.createDirectory(at: dataStore.configFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "invalid =".write(to: dataStore.configFile, atomically: true, encoding: .utf8)
+
+        let result = Config.loadDefault(dataStore: dataStore)
+        switch result {
+        case .success(let config):
+            XCTFail("Expected parseFailed, got config: \(config)")
+        case .failure(let error):
+            guard case .parseFailed(let detail) = error else {
+                XCTFail("Expected parseFailed, got: \(error)")
+                return
+            }
+            XCTAssertFalse(detail.isEmpty)
+        }
+    }
+
+    func testLoadDefaultTranslatesValidationFailedWhenValidationFails() throws {
+        let home = try makeTempHomeDirectory()
+        let dataStore = DataPaths(homeDirectory: home)
+        try FileManager.default.createDirectory(at: dataStore.configFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        // Valid TOML but invalid AgentPanel config (no projects).
+        try """
+        [chrome]
+        pinnedTabs = []
+        """.write(to: dataStore.configFile, atomically: true, encoding: .utf8)
+
+        let result = Config.loadDefault(dataStore: dataStore)
+        switch result {
+        case .success(let config):
+            XCTFail("Expected validationFailed, got config: \(config)")
+        case .failure(let error):
+            guard case .validationFailed(let findings) = error else {
+                XCTFail("Expected validationFailed, got: \(error)")
+                return
+            }
+            XCTAssertFalse(findings.isEmpty)
+        }
+    }
+
+    func testLoadDefaultReturnsConfigOnSuccess() throws {
+        let home = try makeTempHomeDirectory()
+        let dataStore = DataPaths(homeDirectory: home)
+        try FileManager.default.createDirectory(at: dataStore.configFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        try """
+        [[project]]
+        name = "My Project"
+        path = "/tmp/project"
+        color = "blue"
+        useAgentLayer = false
+        """.write(to: dataStore.configFile, atomically: true, encoding: .utf8)
+
+        let result = Config.loadDefault(dataStore: dataStore)
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success, got error: \(error)")
+        case .success(let config):
+            XCTAssertEqual(config.projects.count, 1)
+            XCTAssertEqual(config.projects[0].id, "my-project")
+        }
+    }
+}

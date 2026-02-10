@@ -13,6 +13,13 @@ final class DataPathsTests: XCTestCase {
         XCTAssertEqual(store.primaryLogFile.path, "/Users/testuser/.local/state/agent-panel/logs/agent-panel.log")
 
         XCTAssertEqual(store.stateFile.path, "/Users/testuser/.local/state/agent-panel/state.json")
+        XCTAssertEqual(store.recentProjectsFile.path, "/Users/testuser/.local/state/agent-panel/recent-projects.json")
+
+        XCTAssertEqual(store.chromeTabsDirectory.path, "/Users/testuser/.local/state/agent-panel/chrome-tabs")
+        XCTAssertEqual(
+            store.chromeTabsFile(projectId: "my-project").path,
+            "/Users/testuser/.local/state/agent-panel/chrome-tabs/my-project.json"
+        )
 
         XCTAssertEqual(store.vscodeWorkspaceDirectory.path, "/Users/testuser/.local/state/agent-panel/vscode")
         XCTAssertEqual(
@@ -20,5 +27,11 @@ final class DataPathsTests: XCTestCase {
             "/Users/testuser/.local/state/agent-panel/vscode/my-project.code-workspace"
         )
     }
-}
 
+    func testHomeDirectoryIsStandardized() {
+        let home = URL(fileURLWithPath: "/Users/testuser/../testuser", isDirectory: true)
+        let store = DataPaths(homeDirectory: home)
+
+        XCTAssertEqual(store.configFile.path, "/Users/testuser/.config/agent-panel/config.toml")
+    }
+}

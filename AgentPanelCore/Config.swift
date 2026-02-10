@@ -317,8 +317,12 @@ struct ConfigLoader {
 
     /// Loads and parses the default config file.
     static func loadDefault() -> Result<ConfigLoadResult, ConfigError> {
-        let url = DataPaths.default().configFile
-        return load(from: url)
+        loadDefault(dataStore: DataPaths.default())
+    }
+
+    /// Loads and parses the default config file using the provided data store.
+    static func loadDefault(dataStore: DataPaths) -> Result<ConfigLoadResult, ConfigError> {
+        load(from: dataStore.configFile)
     }
 
     /// Loads and parses a config file at the given URL.
@@ -936,33 +940,6 @@ struct ConfigParser {
         return allValid
     }
 
-    /// Reads a required boolean value or records a failure.
-    private static func readBool(
-        from table: TOMLTable,
-        key: String,
-        label: String,
-        findings: inout [ConfigFinding]
-    ) -> Bool? {
-        if !table.contains(key: key) {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "\(label) is missing",
-                fix: "Set \(label) to true or false."
-            ))
-            return nil
-        }
-
-        guard let value = try? table.bool(forKey: key) else {
-            findings.append(ConfigFinding(
-                severity: .fail,
-                title: "\(label) must be a boolean",
-                fix: "Set \(label) to true or false."
-            ))
-            return nil
-        }
-
-        return value
-    }
 }
 
 // MARK: - ConfigLoadError
@@ -995,10 +972,14 @@ extension Config {
     ///
     /// - Returns: Result with validated Config or ConfigLoadError.
     public static func loadDefault() -> Result<Config, ConfigLoadError> {
-        let path = DataPaths.default().configFile.path
+        loadDefault(dataStore: DataPaths.default())
+    }
+
+    static func loadDefault(dataStore: DataPaths) -> Result<Config, ConfigLoadError> {
+        let path = dataStore.configFile.path
 
         // Use ConfigLoader as single source of truth
-        switch ConfigLoader.loadDefault() {
+        switch ConfigLoader.loadDefault(dataStore: dataStore) {
         case .failure(let error):
             // Translate ConfigError to ConfigLoadError using the error kind.
             switch error.kind {

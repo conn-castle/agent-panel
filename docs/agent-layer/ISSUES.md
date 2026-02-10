@@ -27,6 +27,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-09 vscode-settings-json: Replace workspace-based VS Code configuration with settings.json block
+    Priority: Medium. Area: IDE/Configuration
+    Description: Currently, the application uses workspace-based configuration for VS Code. This should be replaced with a block that can be directly added to the user's `settings.json` file to avoid the overhead and complexity of managing separate workspace files for each project.
+    Next step: Research how to programmatically manage custom blocks or profiles within `settings.json` and update ProjectManager to use this approach instead of `.code-workspace` files.
+
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE
     Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window workspace.code-workspace` becomes `code --new-window workspace.code-workspace .` → two windows. Workaround implemented: AgentPanel now runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. This loses `CODEX_HOME` env var that `al vscode` normally sets (only needed by Codex VS Code extension).

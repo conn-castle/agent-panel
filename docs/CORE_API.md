@@ -217,6 +217,8 @@ public final class ProjectManager {
 public struct ProjectWorkspaceState: Equatable, Sendable {
     public let activeProjectId: String?
     public let openProjectIds: Set<String>
+
+    public init(activeProjectId: String?, openProjectIds: Set<String>)
 }
 
 public enum ProjectError: Error, Equatable, Sendable {
@@ -341,7 +343,6 @@ public enum HotkeyRegistrationStatus: Equatable, Sendable {
 
 ```swift
 public protocol AgentPanelLogging {
-    @discardableResult
     func log(
         event: String,
         level: LogLevel,
@@ -354,11 +355,18 @@ public enum LogLevel: String, Codable, Sendable {
     case info, warn, error
 }
 
-public struct AgentPanelLogger: AgentPanelLogging {
+public struct AgentPanelLogger {
     public init()
     public init(dataStore: DataPaths)
+}
 
-    public func log(event: String, level: LogLevel, message: String?, context: [String: String]?) -> Result<Void, LogWriteError>
+extension AgentPanelLogger: AgentPanelLogging {
+    public func log(
+        event: String,
+        level: LogLevel = .info,
+        message: String? = nil,
+        context: [String: String]? = nil
+    ) -> Result<Void, LogWriteError>
 }
 
 public enum LogWriteError: Error, Equatable, Sendable {
@@ -383,6 +391,9 @@ For first-launch setup, the App uses these types directly.
 
 ```swift
 public struct ApAeroSpace {
+    /// AeroSpace app bundle identifier.
+    public static let bundleIdentifier: String  // "bobko.aerospace"
+
     public init()
 
     /// Returns true when AeroSpace.app is installed.

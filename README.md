@@ -8,6 +8,11 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 - Menu bar health indicator reflects latest Doctor severity (PASS/WARN/FAIL)
 - Global switcher (Cmd+Shift+Space) to list/filter/activate projects
 - Project activation: opens IDE + Chrome, organizes windows in AeroSpace workspace
+- Chrome tab persistence: URLs captured on project close, restored on activate (snapshot-is-truth)
+- LIFO focus stack: "exit project space" returns to last non-project window
+- Agent Layer integration: `al sync` + VS Code launch for projects with `useAgentLayer=true`
+- SSH remote projects: VS Code Remote-SSH with Doctor path validation
+- Close project with automatic focus restoration (stack or workspace fallback)
 - Doctor UI in the app menu
 - `ap doctor` CLI
 
@@ -16,8 +21,9 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 1) macOS 15.7+
 2) Homebrew (required for Doctor's AeroSpace install action)
 3) AeroSpace installed
-4) Google Chrome (required for `ap new-chrome` and future activation)
-5) VS Code and/or Antigravity (required for `ap new-ide` and future activation)
+4) Google Chrome (required for project activation)
+5) VS Code (required for project activation)
+6) Agent Layer CLI (`al`) — required if any project uses `useAgentLayer=true`
 
 ## First run (onboarding)
 
@@ -82,7 +88,7 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 - Logs (rotated): `~/.local/state/agent-panel/logs/agent-panel.log.1` … `agent-panel.log.5`
 - Logs format: JSON Lines with UTC ISO-8601 timestamps; rotation at 10 MiB
 - Chrome tab snapshots: `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`
-- VS Code workspaces (created by `ap new-ide <identifier>`): `~/.local/state/agent-panel/vscode/<identifier>.code-workspace`
+- VS Code workspaces (created during project activation): `~/.local/state/agent-panel/vscode/<projectId>.code-workspace`
 - AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`)
 
 ## Doctor
@@ -115,19 +121,12 @@ Current checks include:
 
 `ap` is the CLI companion for AgentPanel. It shares the same config file and provides:
 
-- `ap doctor`
-- `ap list-workspaces`
-- `ap show-config`
-- `ap new-workspace <name>`
-- `ap new-ide <identifier>`
-- `ap new-chrome <identifier>`
-- `ap list-ide`
-- `ap list-chrome`
-- `ap list-windows <workspace>`
-- `ap focused-window`
-- `ap move-window <workspace> <window-id>`
-- `ap focus-window <window-id>`
-- `ap close-workspace <workspace>`
+- `ap doctor` — run diagnostic checks
+- `ap show-config` — display the parsed configuration
+- `ap list-projects [query]` — list projects (optionally filtered by query)
+- `ap select-project <id>` — activate a project by ID
+- `ap close-project <id>` — close a project by ID and restore focus
+- `ap return` — exit to the last non-project window without closing the project
 
 ## Development
 
@@ -149,4 +148,10 @@ Test:
 
 ```bash
 scripts/test.sh
+```
+
+Optional: install repo-managed git hooks (pre-commit runs `scripts/test.sh`):
+
+```bash
+scripts/install_git_hooks.sh
 ```

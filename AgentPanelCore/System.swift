@@ -559,7 +559,11 @@ struct ApChromeLauncher {
     /// Chrome bundle identifier used for filtering windows.
     static let bundleId = "com.google.Chrome"
 
-    private let commandRunner = ApSystemCommandRunner()
+    private let commandRunner: CommandRunning
+
+    init(commandRunner: CommandRunning = ApSystemCommandRunner()) {
+        self.commandRunner = commandRunner
+    }
 
     /// Opens a new Chrome window tagged with the provided identifier.
     /// - Parameters:

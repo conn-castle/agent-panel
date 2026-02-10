@@ -88,14 +88,41 @@ Incomplete:
 - Focus restore workspace fallback: `closeProject` and `exitToNonProjectWindow` fall back to first non-project workspace when focus stack is exhausted. Switcher dismiss tries workspace-level focus before app activation.
 - Switcher refreshes captured focus after `closeProject` (to the newly restored focus) so dismiss and subsequent selections don't use stale pre-switcher focus.
 
-## Phase 6 — Extra non-required features
+## Phase 6 — Cleanup: reduce code debt + raise coverage
+
+### Goal
+- Reduce high-risk code debt and regressions by addressing prioritized issues before building more features.
+- Establish and enforce a test coverage bar (> 90%) with repeatable tooling.
+- Keep docs and internal APIs consistent as we refactor.
+
+### Tasks
+- [ ] Fix activation errors invisible when the panel dismisses during async launch (`activation-error-invisible`).
+- [ ] Add switcher dismiss/restore lifecycle tests (`switcher-lifecycle-tests`).
+- [ ] Expand ProjectManager tests for config load/sort/recency + full activation path (`pm-tests`).
+- [ ] Add CLI runner tests for new ProjectManager-backed commands (`cli-runner-tests`).
+- [ ] Doctor: fail on unrecognized `config.toml` entries (`doctor-unrecognized-config`).
+- [ ] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
+- [ ] Config: surface config warnings to UI (and/or CLI) (`config-warn`).
+- [ ] Doctor: restore previous focus when Doctor window closes (`doctor-focus`).
+- [ ] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
+- [x] Add a first-class coverage command/script and document it in COMMANDS.md.
+- [x] Enforce > 90% test coverage as a hard gate in `scripts/test.sh`, CI, and a repo-managed git pre-commit hook.
+- [ ] Raise test coverage to > 90% (as measured by the gate) by adding tests and refactoring for testability.
+
+### Exit criteria
+- All issues referenced in this phase are fixed and removed from ISSUES.md.
+- Overall test coverage is > 90% (measured by a documented command in COMMANDS.md).
+- `scripts/test.sh` passes.
+- Any affected Markdown docs are updated and accurate (README, CORE_API.md, agent-layer docs).
+
+## Phase 7 — Extra non-required features
 
 ### Goal
 - Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
 
 ### Tasks
 - [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
-- [ ] Favorites/stars for projects (persisted) and UI affordances.
+- [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
 - [ ] Fuzzy search with ranking in the switcher.
 - [ ] Auto-start at login (opt-in).
 - [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure), either in the background or by surfacing a diagnostic report.
@@ -110,7 +137,7 @@ Incomplete:
 - Behavior and limitations are documented where needed.
 - New behavior is covered by tests.
 
-## Phase 7 — Release: packaging, verification, and documentation
+## Phase 8 — Release: packaging, verification, and documentation
 
 ### Goal
 - Ship a release-quality build with deterministic install/upgrade and scripted release steps.
@@ -129,7 +156,7 @@ Incomplete:
 - A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
 - CI is green and a release checklist exists.
 
-## Phase 8 — Future post-release features
+## Phase 9 — Future post-release features
 
 ### Goal
 - Track larger post-release product features that are intentionally deferred until after release.
@@ -144,4 +171,4 @@ Incomplete:
 ### Exit criteria
 - Missing-config onboarding path allows users to add and open a project from Switcher with explicit error surfacing and no silent defaults.
 - Dedicated-space behavior is deterministic and matches the selected configuration strategy.
-- Phase 8 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
+- Phase 9 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.

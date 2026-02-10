@@ -461,6 +461,87 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    // MARK: - Chrome initial URLs (cold start)
+
+    func testSelectProjectLaunchesChromeWithColdStartURLsWhenNoSnapshotExists() async {
+        let aero = FocusAeroSpaceStub()
+        let chromeLauncher = FocusChromeLauncherRecordingStub()
+
+        let ideLauncher = FocusIdeLauncherStub()
+
+        let projectId = "test"
+        let workspace = "ap-\(projectId)"
+        let chromeWindow = ApWindow(
+            windowId: 100,
+            appBundleId: "com.google.Chrome",
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - Chrome"
+        )
+        let ideWindow = ApWindow(
+            windowId: 101,
+            appBundleId: "com.microsoft.VSCode",
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - VS Code"
+        )
+
+        chromeLauncher.onLaunch = { identifier in
+            aero.windowsByBundleId["com.google.Chrome"] = [chromeWindow]
+            aero.windowsByWorkspace[workspace] = (aero.windowsByWorkspace[workspace] ?? []) + [chromeWindow]
+        }
+        ideLauncher.onLaunch = { identifier in
+            aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
+            aero.windowsByWorkspace[workspace] = (aero.windowsByWorkspace[workspace] ?? []) + [ideWindow]
+        }
+
+        aero.focusWindowSuccessIds.formUnion([100, 101])
+        aero.focusedWindowResult = .success(ideWindow)
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+
+        let manager = makeFocusManagerWithSeparateLaunchers(
+            aerospace: aero,
+            ideLauncher: ideLauncher,
+            agentLayerIdeLauncher: ideLauncher,
+            chromeLauncher: chromeLauncher
+        )
+
+        let project = ProjectConfig(
+            id: projectId,
+            name: "Test",
+            path: "/test",
+            color: "blue",
+            useAgentLayer: false,
+            chromePinnedTabs: ["https://project-pinned.com"],
+            chromeDefaultTabs: ["https://project-default.com"]
+        )
+        let config = Config(
+            projects: [project],
+            chrome: ChromeConfig(
+                pinnedTabs: ["https://global-pinned.com"],
+                defaultTabs: ["https://global-default.com"],
+                openGitRemote: false
+            )
+        )
+        manager.loadTestConfig(config)
+
+        let preFocus = CapturedFocus(windowId: 50, appBundleId: "com.apple.Finder", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        if case .failure(let error) = result {
+            XCTFail("Expected activation success but got: \(error)")
+        }
+
+        XCTAssertEqual(chromeLauncher.calls.count, 1)
+        XCTAssertEqual(chromeLauncher.calls[0].identifier, projectId)
+        XCTAssertEqual(chromeLauncher.calls[0].initialURLs, [
+            "https://global-pinned.com",
+            "https://project-pinned.com",
+            "https://global-default.com",
+            "https://project-default.com"
+        ])
+    }
+
     // MARK: - Helpers
 
     private func testProject(id: String = "test") -> ProjectConfig {
@@ -649,6 +730,17 @@ private final class FocusIdeLauncherStub: IdeLauncherProviding {
 
 private struct FocusChromeLauncherStub: ChromeLauncherProviding {
     func openNewWindow(identifier: String, initialURLs: [String]) -> Result<Void, ApCoreError> { .success(()) }
+}
+
+private final class FocusChromeLauncherRecordingStub: ChromeLauncherProviding {
+    private(set) var calls: [(identifier: String, initialURLs: [String])] = []
+    var onLaunch: ((String) -> Void)?
+
+    func openNewWindow(identifier: String, initialURLs: [String]) -> Result<Void, ApCoreError> {
+        calls.append((identifier: identifier, initialURLs: initialURLs))
+        onLaunch?(identifier)
+        return .success(())
+    }
 }
 
 private final class FocusTabCaptureStub: ChromeTabCapturing {

@@ -2,6 +2,18 @@ import Foundation
 
 import AgentPanelCore
 
+/// Minimal interface required by the CLI runner for project operations.
+public protocol ProjectManaging {
+    func loadConfig() -> Result<Config, ConfigLoadError>
+    func sortedProjects(query: String) -> [ProjectConfig]
+    func captureCurrentFocus() -> CapturedFocus?
+    func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
+    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
+    func exitToNonProjectWindow() -> Result<Void, ProjectError>
+}
+
+extension ProjectManager: ProjectManaging {}
+
 /// Help topics supported by the ap CLI.
 public enum ApHelpTopic: Equatable {
     case root
@@ -205,12 +217,12 @@ public struct ApCLIOutput {
 /// Dependencies for the CLI runner.
 public struct ApCLIDependencies {
     public let version: () -> String
-    public let projectManagerFactory: () -> ProjectManager
+    public let projectManagerFactory: () -> any ProjectManaging
     public let doctorRunner: () -> DoctorReport
 
     public init(
         version: @escaping () -> String,
-        projectManagerFactory: @escaping () -> ProjectManager,
+        projectManagerFactory: @escaping () -> any ProjectManaging,
         doctorRunner: @escaping () -> DoctorReport
     ) {
         self.version = version

@@ -47,6 +47,18 @@ final class ApArgumentParserTests: XCTestCase {
         }
     }
 
+    func testDoctorUnexpectedArgumentsReportsUsage() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["doctor", "extra"]) {
+        case .success(let command):
+            XCTFail("Expected parse error, got \(command)")
+        case .failure(let error):
+            XCTAssertEqual(error.message, "unexpected arguments: extra")
+            XCTAssertEqual(error.usageTopic, .doctor)
+        }
+    }
+
     func testShowConfigCommand() {
         let parser = ApArgumentParser()
 
@@ -80,6 +92,18 @@ final class ApArgumentParserTests: XCTestCase {
         }
     }
 
+    func testListProjectsUnexpectedArgumentsReportsUsage() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["list-projects", "a", "b"]) {
+        case .success(let command):
+            XCTFail("Expected parse error, got \(command)")
+        case .failure(let error):
+            XCTAssertEqual(error.message, "unexpected arguments: a b")
+            XCTAssertEqual(error.usageTopic, .listProjects)
+        }
+    }
+
     func testSelectProjectCommand() {
         let parser = ApArgumentParser()
 
@@ -99,6 +123,18 @@ final class ApArgumentParserTests: XCTestCase {
             XCTFail("Expected parse error, got \(command)")
         case .failure(let error):
             XCTAssertEqual(error.message, "missing argument")
+            XCTAssertEqual(error.usageTopic, .selectProject)
+        }
+    }
+
+    func testSelectProjectUnexpectedArgumentsReportsUsage() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["select-project", "a", "b"]) {
+        case .success(let command):
+            XCTFail("Expected parse error, got \(command)")
+        case .failure(let error):
+            XCTAssertEqual(error.message, "unexpected arguments: a b")
             XCTAssertEqual(error.usageTopic, .selectProject)
         }
     }
