@@ -236,10 +236,12 @@ public enum ProjectError: Error, Equatable, Sendable {
 public struct ProjectActivationSuccess: Equatable, Sendable {
     public let ideWindowId: Int
     public let tabRestoreWarning: String?
+    public init(ideWindowId: Int, tabRestoreWarning: String?)
 }
 
 public struct ProjectCloseSuccess: Equatable, Sendable {
     public let tabCaptureWarning: String?
+    public init(tabCaptureWarning: String?)
 }
 ```
 
@@ -249,6 +251,7 @@ public struct ProjectCloseSuccess: Equatable, Sendable {
 public struct ChromeTabSnapshot: Codable, Equatable, Sendable {
     public let urls: [String]
     public let capturedAt: Date
+    public init(urls: [String], capturedAt: Date)
 }
 
 public struct ResolvedTabs: Equatable, Sendable {

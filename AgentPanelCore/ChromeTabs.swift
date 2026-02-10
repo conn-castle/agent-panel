@@ -13,7 +13,7 @@ public struct ChromeTabSnapshot: Codable, Equatable, Sendable {
     /// UTC timestamp of when the snapshot was captured.
     public let capturedAt: Date
 
-    init(urls: [String], capturedAt: Date) {
+    public init(urls: [String], capturedAt: Date) {
         self.urls = urls
         self.capturedAt = capturedAt
     }

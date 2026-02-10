@@ -64,12 +64,27 @@ public struct ProjectActivationSuccess: Equatable, Sendable {
     public let ideWindowId: Int
     /// Warning message if tab restore failed (non-fatal).
     public let tabRestoreWarning: String?
+
+    /// Creates a new activation success result.
+    /// - Parameters:
+    ///   - ideWindowId: AeroSpace window ID for the IDE window.
+    ///   - tabRestoreWarning: Optional non-fatal warning if tab restore failed.
+    public init(ideWindowId: Int, tabRestoreWarning: String?) {
+        self.ideWindowId = ideWindowId
+        self.tabRestoreWarning = tabRestoreWarning
+    }
 }
 
 /// Success result from project close.
 public struct ProjectCloseSuccess: Equatable, Sendable {
     /// Warning message if tab capture failed (non-fatal).
     public let tabCaptureWarning: String?
+
+    /// Creates a new close success result.
+    /// - Parameter tabCaptureWarning: Optional non-fatal warning if tab capture failed.
+    public init(tabCaptureWarning: String?) {
+        self.tabCaptureWarning = tabCaptureWarning
+    }
 }
 
 // Note: CapturedFocus and internal protocols (AeroSpaceProviding,

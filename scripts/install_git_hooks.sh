@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-if [[ ! -d ".git" ]]; then
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
   echo "error: expected a git repository at: $repo_root" >&2
   exit 1
 fi
