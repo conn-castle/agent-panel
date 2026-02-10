@@ -584,4 +584,154 @@ final class ConfigParserTests: XCTestCase {
             $0.severity == .fail && $0.title.contains("project must be an array")
         })
     }
+
+    func testMissingProjectKeyFails() {
+        let toml = """
+        [chrome]
+        pinnedTabs = ["https://example.com"]
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("No [[project]] entries")
+        })
+    }
+
+    func testEmptyProjectArrayFails() {
+        let toml = """
+        project = []
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("No [[project]] entries")
+        })
+    }
+
+    func testProjectArrayElementNotATableFails() {
+        let toml = """
+        project = [1]
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("project[0] must be a table")
+        })
+    }
+
+    func testOptionalRemoteWrongTypeFails() {
+        let toml = """
+        [[project]]
+        name = "Remote ML"
+        remote = 123
+        path = "/remote/path"
+        color = "teal"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("project[0].remote must be a string")
+        })
+    }
+
+    func testOptionalRemoteEmptyFails() {
+        let toml = """
+        [[project]]
+        name = "Remote ML"
+        remote = ""
+        path = "/remote/path"
+        color = "teal"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("project[0].remote is empty")
+        })
+    }
+
+    func testChromePinnedTabsWrongTypeFails() {
+        let toml = """
+        [chrome]
+        pinnedTabs = "not-an-array"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("chrome.pinnedTabs must be an array of strings")
+        })
+    }
+
+    func testChromePinnedTabsElementWrongTypeFails() {
+        let toml = """
+        [chrome]
+        pinnedTabs = [123]
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("chrome.pinnedTabs[0] must be a string")
+        })
+    }
+
+    func testAgentLayerEnabledWrongTypeFails() {
+        let toml = """
+        [agentLayer]
+        enabled = "yes"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("agentLayer.enabled must be a boolean")
+        })
+    }
+
+    func testChromeOpenGitRemoteWrongTypeFails() {
+        let toml = """
+        [chrome]
+        openGitRemote = "true"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("chrome.openGitRemote must be a boolean")
+        })
+    }
 }

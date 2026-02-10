@@ -127,6 +127,53 @@ final class AgentLayerLauncherTests: XCTestCase {
                       "AL workspace should not have remoteAuthority (SSH+AL is mutually exclusive)")
     }
 
+    // MARK: - Error: workspace file write fails
+
+    func testWorkspaceFileWriteFailureReturnsError() {
+        let runner = MockALCommandRunner()
+        let launcher = ApAgentLayerVSCodeLauncher(
+            dataStore: dataStore,
+            commandRunner: runner,
+            executableResolver: makeResolver(),
+            fileSystem: FailingWorkspaceFileSystem()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("Failed to write workspace file"))
+        } else {
+            XCTFail("Expected failure when workspace file cannot be written")
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty, "No command should be run if workspace file creation fails")
+    }
+
+    // MARK: - Error: remoteAuthority not supported
+
+    func testRemoteAuthorityProvidedReturnsError() {
+        let runner = MockALCommandRunner()
+        let launcher = ApAgentLayerVSCodeLauncher(
+            dataStore: dataStore,
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(
+            identifier: "test",
+            projectPath: "/Users/test/project",
+            remoteAuthority: "ssh-remote+u@host"
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("does not support SSH remote projects"))
+        } else {
+            XCTFail("Expected failure when remoteAuthority is provided")
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty, "No command should be run if remoteAuthority is provided")
+    }
+
     // MARK: - Error: al not found
 
     func testAlNotFoundReturnsError() {
@@ -242,6 +289,29 @@ final class AgentLayerLauncherTests: XCTestCase {
         XCTAssertEqual(runner.calls.count, 1, "code should not run after al sync failure")
     }
 
+    func testAlSyncNonZeroExitReturnsErrorWithoutStderr() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "   "))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            dataStore: dataStore,
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("al sync failed with exit code 1."))
+            XCTAssertFalse(error.message.contains("\n"))
+        } else {
+            XCTFail("Expected failure for non-zero exit code")
+        }
+
+        XCTAssertEqual(runner.calls.count, 1, "code should not run after al sync failure")
+    }
+
     // MARK: - Error: al sync succeeds but code fails
 
     func testAlSyncSucceedsButCodeFailsReturnsError() {
@@ -261,6 +331,30 @@ final class AgentLayerLauncherTests: XCTestCase {
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("code failed"), "Error should mention code, got: \(error.message)")
             XCTAssertTrue(error.message.contains("exit code 1"), "Error should contain exit code")
+        } else {
+            XCTFail("Expected failure when code exits non-zero")
+        }
+
+        XCTAssertEqual(runner.calls.count, 2, "Both al sync and code should have run")
+    }
+
+    func testCodeNonZeroExitReturnsErrorWithoutStderr() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 2, stdout: "", stderr: ""))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            dataStore: dataStore,
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("code failed with exit code 2."))
+            XCTAssertFalse(error.message.contains("\n"))
         } else {
             XCTFail("Expected failure when code exits non-zero")
         }
@@ -289,6 +383,29 @@ final class AgentLayerLauncherTests: XCTestCase {
         } else {
             XCTFail("Expected failure from command runner")
         }
+    }
+
+    func testCodeRunnerFailureReturnsError() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .failure(ApCoreError(message: "runner failed"))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            dataStore: dataStore,
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error.message, "runner failed")
+        } else {
+            XCTFail("Expected failure from command runner (code)")
+        }
+
+        XCTAssertEqual(runner.calls.count, 2)
     }
 
     // MARK: - Helpers
@@ -351,4 +468,20 @@ private struct ALSelectiveFileSystem: FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
     func appendFile(at url: URL, data: Data) throws {}
     func writeFile(at url: URL, data: Data) throws {}
+}
+
+private struct FailingWorkspaceFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
 }

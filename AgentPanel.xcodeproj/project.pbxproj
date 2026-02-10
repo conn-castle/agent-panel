@@ -68,6 +68,7 @@
 		E6AB4DCAB965EE715A11593A /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */; };
 		F4D808EF753CD911BCADF9D7 /* ChromeTabStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4F78292D1AA1E00396BB86 /* ChromeTabStoreTests.swift */; };
+		F70E3D73FE0AC52B55112104 /* ProjectManagerCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ABFD578BD00149884F14AFA /* ProjectManagerCoverageTests.swift */; };
 		F9B3F3241C29CD9386229E1D /* DoctorSSHTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2095712C0FAC7312D63559A /* DoctorSSHTests.swift */; };
 		FF90DD97E05DB53306719BAA /* Doctor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935CD37A022BA8B71683DE72 /* Doctor.swift */; };
 /* End PBXBuildFile section */
@@ -166,6 +167,7 @@
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6E8DE3E79215020A2587A722 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		792EA59F2896815CA8062275 /* ProjectManagerChromeTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerChromeTabTests.swift; sourceTree = "<group>"; };
+		7ABFD578BD00149884F14AFA /* ProjectManagerCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerCoverageTests.swift; sourceTree = "<group>"; };
 		7CBD0FE2C6DF91C6CEA318A9 /* DependenciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependenciesTests.swift; sourceTree = "<group>"; };
 		8375E9AD9F43075DD43C36F4 /* ap */ = {isa = PBXFileReference; includeInIndex = 0; path = ap; sourceTree = BUILT_PRODUCTS_DIR; };
 		864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserTests.swift; sourceTree = "<group>"; };
@@ -284,6 +286,7 @@
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
 				792EA59F2896815CA8062275 /* ProjectManagerChromeTabTests.swift */,
+				7ABFD578BD00149884F14AFA /* ProjectManagerCoverageTests.swift */,
 				98F56A9B2D3B18E280767106 /* ProjectManagerFocusTests.swift */,
 				FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */,
 				D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */,
@@ -695,6 +698,7 @@
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
 				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
 				08382A3C82BA6B765B7A4DEC /* ProjectManagerChromeTabTests.swift in Sources */,
+				F70E3D73FE0AC52B55112104 /* ProjectManagerCoverageTests.swift in Sources */,
 				12C912FD7B0796498A203261 /* ProjectManagerFocusTests.swift in Sources */,
 				483837094975998B931C20D2 /* ProjectManagerLogEventNameTests.swift in Sources */,
 				F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */,

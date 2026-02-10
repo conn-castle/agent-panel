@@ -3,6 +3,25 @@ import XCTest
 
 final class LoggerTests: XCTestCase {
 
+    func testLoggerInitWithCustomDataStoreWritesToDiskAtExpectedPath() throws {
+        let tmpHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentpanel-logger-home-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpHome) }
+        try FileManager.default.createDirectory(at: tmpHome, withIntermediateDirectories: true)
+
+        let dataStore = DataPaths(homeDirectory: tmpHome)
+        let logger = AgentPanelLogger(dataStore: dataStore)
+
+        switch logger.log(event: "disk.write.test") {
+        case .failure(let error):
+            XCTFail("Unexpected error: \(error)")
+        case .success:
+            break
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dataStore.primaryLogFile.path))
+    }
+
     func testLoggerLogWritesWithGeneratedTimestamp() throws {
         let fileSystem = InMemoryFileSystem()
         let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))

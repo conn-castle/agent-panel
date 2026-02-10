@@ -99,8 +99,8 @@ Incomplete:
 - [ ] Window rescue for floating IDE/app windows: keep the “all windows floating” AeroSpace strategy, but when AgentPanel focuses/activates a project (and when restoring focus via `ap return` / close / exit), detect if the target VS Code (and optionally Chrome) window is mostly off-screen (e.g., only a 1px slice visible due to stale saved coordinates after monitor/Space changes) and automatically reposition it into a visible `NSScreen.visibleFrame` (clamp/center with padding; do not change tiling/layout). Implement via macOS Accessibility window frame control (AX position/size), map AeroSpace `window-id` to the corresponding AX window reliably, fail loudly with a clear error when Accessibility permission is missing, add a Doctor check + remediation guidance for the required permission, add unit tests for the geometry logic + integration tests covering activation/return/close paths, and document the behavior + permission requirement in README (`offscreen-window-rescue`).
 - [ ] Fix activation errors invisible when the panel dismisses during async launch (`activation-error-invisible`).
 - [ ] Add switcher dismiss/restore lifecycle tests (`switcher-lifecycle-tests`).
-- [ ] Expand ProjectManager tests for config load/sort/recency + full activation path (`pm-tests`).
-- [ ] Add CLI runner tests for new ProjectManager-backed commands (`cli-runner-tests`).
+- [x] Expand ProjectManager tests for config load/sort/recency + full activation path (`pm-tests`).
+- [x] Add CLI runner tests for new ProjectManager-backed commands (`cli-runner-tests`).
 - [ ] Doctor: fail on unrecognized `config.toml` entries (`doctor-unrecognized-config`).
 - [ ] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
 - [ ] Config: surface config warnings to UI (and/or CLI) (`config-warn`).
@@ -108,7 +108,7 @@ Incomplete:
 - [ ] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
 - [x] Add a first-class coverage command/script and document it in COMMANDS.md.
 - [x] Enforce > 90% test coverage as a hard gate in `scripts/test.sh`, CI, and a repo-managed git pre-commit hook.
-- [ ] Raise test coverage to > 90% (as measured by the gate) by adding tests and refactoring for testability.
+- [x] Raise test coverage to > 90% (as measured by the gate) by adding tests and refactoring for testability. (Hit 95.02% total selected on 2026-02-10.)
 
 ### Exit criteria
 - All issues referenced in this phase are fixed and removed from ISSUES.md.

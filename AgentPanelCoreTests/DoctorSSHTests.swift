@@ -143,6 +143,31 @@ final class DoctorSSHTests: XCTestCase {
         XCTAssertFalse(report.actions.canReloadAeroSpaceConfig)
     }
 
+    func testRunUsesFoundLabelWhenAeroSpaceInstalledButAppPathNil() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+
+        let health = RecordingAeroSpaceHealth()
+        health.installStatusValue = AeroSpaceInstallStatus(isInstalled: true, appPath: nil)
+        health.cliAvailableValue = true
+        health.compatibilityValue = .compatible
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            aerospaceHealth: health
+        )
+
+        let report = doctor.run()
+        XCTAssertEqual(report.metadata.aerospaceApp, "FOUND")
+    }
+
     func testRunReportsCompatibilityIncompatible() throws {
         let toml = """
         [[project]]
@@ -312,6 +337,21 @@ final class DoctorSSHTests: XCTestCase {
         })
     }
 
+    func testSSHProjectExit255WarnsConnectionFailedWhenStderrEmpty() {
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 255, stdout: "", stderr: "   ")),
+            sshResolvable: true
+        )
+
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.severity == .warn && $0.title.contains("Cannot verify remote path: remote-ml")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertTrue(finding?.bodyLines.contains("Detail: SSH connection failed") == true)
+    }
+
     // MARK: - SSH other exit → WARN (unexpected)
 
     func testSSHProjectOtherExitWarnsUnexpected() {
@@ -325,6 +365,21 @@ final class DoctorSSHTests: XCTestCase {
         XCTAssertTrue(report.findings.contains {
             $0.severity == .warn && $0.title.contains("Unexpected SSH result (exit 42): remote-ml")
         })
+    }
+
+    func testSSHProjectOtherExitWarnsUnexpectedWithNilDetailWhenStderrEmpty() {
+        let doctor = makeDoctor(
+            sshResult: .success(ApCommandResult(exitCode: 42, stdout: "", stderr: "   ")),
+            sshResolvable: true
+        )
+
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.severity == .warn && $0.title.contains("Unexpected SSH result (exit 42): remote-ml")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertFalse(finding?.bodyLines.contains(where: { $0.hasPrefix("Detail:") }) == true)
     }
 
     // MARK: - ssh not found → WARN
@@ -427,6 +482,34 @@ final class DoctorSSHTests: XCTestCase {
         let authorityIndex = terminatorIndex + 1
         XCTAssertTrue(authorityIndex < args.count, "Authority should follow '--'")
         XCTAssertEqual(args[authorityIndex], "nconn@happy-mac.local")
+    }
+
+    func testSSHCommandEscapesSingleQuotesInRemotePath() {
+        let runner = StubCommandRunner(
+            result: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        )
+        let toml = """
+        [[project]]
+        name = "Remote ML"
+        remote = "ssh-remote+nconn@happy-mac.local"
+        path = "/Users/nconn/it's-project"
+        color = "teal"
+        useAgentLayer = false
+        """
+        let doctor = makeDoctor(
+            toml: toml,
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        _ = doctor.run()
+
+        guard let args = runner.lastArguments, let last = args.last else {
+            XCTFail("Expected ssh command to have been called")
+            return
+        }
+        XCTAssertTrue(last.contains("test -d '/Users/nconn/it'\\''s-project'"), "Unexpected ssh test arg: \(last)")
     }
 
     // MARK: - Helpers

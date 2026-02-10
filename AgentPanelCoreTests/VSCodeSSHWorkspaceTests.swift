@@ -103,6 +103,111 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         XCTAssertEqual(folders?.first?["uri"], "vscode-remote://ssh-remote+nconn@host/Users/nconn/my%20project%231")
     }
 
+    // MARK: - openNewWindow command execution behavior
+
+    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrEmpty() throws {
+        let launcher = try makeLauncherWithCodeStub(
+            "#!/bin/sh\nexit 2\n"
+        )
+
+        let result = launcher.openNewWindow(
+            identifier: "exit-empty-stderr",
+            projectPath: "/Users/test/project"
+        )
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertEqual(error.message, "code failed with exit code 2.")
+        }
+    }
+
+    func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrIncluded() throws {
+        let launcher = try makeLauncherWithCodeStub(
+            "#!/bin/sh\necho boom 1>&2\nexit 3\n"
+        )
+
+        let result = launcher.openNewWindow(
+            identifier: "exit-with-stderr",
+            projectPath: "/Users/test/project"
+        )
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("exit code 3"))
+            XCTAssertTrue(error.message.contains("\nboom"))
+        }
+    }
+
+    func testOpenNewWindowSucceedsWhenCodeExitZero() throws {
+        let launcher = try makeLauncherWithCodeStub(
+            "#!/bin/sh\nexit 0\n"
+        )
+
+        let result = launcher.openNewWindow(
+            identifier: "exit-zero",
+            projectPath: "/Users/test/project"
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error.message)")
+        case .success:
+            break
+        }
+    }
+
+    func testOpenNewWindowTrimsRemoteAuthorityAndProjectPathWhenWritingWorkspace() throws {
+        let launcher = try makeLauncherWithCodeStub(
+            "#!/bin/sh\nexit 0\n"
+        )
+
+        let result = launcher.openNewWindow(
+            identifier: "trim-test",
+            projectPath: " /Users/test/project ",
+            remoteAuthority: "  ssh-remote+u@h  "
+        )
+        if case .failure(let error) = result {
+            XCTFail("Expected success, got: \(error.message)")
+            return
+        }
+
+        let workspace = readWorkspaceJSON("trim-test")
+        XCTAssertNotNil(workspace, "Workspace file should exist")
+
+        let remoteAuthority = workspace?["remoteAuthority"] as? String
+        XCTAssertEqual(remoteAuthority, "ssh-remote+u@h")
+
+        let folders = workspace?["folders"] as? [[String: String]]
+        XCTAssertEqual(folders?.first?["uri"], "vscode-remote://ssh-remote+u@h/Users/test/project")
+    }
+
+    func testOpenNewWindowReturnsErrorWhenWorkspaceFileWriteFails() {
+        let failingFS = FailingFileSystem()
+        let resolver = ExecutableResolver(
+            fileSystem: EmptyFileSystem(),
+            searchPaths: [],
+            loginShellFallbackEnabled: false
+        )
+        let runner = ApSystemCommandRunner(executableResolver: resolver)
+        let launcher = ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner, fileSystem: failingFS)
+
+        let result = launcher.openNewWindow(
+            identifier: "workspace-write-fails",
+            projectPath: "/Users/test/project"
+        )
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("Failed to write workspace file"))
+        }
+    }
+
     // MARK: - Helpers
 
     /// Creates a launcher with a sandboxed resolver that cannot find 'code',
@@ -112,6 +217,22 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         let resolver = ExecutableResolver(
             fileSystem: emptyFS,
             searchPaths: [],
+            loginShellFallbackEnabled: false
+        )
+        let runner = ApSystemCommandRunner(executableResolver: resolver)
+        return ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner)
+    }
+
+    private func makeLauncherWithCodeStub(_ codeScript: String) throws -> ApVSCodeLauncher {
+        let binDir = tempDir.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+
+        let codeURL = binDir.appendingPathComponent("code", isDirectory: false)
+        try codeScript.write(to: codeURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codeURL.path)
+
+        let resolver = ExecutableResolver(
+            searchPaths: [binDir.path],
             loginShellFallbackEnabled: false
         )
         let runner = ApSystemCommandRunner(executableResolver: resolver)

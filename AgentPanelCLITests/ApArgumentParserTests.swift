@@ -92,6 +92,17 @@ final class ApArgumentParserTests: XCTestCase {
         }
     }
 
+    func testListProjectsHelpFlag() {
+        let parser = ApArgumentParser()
+
+        switch parser.parse(arguments: ["list-projects", "--help"]) {
+        case .failure(let error):
+            XCTFail("Unexpected parse error: \(error.message)")
+        case .success(let command):
+            XCTAssertEqual(command, .help(.listProjects))
+        }
+    }
+
     func testListProjectsUnexpectedArgumentsReportsUsage() {
         let parser = ApArgumentParser()
 
