@@ -95,6 +95,275 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
         XCTAssertTrue(output.stdout.first?.contains("select-project") ?? false)
     }
+
+    func testShowConfigSuccessPrintsFormattedConfig() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a", "b"]))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stderr, [])
+        XCTAssertEqual(output.stdout.count, 1)
+        XCTAssertTrue(output.stdout[0].contains("# AgentPanel Configuration"))
+        XCTAssertTrue(output.stdout[0].contains("id = \"a\""))
+        XCTAssertTrue(output.stdout[0].contains("id = \"b\""))
+    }
+
+    func testShowConfigFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.fileNotFound(path: "/tmp/missing"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr.first, "error: Config file not found: /tmp/missing")
+    }
+
+    func testShowConfigValidationFailedWithoutFailFindingsUsesGenericMessage() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.validationFailed(findings: [
+            ConfigFinding(severity: .warn, title: "Warning only")
+        ]))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr.first, "error: Config validation failed")
+    }
+
+    func testListProjectsSuccessPrintsProjectLines() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a", "b"]))
+        manager.sortedProjectsResult = [
+            makeProject(id: "a", name: "Alpha", path: "/p/a"),
+            makeProject(id: "b", name: "Beta", path: "/p/b")
+        ]
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["list-projects", "query"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stderr, [])
+        XCTAssertEqual(output.stdout, [
+            "a\tAlpha\t/p/a",
+            "b\tBeta\t/p/b"
+        ])
+        XCTAssertEqual(manager.sortedProjectsQueries, ["query"])
+    }
+
+    func testListProjectsFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.parseFailed(detail: "bad toml"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["list-projects"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr.first, "error: Failed to parse config: bad toml")
+    }
+
+    func testSelectProjectFailsWhenCannotCaptureFocus() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = nil
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Could not capture current focus"])
+        XCTAssertEqual(manager.selectProjectCalls.count, 0)
+    }
+
+    func testSelectProjectSuccessPrintsWarningIfPresent() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = CapturedFocus(windowId: 1, appBundleId: "app", workspace: "main")
+        manager.selectProjectResult = .success(ProjectActivationSuccess(ideWindowId: 42, tabRestoreWarning: "tabs failed"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Selected project: a"])
+        XCTAssertEqual(output.stderr, ["warning: tabs failed"])
+        XCTAssertEqual(manager.selectProjectCalls.count, 1)
+        XCTAssertEqual(manager.selectProjectCalls[0].projectId, "a")
+    }
+
+    func testSelectProjectFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = CapturedFocus(windowId: 1, appBundleId: "app", workspace: "main")
+        manager.selectProjectResult = .failure(.projectNotFound(projectId: "a"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Project not found: a"])
+    }
+
+    func testCloseProjectSuccessPrintsWarningIfPresent() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.closeProjectResult = .success(ProjectCloseSuccess(tabCaptureWarning: "capture failed"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Closed project: a"])
+        XCTAssertEqual(output.stderr, ["warning: capture failed"])
+    }
+
+    func testCloseProjectFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.closeProjectResult = .failure(.aeroSpaceError(detail: "boom"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: AeroSpace error: boom"])
+    }
+
+    func testReturnCommandSuccessPrintsMessage() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: []))
+        manager.exitToNonProjectResult = .success(())
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Returned to previous window"])
+        XCTAssertEqual(output.stderr, [])
+    }
+
+    func testReturnCommandFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: []))
+        manager.exitToNonProjectResult = .failure(.noPreviousWindow)
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: No previous window to return to"])
+    }
+
+    func testUsageTextHasUniqueContentPerHelpTopic() {
+        XCTAssertTrue(usageText(for: .root).contains("Commands:"))
+        XCTAssertTrue(usageText(for: .doctor).contains("ap doctor"))
+        XCTAssertTrue(usageText(for: .showConfig).contains("show-config"))
+        XCTAssertTrue(usageText(for: .listProjects).contains("list-projects"))
+        XCTAssertTrue(usageText(for: .selectProject).contains("select-project"))
+        XCTAssertTrue(usageText(for: .closeProject).contains("close-project"))
+        XCTAssertTrue(usageText(for: .returnToWindow).contains("ap return"))
+    }
+
+    func testStandardOutputWritersExecute() {
+        // Intentionally writes to stdout/stderr to cover the standard output sinks.
+        ApCLIOutput.standard.stdout("stdout test")
+        ApCLIOutput.standard.stderr("stderr test")
+    }
 }
 
 // MARK: - Test Doubles
@@ -123,4 +392,65 @@ private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {
         ? [DoctorFinding(severity: .fail, title: "Failure")]
         : [DoctorFinding(severity: .pass, title: "Pass")]
     return DoctorReport(metadata: metadata, findings: findings)
+}
+
+private func makeConfig(projectIds: [String]) -> Config {
+    let projects = projectIds.map { id in
+        makeProject(id: id, name: id.uppercased(), path: "/tmp/\(id)")
+    }
+    return Config(projects: projects)
+}
+
+private func makeProject(id: String, name: String, path: String) -> ProjectConfig {
+    ProjectConfig(
+        id: id,
+        name: name,
+        remote: nil,
+        path: path,
+        color: "blue",
+        useAgentLayer: false,
+        chromePinnedTabs: [],
+        chromeDefaultTabs: []
+    )
+}
+
+private final class MockProjectManager: ProjectManaging {
+    var loadConfigResult: Result<Config, ConfigLoadError> = .success(Config(projects: []))
+    var sortedProjectsResult: [ProjectConfig] = []
+    var sortedProjectsQueries: [String] = []
+    var captureCurrentFocusResult: CapturedFocus?
+    var selectProjectResult: Result<ProjectActivationSuccess, ProjectError> = .success(ProjectActivationSuccess(ideWindowId: 1, tabRestoreWarning: nil))
+    var selectProjectCalls: [(projectId: String, focus: CapturedFocus)] = []
+    var closeProjectResult: Result<ProjectCloseSuccess, ProjectError> = .success(ProjectCloseSuccess(tabCaptureWarning: nil))
+    var closeProjectCalls: [String] = []
+    var exitToNonProjectResult: Result<Void, ProjectError> = .success(())
+    var exitCalls: Int = 0
+
+    func loadConfig() -> Result<Config, ConfigLoadError> {
+        loadConfigResult
+    }
+
+    func sortedProjects(query: String) -> [ProjectConfig] {
+        sortedProjectsQueries.append(query)
+        return sortedProjectsResult
+    }
+
+    func captureCurrentFocus() -> CapturedFocus? {
+        captureCurrentFocusResult
+    }
+
+    func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError> {
+        selectProjectCalls.append((projectId: projectId, focus: preCapturedFocus))
+        return selectProjectResult
+    }
+
+    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
+        closeProjectCalls.append(projectId)
+        return closeProjectResult
+    }
+
+    func exitToNonProjectWindow() -> Result<Void, ProjectError> {
+        exitCalls += 1
+        return exitToNonProjectResult
+    }
 }

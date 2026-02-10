@@ -92,9 +92,30 @@ scripts/test.sh
 ```
 
 Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
+This script also enforces the repo coverage gate via `scripts/coverage_gate.sh`.
 
 Reference (underlying `xcodebuild`):
 
 ```bash
-xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData test CODE_SIGNING_ALLOWED=NO
+xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData -resultBundlePath build/TestResults/Test-AgentPanel.xcresult -enableCodeCoverage YES test CODE_SIGNING_ALLOWED=NO
 ```
+
+## Coverage
+
+Re-check the coverage gate from an existing test result bundle:
+
+```bash
+scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
+```
+
+Run from repo root. Notes: the `.xcresult` bundle is produced by `scripts/test.sh`.
+
+## Git hooks
+
+Install repo-managed git hooks (pre-commit runs `scripts/test.sh`):
+
+```bash
+scripts/install_git_hooks.sh
+```
+
+Run from repo root. Notes: sets local git config `core.hooksPath` to `.githooks`.

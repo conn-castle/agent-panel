@@ -232,15 +232,20 @@ This is the one exception to the "prefer scoped queries" guidance above — tagg
 
 ### Chrome launch (AppleScript)
 
-If no tagged Chrome window exists, launch one via `osascript`:
+If no tagged Chrome window exists, resolve initial tab URLs and launch via `osascript`. Tab URLs come from the last captured snapshot (verbatim, preserving order). If no snapshot exists (cold start), URLs are computed from always-open URLs (global `pinnedTabs` + per-project `chromePinnedTabs` + git remote if enabled) followed by default tabs. URL resolution is deferred until after confirming Chrome needs a fresh launch.
+
+Launch with tab URLs (single AppleScript, no placeholder):
 
 ```applescript
 tell application "Google Chrome"
   set newWindow to make new window
-  set URL of active tab of newWindow to "https://example.com"
+  set URL of active tab of newWindow to "<first-tab-url>"
   set given name of newWindow to "AP:<project-id>"
+  -- additional tabs opened via `make new tab` with each URL
 end tell
 ```
+
+If the tab-restore launch fails, Chrome falls back to launching without tabs (empty window with tag only) and a warning is surfaced to the caller.
 
 ### VS Code launch (workspace file)
 
@@ -257,7 +262,10 @@ If no tagged VS Code window exists:
 }
 ```
 
-2. Launch with `code --new-window <workspace-file>`.
+2. Launch:
+   - **Direct projects:** `code --new-window <workspace-file>`
+   - **Agent Layer projects** (`useAgentLayer = true`): run `al sync` with working directory set to the project path, then `code --new-window <workspace-file>`. This avoids a current `al vscode` dual-window issue (tradeoff: Agent Layer env vars like `CODEX_HOME` are not set).
+   - **SSH projects:** Same as direct, but the workspace file uses a `vscode-remote://...` folder URI in `folders` (e.g., `"vscode-remote://ssh-remote+user@host/remote/absolute/path"`) and includes a top-level `remoteAuthority` key (e.g., `"ssh-remote+user@host"`) so VS Code connects via SSH Remote.
 
 ### Poll until window appears
 

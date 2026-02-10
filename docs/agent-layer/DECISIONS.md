@@ -3,7 +3,7 @@
 Note: This is an agent-layer memory file. It is primarily for agent use.
 
 ## Purpose
-A rolling log of important, non-obvious decisions that materially affect future work (constraints, deferrals, irreversible tradeoffs). Only record decisions that future developers/agents would not learn just by reading the code.
+A rolling log of important, non-obvious decisions that materially affect future work (constraints, deferrals, irreversible tradeoffs). Only record decisions that future developers/agents would not learn just by reading the code. Do not log routine choices or standard best-practice decisions; if it is obvious from the code, leave it out.
 
 ## Format
 - Keep entries brief and durable (avoid restating obvious defaults).
@@ -26,68 +26,32 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 <!-- ENTRIES START -->
 
-- Decision 2026-01-11 9fd499c: Build workflow and Xcode project management
-    Decision: Track `project.yml` and regenerate `AgentPanel.xcodeproj` via XcodeGen; keep a single repo-level `.xcodeproj` (no `.xcworkspace` in v1); drive build/test via `xcodebuild -project` scripts (`scripts/dev_bootstrap.sh`, `scripts/build.sh`, `scripts/test.sh`); commit the SwiftPM lockfile and resolve packages in CI; require Apple toolchain for developers/CI while keeping Xcode GUI optional.
-    Reason: Deterministic, reviewable builds with minimal IDE friction and no brittle `.pbxproj` manual edits.
-    Tradeoffs: Contributors must install `xcodegen`; additional script maintenance; occasional need to open Xcode for debugging/provisioning.
+- Decision 2026-02-03 brewonly: Homebrew-only distribution
+    Decision: Both AgentPanel and AeroSpace are installed via Homebrew only; direct-download installs (zip/dmg) are not supported.
+    Reason: Deterministic installs/upgrades, scriptable onboarding and Doctor automation, and reduced distribution surface area.
+    Tradeoffs: Users without Homebrew cannot install or onboard. Any future direct-download path requires signing/notarization + updater work.
 
-- Decision 2026-01-11 9fd499c: Logging contract
-    Decision: Write JSON Lines log entries with UTC ISO-8601 timestamps to `agent-panel.log`; rotate at 10 MiB with up to 5 archives (`agent-panel.log.1`…`agent-panel.log.5`).
-    Reason: Structured logs are easy to parse/filter; stable "tail this file" contract; prevents unbounded growth.
-    Tradeoffs: Less human-readable without tooling; schema must stay stable; older history rotates out.
+- Decision 2026-02-03 guipath: GUI apps and child processes require PATH augmentation
+    Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c 'echo $PATH'`, validated as absolute path, falls back to `/bin/zsh`).
+    Reason: macOS GUI apps launched via Finder/Dock inherit a minimal PATH missing Homebrew and user additions. Child processes (e.g., `al` calling `code`) inherit the same minimal PATH and fail. `/usr/bin/env` is not viable.
+    Tradeoffs: Login shell spawn at init (~50ms, cached). Non-POSIX shells (fish) may not work (safe fallback to standard paths).
 
-- Decision 2026-01-12 9fd499c: Minimum supported macOS version
-    Decision: Set minimum supported macOS version to 15.7.
-    Reason: Product requirement for initial release.
-    Tradeoffs: Older macOS versions unsupported.
+- Decision 2026-02-08 chrometabs: Chrome has no scriptable tab-pinning API
+    Decision: Use "always-open" tabs (regular tabs, leftmost position) instead of Chrome pinned tabs.
+    Reason: Chrome tab pinning is only available via user interaction (right-click → Pin). Neither AppleScript nor remote debugging can pin tabs programmatically.
+    Tradeoffs: Tabs appear as regular tabs; users must manually pin if desired.
 
-- Decision 2026-01-27 b1f4c2d: Homebrew required for AeroSpace install
-    Decision: Require Homebrew and only support AeroSpace installation via Homebrew for now; manual installs are deferred.
-    Reason: Deterministic, scriptable install path for onboarding and Doctor automation.
-    Tradeoffs: Users without Homebrew cannot onboard until a manual install path is added.
+- Decision 2026-02-08 snaptruth: Snapshot-is-truth for Chrome tab persistence
+    Decision: Save all captured Chrome tab URLs verbatim on close (no filtering). Restore snapshot directly on activate. Always-open + default tabs are only used for cold start (no snapshot). Capture failures preserve the existing snapshot; empty capture (window gone) deletes it.
+    Reason: Exact-match URL filtering is unreliable because Chrome redirects URLs (e.g., `todoist.com/` → `todoist.com/app/today`), git remote URLs differ from web URLs, and other dynamic URL changes.
+    Tradeoffs: Snapshot may overlap with always-open config; harmless since the snapshot IS the intended tab state.
 
-- Decision 2026-02-03 brewonly: Homebrew-only AgentPanel install
-    Decision: Support installing AgentPanel via Homebrew only; direct-download installs (zip/dmg) are not supported at this stage.
-    Reason: Keep installs and upgrades deterministic and reduce release/distribution surface area while we reboot the project.
-    Tradeoffs: Users without Homebrew cannot install AgentPanel; any future direct-download path will require intentional new work (signing/notarization + updater story).
+- Decision 2026-02-09 allauncher: Agent Layer launcher uses `al sync` + direct `code` (two-step workaround)
+    Decision: AL launcher runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly, instead of using `al vscode`.
+    Reason: `al vscode` unconditionally appends `.` (CWD) to the `code` args (`internal/clients/vscode/launch.go`), causing two VS Code windows.
+    Tradeoffs: Loses `CODEX_HOME` env var (only needed by Codex VS Code extension). Once `al vscode` is fixed upstream (see ISSUES.md `al-dual-window`), revert to single-command launch for CODEX_HOME support.
 
-- Decision 2026-02-03 guipath: GUI apps don't inherit shell PATH
-    Decision: Use `ExecutableResolver` to find executables instead of `/usr/bin/env`. Searches standard paths first, falls back to login shell `which`.
-    Reason: GUI apps launched via Finder/Dock get a minimal PATH without Homebrew or user additions. `/usr/bin/env` fails to find `code`, `brew`, `aerospace`, etc.
-    Tradeoffs: Must maintain search path list; zsh fallback has performance cost.
-
-- Decision 2026-02-03 pipes: Read pipes concurrently to avoid deadlock
-    Decision: Use `readabilityHandler` to stream stdout/stderr while process runs, not after termination.
-    Reason: Pipe buffers are ~64KB. If a process fills the buffer and blocks, waiting for termination before reading creates a deadlock.
-    Tradeoffs: More complex thread synchronization.
-
-- Decision 2026-02-04 e2ee3b6: SessionManager as single source of truth for state (SUPERSEDED)
-    Decision: All state persistence (AppState, FocusHistory) and focus capture/restore flows through SessionManager in Core. App sets FocusOperationsProviding after config load.
-    Reason: Consolidates state ownership in Core, eliminating duplicate state management in App/SwitcherPanelController. Enforces API boundaries via Swift access control.
-    Tradeoffs: App must call setFocusOperations() after loading config; focus operations unavailable until then.
-    **Superseded 2026-02-05:** SessionManager removed in favor of ProjectManager. FocusOperationsProviding protocol eliminated; ProjectManager uses AeroSpace directly for focus operations (CLI-based, no AppKit needed).
-
-- Decision 2026-02-04 intentapi: Intent-based protocol pattern for cross-layer APIs
-    Decision: Protocols crossing layer boundaries (Core↔App) use intent-based signatures like `captureCurrentFocus() -> CapturedFocus?` instead of implementation-specific types like `focusedWindow() -> ApWindow?`.
-    Reason: Keeps implementation details (ApWindow, AeroSpace concepts) internal to the layer that owns them. Callers express what they want, not how to get it. Cleaner testability and looser coupling.
-    Tradeoffs: Implementation must translate between internal types and intent-based types; slightly more code in the implementing layer.
-
-- Decision 2026-02-04 appkitmod: Shared AgentPanelAppKit module (supersedes appkit)
-    Decision: Create `AgentPanelAppKit` static framework containing `AppKitRunningApplicationChecker`. Both App and CLI depend on this shared module. Removes previous duplication in `AgentPanelApp/AppKitIntegration.swift` and `AgentPanelCLI/AppKitIntegration.swift`.
-    Reason: Single source of truth for AppKit integration code; clean layering (Core → AppKit → App/CLI); no manual sync required.
-    Tradeoffs: One additional build target; marginal complexity for small codebase, but scales if more AppKit integration is needed later.
-
-- Decision 2026-02-05 pubaudit: Minimal public API surface in Core
-    Decision: Make internal everything not directly used by App or CLI. Internal types include: `AgentPanel.appBundleIdentifier`, `ApCoreErrorCategory`, error factory functions, `ExecutableResolver`, `ApCommandResult`, `ApSystemCommandRunner`, `FileSystem`, `DefaultFileSystem`, `AppDiscovering`, `LaunchServicesAppDiscovery`, `HotkeyChecking`, `CarbonHotkeyChecker`, `DateProviding`, `SystemDateProvider`, `EnvironmentProviding`, `ProcessEnvironment`, `AeroSpaceInstallStatus`, `AeroSpaceCompatibility`, `AeroSpaceHealthChecking`, `IdNormalizer`, `ConfigLoadResult`, `ConfigLoader`, `ConfigError`, `ConfigErrorKind`, `LogEntry`, `DoctorMetadata`. Internal struct properties: `ApCoreError.category/detail/command/exitCode`, `ConfigFinding.detail/fix`, `DoctorFinding.title/bodyLines/snippet`. Internal static members: `ProjectColorPalette.named/sortedNames`, `DoctorActionAvailability.none`, `DoctorSeverity.sortOrder`, `DoctorReport.metadata`. Most `AeroSpaceConfigManager` and `DataPaths` methods/properties internal. All constructors internal where App/CLI never constructs directly. Dead code removed from SwitcherSession.
-    Reason: Minimize public API surface; hide implementation details; cleaner module boundary; prevent accidental coupling to internal types.
-    Tradeoffs: Tests must use `@testable import`; CORE_API.md must be kept in sync manually.
-
-- Decision 2026-02-08 wsstate: Single-query workspace state in ProjectManager
-    Decision: Replace split active/open workspace lookups with `ProjectManager.workspaceState()`, backed by one AeroSpace command: `list-workspaces --all --format "%{workspace}||%{workspace-is-focused}"`.
-    Reason: Removes redundant CLI calls and guarantees active/open values are derived from one consistent snapshot instead of two separately timed queries.
-    Tradeoffs: Depends on `workspace-is-focused` format support; parser contract must remain stable with AeroSpace output.
-
-- Decision 2026-02-08 startbg: AeroSpace start must not run on main thread
-    Decision: Enforce off-main-thread execution for `ApAeroSpace.start()` and run Doctor/startup AeroSpace actions on a background queue before updating UI.
-    Reason: Startup readiness polling is synchronous and can block up to the configured timeout; keeping it off the main thread prevents UI stalls.
-    Tradeoffs: Doctor/start actions become asynchronous from the app UI perspective and require callback-style UI updates.
+- Decision 2026-02-10 covgate: Coverage gate enforced via scripts/test.sh
+    Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`, `AgentPanelAppKit`) via `scripts/coverage_gate.sh`. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
+    Reason: Deterministic quality bar for core/business logic; presentation/UI code is intentionally not gated.
+    Tradeoffs: UI target coverage is not enforced; developers must install git hooks locally (CI still enforces).

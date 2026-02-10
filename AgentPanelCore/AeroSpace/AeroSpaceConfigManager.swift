@@ -44,30 +44,51 @@ public struct AeroSpaceConfigManager {
     }
 
     private let fileManager: FileManager
+    private let configPath: String
+    private let backupPath: String
+    private let safeConfigLoader: () -> String?
 
     /// Creates a config manager.
     public init() {
         self.fileManager = .default
+        self.configPath = Self.configPath
+        self.backupPath = Self.backupPath
+        self.safeConfigLoader = {
+            guard let url = Bundle.main.url(forResource: Self.safeConfigResourceName, withExtension: "toml") else {
+                return nil
+            }
+            return try? String(contentsOf: url, encoding: .utf8)
+        }
     }
 
     /// Creates a config manager with a custom file manager.
     /// - Parameter fileManager: File manager to use for file operations.
-    init(fileManager: FileManager) {
+    init(
+        fileManager: FileManager,
+        configPath: String = AeroSpaceConfigManager.configPath,
+        backupPath: String = AeroSpaceConfigManager.backupPath,
+        safeConfigLoader: @escaping () -> String? = {
+            guard let url = Bundle.main.url(forResource: AeroSpaceConfigManager.safeConfigResourceName, withExtension: "toml") else {
+                return nil
+            }
+            return try? String(contentsOf: url, encoding: .utf8)
+        }
+    ) {
         self.fileManager = fileManager
+        self.configPath = configPath
+        self.backupPath = backupPath
+        self.safeConfigLoader = safeConfigLoader
     }
 
     /// Loads the safe AeroSpace config from the app bundle.
     /// - Returns: The config content, or nil if not found.
     private func loadSafeConfigFromBundle() -> String? {
-        guard let url = Bundle.main.url(forResource: Self.safeConfigResourceName, withExtension: "toml") else {
-            return nil
-        }
-        return try? String(contentsOf: url, encoding: .utf8)
+        safeConfigLoader()
     }
 
     /// Returns true if the AeroSpace config file exists.
     private func configExists() -> Bool {
-        fileManager.fileExists(atPath: Self.configPath)
+        fileManager.fileExists(atPath: configPath)
     }
 
     /// Returns true if the existing config is managed by AgentPanel.
@@ -78,7 +99,7 @@ public struct AeroSpaceConfigManager {
         }
 
         do {
-            let contents = try String(contentsOfFile: Self.configPath, encoding: .utf8)
+            let contents = try String(contentsOfFile: configPath, encoding: .utf8)
             return .success(contents.hasPrefix(Self.managedByMarker))
         } catch {
             return .failure(fileSystemError(
@@ -97,10 +118,10 @@ public struct AeroSpaceConfigManager {
 
         do {
             // Remove old backup if it exists
-            if fileManager.fileExists(atPath: Self.backupPath) {
-                try fileManager.removeItem(atPath: Self.backupPath)
+            if fileManager.fileExists(atPath: backupPath) {
+                try fileManager.removeItem(atPath: backupPath)
             }
-            try fileManager.copyItem(atPath: Self.configPath, toPath: Self.backupPath)
+            try fileManager.copyItem(atPath: configPath, toPath: backupPath)
             return .success(())
         } catch {
             return .failure(fileSystemError(
@@ -138,7 +159,7 @@ public struct AeroSpaceConfigManager {
 
         // Write the safe config
         do {
-            try safeConfig.write(toFile: Self.configPath, atomically: true, encoding: .utf8)
+            try safeConfig.write(toFile: configPath, atomically: true, encoding: .utf8)
             return .success(())
         } catch {
             return .failure(fileSystemError(

@@ -2,6 +2,18 @@ import Foundation
 
 import AgentPanelCore
 
+/// Minimal interface required by the CLI runner for project operations.
+public protocol ProjectManaging {
+    func loadConfig() -> Result<Config, ConfigLoadError>
+    func sortedProjects(query: String) -> [ProjectConfig]
+    func captureCurrentFocus() -> CapturedFocus?
+    func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
+    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
+    func exitToNonProjectWindow() -> Result<Void, ProjectError>
+}
+
+extension ProjectManager: ProjectManaging {}
+
 /// Help topics supported by the ap CLI.
 public enum ApHelpTopic: Equatable {
     case root
@@ -205,12 +217,12 @@ public struct ApCLIOutput {
 /// Dependencies for the CLI runner.
 public struct ApCLIDependencies {
     public let version: () -> String
-    public let projectManagerFactory: () -> ProjectManager
+    public let projectManagerFactory: () -> any ProjectManaging
     public let doctorRunner: () -> DoctorReport
 
     public init(
         version: @escaping () -> String,
-        projectManagerFactory: @escaping () -> ProjectManager,
+        projectManagerFactory: @escaping () -> any ProjectManaging,
         doctorRunner: @escaping () -> DoctorReport
     ) {
         self.version = version
@@ -295,7 +307,7 @@ public struct ApCLI {
                 }
                 // Bridge async selectProject to sync CLI using semaphore with timeout
                 let semaphore = DispatchSemaphore(value: 0)
-                var result: Result<Int, ProjectError>?
+                var result: Result<ProjectActivationSuccess, ProjectError>?
                 Task {
                     result = await manager.selectProject(projectId: projectId, preCapturedFocus: capturedFocus)
                     semaphore.signal()
@@ -310,7 +322,10 @@ public struct ApCLI {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
-                case .success:
+                case .success(let activation):
+                    if let warning = activation.tabRestoreWarning {
+                        output.stderr("warning: \(warning)")
+                    }
                     output.stdout("Selected project: \(projectId)")
                     return ApExitCode.ok.rawValue
                 case .none:
@@ -330,7 +345,10 @@ public struct ApCLI {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
-                case .success:
+                case .success(let closeResult):
+                    if let warning = closeResult.tabCaptureWarning {
+                        output.stderr("warning: \(warning)")
+                    }
                     output.stdout("Closed project: \(projectId)")
                     return ApExitCode.ok.rawValue
                 }

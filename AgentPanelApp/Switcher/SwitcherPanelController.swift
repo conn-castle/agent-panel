@@ -435,6 +435,22 @@ final class SwitcherPanelController: NSObject {
                     }
                     return
                 } else {
+                    // Window gone — try focusing the workspace the user was on
+                    if projectManager.focusWorkspace(name: focus.workspace) {
+                        let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                        await MainActor.run {
+                            session.logEvent(
+                                event: "switcher.focus.restored",
+                                context: [
+                                    "workspace": focus.workspace,
+                                    "method": "workspace_fallback",
+                                    "restore_ms": "\(restoreMs)"
+                                ]
+                            )
+                        }
+                        return
+                    }
+
                     let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
                     await MainActor.run {
                         session.logEvent(
@@ -873,10 +889,20 @@ final class SwitcherPanelController: NSObject {
                 self.tableView.isEnabled = true
 
                 switch result {
-                case .success(let ideWindowId):
+                case .success(let activation):
+                    if let warning = activation.tabRestoreWarning {
+                        // Panel is already being dismissed — can't show in status bar.
+                        // Log only; the user will see Chrome opened without their tabs.
+                        self.session.logEvent(
+                            event: "switcher.project.tab_restore_warning",
+                            level: .warn,
+                            message: warning,
+                            context: ["project_id": projectId]
+                        )
+                    }
                     // Dismiss first, then focus the IDE (avoids panel close stealing focus)
                     self.dismiss(reason: .projectSelected)
-                    self.focusIdeWindow(windowId: ideWindowId)
+                    self.focusIdeWindow(windowId: activation.ideWindowId)
                 case .failure(let error):
                     self.setStatus(message: self.projectErrorMessage(error), level: .error)
                     self.session.logEvent(
@@ -957,18 +983,46 @@ final class SwitcherPanelController: NSObject {
         )
 
         switch projectManager.closeProject(projectId: projectId) {
-        case .success:
+        case .success(let closeResult):
+            if let warning = closeResult.tabCaptureWarning {
+                session.logEvent(
+                    event: "switcher.close_project.tab_capture_warning",
+                    level: .warn,
+                    message: warning,
+                    context: ["project_id": projectId]
+                )
+            }
             session.logEvent(
                 event: "switcher.close_project.succeeded",
                 context: ["project_id": projectId]
             )
+
+            // closeProject already restored focus (via focus stack or workspace fallback).
+            // Refresh captured focus so:
+            // - dismiss doesn't restore stale pre-switcher focus (which may have been destroyed)
+            // - a subsequent project selection pushes the correct non-project focus entry
+            let refreshedFocus = projectManager.captureCurrentFocus()
+            if let refreshedFocus,
+               let selfBundleId = Bundle.main.bundleIdentifier,
+               refreshedFocus.appBundleId != selfBundleId {
+                capturedFocus = refreshedFocus
+                previouslyActiveApp = NSWorkspace.shared.frontmostApplication
+            } else {
+                capturedFocus = nil
+                previouslyActiveApp = nil
+            }
+
             refreshWorkspaceState()
             applyFilter(
                 query: searchField.stringValue,
                 preferredSelectionKey: fallbackSelectionKey,
                 useDefaultSelection: false
             )
-            setStatus(message: "Closed '\(projectName)'", level: .info)
+            if closeResult.tabCaptureWarning != nil {
+                setStatus(message: "Closed '\(projectName)' (tab capture failed)", level: .warning)
+            } else {
+                setStatus(message: "Closed '\(projectName)'", level: .info)
+            }
         case .failure(let error):
             setStatus(message: projectErrorMessage(error), level: .error)
             session.logEvent(

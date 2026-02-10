@@ -81,6 +81,7 @@ targets:
       - path: AgentPanelCoreTests
     dependencies:
       - target: AgentPanelCore
+      - target: AgentPanelAppKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

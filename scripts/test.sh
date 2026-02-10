@@ -15,6 +15,16 @@ fi
 derived_data_path="build/DerivedData"
 mkdir -p "$(dirname -- "$derived_data_path")"
 
+result_bundle_path="build/TestResults/Test-AgentPanel.xcresult"
+mkdir -p "$(dirname -- "$result_bundle_path")"
+if [[ -e "$result_bundle_path" ]]; then
+  if [[ "$result_bundle_path" != build/TestResults/*.xcresult ]]; then
+    echo "error: refusing to delete unexpected result bundle path: $result_bundle_path" >&2
+    exit 1
+  fi
+  rm -rf "$result_bundle_path"
+fi
+
 if ! command -v xcbeautify &>/dev/null; then
   echo "error: xcbeautify not found" >&2
   echo "Fix: brew install xcbeautify" >&2
@@ -28,8 +38,12 @@ xcodebuild \
   -configuration Debug \
   -destination "platform=macOS" \
   -derivedDataPath "$derived_data_path" \
+  -resultBundlePath "$result_bundle_path" \
+  -enableCodeCoverage YES \
   test \
   CODE_SIGNING_ALLOWED=NO \
   2>&1 | xcbeautify
+
+scripts/coverage_gate.sh "$result_bundle_path"
 
 echo "test: OK"

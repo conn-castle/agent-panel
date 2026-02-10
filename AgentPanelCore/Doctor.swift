@@ -195,6 +195,7 @@ public struct Doctor {
     private let aerospaceHealth: AeroSpaceHealthChecking
     private let appDiscovery: AppDiscovering
     private let executableResolver: ExecutableResolver
+    private let commandRunner: CommandRunning
     private let dataStore: DataPaths
 
     /// Creates a Doctor instance with default dependencies.
@@ -211,6 +212,7 @@ public struct Doctor {
         self.aerospaceHealth = ApAeroSpace()
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.executableResolver = ExecutableResolver()
+        self.commandRunner = ApSystemCommandRunner()
         self.dataStore = .default()
     }
 
@@ -222,6 +224,7 @@ public struct Doctor {
     ///   - aerospaceHealth: AeroSpace health checker for status and remediation actions.
     ///   - appDiscovery: App discovery for checking installed apps.
     ///   - executableResolver: Resolver for checking CLI tools.
+    ///   - commandRunner: Command runner for SSH remote path checks.
     ///   - dataStore: Data store for path checks.
     init(
         runningApplicationChecker: RunningApplicationChecking,
@@ -230,6 +233,7 @@ public struct Doctor {
         aerospaceHealth: AeroSpaceHealthChecking,
         appDiscovery: AppDiscovering,
         executableResolver: ExecutableResolver,
+        commandRunner: CommandRunning,
         dataStore: DataPaths
     ) {
         self.runningApplicationChecker = runningApplicationChecker
@@ -238,6 +242,7 @@ public struct Doctor {
         self.aerospaceHealth = aerospaceHealth
         self.appDiscovery = appDiscovery
         self.executableResolver = executableResolver
+        self.commandRunner = commandRunner
         self.dataStore = dataStore
     }
 
@@ -420,7 +425,7 @@ public struct Doctor {
         }
 
         // Check AgentPanel config
-        switch ConfigLoader.loadDefault() {
+        switch ConfigLoader.load(from: dataStore.configFile) {
         case .failure(let error):
             findings.append(DoctorFinding(
                 severity: .fail,
@@ -464,46 +469,10 @@ public struct Doctor {
 
             // Check project paths exist and agent-layer if required
             for project in result.projects {
-                let pathURL = URL(fileURLWithPath: project.path, isDirectory: true)
-                var isDirectory = ObjCBool(false)
-                let exists = FileManager.default.fileExists(atPath: pathURL.path, isDirectory: &isDirectory)
-                if exists && isDirectory.boolValue {
-                    findings.append(DoctorFinding(
-                        severity: .pass,
-                        title: "Project path exists: \(project.id)",
-                        detail: project.path
-                    ))
-
-                    // Check agent-layer directory if useAgentLayer is true
-                    if project.useAgentLayer {
-                        let agentLayerPath = pathURL.appendingPathComponent(".agent-layer", isDirectory: true)
-                        var isAgentLayerDir = ObjCBool(false)
-                        let agentLayerExists = FileManager.default.fileExists(
-                            atPath: agentLayerPath.path,
-                            isDirectory: &isAgentLayerDir
-                        )
-                        if agentLayerExists && isAgentLayerDir.boolValue {
-                            findings.append(DoctorFinding(
-                                severity: .pass,
-                                title: "Agent layer exists: \(project.id)",
-                                detail: agentLayerPath.path
-                            ))
-                        } else {
-                            findings.append(DoctorFinding(
-                                severity: .warn,
-                                title: "Agent layer missing: \(project.id)",
-                                detail: "useAgentLayer=true but .agent-layer directory not found",
-                                fix: "Create .agent-layer directory in \(project.path) or set useAgentLayer=false"
-                            ))
-                        }
-                    }
+                if project.isSSH {
+                    checkSSHProjectPath(project: project, findings: &findings)
                 } else {
-                    findings.append(DoctorFinding(
-                        severity: .fail,
-                        title: "Project path missing: \(project.id)",
-                        detail: project.path,
-                        fix: "Update project.path to an existing directory."
-                    ))
+                    checkLocalProjectPath(project: project, findings: &findings)
                 }
             }
         }
@@ -553,6 +522,159 @@ public struct Doctor {
         )
 
         return DoctorReport(metadata: metadata, findings: findings, actions: actions)
+    }
+
+    // MARK: - Project Path Checks
+
+    /// Checks a local project path exists and has .agent-layer if required.
+    private func checkLocalProjectPath(project: ProjectConfig, findings: inout [DoctorFinding]) {
+        let pathURL = URL(fileURLWithPath: project.path, isDirectory: true)
+        var isDirectory = ObjCBool(false)
+        let exists = FileManager.default.fileExists(atPath: pathURL.path, isDirectory: &isDirectory)
+        if exists && isDirectory.boolValue {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Project path exists: \(project.id)",
+                detail: project.path
+            ))
+
+            // Check agent-layer directory if useAgentLayer is true
+            if project.useAgentLayer {
+                let agentLayerPath = pathURL.appendingPathComponent(".agent-layer", isDirectory: true)
+                var isAgentLayerDir = ObjCBool(false)
+                let agentLayerExists = FileManager.default.fileExists(
+                    atPath: agentLayerPath.path,
+                    isDirectory: &isAgentLayerDir
+                )
+                if agentLayerExists && isAgentLayerDir.boolValue {
+                    findings.append(DoctorFinding(
+                        severity: .pass,
+                        title: "Agent layer exists: \(project.id)",
+                        detail: agentLayerPath.path
+                    ))
+                } else {
+                    findings.append(DoctorFinding(
+                        severity: .warn,
+                        title: "Agent layer missing: \(project.id)",
+                        detail: "useAgentLayer=true but .agent-layer directory not found",
+                        fix: "Create .agent-layer directory in \(project.path) or set useAgentLayer=false"
+                    ))
+                }
+            }
+        } else {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Project path missing: \(project.id)",
+                detail: project.path,
+                fix: "Update project.path to an existing directory."
+            ))
+        }
+    }
+
+    /// Checks an SSH project's remote path exists via ssh command.
+    private func checkSSHProjectPath(project: ProjectConfig, findings: inout [DoctorFinding]) {
+        // Parse authority from VS Code remote authority (ssh-remote+user@host)
+        guard let remoteAuthority = project.remote?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !remoteAuthority.isEmpty,
+              remoteAuthority.hasPrefix("ssh-remote+") else {
+            // Malformed remote authority — config validation should have caught this
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Malformed SSH remote authority: \(project.id)",
+                detail: project.remote,
+                fix: "Use format: remote = \"ssh-remote+user@host\" and path = \"/remote/path\""
+            ))
+            return
+        }
+
+        let authority = String(remoteAuthority.dropFirst("ssh-remote+".count))
+        let remotePath = project.path
+        if authority.isEmpty || authority.hasPrefix("-") {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Malformed SSH remote authority: \(project.id)",
+                detail: remoteAuthority,
+                fix: "Use format: remote = \"ssh-remote+user@host\""
+            ))
+            return
+        }
+        if remotePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !remotePath.hasPrefix("/") {
+            findings.append(DoctorFinding(
+                severity: .fail,
+                title: "Malformed SSH remote path: \(project.id)",
+                detail: remotePath,
+                fix: "Use format: path = \"/remote/absolute/path\""
+            ))
+            return
+        }
+
+        // Pre-check: is ssh available?
+        guard executableResolver.resolve("ssh") != nil else {
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "ssh not found: cannot verify remote path for \(project.id)",
+                fix: "Install OpenSSH."
+            ))
+            return
+        }
+
+        // Shell-quote the remote path (single-quote with '\'' escaping)
+        let escapedPath = remotePath.replacingOccurrences(of: "'", with: "'\\''")
+
+        let result = commandRunner.run(
+            executable: "ssh",
+            arguments: [
+                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=yes",
+                "--",
+                authority,
+                "test -d '\(escapedPath)'"
+            ],
+            timeoutSeconds: 10
+        )
+
+        switch result {
+        case .failure(let error):
+            findings.append(DoctorFinding(
+                severity: .warn,
+                title: "Cannot verify remote path for \(project.id)",
+                detail: error.message,
+                fix: "Check SSH configuration and network connectivity to \(authority)."
+            ))
+        case .success(let cmdResult):
+            switch cmdResult.exitCode {
+            case 0:
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Remote project path exists: \(project.id)",
+                    detail: "\(remoteAuthority) \(remotePath)"
+                ))
+            case 1:
+                findings.append(DoctorFinding(
+                    severity: .fail,
+                    title: "Remote project path missing: \(project.id)",
+                    detail: "\(remoteAuthority) \(remotePath)",
+                    fix: "Update path or create directory on remote host."
+                ))
+            case 255:
+                let stderr = cmdResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "Cannot verify remote path: \(project.id)",
+                    detail: stderr.isEmpty ? "SSH connection failed" : stderr,
+                    fix: "Check SSH configuration and connectivity to \(authority)."
+                ))
+            default:
+                let stderr = cmdResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "Unexpected SSH result (exit \(cmdResult.exitCode)): \(project.id)",
+                    detail: stderr.isEmpty ? nil : stderr,
+                    fix: "Check SSH configuration."
+                ))
+            }
+        }
+        // Skip .agent-layer directory check for SSH projects (not supported with SSH)
     }
 
     /// Installs AeroSpace via Homebrew and returns an updated report.

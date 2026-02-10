@@ -15,10 +15,14 @@ public struct CapturedFocus: Sendable, Equatable {
     /// App bundle identifier of the focused window.
     public let appBundleId: String
 
+    /// AeroSpace workspace name the window was on (e.g., "main", "ap-myproject").
+    public let workspace: String
+
     /// Creates a captured focus state.
-    init(windowId: Int, appBundleId: String) {
+    init(windowId: Int, appBundleId: String, workspace: String) {
         self.windowId = windowId
         self.appBundleId = appBundleId
+        self.workspace = workspace
     }
 }
 
@@ -213,17 +217,43 @@ protocol IdeLauncherProviding {
     /// Opens a new VS Code window with a tagged title for precise identification.
     /// - Parameters:
     ///   - identifier: Project identifier embedded in the window title as `AP:<identifier>`.
-    ///   - projectPath: Optional path to the project folder. If provided, opens VS Code at this path.
-    func openNewWindow(identifier: String, projectPath: String?) -> Result<Void, ApCoreError>
+    ///   - projectPath: Optional path to the project folder.
+    ///     - Local projects: local absolute path.
+    ///     - SSH projects: remote absolute path.
+    ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
+    ///     When set, the workspace folder is opened via a `vscode-remote://` folder URI.
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for Chrome launching.
 protocol ChromeLauncherProviding {
-    func openNewWindow(identifier: String) -> Result<Void, ApCoreError>
+    /// Opens a new Chrome window tagged with the provided identifier.
+    /// - Parameters:
+    ///   - identifier: Project identifier embedded in the window title token.
+    ///   - initialURLs: URLs to open in the new window. First URL becomes the active tab,
+    ///     remaining URLs open as additional tabs. If empty, opens Chrome's default new tab page.
+    func openNewWindow(identifier: String, initialURLs: [String]) -> Result<Void, ApCoreError>
+}
+
+/// Internal protocol for Chrome tab capture.
+protocol ChromeTabCapturing {
+    /// Captures the URLs of all tabs in the Chrome window matching the given title.
+    /// - Parameter windowTitle: The window title to match.
+    /// - Returns: Array of tab URLs on success, or an error.
+    func captureTabURLs(windowTitle: String) -> Result<[String], ApCoreError>
+}
+
+/// Internal protocol for git remote URL resolution.
+protocol GitRemoteResolving {
+    /// Resolves the git remote origin URL at the given path.
+    /// - Parameter projectPath: Absolute path to the project directory.
+    /// - Returns: The remote URL if one exists, nil otherwise.
+    func resolve(projectPath: String) -> String?
 }
 
 extension ApAeroSpace: AeroSpaceProviding {}
 extension ApVSCodeLauncher: IdeLauncherProviding {}
+extension ApAgentLayerVSCodeLauncher: IdeLauncherProviding {}
 extension ApChromeLauncher: ChromeLauncherProviding {}
 
 // MARK: - App Discovery
@@ -237,7 +267,13 @@ protocol AppDiscovering {
 
 /// Launch Services-backed application discovery implementation.
 struct LaunchServicesAppDiscovery: AppDiscovering {
-    init() {}
+    private let fileManager: FileManager
+    private let searchRootsOverride: [URL]?
+
+    init(fileManager: FileManager = .default, searchRootsOverride: [URL]? = nil) {
+        self.fileManager = fileManager
+        self.searchRootsOverride = searchRootsOverride
+    }
 
     func applicationURL(bundleIdentifier: String) -> URL? {
         guard let unmanaged = LSCopyApplicationURLsForBundleIdentifier(bundleIdentifier as CFString, nil) else {
@@ -249,8 +285,7 @@ struct LaunchServicesAppDiscovery: AppDiscovering {
 
     func applicationURL(named appName: String) -> URL? {
         let bundleName = appName.hasSuffix(".app") ? appName : "\(appName).app"
-        let fileManager = FileManager.default
-        let searchRoots = applicationSearchRoots(fileManager: fileManager)
+        let searchRoots = searchRootsOverride ?? applicationSearchRoots()
 
         for directory in searchRoots {
             if let directMatch = directMatch(bundleName: bundleName, in: directory, fileManager: fileManager) {
@@ -268,7 +303,7 @@ struct LaunchServicesAppDiscovery: AppDiscovering {
         Bundle(url: url)?.bundleIdentifier
     }
 
-    private func applicationSearchRoots(fileManager: FileManager) -> [URL] {
+    private func applicationSearchRoots() -> [URL] {
         var roots = fileManager.urls(for: .applicationDirectory, in: .allDomainsMask)
         let fallbackRoots = [
             URL(fileURLWithPath: "/Applications", isDirectory: true),

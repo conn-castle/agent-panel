@@ -79,6 +79,7 @@ final class UTCTimestampTests: XCTestCase {
             aerospaceHealth: ApAeroSpace(),
             appDiscovery: LaunchServicesAppDiscovery(),
             executableResolver: ExecutableResolver(),
+            commandRunner: ApSystemCommandRunner(),
             dataStore: .default()
         )
     }
