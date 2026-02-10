@@ -118,6 +118,77 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         return ApVSCodeLauncher(dataStore: dataStore, commandRunner: runner)
     }
 
+    // MARK: - createWorkspaceFile with injected FileSystem
+
+    func testCreateWorkspaceFileUsesInjectedFileSystem() {
+        let recorder = RecordingFileSystem()
+
+        let result = ApIdeToken.createWorkspaceFile(
+            identifier: "injected-fs",
+            folders: [["path": "/test/path"]],
+            remoteAuthority: nil,
+            dataStore: dataStore,
+            fileSystem: recorder
+        )
+
+        if case .failure(let error) = result {
+            XCTFail("Expected success, got: \(error.message)")
+            return
+        }
+        XCTAssertEqual(recorder.createDirectoryCalls.count, 1)
+        XCTAssertEqual(recorder.writeFileCalls.count, 1)
+        XCTAssertTrue(recorder.writeFileCalls.first?.url.lastPathComponent == "injected-fs.code-workspace")
+    }
+
+    func testCreateWorkspaceFileReturnsErrorOnFileSystemFailure() {
+        let failingFS = FailingFileSystem()
+
+        let result = ApIdeToken.createWorkspaceFile(
+            identifier: "fail-test",
+            folders: [],
+            remoteAuthority: nil,
+            dataStore: dataStore,
+            fileSystem: failingFS
+        )
+
+        if case .success = result {
+            XCTFail("Expected failure from failing file system")
+        }
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("Failed to write workspace file"))
+        }
+    }
+
+    func testCreateWorkspaceFileSlashInIdentifierFails() {
+        let result = ApIdeToken.createWorkspaceFile(
+            identifier: "bad/id",
+            folders: [],
+            remoteAuthority: nil,
+            dataStore: dataStore
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("cannot contain '/'"))
+        } else {
+            XCTFail("Expected failure for identifier with slash")
+        }
+    }
+
+    func testCreateWorkspaceFileEmptyIdentifierFails() {
+        let result = ApIdeToken.createWorkspaceFile(
+            identifier: "   ",
+            folders: [],
+            remoteAuthority: nil,
+            dataStore: dataStore
+        )
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("cannot be empty"))
+        } else {
+            XCTFail("Expected failure for empty identifier")
+        }
+    }
+
     private func readWorkspaceJSON(_ identifier: String) -> [String: Any]? {
         let workspaceURL = dataStore.vscodeWorkspaceDirectory
             .appendingPathComponent("\(identifier).code-workspace")
@@ -137,4 +208,41 @@ private struct EmptyFileSystem: FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
     func appendFile(at url: URL, data: Data) throws {}
     func writeFile(at url: URL, data: Data) throws {}
+}
+
+/// Records createDirectory and writeFile calls for verification.
+private final class RecordingFileSystem: FileSystem {
+    struct WriteCall {
+        let url: URL
+        let data: Data
+    }
+    var createDirectoryCalls: [URL] = []
+    var writeFileCalls: [WriteCall] = []
+
+    func fileExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws { createDirectoryCalls.append(url) }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws { writeFileCalls.append(WriteCall(url: url, data: data)) }
+}
+
+/// File system that throws on write — for testing error handling.
+private struct FailingFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
 }

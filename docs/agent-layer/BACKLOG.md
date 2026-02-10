@@ -27,3 +27,8 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 ## Features and tasks (not scheduled)
 
 <!-- ENTRIES START -->
+
+- Backlog 2026-02-09 trackpad-hotcorners: Hot Corners and Trackpad activation/switching
+    Priority: Medium. Area: App/UX
+    Description: Add support for Hot Corners and trackpad gestures (e.g., specific swipes) to trigger the project switcher or quickly toggle between recent projects. This aims to streamline navigation for laptop users who may prefer gesture-based interaction over keyboard shortcuts.
+    Acceptance criteria: User can configure a specific screen corner or trackpad gesture in the settings to invoke the AgentPanel switcher.

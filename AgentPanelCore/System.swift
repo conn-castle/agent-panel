@@ -414,7 +414,8 @@ enum ApIdeToken {
         identifier: String,
         folders: [[String: String]],
         remoteAuthority: String?,
-        dataStore: DataPaths
+        dataStore: DataPaths,
+        fileSystem: FileSystem = DefaultFileSystem()
     ) -> Result<URL, ApCoreError> {
         let trimmedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedId.isEmpty else {
@@ -437,9 +438,9 @@ enum ApIdeToken {
         }
 
         do {
-            try FileManager.default.createDirectory(at: workspaceDirectory, withIntermediateDirectories: true)
+            try fileSystem.createDirectory(at: workspaceDirectory)
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
-            try data.write(to: workspaceURL, options: [.atomic])
+            try fileSystem.writeFile(at: workspaceURL, data: data)
         } catch {
             return .failure(ApCoreError(message: "Failed to write workspace file: \(error.localizedDescription)"))
         }
@@ -455,14 +456,21 @@ struct ApVSCodeLauncher {
 
     private let dataStore: DataPaths
     private let commandRunner: ApSystemCommandRunner
+    private let fileSystem: FileSystem
 
     /// Creates a VS Code launcher.
     /// - Parameters:
     ///   - dataStore: Data store for workspace file paths.
     ///   - commandRunner: Command runner for launching VS Code.
-    init(dataStore: DataPaths = .default(), commandRunner: ApSystemCommandRunner = ApSystemCommandRunner()) {
+    ///   - fileSystem: File system for workspace file creation.
+    init(
+        dataStore: DataPaths = .default(),
+        commandRunner: ApSystemCommandRunner = ApSystemCommandRunner(),
+        fileSystem: FileSystem = DefaultFileSystem()
+    ) {
         self.dataStore = dataStore
         self.commandRunner = commandRunner
+        self.fileSystem = fileSystem
     }
 
     /// Opens a new VS Code window with a tagged title for precise identification.
@@ -511,7 +519,8 @@ struct ApVSCodeLauncher {
             identifier: identifier,
             folders: folders,
             remoteAuthority: normalizedRemoteAuthority,
-            dataStore: dataStore
+            dataStore: dataStore,
+            fileSystem: fileSystem
         ) {
         case .failure(let error):
             return .failure(error)
@@ -655,20 +664,24 @@ struct ApAgentLayerVSCodeLauncher {
     private let dataStore: DataPaths
     private let commandRunner: CommandRunning
     private let executableResolver: ExecutableResolver
+    private let fileSystem: FileSystem
 
     /// Creates an Agent Layer VS Code launcher.
     /// - Parameters:
     ///   - dataStore: Data store for workspace file paths.
     ///   - commandRunner: Command runner for running `al sync` and `code --new-window`.
     ///   - executableResolver: Resolver for finding the `al` executable.
+    ///   - fileSystem: File system for workspace file creation.
     init(
         dataStore: DataPaths = .default(),
         commandRunner: CommandRunning = ApSystemCommandRunner(),
-        executableResolver: ExecutableResolver = ExecutableResolver()
+        executableResolver: ExecutableResolver = ExecutableResolver(),
+        fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.dataStore = dataStore
         self.commandRunner = commandRunner
         self.executableResolver = executableResolver
+        self.fileSystem = fileSystem
     }
 
     /// Opens a new VS Code window through the Agent Layer.
@@ -698,7 +711,8 @@ struct ApAgentLayerVSCodeLauncher {
             identifier: identifier,
             folders: [["path": projectPath]],
             remoteAuthority: nil,
-            dataStore: dataStore
+            dataStore: dataStore,
+            fileSystem: fileSystem
         ) {
         case .failure(let error):
             return .failure(error)

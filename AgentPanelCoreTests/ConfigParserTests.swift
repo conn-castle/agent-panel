@@ -502,4 +502,86 @@ final class ConfigParserTests: XCTestCase {
         XCTAssertNotNil(result.config)
         XCTAssertEqual(result.projects.first?.path, "/Users/test/project")
     }
+
+    // MARK: - Config Edge Cases
+
+    func testNameNormalizesToEmptyFails() {
+        let toml = """
+        [[project]]
+        name = "---"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("cannot derive an id")
+        })
+    }
+
+    func testInvalidColorFails() {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "not-a-color"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("color is invalid")
+        })
+    }
+
+    func testChromeNotATableFails() {
+        let toml = """
+        chrome = "not-a-table"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("[chrome] must be a table")
+        })
+    }
+
+    func testNameWrongTypeFails() {
+        let toml = """
+        [[project]]
+        name = 123
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("must be a string")
+        })
+    }
+
+    func testProjectKeyNotAnArrayFails() {
+        let toml = """
+        [project]
+        name = "Test"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config)
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("project must be an array")
+        })
+    }
 }
