@@ -734,4 +734,153 @@ final class ConfigParserTests: XCTestCase {
             $0.severity == .fail && $0.title.contains("chrome.openGitRemote must be a boolean")
         })
     }
+
+    // MARK: - Unrecognized Config Key Tests
+
+    func testUnrecognizedTopLevelKey() {
+        let toml = """
+        bogusKey = "unexpected"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config, "Config should be nil when unrecognized keys produce FAIL findings")
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("Unrecognized top-level config key: bogusKey")
+        })
+    }
+
+    func testUnrecognizedChromeKey() {
+        let toml = """
+        [chrome]
+        pinnedTabs = ["https://example.com"]
+        bogusOption = true
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config, "Config should be nil when unrecognized keys produce FAIL findings")
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("Unrecognized [chrome] config key: bogusOption")
+        })
+    }
+
+    func testUnrecognizedAgentLayerKey() {
+        let toml = """
+        [agentLayer]
+        enabled = true
+        unknownSetting = "value"
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        useAgentLayer = true
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config, "Config should be nil when unrecognized keys produce FAIL findings")
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("Unrecognized [agentLayer] config key: unknownSetting")
+        })
+    }
+
+    func testUnrecognizedProjectKey() {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        typoField = "oops"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        XCTAssertNil(result.config, "Config should be nil when unrecognized keys produce FAIL findings")
+        XCTAssertTrue(result.findings.contains {
+            $0.severity == .fail && $0.title.contains("Unrecognized [[project]] config key: typoField")
+        })
+    }
+
+    func testMultipleUnrecognizedKeysAreSorted() {
+        let toml = """
+        [chrome]
+        zebra = true
+        alpha = "test"
+        pinnedTabs = ["https://example.com"]
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        let unknownFindings = result.findings.filter {
+            $0.severity == .fail && $0.title.contains("Unrecognized [chrome] config key")
+        }
+        XCTAssertEqual(unknownFindings.count, 2)
+        XCTAssertTrue(unknownFindings[0].title.contains("alpha"))
+        XCTAssertTrue(unknownFindings[1].title.contains("zebra"))
+    }
+
+    func testValidConfigHasNoUnrecognizedKeyFindings() {
+        let toml = """
+        [chrome]
+        pinnedTabs = ["https://example.com"]
+        defaultTabs = ["https://docs.example.com"]
+        openGitRemote = true
+
+        [agentLayer]
+        enabled = false
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        useAgentLayer = false
+        remote = "ssh-remote+user@host"
+        chromePinnedTabs = ["https://api.example.com"]
+        chromeDefaultTabs = ["https://jira.example.com"]
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        let unknownFindings = result.findings.filter {
+            $0.title.contains("Unrecognized")
+        }
+        XCTAssertTrue(unknownFindings.isEmpty, "Valid config should have no unrecognized key findings, got: \(unknownFindings)")
+    }
+
+    func testUnrecognizedKeyFixIncludesKnownKeys() {
+        let toml = """
+        [agentLayer]
+        enabeld = true
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let result = ConfigParser.parse(toml: toml)
+
+        let finding = result.findings.first {
+            $0.title.contains("Unrecognized [agentLayer] config key: enabeld")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertTrue(finding?.fix?.contains("enabled") == true, "Fix should list known keys")
+    }
 }

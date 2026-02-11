@@ -77,16 +77,13 @@ Incomplete:
 - Added visual menu bar health indication driven by Doctor results.
 
 ## Phase 5 ✅ — Daily-driver required features
-- Chrome tab persistence/restore via AppleScript with snapshot-is-truth design; URLs captured verbatim on close and restored on activate.
-- LIFO focus stack replacing single-slot design; "exit project space" returns to last non-project window.
-- Agent Layer config: global `[agentLayer] enabled` default (false), per-project override, SSH+AL mutual exclusion at parse time.
-- SSH projects: `project.remote` (ssh-remote+user@host) + remote absolute `project.path`; writes remote `.vscode/settings.json` block via SSH (required for window identification), then launches `code --new-window --remote <authority> <remotePath>`. Doctor validates via `ssh test -d` and warns if remote settings.json missing AgentPanel block.
-- Agent Layer launcher: `ApAgentLayerVSCodeLauncher` injects `// >>> agent-panel` block in `.vscode/settings.json` with `AP:<id>` tag, runs `al sync` (CWD = project path) then `al vscode --no-sync --new-window` (CWD = project path). This preserves Agent Layer env vars like `CODEX_HOME` while avoiding the dual-window bug in `al vscode` by not passing a positional path. `ProjectManager` selects launcher based on `project.useAgentLayer`.
-- `CommandRunning` extended with `workingDirectory: String?` parameter.
-- Config hardening: SSH authority option injection rejected at parse time (authorities starting with `-`); local paths validated as absolute; Doctor ssh includes `--` option terminator for defense-in-depth.
-- PATH propagation: `ApSystemCommandRunner` builds augmented PATH (standard paths + login shell PATH + process PATH) with 5s timeout, user's `$SHELL` (validated as absolute path), deduplication, 2s pipe EOF timeout. Child processes receive this environment. Tested in `SystemCommandRunnerTests`.
-- Focus restore workspace fallback: `closeProject` and `exitToNonProjectWindow` fall back to first non-project workspace when focus stack is exhausted. Switcher dismiss tries workspace-level focus before app activation.
-- Switcher refreshes captured focus after `closeProject` (to the newly restored focus) so dismiss and subsequent selections don't use stale pre-switcher focus.
+- Chrome tab persistence: Verbatim URL capture and restoration via AppleScript.
+- LIFO Focus Stack: Returns to last non-project window with workspace-level fallbacks when the stack is exhausted.
+- SSH & Agent Layer Support: Orchestration for `code --remote` and `al sync` with environment preservation and `.vscode/settings.json` tagging for window identification.
+- Config Hardening: Strict absolute path validation and protection against malicious SSH authority options.
+- PATH Propagation: Robust PATH discovery via login shell with timeout and pipe safety.
+- Switcher UX Polish: Automatic focus refresh on project close to ensure reliable restoration and subsequent selections.
+- Core Extensibility: Added `workingDirectory` support to the `CommandRunning` interface.
 
 ## Phase 6 — Cleanup: reduce code debt + raise coverage
 
@@ -96,16 +93,17 @@ Incomplete:
 - Keep docs and internal APIs consistent as we refactor.
 
 ### Tasks
-- [ ] Fix light mode coloring. Currently the switcher only looks good in dark mode.
+- [x] In the menu, add a view config file option, which will open the Files app to the config file's location for easy access. (`view-config-file`).
+- [x] Fix light mode coloring. Currently the switcher only looks good in dark mode.
 - [ ] Window rescue for floating IDE/app windows: keep the “all windows floating” AeroSpace strategy, but when AgentPanel focuses/activates a project (and when restoring focus via `ap return` / close / exit), detect if the target VS Code (and optionally Chrome) window is mostly off-screen (e.g., only a 1px slice visible due to stale saved coordinates after monitor/Space changes) and automatically reposition it into a visible `NSScreen.visibleFrame` (clamp/center with padding; do not change tiling/layout). Implement via macOS Accessibility window frame control (AX position/size), map AeroSpace `window-id` to the corresponding AX window reliably, fail loudly with a clear error when Accessibility permission is missing, add a Doctor check + remediation guidance for the required permission, add unit tests for the geometry logic + integration tests covering activation/return/close paths, and document the behavior + permission requirement in README (`offscreen-window-rescue`).
 - [ ] Fix activation errors invisible when the panel dismisses during async launch (`activation-error-invisible`).
 - [ ] Add switcher dismiss/restore lifecycle tests (`switcher-lifecycle-tests`).
 - [x] Expand ProjectManager tests for config load/sort/recency + full activation path (`pm-tests`).
 - [x] Add CLI runner tests for new ProjectManager-backed commands (`cli-runner-tests`).
-- [ ] Doctor: fail on unrecognized `config.toml` entries (`doctor-unrecognized-config`).
-- [ ] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
+- [x] Doctor: fail on unrecognized `config.toml` entries (`doctor-unrecognized-config`).
+- [x] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
 - [ ] Config: surface config warnings to UI (and/or CLI) (`config-warn`).
-- [ ] Doctor: restore previous focus when Doctor window closes (`doctor-focus`).
+- [x] Doctor: restore previous focus when Doctor window closes (`doctor-focus`).
 - [x] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
 - [x] Add a first-class coverage command/script and document it in COMMANDS.md.
 - [x] Enforce > 90% test coverage as a hard gate in `scripts/test.sh`, CI, and a repo-managed git pre-commit hook.

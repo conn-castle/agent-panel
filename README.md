@@ -13,7 +13,8 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 - Agent Layer integration: `al sync` + VS Code launch for projects with `useAgentLayer=true`
 - SSH remote projects: VS Code Remote-SSH with Doctor path validation
 - Close project with automatic focus restoration (stack or workspace fallback)
-- Doctor UI in the app menu
+- "View Config File" menu item (opens Finder to config, creates starter if missing)
+- Doctor UI in the app menu (restores previous focus on close)
 - `ap doctor` CLI
 
 ## Requirements
@@ -108,8 +109,9 @@ Current checks include:
 - `aerospace` CLI available + basic compatibility (required commands/flags)
 - Whether AeroSpace is currently running
 - Whether `~/.aerospace.toml` is AgentPanel-managed
-- VS Code installed
-- Google Chrome installed
+- VS Code installed (FAIL if valid projects are defined, WARN otherwise)
+- Google Chrome installed (FAIL if valid projects are defined, WARN otherwise)
+- Unrecognized `config.toml` keys (FAIL)
 - Logs directory status
 - AgentPanel config parses, and each local `project.path` exists
 - SSH project paths validated via `ssh test -d` (exit 0 = pass, 1 = fail, 255 = connection error)

@@ -514,7 +514,6 @@ final class SwitcherPanelController: NSObject {
         panel.hasShadow = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.appearance = NSAppearance(named: .darkAqua)
     }
 
     /// Configures the optional title label shown above the search field.

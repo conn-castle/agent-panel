@@ -382,37 +382,10 @@ public struct Doctor {
             ))
         }
 
-        // Check VS Code
-        if let vscodeURL = appDiscovery.applicationURL(bundleIdentifier: Self.vscodeBundleId) {
-            findings.append(DoctorFinding(
-                severity: .pass,
-                title: "VS Code installed",
-                detail: vscodeURL.path
-            ))
-        } else {
-            findings.append(DoctorFinding(
-                severity: .warn,
-                title: "VS Code not found",
-                detail: "Required for IDE window management",
-                fix: "Install: brew install --cask visual-studio-code (or configure a custom IDE in the future)"
-            ))
-        }
-
-        // Check Chrome
-        if let chromeURL = appDiscovery.applicationURL(bundleIdentifier: Self.chromeBundleId) {
-            findings.append(DoctorFinding(
-                severity: .pass,
-                title: "Google Chrome installed",
-                detail: chromeURL.path
-            ))
-        } else {
-            findings.append(DoctorFinding(
-                severity: .warn,
-                title: "Google Chrome not found",
-                detail: "Required for browser window management",
-                fix: "Install: brew install --cask google-chrome (or configure a custom browser in the future)"
-            ))
-        }
+        // Detect VS Code / Chrome installation (findings emitted after config load,
+        // since severity depends on whether projects are configured).
+        let vscodeURL = appDiscovery.applicationURL(bundleIdentifier: Self.vscodeBundleId)
+        let chromeURL = appDiscovery.applicationURL(bundleIdentifier: Self.chromeBundleId)
 
         // Check required directories
         let logsDir = dataStore.logsDirectory
@@ -432,6 +405,7 @@ public struct Doctor {
         }
 
         // Check AgentPanel config
+        var hasValidProjects = false
         switch ConfigLoader.load(from: dataStore.configFile) {
         case .failure(let error):
             findings.append(DoctorFinding(
@@ -454,6 +428,8 @@ public struct Doctor {
                     fix: finding.fix
                 ))
             }
+
+            hasValidProjects = !result.projects.isEmpty
 
             // Check agent-layer CLI if any project uses it
             let agentLayerProjects = result.projects.filter { $0.useAgentLayer }
@@ -483,6 +459,39 @@ public struct Doctor {
                     checkLocalProjectPath(project: project, findings: &findings)
                 }
             }
+        }
+
+        // Emit VS Code / Chrome findings (severity depends on whether projects are configured)
+        if let vscodeURL {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "VS Code installed",
+                detail: vscodeURL.path
+            ))
+        } else {
+            let severity: DoctorSeverity = hasValidProjects ? .fail : .warn
+            findings.append(DoctorFinding(
+                severity: severity,
+                title: "VS Code not found",
+                detail: "Required for IDE window management",
+                fix: "Install: brew install --cask visual-studio-code"
+            ))
+        }
+
+        if let chromeURL {
+            findings.append(DoctorFinding(
+                severity: .pass,
+                title: "Google Chrome installed",
+                detail: chromeURL.path
+            ))
+        } else {
+            let severity: DoctorSeverity = hasValidProjects ? .fail : .warn
+            findings.append(DoctorFinding(
+                severity: severity,
+                title: "Google Chrome not found",
+                detail: "Required for browser window management",
+                fix: "Install: brew install --cask google-chrome"
+            ))
         }
 
         // Check hotkey status if provider available

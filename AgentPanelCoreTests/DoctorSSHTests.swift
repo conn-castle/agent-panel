@@ -195,7 +195,7 @@ final class DoctorSSHTests: XCTestCase {
         })
     }
 
-    func testRunReportsVSCodeAndChromeMissing() throws {
+    func testRunReportsVSCodeAndChromeFailWhenProjectsConfigured() throws {
         let toml = """
         [[project]]
         name = "Local"
@@ -212,11 +212,34 @@ final class DoctorSSHTests: XCTestCase {
         let report = doctor.run()
 
         XCTAssertTrue(report.findings.contains {
+            $0.severity == .fail && $0.title.contains("VS Code not found")
+        }, "VS Code missing should be FAIL when projects are configured")
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .fail && $0.title.contains("Google Chrome not found")
+        }, "Chrome missing should be FAIL when projects are configured")
+    }
+
+    func testRunReportsVSCodeAndChromeWarnWhenNoProjectsConfigured() throws {
+        // Config with no valid projects — all required fields missing
+        let toml = """
+        [[project]]
+        name = ""
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: false
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
             $0.severity == .warn && $0.title.contains("VS Code not found")
-        })
+        }, "VS Code missing should be WARN when no valid projects are configured")
         XCTAssertTrue(report.findings.contains {
             $0.severity == .warn && $0.title.contains("Google Chrome not found")
-        })
+        }, "Chrome missing should be WARN when no valid projects are configured")
     }
 
     func testRunReportsAgentLayerCliMissingWhenRequiredByConfig() throws {

@@ -401,6 +401,8 @@ struct ConfigParser {
     private static func parse(table: TOMLTable) -> ConfigLoadResult {
         var findings: [ConfigFinding] = []
 
+        checkForUnknownKeys(in: table, knownKeys: knownTopLevelKeys, section: "top-level", findings: &findings)
+
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
         let projectOutcomes = parseProjects(
@@ -440,6 +442,8 @@ struct ConfigParser {
             ))
             return ChromeConfig()
         }
+
+        checkForUnknownKeys(in: chromeTable, knownKeys: knownChromeKeys, section: "[chrome]", findings: &findings)
 
         let pinnedTabs = readOptionalStringArray(
             from: chromeTable, key: "pinnedTabs",
@@ -484,6 +488,8 @@ struct ConfigParser {
             ))
             return AgentLayerConfig()
         }
+
+        checkForUnknownKeys(in: agentLayerTable, knownKeys: knownAgentLayerKeys, section: "[agentLayer]", findings: &findings)
 
         let enabled = readOptionalBool(
             from: agentLayerTable, key: "enabled",
@@ -567,6 +573,8 @@ struct ConfigParser {
         findings: inout [ConfigFinding]
     ) -> ProjectOutcome {
         var projectIsValid = true
+
+        checkForUnknownKeys(in: table, knownKeys: knownProjectKeys, section: "[[project]]", findings: &findings)
 
         let name = readNonEmptyString(
             from: table,
@@ -773,6 +781,44 @@ struct ConfigParser {
             chromeDefaultTabs: chromeDefaultTabs
         )
         return ProjectOutcome(config: projectConfig)
+    }
+
+    // MARK: - Unknown Key Detection
+
+    /// Known top-level keys in config.toml.
+    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project"]
+
+    /// Known keys in the [chrome] section.
+    private static let knownChromeKeys: Set<String> = ["pinnedTabs", "defaultTabs", "openGitRemote"]
+
+    /// Known keys in the [agentLayer] section.
+    private static let knownAgentLayerKeys: Set<String> = ["enabled"]
+
+    /// Known keys in each [[project]] entry.
+    private static let knownProjectKeys: Set<String> = [
+        "name", "remote", "path", "color", "useAgentLayer", "chromePinnedTabs", "chromeDefaultTabs"
+    ]
+
+    /// Checks for unrecognized keys in a TOMLTable and emits FAIL findings for each.
+    /// - Parameters:
+    ///   - table: The TOML table to check.
+    ///   - knownKeys: Set of recognized key names.
+    ///   - section: Human-readable section label (e.g., "top-level", "[chrome]", "project[0]").
+    ///   - findings: Findings array to append to.
+    private static func checkForUnknownKeys(
+        in table: TOMLTable,
+        knownKeys: Set<String>,
+        section: String,
+        findings: inout [ConfigFinding]
+    ) {
+        let unknown = Set(table.keys).subtracting(knownKeys).sorted()
+        for key in unknown {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "Unrecognized \(section) config key: \(key)",
+                fix: "Remove '\(key)' from config.toml. Known \(section) keys are: \(knownKeys.sorted().joined(separator: ", "))."
+            ))
+        }
     }
 
     // MARK: - Validation Helpers

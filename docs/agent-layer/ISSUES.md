@@ -42,20 +42,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: `runLoginShellCommand` uses `$SHELL -l -c <command>` to resolve the login shell PATH. `$SHELL` is validated as an absolute path (non-absolute values fall back to `/bin/zsh`). Fish shell does not support the `-c` flag in the same way as bash/zsh. Users with `$SHELL=/usr/local/bin/fish` may get nil PATH resolution (safe — falls back to standard paths + process PATH).
     Next step: If a fish user reports missing executables in child processes, add fish-specific PATH resolution (`fish -l -c 'echo $PATH'` uses space-separated entries, not colon-separated).
 
-- Issue 2026-02-09 doctor-unrecognized-config: Doctor should fail on unrecognized config.toml entries
-    Priority: Medium. Area: Doctor/Config
-    Description: Currently, the Doctor does not flag unrecognized keys in `config.toml`. It should fail verification if the configuration contains unknown entries to prevent silent typos or configuration errors.
-    Next step: Update the configuration loader or Doctor check to validate that all keys in `config.toml` are known schemas.
-
 - Issue 2026-02-09 doctor-color-output: Color code the Doctor CLI output
     Priority: Low. Area: Doctor/CLI
     Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
     Next step: Integrate a color-coding utility into the Doctor report rendering logic.
-
-- Issue 2026-02-09 doctor-focus: Closing Doctor window does not restore previous focus
-    Priority: Medium. Area: UI/UX
-    Description: When the Doctor window is closed, the application does not restore focus to the window that was focused before the Doctor was opened. It should return focus to the previous application/window to ensure a smooth workflow.
-    Next step: Capture the currently focused window before showing the Doctor window and restore it upon closing.
 
 - Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
     Priority: High. Area: App/Switcher Tests
@@ -69,8 +59,4 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Next step: Either change return type to include warnings, or add a separate `Config.loadDefaultWithWarnings()` method that returns warnings alongside the config.
     Notes: SwitcherPanelController clears status on success, so even if warnings were returned they'd need explicit handling.
 
-- Issue 2026-02-03 doctorsev: Doctor VS Code/Chrome checks should FAIL when a project needs them
-    Priority: Medium. Area: Doctor
-    Description: VS Code and Chrome checks are currently WARN. They should be FAIL if any configured project would use them (same logic as the agent-layer CLI check).
-    Next step: Add project config fields to specify IDE/browser requirements, then check those fields in Doctor and fail if the required app is missing.
-    Notes: Blocked until project config schema includes IDE/browser requirements.
+
