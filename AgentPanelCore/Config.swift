@@ -309,7 +309,7 @@ struct ConfigLoader {
 #
 # [[project]]
 # name = "Remote ML"
-# remote = "ssh-remote+nconn@happy-mac.local"
+# remote = "ssh-remote+nconn@my-remote-host.local"
 # path = "/Users/nconn/Documents/git-repos/local-ml"
 # color = "teal"
 # useAgentLayer = false
@@ -1015,21 +1015,39 @@ public enum ConfigLoadError: Error, Equatable, Sendable {
     case validationFailed(findings: [ConfigFinding])
 }
 
+// MARK: - ConfigLoadSuccess
+
+/// Successful result of loading configuration via `Config.loadDefault()`.
+///
+/// Carries the validated config and any non-fatal warnings from parsing.
+public struct ConfigLoadSuccess: Equatable, Sendable {
+    /// The validated configuration.
+    public let config: Config
+    /// Non-fatal warnings from config parsing (severity == .warn).
+    public let warnings: [ConfigFinding]
+
+    public init(config: Config, warnings: [ConfigFinding] = []) {
+        self.config = config
+        self.warnings = warnings
+    }
+}
+
 // MARK: - Config Public Loading API
 
 extension Config {
     /// Loads and validates configuration from the default path.
     ///
     /// This is the recommended entry point for App to load configuration.
-    /// It provides a simplified API that returns either a valid Config or
-    /// a descriptive error. Uses `ConfigLoader` as the single source of truth.
+    /// It provides a simplified API that returns either a valid `ConfigLoadSuccess`
+    /// (config + warnings) or a descriptive error. Uses `ConfigLoader` as the
+    /// single source of truth.
     ///
-    /// - Returns: Result with validated Config or ConfigLoadError.
-    public static func loadDefault() -> Result<Config, ConfigLoadError> {
+    /// - Returns: Result with ConfigLoadSuccess or ConfigLoadError.
+    public static func loadDefault() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         loadDefault(dataStore: DataPaths.default())
     }
 
-    static func loadDefault(dataStore: DataPaths) -> Result<Config, ConfigLoadError> {
+    static func loadDefault(dataStore: DataPaths) -> Result<ConfigLoadSuccess, ConfigLoadError> {
         let path = dataStore.configFile.path
 
         // Use ConfigLoader as single source of truth
@@ -1058,7 +1076,8 @@ extension Config {
                 return .failure(.validationFailed(findings: result.findings))
             }
 
-            return .success(config)
+            let warnings = result.findings.filter { $0.severity == .warn }
+            return .success(ConfigLoadSuccess(config: config, warnings: warnings))
         }
     }
 }

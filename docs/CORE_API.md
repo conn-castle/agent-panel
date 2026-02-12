@@ -44,7 +44,7 @@ public struct Config: Equatable, Sendable {
     public let agentLayer: AgentLayerConfig
 
     /// Loads and validates configuration from the default path.
-    public static func loadDefault() -> Result<Config, ConfigLoadError>
+    public static func loadDefault() -> Result<ConfigLoadSuccess, ConfigLoadError>
 }
 
 public struct AgentLayerConfig: Equatable, Sendable {
@@ -70,6 +70,11 @@ public struct ProjectConfig: Equatable, Sendable {
 
     /// True when `remote` is set (SSH remote project).
     public var isSSH: Bool
+}
+
+public struct ConfigLoadSuccess: Equatable, Sendable {
+    public let config: Config
+    public let warnings: [ConfigFinding]  // Non-fatal warnings (severity == .warn)
 }
 
 public enum ConfigLoadError: Error, Equatable, Sendable {
@@ -157,7 +162,10 @@ public final class ProjectManager {
 
     /// Loads configuration from the default path.
     @discardableResult
-    public func loadConfig() -> Result<Config, ConfigLoadError>
+    public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError>
+
+    /// Non-fatal warnings from the most recent config load.
+    public private(set) var configWarnings: [ConfigFinding]
 
     /// Captures the currently focused window for later restoration.
     public func captureCurrentFocus() -> CapturedFocus?
@@ -268,6 +276,42 @@ public struct CapturedFocus: Sendable, Equatable {
     public let windowId: Int
     public let appBundleId: String
     public let workspace: String
+}
+```
+
+### Switcher Dismiss Policy
+
+Pure policy helpers for switcher panel dismiss/restore decisions. Extracted to Core
+for testability; no AppKit dependency.
+
+```swift
+public enum SwitcherDismissReason: String, CaseIterable, Sendable {
+    case toggle
+    case escape
+    case projectSelected
+    case projectClosed
+    case exitedToNonProject
+    case windowClose
+    case unknown
+}
+
+public enum DismissDecision: Equatable, Sendable {
+    case dismiss
+    case suppress(reason: String)
+}
+
+public struct SwitcherDismissPolicy: Sendable {
+    /// Decides whether to dismiss the panel when it resigns key window status.
+    /// Suppresses dismissal during activation (Chrome window steal) or when
+    /// the panel is not visible.
+    public static func shouldDismissOnResignKey(
+        isActivating: Bool,
+        isVisible: Bool
+    ) -> DismissDecision
+
+    /// Decides whether to restore focus to the previously captured window
+    /// when the panel dismisses with the given reason.
+    public static func shouldRestoreFocus(reason: SwitcherDismissReason) -> Bool
 }
 ```
 

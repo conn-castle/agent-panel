@@ -32,10 +32,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
     Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg, so path-based launches don't open two windows.
 
-- Issue 2026-02-09 activation-error-invisible: Activation errors invisible when panel closes during async launch
-    Priority: High. Area: App/Switcher UX
-    Description: During `selectProject`, Chrome's new window steals focus from the switcher panel, triggering `windowDidResignKey` → `dismiss(reason: .windowClose)`. If the subsequent VS Code launch fails, the error status message is set on an already-dismissed panel, so the user sees no indication of failure.
-    Next step: Suppress `windowDidResignKey` dismissal while an activation task is in progress (add an `isActivating` guard). Alternatively, surface the error via a notification or menu bar indicator.
 
 - Issue 2026-02-09 fish-shell-path: Login shell PATH resolution may not work with fish shell
     Priority: Low. Area: System/PATH
@@ -47,16 +43,5 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
     Next step: Integrate a color-coding utility into the Doctor report rendering logic.
 
-- Issue 2026-02-07 switcher-lifecycle-tests: Switcher dismiss/restore lifecycle lacks direct tests
-    Priority: High. Area: App/Switcher Tests
-    Description: Recent regressions involved `windowClose`/termination-triggered focus restore and app activation fallback behavior, but there is no dedicated test target validating switcher dismiss semantics.
-    Next step: Add App-layer tests (or extract testable policy helpers) covering `dismiss` reason handling and prohibiting app-activation fallback on project handoff/termination paths.
-    Notes: Existing ProjectManager tests do not cover AppKit panel lifecycle paths.
-
-- Issue 2026-02-04 config-warn: Config warnings not surfaced to UI
-    Priority: Medium. Area: Config/UX
-    Description: `Config.loadDefault()` returns `Result<Config, ConfigLoadError>` which cannot convey warnings. If config is valid but has warnings (e.g., deprecated fields), they are silently dropped.
-    Next step: Either change return type to include warnings, or add a separate `Config.loadDefaultWithWarnings()` method that returns warnings alongside the config.
-    Notes: SwitcherPanelController clears status on success, so even if warnings were returned they'd need explicit handling.
 
 

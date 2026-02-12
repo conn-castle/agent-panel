@@ -61,6 +61,16 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Settings blocks must exist before VS Code opens the project (for reliable window identification), not just when AgentPanel activates it. Proactive writing early in app startup reduces "first activate" flakiness and keeps manual VS Code opens consistent.
     Tradeoffs: SSH write adds latency to background startup work (bounded by 10s timeout per SSH call, 2 calls per SSH project). Unreachable SSH hosts will log warnings but not block app startup.
 
+- Decision 2026-02-11 dismisspolicy: SwitcherDismissReason and policy extracted to Core
+    Decision: Moved `SwitcherDismissReason` enum and dismiss/restore policy logic from App (SwitcherPanelController) to Core (`SwitcherDismissPolicy.swift`). All types are `public`.
+    Reason: Enables unit testing of dismiss semantics without an App test target. The types are pure value types with no AppKit dependency.
+    Tradeoffs: Expands Core's public API surface with presentation-adjacent types. Accepted because the alternative (App test target with NSPanel mocks) is significantly more complex.
+
+- Decision 2026-02-11 configwarn: Config.loadDefault returns ConfigLoadSuccess with warnings
+    Decision: Changed `Config.loadDefault()` return type from `Result<Config, ConfigLoadError>` to `Result<ConfigLoadSuccess, ConfigLoadError>` where `ConfigLoadSuccess` carries both `config: Config` and `warnings: [ConfigFinding]`.
+    Reason: WARN-severity config findings (e.g., deprecated fields) were silently dropped because the previous return type had no way to convey non-fatal warnings alongside a valid config.
+    Tradeoffs: All call sites (ProjectManager, CLI handlers, App, tests) required migration to unwrap `.config` from the success value.
+
 - Decision 2026-02-10 covgate: Coverage gate enforced via scripts/test.sh
     Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`, `AgentPanelAppKit`) via `scripts/coverage_gate.sh`. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
     Reason: Deterministic quality bar for core/business logic; presentation/UI code is intentionally not gated.

@@ -118,6 +118,31 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertTrue(output.stdout[0].contains("id = \"b\""))
     }
 
+    func testShowConfigWithWarningsPrintsWarningsToStderr() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(
+            makeConfig(
+                projectIds: ["a"],
+                warnings: [ConfigFinding(severity: .warn, title: "Deprecated field: foo")]
+            )
+        )
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stderr, ["warning: Deprecated field: foo"])
+        XCTAssertEqual(output.stdout.count, 1)
+        XCTAssertTrue(output.stdout[0].contains("# AgentPanel Configuration"))
+    }
+
     func testShowConfigFailurePrintsErrorAndReturnsFailureExit() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -562,11 +587,11 @@ private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {
     return DoctorReport(metadata: metadata, findings: findings)
 }
 
-private func makeConfig(projectIds: [String]) -> Config {
+private func makeConfig(projectIds: [String], warnings: [ConfigFinding] = []) -> ConfigLoadSuccess {
     let projects = projectIds.map { id in
         makeProject(id: id, name: id.uppercased(), path: "/tmp/\(id)")
     }
-    return Config(projects: projects)
+    return ConfigLoadSuccess(config: Config(projects: projects), warnings: warnings)
 }
 
 private func makeProject(id: String, name: String, path: String) -> ProjectConfig {
@@ -583,7 +608,7 @@ private func makeProject(id: String, name: String, path: String) -> ProjectConfi
 }
 
 private final class MockProjectManager: ProjectManaging {
-    var loadConfigResult: Result<Config, ConfigLoadError> = .success(Config(projects: []))
+    var loadConfigResult: Result<ConfigLoadSuccess, ConfigLoadError> = .success(ConfigLoadSuccess(config: Config(projects: [])))
     var sortedProjectsResult: [ProjectConfig] = []
     var sortedProjectsQueries: [String] = []
     var captureCurrentFocusResult: CapturedFocus?
@@ -594,7 +619,7 @@ private final class MockProjectManager: ProjectManaging {
     var exitToNonProjectResult: Result<Void, ProjectError> = .success(())
     var exitCalls: Int = 0
 
-    func loadConfig() -> Result<Config, ConfigLoadError> {
+    func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         loadConfigResult
     }
 

@@ -148,7 +148,10 @@ struct FocusStack {
 /// - Project selection, closing, and exit
 /// - Focus capture/restore for switcher UX
 ///
-/// Thread Safety: Not thread-safe. All methods must be called from the main thread.
+/// Thread Safety: Not thread-safe. Most methods must be called from the main thread.
+/// Exception: `restoreFocus(_:)`, `focusWorkspace(name:)`, and `focusWindow(windowId:)` may be
+/// called from a detached task for non-blocking focus restoration (these only invoke AeroSpace CLI
+/// commands and do not mutate ProjectManager state).
 public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces.
     public static let workspacePrefix = "ap-"
@@ -159,7 +162,10 @@ public final class ProjectManager {
 
     // Config
     private var config: Config?
-    private let configLoader: () -> Result<Config, ConfigLoadError>
+    private let configLoader: () -> Result<ConfigLoadSuccess, ConfigLoadError>
+
+    /// Non-fatal warnings from the most recent config load.
+    public private(set) var configWarnings: [ConfigFinding] = []
 
     // Recency tracking - simple list of project IDs, most recent first
     private var recentProjectIds: [String] = []
@@ -252,7 +258,7 @@ public final class ProjectManager {
         gitRemoteResolver: GitRemoteResolving,
         logger: AgentPanelLogging,
         recencyFilePath: URL,
-        configLoader: @escaping () -> Result<Config, ConfigLoadError> = { Config.loadDefault() },
+        configLoader: @escaping () -> Result<ConfigLoadSuccess, ConfigLoadError> = { Config.loadDefault() },
         fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.aerospace = aerospace
@@ -291,14 +297,16 @@ public final class ProjectManager {
     ///
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
-    public func loadConfig() -> Result<Config, ConfigLoadError> {
+    public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         switch configLoader() {
-        case .success(let loadedConfig):
-            self.config = loadedConfig
-            logEvent("config.loaded", context: ["project_count": "\(loadedConfig.projects.count)"])
-            return .success(loadedConfig)
+        case .success(let success):
+            self.config = success.config
+            self.configWarnings = success.warnings
+            logEvent("config.loaded", context: ["project_count": "\(success.config.projects.count)"])
+            return .success(success)
         case .failure(let error):
             self.config = nil
+            self.configWarnings = []
             logEvent("config.failed", level: .error, message: "\(error)")
             return .failure(error)
         }

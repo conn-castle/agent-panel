@@ -20,6 +20,7 @@
 		18F5AE94B0A5B02A2A773CFB /* DataPathsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CC898051808DC63C4089ED /* DataPathsTests.swift */; };
 		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
 		1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */; };
+		1C6CBACBED263A63C510AA30 /* SwitcherDismissPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */; };
 		1F6C1865590F67A36D702863 /* DataPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */; };
 		22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */; };
 		255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */; };
@@ -42,6 +43,7 @@
 		5F2733E6786E0EF79EB6B6F6 /* Identity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06D0D92D76D722E481FBCAC /* Identity.swift */; };
 		5FB1D70D002D0F89F4815E61 /* ChromeTabCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FC5E105388E71A646F7C555 /* ChromeTabCaptureTests.swift */; };
 		6025AFD99FB66395A3BB4B44 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
+		629C70BE0A769CE6A0F013CD /* SwitcherDismissPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */; };
 		65822A51B623A24EA742CF9C /* Dependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691139171C62F83E4E0CC709 /* Dependencies.swift */; };
 		6BA2313347BD3CE1A01BCAFB /* ChromeTabResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91616BD52F8F0B9C3B94A6D4 /* ChromeTabResolverTests.swift */; };
 		6C4A9EDCF500AB4F1BC4A80A /* AeroSpaceConfigManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A28604104E568953BB98A138 /* AeroSpaceConfigManagerTests.swift */; };
@@ -151,6 +153,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherDismissPolicy.swift; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRemoteResolverTests.swift; sourceTree = "<group>"; };
 		1FC5E105388E71A646F7C555 /* ChromeTabCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabCaptureTests.swift; sourceTree = "<group>"; };
@@ -170,6 +173,7 @@
 		6C4F78292D1AA1E00396BB86 /* ChromeTabStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabStoreTests.swift; sourceTree = "<group>"; };
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6E8DE3E79215020A2587A722 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
+		77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherDismissPolicyTests.swift; sourceTree = "<group>"; };
 		792EA59F2896815CA8062275 /* ProjectManagerChromeTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerChromeTabTests.swift; sourceTree = "<group>"; };
 		7ABFD578BD00149884F14AFA /* ProjectManagerCoverageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerCoverageTests.swift; sourceTree = "<group>"; };
 		7CBD0FE2C6DF91C6CEA318A9 /* DependenciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependenciesTests.swift; sourceTree = "<group>"; };
@@ -298,6 +302,7 @@
 				98F56A9B2D3B18E280767106 /* ProjectManagerFocusTests.swift */,
 				FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */,
 				D54CEA7ABFA8DFB2065DF57C /* ProjectManagerOpenProjectIdsTests.swift */,
+				77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */,
 				90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
 				8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */,
@@ -328,6 +333,7 @@
 				9E0C3DAA0280728917003498 /* Logger.swift */,
 				3CC240A74C38218E4C33B36B /* ProjectManager.swift */,
 				BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */,
+				0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */,
 				B8D8C73BDF50CEB78DBA5853 /* System.swift */,
 				87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */,
 				D70EE9EFFE9128D41FD8C855 /* AeroSpace */,
@@ -655,6 +661,7 @@
 				476AD5F6F072D635D7418FAB /* Logger.swift in Sources */,
 				0DDF42CE7E81D0B7064840F2 /* ProjectManager.swift in Sources */,
 				9A65D206EB28E8E6C9DDEE52 /* SSHHelpers.swift in Sources */,
+				1C6CBACBED263A63C510AA30 /* SwitcherDismissPolicy.swift in Sources */,
 				E1A3D5707DC2114E42745583 /* System.swift in Sources */,
 				1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */,
 			);
@@ -716,6 +723,7 @@
 				12C912FD7B0796498A203261 /* ProjectManagerFocusTests.swift in Sources */,
 				483837094975998B931C20D2 /* ProjectManagerLogEventNameTests.swift in Sources */,
 				F3C23C4523D8FBC71F2C0A40 /* ProjectManagerOpenProjectIdsTests.swift in Sources */,
+				629C70BE0A769CE6A0F013CD /* SwitcherDismissPolicyTests.swift in Sources */,
 				22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
 				7FD3930962ACAD6D46827DF1 /* VSCodeSSHWorkspaceTests.swift in Sources */,

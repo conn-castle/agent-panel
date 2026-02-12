@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Load config on the main thread (ProjectManager is not thread-safe), then
         // ensure VS Code settings blocks in the background (may use SSH).
         let configResult = projectManager.loadConfig()
-        let projects = (try? configResult.get())?.projects ?? []
+        let projects = (try? configResult.get())?.config.projects ?? []
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             if !projects.isEmpty {
@@ -535,25 +535,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Closes the Doctor window and restores previously captured focus.
+    ///
+    /// Focus restoration runs on a detached task so AeroSpace CLI calls don't block the main
+    /// thread. Without this, clicking the menu bar immediately after closing Doctor causes a
+    /// beachball. This mirrors SwitcherPanelController.restorePreviousFocus().
     private func closeDoctorWindow() {
         logAppEvent(event: "doctor.window.closed")
         let focus = doctorController?.capturedFocus
         let previousApp = doctorController?.previousApp
         doctorController?.capturedFocus = nil
         doctorController?.previousApp = nil
-        // Defer focus restoration to the next runloop tick so the window has fully closed.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+        let projectManager = self.projectManager
+        let logEvent: (String, [String: String]?) -> Void = { [weak self] event, context in
+            self?.logAppEvent(event: event, context: context)
+        }
+        Task.detached(priority: .userInitiated) {
             if let focus {
-                if self.projectManager.restoreFocus(focus) {
-                    self.logAppEvent(event: "doctor.focus.restored", context: ["window_id": "\(focus.windowId)"])
+                if projectManager.restoreFocus(focus) {
+                    await MainActor.run {
+                        logEvent("doctor.focus.restored", ["window_id": "\(focus.windowId)"])
+                    }
+                    return
                 } else if let previousApp {
-                    previousApp.activate()
-                    self.logAppEvent(event: "doctor.focus.restored.app_fallback", context: ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
+                    await MainActor.run {
+                        previousApp.activate()
+                        logEvent("doctor.focus.restored.app_fallback", ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
+                    }
+                    return
                 }
-            } else if let previousApp {
-                previousApp.activate()
-                self.logAppEvent(event: "doctor.focus.restored.app_fallback", context: ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
+            }
+            if let previousApp {
+                await MainActor.run {
+                    previousApp.activate()
+                    logEvent("doctor.focus.restored.app_fallback", ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
+                }
             }
         }
     }
