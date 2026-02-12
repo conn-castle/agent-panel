@@ -746,7 +746,9 @@ public struct Doctor {
                 checkErrorDetail: error.message
             ))
         case .success(let cmdResult):
-            if cmdResult.exitCode == 0 && cmdResult.stdout.contains(ApVSCodeSettingsManager.startMarker) {
+            if cmdResult.exitCode == 0
+                && cmdResult.stdout.contains(ApVSCodeSettingsManager.startMarker)
+                && cmdResult.stdout.contains(ApVSCodeSettingsManager.endMarker) {
                 findings.append(DoctorFinding(
                     severity: .pass,
                     title: "Remote VS Code settings block present: \(project.id)"

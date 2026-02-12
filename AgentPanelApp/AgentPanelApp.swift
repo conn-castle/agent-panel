@@ -550,20 +550,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.logAppEvent(event: event, context: context)
         }
         Task.detached(priority: .userInitiated) {
-            if let focus {
-                if projectManager.restoreFocus(focus) {
-                    await MainActor.run {
-                        logEvent("doctor.focus.restored", ["window_id": "\(focus.windowId)"])
-                    }
-                    return
-                } else if let previousApp {
-                    await MainActor.run {
-                        previousApp.activate()
-                        logEvent("doctor.focus.restored.app_fallback", ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
-                    }
-                    return
+            // Try to restore precise window focus first.
+            if let focus, projectManager.restoreFocus(focus) {
+                await MainActor.run {
+                    logEvent("doctor.focus.restored", ["window_id": "\(focus.windowId)"])
                 }
+                return
             }
+
+            // If precise focus restore fails or was not possible, fall back to activating the previous app.
             if let previousApp {
                 await MainActor.run {
                     previousApp.activate()
