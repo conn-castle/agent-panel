@@ -118,6 +118,31 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertTrue(output.stdout[0].contains("id = \"b\""))
     }
 
+    func testShowConfigWithWarningsPrintsWarningsToStderr() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(
+            makeConfig(
+                projectIds: ["a"],
+                warnings: [ConfigFinding(severity: .warn, title: "Deprecated field: foo")]
+            )
+        )
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stderr, ["warning: Deprecated field: foo"])
+        XCTAssertEqual(output.stdout.count, 1)
+        XCTAssertTrue(output.stdout[0].contains("# AgentPanel Configuration"))
+    }
+
     func testShowConfigFailurePrintsErrorAndReturnsFailureExit() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -135,6 +160,25 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
         XCTAssertEqual(output.stdout, [])
         XCTAssertEqual(output.stderr.first, "error: Config file not found: /tmp/missing")
+    }
+
+    func testShowConfigReadFailedPrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.readFailed(path: "/tmp/config.toml", detail: "permission denied"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["show-config"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Failed to read config at /tmp/config.toml: permission denied"])
     }
 
     func testShowConfigValidationFailedWithoutFailFindingsUsesGenericMessage() {
@@ -204,6 +248,33 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(output.stderr.first, "error: Failed to parse config: bad toml")
     }
 
+    func testListProjectsNoQueryUsesEmptyString() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a", "b"]))
+        manager.sortedProjectsResult = [
+            makeProject(id: "a", name: "Alpha", path: "/p/a"),
+            makeProject(id: "b", name: "Beta", path: "/p/b")
+        ]
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["list-projects"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stderr, [])
+        XCTAssertEqual(output.stdout, [
+            "a\tAlpha\t/p/a",
+            "b\tBeta\t/p/b"
+        ])
+        XCTAssertEqual(manager.sortedProjectsQueries, [""])
+    }
+
     func testSelectProjectFailsWhenCannotCaptureFocus() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -269,6 +340,48 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(output.stderr, ["error: Project not found: a"])
     }
 
+    func testSelectProjectConfigNotLoadedPrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = CapturedFocus(windowId: 1, appBundleId: "app", workspace: "main")
+        manager.selectProjectResult = .failure(.configNotLoaded)
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Config not loaded"])
+    }
+
+    func testSelectProjectIdeLaunchFailedPrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = CapturedFocus(windowId: 1, appBundleId: "app", workspace: "main")
+        manager.selectProjectResult = .failure(.ideLaunchFailed(detail: "VS Code missing"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: IDE launch failed: VS Code missing"])
+    }
+
     func testCloseProjectSuccessPrintsWarningIfPresent() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -309,6 +422,46 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(output.stderr, ["error: AeroSpace error: boom"])
     }
 
+    func testCloseProjectChromeLaunchFailedPrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.closeProjectResult = .failure(.chromeLaunchFailed(detail: "Chrome not installed"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Chrome launch failed: Chrome not installed"])
+    }
+
+    func testCloseProjectNoActiveProjectPrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.closeProjectResult = .failure(.noActiveProject)
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: No active project"])
+    }
+
     func testReturnCommandSuccessPrintsMessage() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -347,6 +500,46 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
         XCTAssertEqual(output.stdout, [])
         XCTAssertEqual(output.stderr, ["error: No previous window to return to"])
+    }
+
+    func testReturnCommandWindowNotFoundPrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: []))
+        manager.exitToNonProjectResult = .failure(.windowNotFound(detail: "missing"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Window not found: missing"])
+    }
+
+    func testReturnCommandFocusUnstablePrintsError() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: []))
+        manager.exitToNonProjectResult = .failure(.focusUnstable(detail: "did not stabilize"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Focus unstable: did not stabilize"])
     }
 
     func testUsageTextHasUniqueContentPerHelpTopic() {
@@ -394,11 +587,11 @@ private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {
     return DoctorReport(metadata: metadata, findings: findings)
 }
 
-private func makeConfig(projectIds: [String]) -> Config {
+private func makeConfig(projectIds: [String], warnings: [ConfigFinding] = []) -> ConfigLoadSuccess {
     let projects = projectIds.map { id in
         makeProject(id: id, name: id.uppercased(), path: "/tmp/\(id)")
     }
-    return Config(projects: projects)
+    return ConfigLoadSuccess(config: Config(projects: projects), warnings: warnings)
 }
 
 private func makeProject(id: String, name: String, path: String) -> ProjectConfig {
@@ -415,7 +608,7 @@ private func makeProject(id: String, name: String, path: String) -> ProjectConfi
 }
 
 private final class MockProjectManager: ProjectManaging {
-    var loadConfigResult: Result<Config, ConfigLoadError> = .success(Config(projects: []))
+    var loadConfigResult: Result<ConfigLoadSuccess, ConfigLoadError> = .success(ConfigLoadSuccess(config: Config(projects: [])))
     var sortedProjectsResult: [ProjectConfig] = []
     var sortedProjectsQueries: [String] = []
     var captureCurrentFocusResult: CapturedFocus?
@@ -426,7 +619,7 @@ private final class MockProjectManager: ProjectManaging {
     var exitToNonProjectResult: Result<Void, ProjectError> = .success(())
     var exitCalls: Int = 0
 
-    func loadConfig() -> Result<Config, ConfigLoadError> {
+    func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         loadConfigResult
     }
 

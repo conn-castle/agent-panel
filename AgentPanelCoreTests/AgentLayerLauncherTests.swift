@@ -4,20 +4,21 @@ import XCTest
 /// Tests for `ApAgentLayerVSCodeLauncher`.
 ///
 /// Verifies:
-/// - Workspace file creation with AP:<id> tag
-/// - Two-step launch: `al sync` (CWD = project path) then `code --new-window <workspace>`
+/// - Settings.json injection with AP:<id> window title block
+/// - Two-step launch: `al sync` (CWD = project path) then `al vscode --no-sync --new-window` (CWD = project path)
 /// - Error handling: al not found, code not found, empty project path, non-zero exit, partial failure
 final class AgentLayerLauncherTests: XCTestCase {
 
     private var tempDir: URL!
-    private var dataStore: DataPaths!
+    private var projectDir: URL!
 
     override func setUp() {
         super.setUp()
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ALLauncherTests-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        dataStore = DataPaths(homeDirectory: tempDir)
+        projectDir = tempDir.appendingPathComponent("project", isDirectory: true)
+        try? FileManager.default.createDirectory(at: projectDir, withIntermediateDirectories: true)
     }
 
     override func tearDown() {
@@ -27,7 +28,7 @@ final class AgentLayerLauncherTests: XCTestCase {
 
     // MARK: - Successful launch
 
-    func testSuccessfulLaunchRunsAlSyncThenCodeNewWindow() {
+    func testSuccessfulLaunchRunsAlSyncThenAlVSCodeNoSyncNewWindow() {
         let runner = MockALCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
@@ -35,12 +36,11 @@ final class AgentLayerLauncherTests: XCTestCase {
         ]
         let resolver = makeResolver()
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: resolver
         )
 
-        let result = launcher.openNewWindow(identifier: "my-project", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "my-project", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
             XCTFail("Expected success, got failure: \(error.message)")
@@ -53,78 +53,82 @@ final class AgentLayerLauncherTests: XCTestCase {
         let syncCall = runner.calls[0]
         XCTAssertTrue(syncCall.executable.hasSuffix("/al"))
         XCTAssertEqual(syncCall.arguments, ["sync"])
-        XCTAssertEqual(syncCall.workingDirectory, "/Users/test/project")
+        XCTAssertEqual(syncCall.workingDirectory, projectDir.path)
 
-        // Call 1: code --new-window <workspace>
-        let codeCall = runner.calls[1]
-        XCTAssertTrue(codeCall.executable.hasSuffix("/code"))
-        XCTAssertEqual(codeCall.arguments[0], "--new-window")
-        XCTAssertTrue(codeCall.arguments[1].hasSuffix("my-project.code-workspace"))
-        XCTAssertNil(codeCall.workingDirectory)
+        // Call 1: al vscode --no-sync --new-window (CWD = project path)
+        let vscodeCall = runner.calls[1]
+        XCTAssertTrue(vscodeCall.executable.hasSuffix("/al"))
+        XCTAssertEqual(vscodeCall.arguments, ["vscode", "--no-sync", "--new-window"])
+        XCTAssertEqual(vscodeCall.workingDirectory, projectDir.path)
     }
 
-    // MARK: - Workspace file contents
+    // MARK: - Settings file contents
 
-    func testWorkspaceFileContainsAPTag() {
+    func testSettingsFileContainsAPTag() {
         let runner = MockALCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
 
-        _ = launcher.openNewWindow(identifier: "test-proj", projectPath: "/Users/test/project")
+        _ = launcher.openNewWindow(identifier: "test-proj", projectPath: projectDir.path)
 
-        let workspace = readWorkspaceJSON("test-proj")
-        XCTAssertNotNil(workspace, "Workspace file should exist")
-
-        let settings = workspace?["settings"] as? [String: String]
-        let windowTitle = settings?["window.title"]
-        XCTAssertNotNil(windowTitle)
-        XCTAssertTrue(windowTitle?.hasPrefix("AP:test-proj") == true,
-                       "Window title should start with AP:test-proj, got: \(windowTitle ?? "nil")")
+        let content = readSettingsJSON()
+        XCTAssertNotNil(content, "settings.json should exist")
+        XCTAssertTrue(content?.contains("// >>> agent-panel") == true)
+        XCTAssertTrue(content?.contains("// <<< agent-panel") == true)
+        XCTAssertTrue(content?.contains("AP:test-proj") == true,
+                       "Settings should contain AP:test-proj, got: \(content ?? "nil")")
     }
 
-    func testWorkspaceFileContainsCorrectFolderPath() {
+    // MARK: - Error: settings file write fails
+
+    func testSettingsFileWriteFailureReturnsError() {
         let runner = MockALCommandRunner()
-        runner.results = [
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
-        ]
+        let failingSettings = ApVSCodeSettingsManager(fileSystem: FailingWorkspaceFileSystem())
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
-            executableResolver: makeResolver()
+            executableResolver: makeResolver(),
+            settingsManager: failingSettings
         )
 
-        _ = launcher.openNewWindow(identifier: "my-proj", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
-        let workspace = readWorkspaceJSON("my-proj")
-        let folders = workspace?["folders"] as? [[String: String]]
-        XCTAssertEqual(folders?.first?["path"], "/Users/test/project")
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("Failed to write .vscode/settings.json"))
+        } else {
+            XCTFail("Expected failure when settings file cannot be written")
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty, "No command should be run if settings file creation fails")
     }
 
-    func testWorkspaceFileHasNoRemoteAuthority() {
+    // MARK: - Error: remoteAuthority not supported
+
+    func testRemoteAuthorityProvidedReturnsError() {
         let runner = MockALCommandRunner()
-        runner.results = [
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
-        ]
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
 
-        _ = launcher.openNewWindow(identifier: "local-proj", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(
+            identifier: "test",
+            projectPath: projectDir.path,
+            remoteAuthority: "ssh-remote+u@host"
+        )
 
-        let workspace = readWorkspaceJSON("local-proj")
-        XCTAssertNil(workspace?["remoteAuthority"],
-                      "AL workspace should not have remoteAuthority (SSH+AL is mutually exclusive)")
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("does not support SSH remote projects"))
+        } else {
+            XCTFail("Expected failure when remoteAuthority is provided")
+        }
+
+        XCTAssertTrue(runner.calls.isEmpty, "No command should be run if remoteAuthority is provided")
     }
 
     // MARK: - Error: al not found
@@ -133,12 +137,11 @@ final class AgentLayerLauncherTests: XCTestCase {
         let runner = MockALCommandRunner()
         let resolver = makeResolver(alAvailable: false)
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: resolver
         )
 
-        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("al") && error.message.contains("not found"),
@@ -159,12 +162,11 @@ final class AgentLayerLauncherTests: XCTestCase {
         ]
         let resolver = makeResolver(codeAvailable: false)
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: resolver
         )
 
-        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("code") && error.message.contains("not found"),
@@ -173,7 +175,7 @@ final class AgentLayerLauncherTests: XCTestCase {
             XCTFail("Expected failure when code is not found")
         }
 
-        // al sync should have run, but code should not
+        // al sync should have run, but al vscode should not
         XCTAssertEqual(runner.calls.count, 1, "Only al sync should run when code is not found")
     }
 
@@ -182,7 +184,6 @@ final class AgentLayerLauncherTests: XCTestCase {
     func testNilProjectPathReturnsError() {
         let runner = MockALCommandRunner()
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
@@ -200,7 +201,6 @@ final class AgentLayerLauncherTests: XCTestCase {
     func testEmptyProjectPathReturnsError() {
         let runner = MockALCommandRunner()
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
@@ -223,12 +223,11 @@ final class AgentLayerLauncherTests: XCTestCase {
             .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "agent layer isn't initialized"))
         ]
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
 
-        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("al sync failed"), "Error should mention al sync, got: \(error.message)")
@@ -239,33 +238,77 @@ final class AgentLayerLauncherTests: XCTestCase {
             XCTFail("Expected failure for non-zero exit code")
         }
 
-        XCTAssertEqual(runner.calls.count, 1, "code should not run after al sync failure")
+        XCTAssertEqual(runner.calls.count, 1, "al vscode should not run after al sync failure")
     }
 
-    // MARK: - Error: al sync succeeds but code fails
+    func testAlSyncNonZeroExitReturnsErrorWithoutStderr() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "   "))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
 
-    func testAlSyncSucceedsButCodeFailsReturnsError() {
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("al sync failed with exit code 1."))
+            XCTAssertFalse(error.message.contains("\n"))
+        } else {
+            XCTFail("Expected failure for non-zero exit code")
+        }
+
+        XCTAssertEqual(runner.calls.count, 1, "al vscode should not run after al sync failure")
+    }
+
+    // MARK: - Error: al sync succeeds but al vscode fails
+
+    func testAlSyncSucceedsButAlVSCodeFailsReturnsError() {
         let runner = MockALCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
             .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "code: command not supported"))
         ]
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
 
-        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("code failed"), "Error should mention code, got: \(error.message)")
+            XCTAssertTrue(error.message.contains("al vscode failed"), "Error should mention al vscode, got: \(error.message)")
             XCTAssertTrue(error.message.contains("exit code 1"), "Error should contain exit code")
         } else {
-            XCTFail("Expected failure when code exits non-zero")
+            XCTFail("Expected failure when al vscode exits non-zero")
         }
 
-        XCTAssertEqual(runner.calls.count, 2, "Both al sync and code should have run")
+        XCTAssertEqual(runner.calls.count, 2, "Both al sync and al vscode should have run")
+    }
+
+    func testAlVSCodeNonZeroExitReturnsErrorWithoutStderr() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 2, stdout: "", stderr: ""))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("al vscode failed with exit code 2."))
+            XCTAssertFalse(error.message.contains("\n"))
+        } else {
+            XCTFail("Expected failure when al vscode exits non-zero")
+        }
+
+        XCTAssertEqual(runner.calls.count, 2, "Both al sync and al vscode should have run")
     }
 
     // MARK: - Error: command runner failure
@@ -276,12 +319,11 @@ final class AgentLayerLauncherTests: XCTestCase {
             .failure(ApCoreError(message: "Command timed out after 30.0s: al"))
         ]
         let launcher = ApAgentLayerVSCodeLauncher(
-            dataStore: dataStore,
             commandRunner: runner,
             executableResolver: makeResolver()
         )
 
-        let result = launcher.openNewWindow(identifier: "test", projectPath: "/Users/test/project")
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
 
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("timed out"),
@@ -289,6 +331,28 @@ final class AgentLayerLauncherTests: XCTestCase {
         } else {
             XCTFail("Expected failure from command runner")
         }
+    }
+
+    func testCodeRunnerFailureReturnsError() {
+        let runner = MockALCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .failure(ApCoreError(message: "runner failed"))
+        ]
+        let launcher = ApAgentLayerVSCodeLauncher(
+            commandRunner: runner,
+            executableResolver: makeResolver()
+        )
+
+        let result = launcher.openNewWindow(identifier: "test", projectPath: projectDir.path)
+
+        if case .failure(let error) = result {
+            XCTAssertEqual(error.message, "runner failed")
+        } else {
+            XCTFail("Expected failure from command runner (al vscode)")
+        }
+
+        XCTAssertEqual(runner.calls.count, 2)
     }
 
     // MARK: - Helpers
@@ -305,11 +369,9 @@ final class AgentLayerLauncherTests: XCTestCase {
         )
     }
 
-    private func readWorkspaceJSON(_ identifier: String) -> [String: Any]? {
-        let workspaceURL = dataStore.vscodeWorkspaceDirectory
-            .appendingPathComponent("\(identifier).code-workspace")
-        guard let data = try? Data(contentsOf: workspaceURL) else { return nil }
-        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    private func readSettingsJSON() -> String? {
+        let settingsURL = projectDir.appendingPathComponent(".vscode/settings.json")
+        return try? String(contentsOf: settingsURL, encoding: .utf8)
     }
 }
 
@@ -351,4 +413,21 @@ private struct ALSelectiveFileSystem: FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
     func appendFile(at url: URL, data: Data) throws {}
     func writeFile(at url: URL, data: Data) throws {}
+}
+
+private struct FailingWorkspaceFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { true }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
 }

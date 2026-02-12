@@ -86,7 +86,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Auto-start AeroSpace if installed but not running
         ensureAeroSpaceRunning()
-        refreshHealthInBackground(trigger: "startup", force: true)
+
+        // Load config on the main thread (ProjectManager is not thread-safe), then
+        // ensure VS Code settings blocks in the background (may use SSH).
+        let configResult = projectManager.loadConfig()
+        let projects = (try? configResult.get())?.config.projects ?? []
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            if !projects.isEmpty {
+                let results = VSCodeSettingsBlocks.ensureAll(projects: projects)
+                for (projectId, result) in results {
+                    if case .failure(let error) = result {
+                        self?.logAppEvent(
+                            event: "settings_block.write_failed",
+                            level: .warn,
+                            message: error.message,
+                            context: ["project_id": projectId]
+                        )
+                    }
+                }
+            }
+
+            DispatchQueue.main.async {
+                self?.refreshHealthInBackground(trigger: "startup", force: true)
+            }
+        }
 
         let dataStore = DataPaths.default()
         logAppEvent(
@@ -162,6 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         openSwitcherItem.target = self
         menu.addItem(openSwitcherItem)
+
+        let viewConfigItem = NSMenuItem(
+            title: "View Config File...",
+            action: #selector(viewConfigFile),
+            keyEquivalent: ""
+        )
+        viewConfigItem.target = self
+        menu.addItem(viewConfigItem)
 
         menu.addItem(.separator())
 
@@ -425,12 +457,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Runs Doctor and presents the report in a modal-style panel.
     @objc private func runDoctor() {
         logAppEvent(event: "doctor.run.requested")
+        // Capture focus before dispatching to background if no focus is currently held.
+        // Re-runs from within the Doctor window keep the original focus (capturedFocus != nil).
+        let needsCapture = doctorController?.capturedFocus == nil && doctorController?.previousApp == nil
+        let capturedFocus = needsCapture ? projectManager.captureCurrentFocus() : nil
+        let previousApp = needsCapture ? NSWorkspace.shared.frontmostApplication : nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let report = self.makeDoctor().run()
             DispatchQueue.main.async {
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
-                self.showDoctorReport(report)
+                self.showDoctorReport(report, capturedFocus: capturedFocus, previousApp: previousApp)
                 self.logDoctorSummary(report, event: "doctor.run.completed")
             }
         }
@@ -497,10 +534,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Closes the Doctor window.
+    /// Closes the Doctor window and restores previously captured focus.
+    ///
+    /// Focus restoration runs on a detached task so AeroSpace CLI calls don't block the main
+    /// thread. Without this, clicking the menu bar immediately after closing Doctor causes a
+    /// beachball. This mirrors SwitcherPanelController.restorePreviousFocus().
     private func closeDoctorWindow() {
         logAppEvent(event: "doctor.window.closed")
-        doctorController?.close()
+        let focus = doctorController?.capturedFocus
+        let previousApp = doctorController?.previousApp
+        doctorController?.capturedFocus = nil
+        doctorController?.previousApp = nil
+        let projectManager = self.projectManager
+        let logEvent: (String, [String: String]?) -> Void = { [weak self] event, context in
+            self?.logAppEvent(event: event, context: context)
+        }
+        Task.detached(priority: .userInitiated) {
+            // Try to restore precise window focus first.
+            if let focus, projectManager.restoreFocus(focus) {
+                await MainActor.run {
+                    logEvent("doctor.focus.restored", ["window_id": "\(focus.windowId)"])
+                }
+                return
+            }
+
+            // If precise focus restore fails or was not possible, fall back to activating the previous app.
+            if let previousApp {
+                await MainActor.run {
+                    previousApp.activate()
+                    logEvent("doctor.focus.restored.app_fallback", ["bundle_id": previousApp.bundleIdentifier ?? "unknown"])
+                }
+            }
+        }
+    }
+
+    /// Opens Finder to reveal the config file.
+    /// If the config file does not exist, triggers config load (which creates a starter config).
+    @objc private func viewConfigFile() {
+        logAppEvent(event: "config.view.requested")
+        statusItem?.menu?.cancelTracking()
+        let configURL = DataPaths.default().configFile
+        if !FileManager.default.fileExists(atPath: configURL.path) {
+            // loadConfig() calls ConfigLoader which creates a starter config as a side-effect
+            _ = projectManager.loadConfig()
+            if FileManager.default.fileExists(atPath: configURL.path) {
+                logAppEvent(event: "config.view.created_starter")
+            } else {
+                logAppEvent(
+                    event: "config.view.create_failed",
+                    level: .error,
+                    message: "Failed to create starter config at \(configURL.path)"
+                )
+            }
+        }
+        // Reveal the file if it exists, otherwise reveal the parent directory
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([configURL])
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([configURL.deletingLastPathComponent()])
+        }
     }
 
     /// Shows the standard About panel with app name and version.
@@ -526,9 +618,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Displays the Doctor report using the DoctorWindowController.
-    /// - Parameter report: Doctor report payload.
-    private func showDoctorReport(_ report: DoctorReport) {
+    /// - Parameters:
+    ///   - report: Doctor report payload.
+    ///   - capturedFocus: AeroSpace focus captured before showing the window (nil if re-opening).
+    ///   - previousApp: Frontmost app captured before showing the window (nil if re-opening).
+    private func showDoctorReport(
+        _ report: DoctorReport,
+        capturedFocus: CapturedFocus? = nil,
+        previousApp: NSRunningApplication? = nil
+    ) {
         let controller = ensureDoctorController()
+        // Only set focus state on first open (capturedFocus/previousApp are nil on re-runs).
+        if let capturedFocus {
+            controller.capturedFocus = capturedFocus
+        }
+        if let previousApp {
+            controller.previousApp = previousApp
+        }
         controller.showReport(report)
     }
 

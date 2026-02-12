@@ -4,7 +4,7 @@ import AgentPanelCore
 
 /// Minimal interface required by the CLI runner for project operations.
 public protocol ProjectManaging {
-    func loadConfig() -> Result<Config, ConfigLoadError>
+    func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError>
     func sortedProjects(query: String) -> [ProjectConfig]
     func captureCurrentFocus() -> CapturedFocus?
     func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
@@ -275,8 +275,11 @@ public struct ApCLI {
             case .failure(let error):
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
-            case .success(let config):
-                output.stdout(formatConfig(config))
+            case .success(let success):
+                for warning in success.warnings {
+                    output.stderr("warning: \(warning.title)")
+                }
+                output.stdout(formatConfig(success.config))
                 return ApExitCode.ok.rawValue
             }
 

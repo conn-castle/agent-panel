@@ -3,6 +3,64 @@ import XCTest
 @testable import AgentPanelCore
 
 final class DependenciesTests: XCTestCase {
+    private final class FileManagerMissingSizeAttribute: FileManager {
+        override func attributesOfItem(atPath path: String) throws -> [FileAttributeKey: Any] {
+            // Intentionally omit `.size` to exercise DefaultFileSystem's error branch.
+            [.creationDate: Date()]
+        }
+    }
+
+    private final class ControlledSearchRootsFileManager: FileManager {
+        private let appRoots: [URL]
+        private let homeURL: URL
+
+        private(set) var urlsCallCount: Int = 0
+
+        init(appRoots: [URL], homeURL: URL) {
+            self.appRoots = appRoots
+            self.homeURL = homeURL
+            super.init()
+        }
+
+        override var homeDirectoryForCurrentUser: URL { homeURL }
+
+        override func urls(
+            for directory: FileManager.SearchPathDirectory,
+            in domainMask: FileManager.SearchPathDomainMask
+        ) -> [URL] {
+            urlsCallCount += 1
+            guard directory == .applicationDirectory else { return [] }
+            // Include at least one default fallback root so applicationSearchRoots() exercises its
+            // de-duplication logic without requiring the test to scan real system directories.
+            return appRoots
+        }
+
+        override func fileExists(
+            atPath path: String,
+            isDirectory: UnsafeMutablePointer<ObjCBool>?
+        ) -> Bool {
+            // Only allow real filesystem probing under our temp roots; otherwise short-circuit to
+            // avoid scanning the host system.
+            if appRoots.contains(where: { path.hasPrefix($0.path) }) || path.hasPrefix(homeURL.path) {
+                return super.fileExists(atPath: path, isDirectory: isDirectory)
+            }
+            if let isDirectory { isDirectory.pointee = false }
+            return false
+        }
+
+        override func contentsOfDirectory(
+            at url: URL,
+            includingPropertiesForKeys keys: [URLResourceKey]?,
+            options mask: FileManager.DirectoryEnumerationOptions
+        ) throws -> [URL] {
+            // Only enumerate under the temp roots; everything else is treated as empty.
+            if appRoots.contains(where: { url.path.hasPrefix($0.path) }) || url.path.hasPrefix(homeURL.path) {
+                return try super.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: mask)
+            }
+            return []
+        }
+    }
+
     func testCapturedFocusEquatable() {
         let a = CapturedFocus(windowId: 1, appBundleId: "com.example.app", workspace: "main")
         let b = CapturedFocus(windowId: 1, appBundleId: "com.example.app", workspace: "main")
@@ -27,6 +85,18 @@ final class DependenciesTests: XCTestCase {
         XCTAssertTrue(fs.fileExists(at: fileURL))
         XCTAssertEqual(try fs.readFile(at: fileURL), data)
         XCTAssertEqual(try fs.fileSize(at: fileURL), UInt64(data.count))
+    }
+
+    func testDefaultFileSystemFileSizeThrowsWhenSizeAttributeMissing() {
+        let fs = DefaultFileSystem(fileManager: FileManagerMissingSizeAttribute())
+        let fileURL = URL(fileURLWithPath: "/tmp/agentpanel-tests-nonexistent-\(UUID().uuidString)")
+
+        XCTAssertThrowsError(try fs.fileSize(at: fileURL)) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.domain, "DefaultFileSystem")
+            XCTAssertEqual(nsError.code, 1)
+            XCTAssertTrue(nsError.localizedDescription.contains("File size unavailable"))
+        }
     }
 
     func testDefaultFileSystemAppendCreatesFileWhenMissing() throws {
@@ -95,6 +165,23 @@ final class DependenciesTests: XCTestCase {
     func testLaunchServicesAppDiscoveryApplicationURLBundleIdentifierUnknownReturnsNil() {
         let discovery = LaunchServicesAppDiscovery()
         XCTAssertNil(discovery.applicationURL(bundleIdentifier: "com.agentpanel.tests.nonexistent.bundle"))
+    }
+
+    func testLaunchServicesAppDiscoveryWithoutOverrideUsesApplicationSearchRootsAndFindsDirectMatch() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+
+        let appURL = tmp.appendingPathComponent("Foo.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: appURL, withIntermediateDirectories: true)
+
+        let fm = ControlledSearchRootsFileManager(appRoots: [tmp, URL(fileURLWithPath: "/Applications", isDirectory: true)], homeURL: tmp)
+        let discovery = LaunchServicesAppDiscovery(fileManager: fm, searchRootsOverride: nil)
+
+        let found = discovery.applicationURL(named: "Foo")
+        XCTAssertNotNil(found)
+        XCTAssertEqual(found?.resolvingSymlinksInPath().path, appURL.resolvingSymlinksInPath().path)
+        XCTAssertEqual(fm.urlsCallCount, 1)
     }
 
     func testLaunchServicesAppDiscoveryApplicationURLNamedFindsDirectMatchAtRoot() throws {

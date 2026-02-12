@@ -464,6 +464,26 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
         XCTAssertEqual(runner.calls[0].arguments, ["list-workspaces", "--help"])
     }
 
+    func testCheckCompatibilityAcceptsFlagsFromStdoutAndStderr() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // list-workspaces flags in stderr only
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "--all --focused")),
+            // list-windows flags split across stdout/stderr
+            .success(ApCommandResult(exitCode: 0, stdout: "--monitor", stderr: "--workspace --focused --app-bundle-id --format")),
+            .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.checkCompatibility()
+
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(runner.calls.count, 6)
+    }
+
     func testCheckCompatibilityFailsWhenFlagsMissing() {
         let runner = MockCommandRunner()
         runner.results = [
@@ -509,6 +529,30 @@ final class AeroSpaceWorkspacesTests: XCTestCase {
         case .success(let workspaces):
             XCTAssertEqual(workspaces, ["main", "ap-one"])
         }
+    }
+
+    func testListWorkspacesFocusedFailsWhenRunnerFails() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .failure(ApCoreError(category: .command, message: "runner failed"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.listWorkspacesFocused()
+
+        XCTAssertTrue(result.isFailure)
+    }
+
+    func testListWorkspacesFocusedFailsOnNonZeroExit() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 2, stdout: "", stderr: "bad"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.listWorkspacesFocused()
+
+        XCTAssertTrue(result.isFailure)
     }
 
     func testGetWorkspacesFailsOnNonZeroExit() {
@@ -599,6 +643,54 @@ final class AeroSpaceWorkspaceLifecycleTests: XCTestCase {
         XCTAssertEqual(runner.calls[1].arguments, ["summon-workspace", "ap-test"])
     }
 
+    func testCreateWorkspacePropagatesWorkspaceExistsFailure() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // getWorkspaces runner failure
+            .failure(ApCoreError(category: .command, message: "runner failed"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.createWorkspace("ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(runner.calls[0].arguments, ["list-workspaces", "--all"])
+    }
+
+    func testCreateWorkspaceFailsWhenSummonWorkspaceRunnerFails() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // list-workspaces --all does not include ap-test
+            .success(ApCommandResult(exitCode: 0, stdout: "main\n", stderr: "")),
+            // summon-workspace runner fails
+            .failure(ApCoreError(category: .command, message: "runner failed"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.createWorkspace("ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertEqual(runner.calls[1].arguments, ["summon-workspace", "ap-test"])
+    }
+
+    func testCreateWorkspaceFailsWhenSummonWorkspaceNonZeroExit() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // list-workspaces --all does not include ap-test
+            .success(ApCommandResult(exitCode: 0, stdout: "main\n", stderr: "")),
+            // summon-workspace returns non-zero
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "bad"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.createWorkspace("ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        XCTAssertEqual(runner.calls.count, 2)
+    }
+
     func testCloseWorkspaceAggregatesCloseFailures() {
         let runner = MockCommandRunner()
         runner.results = [
@@ -614,6 +706,60 @@ final class AeroSpaceWorkspaceLifecycleTests: XCTestCase {
         let result = aero.closeWorkspace(name: "ap-test")
 
         XCTAssertTrue(result.isFailure)
+    }
+
+    func testCloseWorkspaceFailsOnEmptyName() {
+        let runner = MockCommandRunner()
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "   ")
+
+        XCTAssertTrue(result.isFailure)
+        XCTAssertEqual(runner.calls.count, 0)
+    }
+
+    func testCloseWorkspaceFailsWhenListWindowsWorkspaceFails() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .failure(ApCoreError(category: .command, message: "list-windows failed"))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        XCTAssertEqual(runner.calls.count, 1)
+    }
+
+    func testCloseWorkspaceSucceedsWhenNoWindowsInWorkspace() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(runner.calls.count, 1)
+    }
+
+    func testCloseWorkspaceSucceedsWhenAllWindowsClosed() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // list-windows in workspace returns 2 windows
+            .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n2||app||ap-test||t\n", stderr: "")),
+            // close window 1 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // close window 2 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isSuccess)
+        XCTAssertEqual(runner.calls.count, 3)
     }
 }
 

@@ -20,16 +20,7 @@ enum SwitcherPresentationSource: String {
     case unknown
 }
 
-/// Reason the switcher panel was dismissed.
-enum SwitcherDismissReason: String {
-    case toggle
-    case escape
-    case projectSelected
-    case projectClosed
-    case exitedToNonProject
-    case windowClose
-    case unknown
-}
+// SwitcherDismissReason is defined in AgentPanelCore/SwitcherDismissPolicy.swift
 
 /// Timing constants for switcher behavior.
 private enum SwitcherTiming {
@@ -205,6 +196,7 @@ final class SwitcherPanelController: NSObject {
     private var previouslyActiveApp: NSRunningApplication?
     private var suppressedActionEventTimestamp: TimeInterval?
     private var isDismissing: Bool = false
+    private var isActivating: Bool = false
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
     private var restoreFocusTask: Task<Void, Never>?
@@ -367,6 +359,7 @@ final class SwitcherPanelController: NSObject {
 
         removeKeyEventMonitor()
         expectsVisible = false
+        isActivating = false
         pendingVisibilityCheckToken = nil
         restoreFocusTask?.cancel()
         session.end(reason: reason)
@@ -375,14 +368,12 @@ final class SwitcherPanelController: NSObject {
         lastDismissedQuery = searchField.stringValue
         lastDismissedAt = Date()
 
-        // Reasons where the action itself handles focus (don't restore)
-        let actionHandlesFocus = reason == .projectSelected
-            || reason == .exitedToNonProject
+        let shouldRestore = SwitcherDismissPolicy.shouldRestoreFocus(reason: reason)
 
         // Restore focus unless the action handles it.
         // IMPORTANT: Activate the previous app BEFORE closing the panel to prevent
         // macOS from picking a random window when the panel disappears.
-        if !actionHandlesFocus {
+        if shouldRestore {
             if let previousApp = previouslyActiveApp {
                 previousApp.activate()
             }
@@ -391,7 +382,7 @@ final class SwitcherPanelController: NSObject {
         panel.orderOut(nil)
 
         // Do precise AeroSpace window focus async (can be slow).
-        if !actionHandlesFocus {
+        if shouldRestore {
             restorePreviousFocus()
         } else {
             previouslyActiveApp = nil
@@ -514,7 +505,6 @@ final class SwitcherPanelController: NSObject {
         panel.hasShadow = true
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.appearance = NSAppearance(named: .darkAqua)
     }
 
     /// Configures the optional title label shown above the search field.
@@ -672,11 +662,15 @@ final class SwitcherPanelController: NSObject {
             )
             onProjectOperationFailed?()
 
-        case .success(let config):
-            allProjects = config.projects
+        case .success(let success):
+            allProjects = success.config.projects
             configErrorMessage = nil
-            clearStatus()
-            session.logConfigLoaded(projectCount: config.projects.count)
+            if let firstWarning = success.warnings.first {
+                setStatus(message: "Config warning: \(firstWarning.title)", level: .warning)
+            } else {
+                clearStatus()
+            }
+            session.logConfigLoaded(projectCount: success.config.projects.count)
         }
     }
 
@@ -867,11 +861,13 @@ final class SwitcherPanelController: NSObject {
         setStatus(message: "Switching to \(project.name)...", level: .info)
         searchField.isEnabled = false
         tableView.isEnabled = false
+        isActivating = true
 
         guard let focusForExit = capturedFocus else {
             setStatus(message: "Could not capture focus", level: .error)
             searchField.isEnabled = true
             tableView.isEnabled = true
+            isActivating = false
             return
         }
 
@@ -885,6 +881,7 @@ final class SwitcherPanelController: NSObject {
             )
 
             await MainActor.run {
+                self.isActivating = false
                 self.searchField.isEnabled = true
                 self.tableView.isEnabled = true
 
@@ -1386,8 +1383,20 @@ extension SwitcherPanelController: NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
-        if panel.isVisible {
+        guard panel.isVisible else { return }
+        let decision = SwitcherDismissPolicy.shouldDismissOnResignKey(
+            isActivating: isActivating,
+            isVisible: true
+        )
+        switch decision {
+        case .dismiss:
             dismiss(reason: .windowClose)
+        case .suppress(let reason):
+            session.logEvent(
+                event: "switcher.resign_key.suppressed",
+                level: .info,
+                context: ["reason": reason]
+            )
         }
     }
 }

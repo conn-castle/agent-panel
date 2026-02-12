@@ -215,9 +215,122 @@ final class ChromeTabStoreTests: XCTestCase {
 
         XCTAssertTrue(fs.directories.contains(dir.path))
     }
+
+    // MARK: - Error branches
+
+    func testSaveReturnsErrorWhenCreateDirectoryFails() {
+        let fs = ConfigurableChromeTabFileSystem()
+        fs.createDirectoryError = NSError(domain: "test", code: 1)
+
+        let store = ChromeTabStore(
+            directory: URL(fileURLWithPath: "/tmp/chrome-tabs", isDirectory: true),
+            fileSystem: fs
+        )
+        let snapshot = ChromeTabSnapshot(urls: ["https://example.com"], capturedAt: Date(timeIntervalSince1970: 1))
+
+        switch store.save(snapshot: snapshot, projectId: "p") {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertTrue(error.message.contains("Failed to create chrome-tabs directory"))
+        }
+    }
+
+    func testSaveReturnsErrorWhenWriteFails() throws {
+        let fs = ConfigurableChromeTabFileSystem()
+        fs.writeFileError = NSError(domain: "test", code: 2)
+
+        let store = ChromeTabStore(
+            directory: URL(fileURLWithPath: "/tmp/chrome-tabs", isDirectory: true),
+            fileSystem: fs
+        )
+        let snapshot = ChromeTabSnapshot(urls: ["https://example.com"], capturedAt: Date(timeIntervalSince1970: 1))
+
+        switch store.save(snapshot: snapshot, projectId: "p") {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertTrue(error.message.contains("Failed to write tab snapshot"))
+        }
+    }
+
+    func testLoadReturnsErrorWhenReadFails() {
+        let fs = ConfigurableChromeTabFileSystem()
+        fs.fileExistsValue = true
+        fs.readFileError = NSError(domain: "test", code: 3)
+
+        let store = ChromeTabStore(
+            directory: URL(fileURLWithPath: "/tmp/chrome-tabs", isDirectory: true),
+            fileSystem: fs
+        )
+
+        switch store.load(projectId: "p") {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertTrue(error.message.contains("Failed to read tab snapshot"))
+        }
+    }
+
+    func testDeleteReturnsErrorWhenRemoveFails() {
+        let fs = ConfigurableChromeTabFileSystem()
+        fs.fileExistsValue = true
+        fs.removeItemError = NSError(domain: "test", code: 4)
+
+        let store = ChromeTabStore(
+            directory: URL(fileURLWithPath: "/tmp/chrome-tabs", isDirectory: true),
+            fileSystem: fs
+        )
+
+        switch store.delete(projectId: "p") {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertTrue(error.message.contains("Failed to delete tab snapshot"))
+        }
+    }
 }
 
 // MARK: - Test Doubles
+
+private final class ConfigurableChromeTabFileSystem: FileSystem {
+    var fileExistsValue: Bool = false
+
+    var createDirectoryError: Error?
+    var readFileError: Error?
+    var removeItemError: Error?
+    var writeFileError: Error?
+
+    func fileExists(at url: URL) -> Bool { fileExistsValue }
+    func isExecutableFile(at url: URL) -> Bool { false }
+
+    func readFile(at url: URL) throws -> Data {
+        if let readFileError { throw readFileError }
+        return Data()
+    }
+
+    func createDirectory(at url: URL) throws {
+        if let createDirectoryError { throw createDirectoryError }
+    }
+
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+
+    func removeItem(at url: URL) throws {
+        if let removeItemError { throw removeItemError }
+    }
+
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+
+    func appendFile(at url: URL, data: Data) throws {}
+
+    func writeFile(at url: URL, data: Data) throws {
+        if let writeFileError { throw writeFileError }
+    }
+}
 
 private final class InMemoryFileSystem: FileSystem {
     enum FSError: Error {

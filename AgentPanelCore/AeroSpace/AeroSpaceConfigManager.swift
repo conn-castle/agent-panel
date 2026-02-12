@@ -31,15 +31,15 @@ public struct AeroSpaceConfigManager {
 
     /// Default path to the AeroSpace config file.
     public static var configPath: String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aerospace.toml")
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent(".aerospace.toml", isDirectory: false)
             .path
     }
 
     /// Path for backing up existing configs before overwriting.
     private static var backupPath: String {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".aerospace.toml.agentpanel-backup")
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+            .appendingPathComponent(".aerospace.toml.agentpanel-backup", isDirectory: false)
             .path
     }
 

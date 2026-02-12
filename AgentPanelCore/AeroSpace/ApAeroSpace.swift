@@ -45,11 +45,13 @@ public struct ApAeroSpace {
 
     private let commandRunner: CommandRunning
     private let appDiscovery: AppDiscovering
+    private let fileSystem: FileSystem
 
     /// Creates a new AeroSpace wrapper with default dependencies.
     public init() {
         self.commandRunner = ApSystemCommandRunner()
         self.appDiscovery = LaunchServicesAppDiscovery()
+        self.fileSystem = DefaultFileSystem()
     }
 
     /// Creates a new AeroSpace wrapper with custom dependencies.
@@ -58,10 +60,12 @@ public struct ApAeroSpace {
     ///   - appDiscovery: App discovery for installation checks.
     init(
         commandRunner: CommandRunning,
-        appDiscovery: AppDiscovering
+        appDiscovery: AppDiscovering,
+        fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.commandRunner = commandRunner
         self.appDiscovery = appDiscovery
+        self.fileSystem = fileSystem
     }
 
     /// Returns the path to AeroSpace.app if installed.
@@ -73,9 +77,7 @@ public struct ApAeroSpace {
         }
         // Fallback for edge cases where Launch Services hasn't indexed yet
         let legacyURL = URL(fileURLWithPath: Self.legacyAppPath, isDirectory: true)
-        var isDirectory = ObjCBool(false)
-        if FileManager.default.fileExists(atPath: legacyURL.path, isDirectory: &isDirectory),
-           isDirectory.boolValue {
+        if fileSystem.directoryExists(at: legacyURL) {
             return Self.legacyAppPath
         }
         return nil

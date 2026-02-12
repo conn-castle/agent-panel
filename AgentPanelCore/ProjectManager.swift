@@ -148,7 +148,10 @@ struct FocusStack {
 /// - Project selection, closing, and exit
 /// - Focus capture/restore for switcher UX
 ///
-/// Thread Safety: Not thread-safe. All methods must be called from the main thread.
+/// Thread Safety: Not thread-safe. Most methods must be called from the main thread.
+/// Exception: `restoreFocus(_:)`, `focusWorkspace(name:)`, and `focusWindow(windowId:)` may be
+/// called from a detached task for non-blocking focus restoration (these only invoke AeroSpace CLI
+/// commands and do not mutate ProjectManager state).
 public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces.
     public static let workspacePrefix = "ap-"
@@ -159,11 +162,17 @@ public final class ProjectManager {
 
     // Config
     private var config: Config?
-    private let configLoader: () -> Result<Config, ConfigLoadError>
+    private let configLoader: () -> Result<ConfigLoadSuccess, ConfigLoadError>
+
+    /// Non-fatal warnings from the most recent config load.
+    public private(set) var configWarnings: [ConfigFinding] = []
 
     // Recency tracking - simple list of project IDs, most recent first
     private var recentProjectIds: [String] = []
     private let recencyFilePath: URL
+
+    // File I/O abstraction for testability (recency + persistence).
+    private let fileSystem: FileSystem
 
     // Focus stack for "exit project space" restoration (non-project windows only)
     private var focusStack = FocusStack()
@@ -233,6 +242,7 @@ public final class ProjectManager {
         self.logger = AgentPanelLogger()
         self.recencyFilePath = dataPaths.recentProjectsFile
         self.configLoader = { Config.loadDefault() }
+        self.fileSystem = DefaultFileSystem()
 
         loadRecency()
     }
@@ -248,7 +258,8 @@ public final class ProjectManager {
         gitRemoteResolver: GitRemoteResolving,
         logger: AgentPanelLogging,
         recencyFilePath: URL,
-        configLoader: @escaping () -> Result<Config, ConfigLoadError> = { Config.loadDefault() }
+        configLoader: @escaping () -> Result<ConfigLoadSuccess, ConfigLoadError> = { Config.loadDefault() },
+        fileSystem: FileSystem = DefaultFileSystem()
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
@@ -260,6 +271,7 @@ public final class ProjectManager {
         self.logger = logger
         self.recencyFilePath = recencyFilePath
         self.configLoader = configLoader
+        self.fileSystem = fileSystem
 
         loadRecency()
     }
@@ -285,14 +297,16 @@ public final class ProjectManager {
     ///
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
-    public func loadConfig() -> Result<Config, ConfigLoadError> {
+    public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         switch configLoader() {
-        case .success(let loadedConfig):
-            self.config = loadedConfig
-            logEvent("config.loaded", context: ["project_count": "\(loadedConfig.projects.count)"])
-            return .success(loadedConfig)
+        case .success(let success):
+            self.config = success.config
+            self.configWarnings = success.warnings
+            logEvent("config.loaded", context: ["project_count": "\(success.config.projects.count)"])
+            return .success(success)
         case .failure(let error):
             self.config = nil
+            self.configWarnings = []
             logEvent("config.failed", level: .error, message: "\(error)")
             return .failure(error)
         }
@@ -722,19 +736,31 @@ public final class ProjectManager {
 
     /// Falls back to focusing a non-project workspace when the focus stack is exhausted.
     ///
-    /// Queries all workspaces and focuses the first one that is not an AgentPanel
-    /// project workspace (i.e., does not start with the workspace prefix).
+    /// Queries all workspaces and focuses the first non-project workspace that has
+    /// at least one window. This avoids landing on an empty desktop.
     ///
-    /// - Returns: The workspace name that was focused, or nil if no non-project workspace exists.
+    /// - Returns: The workspace name that was focused, or nil if no suitable workspace exists.
     private func fallbackToNonProjectWorkspace() -> String? {
         guard case .success(let workspaces) = aerospace.listWorkspacesWithFocus() else {
             return nil
         }
         let nonProjectWorkspaces = workspaces.filter { !$0.workspace.hasPrefix(Self.workspacePrefix) }
-        guard let target = nonProjectWorkspaces.first else {
-            return nil
+
+        // Prefer a workspace that has windows (avoid empty desktops)
+        for candidate in nonProjectWorkspaces {
+            if case .success(let windows) = aerospace.listWindowsWorkspace(workspace: candidate.workspace),
+               !windows.isEmpty {
+                if focusWorkspace(name: candidate.workspace) {
+                    return candidate.workspace
+                }
+            }
         }
-        return focusWorkspace(name: target.workspace) ? target.workspace : nil
+
+        // All non-project workspaces are empty; focus the first one anyway as last resort
+        if let target = nonProjectWorkspaces.first {
+            return focusWorkspace(name: target.workspace) ? target.workspace : nil
+        }
+        return nil
     }
 
     // MARK: - Sequential Window Setup
@@ -979,14 +1005,13 @@ public final class ProjectManager {
     }
 
     private func loadRecency() {
-        let path = recencyFilePath.path
-        guard FileManager.default.fileExists(atPath: path) else {
+        guard fileSystem.fileExists(at: recencyFilePath) else {
             recentProjectIds = []
             return
         }
 
         do {
-            let data = try Data(contentsOf: recencyFilePath)
+            let data = try fileSystem.readFile(at: recencyFilePath)
             let ids = try JSONDecoder().decode([String].self, from: data)
             recentProjectIds = ids
         } catch {
@@ -995,7 +1020,7 @@ public final class ProjectManager {
                 "recency.load_failed",
                 level: .warn,
                 message: String(describing: error),
-                context: ["path": path]
+                context: ["path": recencyFilePath.path]
             )
         }
     }
@@ -1017,7 +1042,7 @@ public final class ProjectManager {
         // Ensure directory exists
         let directory = recencyFilePath.deletingLastPathComponent()
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try fileSystem.createDirectory(at: directory)
         } catch {
             logEvent(
                 "recency.directory_create_failed",
@@ -1029,7 +1054,7 @@ public final class ProjectManager {
         }
 
         do {
-            try data.write(to: recencyFilePath, options: .atomic)
+            try fileSystem.writeFile(at: recencyFilePath, data: data)
         } catch {
             logEvent(
                 "recency.write_failed",

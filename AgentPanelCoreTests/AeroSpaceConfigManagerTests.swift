@@ -98,6 +98,43 @@ final class AeroSpaceConfigManagerTests: XCTestCase {
         }
     }
 
+    func testWriteSafeConfigFailsWhenTemplateMissingUsingDefaultBundleLoader() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configPath = dir.appendingPathComponent(".aerospace.toml").path
+        let backupPath = dir.appendingPathComponent(".backup").path
+
+        // Do not use `AeroSpaceConfigManager()` here; its default config path points at the user's home.
+        // This test uses a temp config path but exercises the default bundle-loader closure.
+        let manager = AeroSpaceConfigManager(fileManager: .default, configPath: configPath, backupPath: backupPath)
+
+        switch manager.writeSafeConfig() {
+        case .success:
+            XCTFail("Expected failure when safe config template is missing from bundle")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
+    func testWriteSafeConfigFailsWhenTemplateMissingUsingPublicInit() {
+        // Safety: AeroSpaceConfigManager() points at ~/.aerospace.toml. This test is only safe if the
+        // safe template is missing from the test bundle, causing writeSafeConfig() to return early
+        // without reading or writing the config file.
+        XCTAssertNil(
+            Bundle.main.url(forResource: "aerospace-safe", withExtension: "toml"),
+            "This test assumes aerospace-safe.toml is missing from the test bundle; if it's present, rewrite the test to avoid touching the user's home directory."
+        )
+
+        let manager = AeroSpaceConfigManager()
+        switch manager.writeSafeConfig() {
+        case .success:
+            XCTFail("Expected failure when safe config template is missing from bundle")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
     func testWriteSafeConfigWritesConfigWhenMissing() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -234,4 +271,3 @@ final class AeroSpaceConfigManagerTests: XCTestCase {
         }
     }
 }
-

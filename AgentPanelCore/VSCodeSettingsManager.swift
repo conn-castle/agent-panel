@@ -1,0 +1,363 @@
+import Foundation
+
+/// Manages the `// >>> agent-panel` marker block in `.vscode/settings.json` files.
+///
+/// This manager injects a window title setting directly into the project's `.vscode/settings.json`.
+/// The block is delimited by `// >>> agent-panel` / `// <<< agent-panel` markers,
+/// allowing coexistence with other managed blocks (e.g., `// >>> agent-layer`).
+struct ApVSCodeSettingsManager {
+    private let fileSystem: FileSystem
+    private let commandRunner: CommandRunning?
+
+    /// Creates a settings manager.
+    /// - Parameters:
+    ///   - fileSystem: File system accessor for settings.json I/O.
+    ///   - commandRunner: Command runner for SSH remote writes. Pass `nil` if only local writes are needed.
+    init(fileSystem: FileSystem = DefaultFileSystem(), commandRunner: CommandRunning? = nil) {
+        self.fileSystem = fileSystem
+        self.commandRunner = commandRunner
+    }
+
+    // MARK: - Block injection (pure function)
+
+    /// Start marker for the agent-panel settings block.
+    static let startMarker = "// >>> agent-panel"
+    /// End marker for the agent-panel settings block.
+    static let endMarker = "// <<< agent-panel"
+
+    /// Injects or replaces the agent-panel block at the top of a JSONC settings file.
+    ///
+    /// The block is inserted right after the opening `{`, with a trailing comma on the
+    /// last property line. Trailing commas are valid JSONC. If an existing agent-panel
+    /// block is found, it is replaced.
+    ///
+    /// - Parameters:
+    ///   - content: Existing file content (JSONC).
+    ///   - identifier: Project identifier for the `AP:<id>` window title.
+    /// - Returns: Updated file content with the agent-panel block injected, or an error
+    ///   if the content has no opening `{`.
+    static func injectBlock(into content: String, identifier: String) -> Result<String, ApCoreError> {
+        let hasStart = content.contains(startMarker)
+        let hasEnd = content.contains(endMarker)
+        if hasStart != hasEnd {
+            return .failure(ApCoreError(
+                category: .validation,
+                message: """
+                Cannot inject settings block: unbalanced agent-panel markers in settings.json.
+                Expected both markers:
+                \(startMarker)
+                \(endMarker)
+                Fix the file manually, then retry.
+                """
+            ))
+        }
+
+        // Remove existing block if present
+        let cleaned = removeExistingBlock(from: content)
+
+        // Find the first `{`
+        guard let braceIndex = cleaned.firstIndex(of: "{") else {
+            return .failure(ApCoreError(message: "Cannot inject settings block: content has no opening '{'."))
+        }
+
+        let windowTitle = "\(ApIdeToken.prefix)\(identifier) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
+
+        let block = [
+            "  \(startMarker)",
+            "  // Managed by AgentPanel. Do not edit this block manually.",
+            "  \"window.title\": \"\(windowTitle)\",",
+            "  \(endMarker)"
+        ].joined(separator: "\n")
+
+        // Insert after `{`
+        let afterBrace = cleaned.index(after: braceIndex)
+        let before = String(cleaned[cleaned.startIndex..<afterBrace])
+        let after = String(cleaned[afterBrace...])
+
+        // Check if there's content after the brace (non-whitespace before closing `}`)
+        let trimmedAfter = after.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedAfter == "}" {
+            // Empty object: insert block with newline
+            return .success("\(before)\n\(block)\n}")
+        } else {
+            // Has content: insert block then existing content
+            return .success("\(before)\n\(block)\n\(after.drop(while: { $0 == "\n" || $0 == "\r" }))")
+        }
+    }
+
+    /// Removes an existing agent-panel block (markers + content between them) from the content.
+    ///
+    /// If the start marker exists but the end marker is missing (unbalanced markers),
+    /// returns the content unchanged to prevent data loss.
+    private static func removeExistingBlock(from content: String) -> String {
+        // Guard: only remove if both markers are present (balanced)
+        let hasStart = content.contains(startMarker)
+        let hasEnd = content.contains(endMarker)
+        guard hasStart && hasEnd else { return content }
+
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var result: [String] = []
+        var insideBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == startMarker {
+                insideBlock = true
+                continue
+            }
+            if trimmed == endMarker {
+                insideBlock = false
+                continue
+            }
+            if !insideBlock {
+                result.append(line)
+            }
+        }
+
+        return result.joined(separator: "\n")
+    }
+
+    // MARK: - Local settings.json write
+
+    /// Writes the agent-panel block into the project's `.vscode/settings.json`.
+    ///
+    /// Reads the existing file (or defaults to `{}\n` if the file doesn't exist),
+    /// injects the block, creates the `.vscode/` directory if needed, and writes the result.
+    /// Returns an error if the file exists but cannot be read (e.g., permission denied).
+    ///
+    /// - Parameters:
+    ///   - projectPath: Absolute path to the project directory.
+    ///   - identifier: Project identifier for the `AP:<id>` window title.
+    /// - Returns: Success or an error.
+    func writeLocalSettings(projectPath: String, identifier: String) -> Result<Void, ApCoreError> {
+        let projectURL = URL(fileURLWithPath: projectPath, isDirectory: true)
+
+        // Fail loudly on misconfigured paths. Do not create missing project directories.
+        guard fileSystem.directoryExists(at: projectURL) else {
+            return .failure(ApCoreError(message: "Project path does not exist or is not a directory: \(projectURL.path)"))
+        }
+
+        let vscodeDir = projectURL.appendingPathComponent(".vscode", isDirectory: true)
+        let settingsURL = vscodeDir.appendingPathComponent("settings.json", isDirectory: false)
+
+        // Read existing content or default to empty object (file missing only)
+        let existingContent: String
+        if fileSystem.fileExists(at: settingsURL) {
+            do {
+                let data = try fileSystem.readFile(at: settingsURL)
+                guard let content = String(data: data, encoding: .utf8) else {
+                    return .failure(ApCoreError(
+                        message: "Failed to decode .vscode/settings.json as UTF-8 at \(settingsURL.path)."
+                    ))
+                }
+                existingContent = content
+            } catch {
+                return .failure(ApCoreError(
+                    message: "Failed to read existing .vscode/settings.json at \(settingsURL.path): \(error.localizedDescription)"
+                ))
+            }
+        } else {
+            existingContent = "{}\n"
+        }
+
+        let updatedContent: String
+        switch Self.injectBlock(into: existingContent, identifier: identifier) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let content):
+            updatedContent = content
+        }
+
+        do {
+            try fileSystem.createDirectory(at: vscodeDir)
+            guard let data = updatedContent.data(using: .utf8) else {
+                return .failure(ApCoreError(message: "Failed to encode settings.json content as UTF-8."))
+            }
+            try fileSystem.writeFile(at: settingsURL, data: data)
+        } catch {
+            return .failure(ApCoreError(message: "Failed to write .vscode/settings.json: \(error.localizedDescription)"))
+        }
+
+        return .success(())
+    }
+
+    // MARK: - Remote settings.json write (SSH)
+
+    /// Writes the agent-panel block into a remote project's `.vscode/settings.json` via SSH.
+    ///
+    /// Strategy: read existing file via `cat`, inject block, base64-encode, write back via
+    /// `base64 -d`. All commands use safe SSH flags (ConnectTimeout, BatchMode, `--` terminator).
+    ///
+    /// - Parameters:
+    ///   - remoteAuthority: VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
+    ///   - remotePath: Remote absolute path to the project directory.
+    ///   - identifier: Project identifier for the `AP:<id>` window title.
+    /// - Returns: Success or an error.
+    func writeRemoteSettings(
+        remoteAuthority: String,
+        remotePath: String,
+        identifier: String
+    ) -> Result<Void, ApCoreError> {
+        guard let commandRunner else {
+            return .failure(ApCoreError(message: "Command runner not available for remote settings write"))
+        }
+
+        guard let sshTarget = ApSSHHelpers.extractTarget(from: remoteAuthority) else {
+            return .failure(ApCoreError(message: "Malformed SSH remote authority: \(remoteAuthority)"))
+        }
+
+        let escapedProjectPath = ApSSHHelpers.shellEscape(remotePath)
+        let settingsPath = "\(escapedProjectPath)/.vscode/settings.json"
+
+        // Read existing remote settings.json (or default to empty if file missing)
+        // Uses `test -f` to distinguish "file missing" from "permission denied" or other errors.
+        // Also asserts the remote project directory exists to avoid creating incorrect paths.
+        let readCommand = [
+            "if [ ! -d \(escapedProjectPath) ]; then echo Remote project path missing: \(escapedProjectPath) 1>&2; exit 1; fi",
+            "if [ -f \(settingsPath) ]; then cat \(settingsPath); else echo '{}'; fi"
+        ].joined(separator: "; ")
+        let readResult = commandRunner.run(
+            executable: "ssh",
+            arguments: [
+                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=yes",
+                "--",
+                sshTarget,
+                readCommand
+            ],
+            timeoutSeconds: 10
+        )
+
+        let existingContent: String
+        switch readResult {
+        case .failure(let error):
+            return .failure(ApCoreError(
+                category: .command,
+                message: "SSH read failed for remote settings.json: \(sshTarget) \(remotePath)\n\(error.message)"
+            ))
+        case .success(let result):
+            if result.exitCode != 0 {
+                let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
+                return .failure(ApCoreError(
+                    category: .command,
+                    message: "SSH read failed with exit code \(result.exitCode): \(sshTarget) \(remotePath)\(suffix)"
+                ))
+            }
+            existingContent = result.stdout
+        }
+
+        // Inject block
+        let updatedContent: String
+        switch Self.injectBlock(into: existingContent, identifier: identifier) {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let content):
+            updatedContent = content
+        }
+
+        // Base64-encode and write
+        guard let data = updatedContent.data(using: .utf8) else {
+            return .failure(ApCoreError(message: "Failed to encode settings.json as UTF-8"))
+        }
+        let base64 = data.base64EncodedString()
+
+        // Defense-in-depth: base64 output is limited to [A-Za-z0-9+/=] and is safe to embed
+        // inside single quotes. Keep this invariant if you change the encoding scheme.
+        let writeCommand = "if [ ! -d \(escapedProjectPath) ]; then echo Remote project path missing: \(escapedProjectPath) 1>&2; exit 1; fi && mkdir -p \(escapedProjectPath)/.vscode && echo '\(base64)' | base64 -d > \(settingsPath)"
+        let writeResult = commandRunner.run(
+            executable: "ssh",
+            arguments: [
+                "-o", "ConnectTimeout=5",
+                "-o", "BatchMode=yes",
+                "--",
+                sshTarget,
+                writeCommand
+            ],
+            timeoutSeconds: 10
+        )
+
+        switch writeResult {
+        case .failure(let error):
+            return .failure(ApCoreError(
+                category: .command,
+                message: "SSH write failed for remote settings.json: \(sshTarget) \(remotePath)\n\(error.message)"
+            ))
+        case .success(let result):
+            if result.exitCode != 0 {
+                let trimmedStderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                let suffix = trimmedStderr.isEmpty ? "" : "\n\(trimmedStderr)"
+                return .failure(ApCoreError(
+                    category: .command,
+                    message: "SSH write failed with exit code \(result.exitCode): \(sshTarget) \(remotePath)\(suffix)"
+                ))
+            }
+            return .success(())
+        }
+    }
+
+    // MARK: - Ensure all settings blocks
+
+    /// Writes the agent-panel settings.json block for all configured projects.
+    ///
+    /// For local projects, writes directly via the file system.
+    /// For SSH projects, writes via SSH (requires `commandRunner` to be set).
+    /// Each project is processed independently; failures do not affect other projects.
+    ///
+    /// - Parameter projects: All configured projects.
+    /// - Returns: Per-project results keyed by project ID.
+    @discardableResult
+    func ensureAllSettingsBlocks(projects: [ProjectConfig]) -> [String: Result<Void, ApCoreError>] {
+        var results: [String: Result<Void, ApCoreError>] = [:]
+
+        for project in projects {
+            if project.isSSH {
+                guard let remote = project.remote else {
+                    results[project.id] = .failure(ApCoreError(
+                        message: "SSH project \(project.id) missing remote authority"
+                    ))
+                    continue
+                }
+                results[project.id] = writeRemoteSettings(
+                    remoteAuthority: remote,
+                    remotePath: project.path,
+                    identifier: project.id
+                )
+            } else {
+                results[project.id] = writeLocalSettings(
+                    projectPath: project.path,
+                    identifier: project.id
+                )
+            }
+        }
+
+        return results
+    }
+}
+
+// MARK: - Public Convenience API
+
+/// Proactively ensures the AgentPanel-managed VS Code settings block exists for projects.
+///
+/// This is a public wrapper around internal settings management logic so the App/CLI can
+/// trigger pre-flight settings writes without depending on internal types.
+public enum VSCodeSettingsBlocks {
+    /// Writes the AgentPanel settings block into `.vscode/settings.json` for all projects.
+    ///
+    /// - Local projects: Writes via the local file system.
+    /// - SSH projects: Writes via SSH (read → inject → base64 → write).
+    ///
+    /// - Parameter projects: Projects to process.
+    /// - Returns: Per-project results keyed by project id.
+    @discardableResult
+    public static func ensureAll(projects: [ProjectConfig]) -> [String: Result<Void, ApCoreError>] {
+        let runner = ApSystemCommandRunner()
+        let manager = ApVSCodeSettingsManager(commandRunner: runner)
+        return manager.ensureAllSettingsBlocks(projects: projects)
+    }
+}
+
+// MARK: - Notes
+
+// SSH authority parsing and shell escaping live in `ApSSHHelpers` to keep a single
+// source of truth across config validation, Doctor checks, and remote writes.

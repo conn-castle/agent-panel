@@ -1,6 +1,9 @@
 import XCTest
+import Foundation
 import Darwin
 @testable import AgentPanelCore
+
+private let shellEnvLock = NSLock()
 
 final class SystemCommandRunnerTests: XCTestCase {
 
@@ -107,6 +110,58 @@ final class SystemCommandRunnerTests: XCTestCase {
         XCTAssertEqual(env["HOME"], expectedHome, "Non-PATH environment variables should be preserved")
     }
 
+    func testAugmentedEnvironmentWorksWhenProcessPATHIsMissing() {
+        shellEnvLock.lock()
+        defer { shellEnvLock.unlock() }
+
+        let originalPath = ProcessInfo.processInfo.environment["PATH"]
+        defer {
+            if let originalPath {
+                setenv("PATH", originalPath, 1)
+            } else {
+                unsetenv("PATH")
+            }
+        }
+
+        unsetenv("PATH")
+
+        let resolver = ExecutableResolver(loginShellFallbackEnabled: false)
+        let env = ApSystemCommandRunner.buildAugmentedEnvironment(resolver: resolver)
+
+        guard let path = env["PATH"] else {
+            XCTFail("PATH should be present in augmented environment")
+            return
+        }
+        XCTAssertFalse(path.isEmpty)
+        XCTAssertFalse(path.contains("::"))
+    }
+
+    func testAugmentedEnvironmentIncludesLoginShellPATHWhenAvailable() throws {
+        let expectedShellPath = "/custom/bin:/usr/bin:/bin"
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AugmentedPATHShellTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("shell.sh", isDirectory: false)
+        let script = "#!/bin/sh\necho \"\(expectedShellPath)\"\n"
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            let env = ApSystemCommandRunner.buildAugmentedEnvironment(resolver: resolver)
+
+            guard let path = env["PATH"] else {
+                XCTFail("PATH should be present")
+                return
+            }
+
+            let components = path.split(separator: ":").map(String.init)
+            XCTAssertTrue(components.contains("/custom/bin"))
+        }
+    }
+
     // MARK: - resolveLoginShellPath
 
     func testResolveLoginShellPathReturnsNonNilPathWhenEnabled() throws {
@@ -143,6 +198,194 @@ final class SystemCommandRunnerTests: XCTestCase {
         let path = resolver.resolveLoginShellPath()
 
         XCTAssertNil(path, "Login shell PATH should be nil when fallback is disabled")
+    }
+
+    func testResolveLoginShellPathUsesFallbackWhenShellEnvIsNotAbsolute() throws {
+        withShell("zsh") {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            let path = resolver.resolveLoginShellPath()
+
+            XCTAssertNotNil(path)
+            XCTAssertFalse(path?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        }
+    }
+
+    func testResolveLoginShellPathReturnsNilWhenShellExecutableMissing() throws {
+        withShell("/this/does/not/exist") {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            XCTAssertNil(resolver.resolveLoginShellPath())
+        }
+    }
+
+    func testResolveLoginShellPathReturnsNilWhenShellExitsNonZero() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LoginShellNonZeroTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("shell.sh", isDirectory: false)
+        let script = "#!/bin/sh\nexit 1\n"
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            XCTAssertNil(resolver.resolveLoginShellPath())
+        }
+    }
+
+    func testResolveLoginShellPathReturnsNilWhenShellOutputsEmptyString() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LoginShellEmptyOutputTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("shell.sh", isDirectory: false)
+        let script = "#!/bin/sh\nexit 0\n"
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            XCTAssertNil(resolver.resolveLoginShellPath())
+        }
+    }
+
+    func testResolveViaLoginShellReturnsNilWhenShellCommandTimesOut() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LoginShellTimeoutTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("shell.sh", isDirectory: false)
+        let script = "#!/bin/sh\nsleep 10\n"
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            // Force the login-shell fallback path; the stub shell never completes, so it should time out.
+            XCTAssertNil(resolver.resolve("this-executable-should-not-exist-abcdef"))
+        }
+    }
+
+    func testResolveViaLoginShellReturnsNilWhenShellOutputIsNotUTF8() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LoginShellBadUTF8Tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("shell.sh", isDirectory: false)
+        // Print a single invalid UTF-8 byte (0xFF) then exit 0.
+        let script = "#!/bin/sh\nprintf '\\377'\nexit 0\n"
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            XCTAssertNil(resolver.resolve("this-executable-should-not-exist-badutf8"))
+        }
+    }
+
+    // MARK: - ApSystemCommandRunner.run
+
+    func testRunRespectsWorkingDirectory() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WorkingDirTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let runner = ApSystemCommandRunner(executableResolver: ExecutableResolver(loginShellFallbackEnabled: false))
+        let result = runner.run(
+            executable: "pwd",
+            arguments: [],
+            timeoutSeconds: 5,
+            workingDirectory: tempDir.path
+        )
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error.message)")
+        case .success(let output):
+            XCTAssertEqual(output.exitCode, 0)
+            let actual = (output.stdout.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).resolvingSymlinksInPath
+            let expected = (tempDir.path as NSString).resolvingSymlinksInPath
+            XCTAssertEqual(actual, expected)
+        }
+    }
+
+    func testRunReturnsFailureWhenResolvedExecutableCannotBeLaunched() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LaunchFailureTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let resolver = ExecutableResolver(
+            fileSystem: AlwaysExecutableFileSystem(),
+            searchPaths: [tempDir.path],
+            loginShellFallbackEnabled: false
+        )
+        let runner = ApSystemCommandRunner(executableResolver: resolver)
+        let result = runner.run(executable: "nope", arguments: [], timeoutSeconds: 1)
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("Failed to launch"))
+        }
+    }
+
+    func testRunReturnsFailureWhenStdoutIsNotUTF8() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BadStdoutTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let binDir = tempDir.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+
+        let exeURL = binDir.appendingPathComponent("badstdout", isDirectory: false)
+        let script = "#!/bin/sh\nprintf '\\377'\nexit 0\n"
+        try script.write(to: exeURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exeURL.path)
+
+        let resolver = ExecutableResolver(searchPaths: [binDir.path], loginShellFallbackEnabled: false)
+        let runner = ApSystemCommandRunner(executableResolver: resolver)
+
+        let result = runner.run(executable: "badstdout", arguments: [], timeoutSeconds: 5, workingDirectory: nil)
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("UTF-8") && error.message.contains("stdout"))
+        }
+    }
+
+    func testRunReturnsFailureWhenStderrIsNotUTF8() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BadStderrTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let binDir = tempDir.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+
+        let exeURL = binDir.appendingPathComponent("badstderr", isDirectory: false)
+        let script = "#!/bin/sh\nprintf '\\377' 1>&2\nexit 0\n"
+        try script.write(to: exeURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: exeURL.path)
+
+        let resolver = ExecutableResolver(searchPaths: [binDir.path], loginShellFallbackEnabled: false)
+        let runner = ApSystemCommandRunner(executableResolver: resolver)
+
+        let result = runner.run(executable: "badstderr", arguments: [], timeoutSeconds: 5, workingDirectory: nil)
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            XCTAssertTrue(error.message.contains("UTF-8") && error.message.contains("stderr"))
+        }
     }
 }
 
@@ -279,4 +522,38 @@ private final class ChromeLauncherCommandRunnerStub: CommandRunning {
         lastWorkingDirectory = workingDirectory
         return result
     }
+}
+
+private func withShell(_ shell: String?, _ body: () throws -> Void) rethrows {
+    shellEnvLock.lock()
+    defer { shellEnvLock.unlock() }
+
+    let originalShell = ProcessInfo.processInfo.environment["SHELL"]
+    defer {
+        if let originalShell {
+            setenv("SHELL", originalShell, 1)
+        } else {
+            unsetenv("SHELL")
+        }
+    }
+
+    if let shell {
+        setenv("SHELL", shell, 1)
+    } else {
+        unsetenv("SHELL")
+    }
+
+    try body()
+}
+
+private struct AlwaysExecutableFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { true }
+    func readFile(at url: URL) throws -> Data { Data() }
+    func createDirectory(at url: URL) throws {}
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {}
 }

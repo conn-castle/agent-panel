@@ -125,8 +125,8 @@ final class ConfigLoadDefaultTests: XCTestCase {
 
         let result = Config.loadDefault(dataStore: dataStore)
         switch result {
-        case .success(let config):
-            XCTFail("Expected fileNotFound failure, got config: \(config)")
+        case .success(let success):
+            XCTFail("Expected fileNotFound failure, got config: \(success)")
         case .failure(let error):
             XCTAssertEqual(error, .fileNotFound(path: dataStore.configFile.path))
             XCTAssertTrue(FileManager.default.fileExists(atPath: dataStore.configFile.path))
@@ -140,8 +140,8 @@ final class ConfigLoadDefaultTests: XCTestCase {
 
         let result = Config.loadDefault(dataStore: dataStore)
         switch result {
-        case .success(let config):
-            XCTFail("Expected readFailed failure, got config: \(config)")
+        case .success(let success):
+            XCTFail("Expected readFailed failure, got success: \(success)")
         case .failure(let error):
             guard case .readFailed(let path, _) = error else {
                 XCTFail("Expected readFailed, got: \(error)")
@@ -159,8 +159,8 @@ final class ConfigLoadDefaultTests: XCTestCase {
 
         let result = Config.loadDefault(dataStore: dataStore)
         switch result {
-        case .success(let config):
-            XCTFail("Expected parseFailed, got config: \(config)")
+        case .success(let success):
+            XCTFail("Expected parseFailed, got success: \(success)")
         case .failure(let error):
             guard case .parseFailed(let detail) = error else {
                 XCTFail("Expected parseFailed, got: \(error)")
@@ -183,8 +183,8 @@ final class ConfigLoadDefaultTests: XCTestCase {
 
         let result = Config.loadDefault(dataStore: dataStore)
         switch result {
-        case .success(let config):
-            XCTFail("Expected validationFailed, got config: \(config)")
+        case .success(let success):
+            XCTFail("Expected validationFailed, got success: \(success)")
         case .failure(let error):
             guard case .validationFailed(let findings) = error else {
                 XCTFail("Expected validationFailed, got: \(error)")
@@ -211,9 +211,10 @@ final class ConfigLoadDefaultTests: XCTestCase {
         switch result {
         case .failure(let error):
             XCTFail("Expected success, got error: \(error)")
-        case .success(let config):
-            XCTAssertEqual(config.projects.count, 1)
-            XCTAssertEqual(config.projects[0].id, "my-project")
+        case .success(let success):
+            XCTAssertEqual(success.config.projects.count, 1)
+            XCTAssertEqual(success.config.projects[0].id, "my-project")
+            XCTAssertTrue(success.warnings.isEmpty)
         }
     }
 }

@@ -13,7 +13,8 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 - Agent Layer integration: `al sync` + VS Code launch for projects with `useAgentLayer=true`
 - SSH remote projects: VS Code Remote-SSH with Doctor path validation
 - Close project with automatic focus restoration (stack or workspace fallback)
-- Doctor UI in the app menu
+- "View Config File" menu item (opens Finder to config, creates starter if missing)
+- Doctor UI in the app menu (restores previous focus on close)
 - `ap doctor` CLI
 
 ## Requirements
@@ -71,9 +72,9 @@ color = "teal"
 useAgentLayer = false                           # required for SSH projects (mutually exclusive)
 ```
 
-**Agent Layer:** The `[agentLayer]` section sets a global default for `useAgentLayer`. Each project can override this with an explicit `useAgentLayer = true` or `false`. When `useAgentLayer` is `true`, AgentPanel runs `al sync` (CWD = project path) and then launches VS Code via `code --new-window <workspace-file>`. This avoids a current `al vscode` dual-window issue. The `al` and `code` CLIs must be installed and on PATH.
+**Agent Layer:** The `[agentLayer]` section sets a global default for `useAgentLayer`. Each project can override this with an explicit `useAgentLayer = true` or `false`. When `useAgentLayer` is `true`, AgentPanel injects a `// >>> agent-panel` block into the project's `.vscode/settings.json` (for window identification), runs `al sync` (CWD = project path), and then launches VS Code via `al vscode --no-sync --new-window` (CWD = project path). This keeps Agent Layer environment variables like `CODEX_HOME` while avoiding the current `al vscode` dual-window issue by not passing a positional path. The `al` and `code` CLIs must be installed and on PATH.
 
-**SSH projects:** Set `project.remote` to a VS Code Remote-SSH authority (`ssh-remote+user@host`) and `project.path` to the remote absolute path. The workspace file uses a `vscode-remote://...` folder URI (and `remoteAuthority`) so VS Code opens the folder on the SSH host. SSH projects cannot use Agent Layer: set `useAgentLayer = false` for SSH projects (this is required when `[agentLayer] enabled = true`). Doctor validates SSH project paths via `ssh test -d`.
+**SSH projects:** Set `project.remote` to a VS Code Remote-SSH authority (`ssh-remote+user@host`) and `project.path` to the remote absolute path. AgentPanel writes a `// >>> agent-panel` settings.json block on the remote via SSH (required for window identification) and then launches VS Code via `code --new-window --remote <authority> <remote-path>`. If the remote settings write fails, activation fails loudly. Doctor validates SSH project paths via `ssh test -d` and warns if the remote settings.json is missing the AgentPanel block. SSH projects cannot use Agent Layer: set `useAgentLayer = false` for SSH projects (this is required when `[agentLayer] enabled = true`).
 
 **Chrome tabs:** Chrome tab configuration is optional. When a project is activated and a fresh Chrome window is created, tabs are opened in a single step from the last captured snapshot (verbatim, preserving order). If no snapshot exists (cold start), tabs are computed from always-open URLs (global `pinnedTabs` + per-project `chromePinnedTabs` + git remote if enabled) followed by default tabs. All tab URLs are captured verbatim on project close and persisted across app restarts. If the Chrome window is manually closed before the project is closed, the stale snapshot is automatically deleted so the next activation uses cold-start defaults.
 
@@ -88,7 +89,7 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 - Logs (rotated): `~/.local/state/agent-panel/logs/agent-panel.log.1` … `agent-panel.log.5`
 - Logs format: JSON Lines with UTC ISO-8601 timestamps; rotation at 10 MiB
 - Chrome tab snapshots: `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`
-- VS Code workspaces (created during project activation): `~/.local/state/agent-panel/vscode/<projectId>.code-workspace`
+- VS Code settings blocks: injected into `<project-path>/.vscode/settings.json` (local/AL projects) or remote via SSH
 - AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`)
 
 ## Doctor
@@ -108,8 +109,9 @@ Current checks include:
 - `aerospace` CLI available + basic compatibility (required commands/flags)
 - Whether AeroSpace is currently running
 - Whether `~/.aerospace.toml` is AgentPanel-managed
-- VS Code installed
-- Google Chrome installed
+- VS Code installed (FAIL if valid projects are defined, WARN otherwise)
+- Google Chrome installed (FAIL if valid projects are defined, WARN otherwise)
+- Unrecognized `config.toml` keys (FAIL)
 - Logs directory status
 - AgentPanel config parses, and each local `project.path` exists
 - SSH project paths validated via `ssh test -d` (exit 0 = pass, 1 = fail, 255 = connection error)

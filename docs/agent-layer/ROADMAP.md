@@ -77,68 +77,60 @@ Incomplete:
 - Added visual menu bar health indication driven by Doctor results.
 
 ## Phase 5 ✅ — Daily-driver required features
-- Chrome tab persistence/restore via AppleScript with snapshot-is-truth design; URLs captured verbatim on close and restored on activate.
-- LIFO focus stack replacing single-slot design; "exit project space" returns to last non-project window.
-- Agent Layer config: global `[agentLayer] enabled` default (false), per-project override, SSH+AL mutual exclusion at parse time.
-- SSH projects: `project.remote` (ssh-remote+user@host) + remote absolute `project.path`; workspace uses `vscode-remote://...` folder URI + `remoteAuthority` key; Doctor validates via `ssh test -d`.
-- Agent Layer launcher: `ApAgentLayerVSCodeLauncher` creates workspace with `AP:<id>` tag, runs `al sync` (CWD = project path) then `code --new-window <workspace>` directly. Two-step approach avoids dual-window bug in `al vscode` (unconditionally appends `.` to code args). `ProjectManager` selects launcher based on `project.useAgentLayer`.
-- `CommandRunning` extended with `workingDirectory: String?` parameter; shared workspace helper `ApIdeToken.createWorkspaceFile()`.
-- Config hardening: SSH authority option injection rejected at parse time (authorities starting with `-`); local paths validated as absolute; Doctor ssh includes `--` option terminator for defense-in-depth.
-- PATH propagation: `ApSystemCommandRunner` builds augmented PATH (standard paths + login shell PATH + process PATH) with 5s timeout, user's `$SHELL` (validated as absolute path), deduplication, 2s pipe EOF timeout. Child processes receive this environment. Tested in `SystemCommandRunnerTests`.
-- Focus restore workspace fallback: `closeProject` and `exitToNonProjectWindow` fall back to first non-project workspace when focus stack is exhausted. Switcher dismiss tries workspace-level focus before app activation.
-- Switcher refreshes captured focus after `closeProject` (to the newly restored focus) so dismiss and subsequent selections don't use stale pre-switcher focus.
+- Chrome tab persistence: Verbatim URL capture and restoration via AppleScript.
+- LIFO Focus Stack: Returns to last non-project window with workspace-level fallbacks when the stack is exhausted.
+- SSH & Agent Layer Support: Orchestration for `code --remote` and `al sync` with environment preservation and `.vscode/settings.json` tagging for window identification.
+- Config Hardening: Strict absolute path validation and protection against malicious SSH authority options.
+- PATH Propagation: Robust PATH discovery via login shell with timeout and pipe safety.
+- Switcher UX Polish: Automatic focus refresh on project close to ensure reliable restoration and subsequent selections.
+- Core Extensibility: Added `workingDirectory` support to the `CommandRunning` interface.
 
-## Phase 6 — Cleanup: reduce code debt + raise coverage
+## Phase 6 ✅ — Cleanup: reduce code debt + raise coverage
+- View Config File menu item, light mode fix, dismiss policy extraction, config warnings surfacing.
+- Activation error visibility fix (isActivating guard suppresses premature dismiss during async launch).
+- Comprehensive test expansion: switcher dismiss/restore lifecycle, ProjectManager config/sort/recency/activation, CLI runner tests.
+- Doctor hardening: unrecognized config keys → FAIL, VS Code/Chrome severity context-aware, focus restore on Doctor window close.
+- VS Code settings.json block injection replacing workspace files (local + SSH), proactive write on config load.
+- Coverage gate (> 90%) enforced via `scripts/test.sh` + `scripts/coverage_gate.sh` + git pre-commit hook. Hit 95% coverage.
+
+## Phase 7 — Polish required features + harden daily use
 
 ### Goal
-- Reduce high-risk code debt and regressions by addressing prioritized issues before building more features.
-- Establish and enforce a test coverage bar (> 90%) with repeatable tooling.
-- Keep docs and internal APIs consistent as we refactor.
+- Add polish and hardening to existing daily-driver features: better error recovery, visual differentiation, streamlined developer workflow, and quality-of-life improvements.
+- Keep the build/test pipeline fast and reliable.
 
 ### Tasks
-- [ ] Window rescue for floating IDE/app windows: keep the “all windows floating” AeroSpace strategy, but when AgentPanel focuses/activates a project (and when restoring focus via `ap return` / close / exit), detect if the target VS Code (and optionally Chrome) window is mostly off-screen (e.g., only a 1px slice visible due to stale saved coordinates after monitor/Space changes) and automatically reposition it into a visible `NSScreen.visibleFrame` (clamp/center with padding; do not change tiling/layout). Implement via macOS Accessibility window frame control (AX position/size), map AeroSpace `window-id` to the corresponding AX window reliably, fail loudly with a clear error when Accessibility permission is missing, add a Doctor check + remediation guidance for the required permission, add unit tests for the geometry logic + integration tests covering activation/return/close paths, and document the behavior + permission requirement in README (`offscreen-window-rescue`).
-- [ ] Fix activation errors invisible when the panel dismisses during async launch (`activation-error-invisible`).
-- [ ] Add switcher dismiss/restore lifecycle tests (`switcher-lifecycle-tests`).
-- [ ] Expand ProjectManager tests for config load/sort/recency + full activation path (`pm-tests`).
-- [ ] Add CLI runner tests for new ProjectManager-backed commands (`cli-runner-tests`).
-- [ ] Doctor: fail on unrecognized `config.toml` entries (`doctor-unrecognized-config`).
-- [ ] Doctor: VS Code/Chrome checks should FAIL when a project needs them (`doctorsev`).
-- [ ] Config: surface config warnings to UI (and/or CLI) (`config-warn`).
-- [ ] Doctor: restore previous focus when Doctor window closes (`doctor-focus`).
-- [ ] IDE: replace workspace-based VS Code configuration with a settings.json block (`vscode-settings-json`).
-- [x] Add a first-class coverage command/script and document it in COMMANDS.md.
-- [x] Enforce > 90% test coverage as a hard gate in `scripts/test.sh`, CI, and a repo-managed git pre-commit hook.
-- [ ] Raise test coverage to > 90% (as measured by the gate) by adding tests and refactoring for testability.
+- [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3] (`add-window-to-project`).
+- [ ] Auto-start at login (opt-in) (`auto-start`).
+- [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure) in the background without lagging the app, surfacing a diagnostic report when relevant (`auto-doctor`).
+- [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed). Also, need to actually set VS Code project color, since that's not done today (`chrome-vscode-color`).
+- [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
 
 ### Exit criteria
-- All issues referenced in this phase are fixed and removed from ISSUES.md.
-- Overall test coverage is > 90% (measured by a documented command in COMMANDS.md).
-- `scripts/test.sh` passes.
-- Any affected Markdown docs are updated and accurate (README, CORE_API.md, agent-layer docs).
+- All tasks are implemented, tested, and documented.
+- `make test` and `make coverage` work correctly; CI uses `make coverage` as its gate.
+- Auto-doctor runs in the background on operational errors without blocking the main thread or lagging the app.
+- Chrome/VS Code visual correlation is present for projects where the feature is enabled.
+- `scripts/test.sh` (or `make coverage`) passes with > 90% coverage.
 
-## Phase 7 — Extra non-required features
+## Phase 8 — Extra non-required features
 
 ### Goal
 - Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
 
 ### Tasks
-- [ ] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3]
+- [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
 - [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
 - [ ] Fuzzy search with ranking in the switcher.
-- [ ] Auto-start at login (opt-in).
-- [ ] Automatically run Doctor on operational errors (for example project startup failure or command failure), either in the background or by surfacing a diagnostic report.
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
-- [ ] Add Chrome visual differentiation that matches the associated VS Code project color/theme (for example via profile customization or theme injection, using VSCodeColorPalette guidance as needed). Also, need to actually set VS Code project color, since that's not done today.
 
 ### Exit criteria
 - Optional UX features are implemented without regressing required daily-driver workflows.
-- Operational failures trigger automatic diagnostics in a predictable, documented way.
 - AeroSpace icon visibility can be configured without disabling functional behavior.
-- Chrome/VS Code visual correlation is present for projects where the feature is enabled.
 - Behavior and limitations are documented where needed.
 - New behavior is covered by tests.
 
-## Phase 8 — Release: packaging, verification, and documentation
+## Phase 9 — Release: packaging, verification, and documentation
 
 ### Goal
 - Ship a release-quality build with deterministic install/upgrade and scripted release steps.
@@ -157,7 +149,7 @@ Incomplete:
 - A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
 - CI is green and a release checklist exists.
 
-## Phase 9 — Future post-release features
+## Phase 10 — Future post-release features
 
 ### Goal
 - Track larger post-release product features that are intentionally deferred until after release.
@@ -172,4 +164,4 @@ Incomplete:
 ### Exit criteria
 - Missing-config onboarding path allows users to add and open a project from Switcher with explicit error surfacing and no silent defaults.
 - Dedicated-space behavior is deterministic and matches the selected configuration strategy.
-- Phase 9 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
+- Phase 10 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.

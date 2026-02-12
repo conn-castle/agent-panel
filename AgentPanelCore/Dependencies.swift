@@ -58,6 +58,7 @@ public protocol HotkeyStatusProviding {
 /// - StateStore: fileExists, readFile, createDirectory, writeFile
 protocol FileSystem {
     func fileExists(at url: URL) -> Bool
+    func directoryExists(at url: URL) -> Bool
     func isExecutableFile(at url: URL) -> Bool
     func readFile(at url: URL) throws -> Data
     func createDirectory(at url: URL) throws
@@ -66,6 +67,15 @@ protocol FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws
     func appendFile(at url: URL, data: Data) throws
     func writeFile(at url: URL, data: Data) throws
+}
+
+extension FileSystem {
+    /// Default directory existence check.
+    ///
+    /// Concrete file systems may override this to distinguish between files and directories.
+    func directoryExists(at url: URL) -> Bool {
+        false
+    }
 }
 
 /// Default file system implementation backed by FileManager.
@@ -78,6 +88,11 @@ struct DefaultFileSystem: FileSystem {
 
     func fileExists(at url: URL) -> Bool {
         fileManager.fileExists(atPath: url.path)
+    }
+
+    func directoryExists(at url: URL) -> Bool {
+        var isDirectory = ObjCBool(false)
+        return fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     func isExecutableFile(at url: URL) -> Bool {

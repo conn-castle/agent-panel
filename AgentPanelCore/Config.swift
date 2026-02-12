@@ -309,7 +309,7 @@ struct ConfigLoader {
 #
 # [[project]]
 # name = "Remote ML"
-# remote = "ssh-remote+nconn@happy-mac.local"
+# remote = "ssh-remote+nconn@my-remote-host.local"
 # path = "/Users/nconn/Documents/git-repos/local-ml"
 # color = "teal"
 # useAgentLayer = false
@@ -326,11 +326,11 @@ struct ConfigLoader {
     }
 
     /// Loads and parses a config file at the given URL.
-    static func load(from url: URL) -> Result<ConfigLoadResult, ConfigError> {
+    static func load(from url: URL, fileSystem: FileSystem = DefaultFileSystem()) -> Result<ConfigLoadResult, ConfigError> {
         let path = url.path
-        if !FileManager.default.fileExists(atPath: path) {
+        if !fileSystem.fileExists(at: url) {
             do {
-                try createStarterConfig(at: url)
+                try createStarterConfig(at: url, fileSystem: fileSystem)
             } catch {
                 return .failure(ConfigError(
                     kind: .createFailed,
@@ -345,7 +345,14 @@ struct ConfigLoader {
 
         let raw: String
         do {
-            raw = try String(contentsOf: url, encoding: .utf8)
+            let data = try fileSystem.readFile(at: url)
+            guard let decoded = String(data: data, encoding: .utf8) else {
+                return .failure(ConfigError(
+                    kind: .readFailed,
+                    message: "Failed to read config at \(path): file is not valid UTF-8."
+                ))
+            }
+            raw = decoded
         } catch {
             return .failure(ConfigError(
                 kind: .readFailed,
@@ -357,10 +364,13 @@ struct ConfigLoader {
     }
 
     /// Writes a starter config template at the provided location.
-    private static func createStarterConfig(at url: URL) throws {
+    private static func createStarterConfig(at url: URL, fileSystem: FileSystem) throws {
         let directory = url.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try starterConfigTemplate.write(to: url, atomically: true, encoding: .utf8)
+        try fileSystem.createDirectory(at: directory)
+        guard let data = starterConfigTemplate.data(using: .utf8) else {
+            throw NSError(domain: "ConfigLoader", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode starter config as UTF-8"])
+        }
+        try fileSystem.writeFile(at: url, data: data)
     }
 }
 
@@ -390,6 +400,8 @@ struct ConfigParser {
 
     private static func parse(table: TOMLTable) -> ConfigLoadResult {
         var findings: [ConfigFinding] = []
+
+        checkForUnknownKeys(in: table, knownKeys: knownTopLevelKeys, section: "top-level", findings: &findings)
 
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
@@ -430,6 +442,8 @@ struct ConfigParser {
             ))
             return ChromeConfig()
         }
+
+        checkForUnknownKeys(in: chromeTable, knownKeys: knownChromeKeys, section: "[chrome]", findings: &findings)
 
         let pinnedTabs = readOptionalStringArray(
             from: chromeTable, key: "pinnedTabs",
@@ -474,6 +488,8 @@ struct ConfigParser {
             ))
             return AgentLayerConfig()
         }
+
+        checkForUnknownKeys(in: agentLayerTable, knownKeys: knownAgentLayerKeys, section: "[agentLayer]", findings: &findings)
 
         let enabled = readOptionalBool(
             from: agentLayerTable, key: "enabled",
@@ -557,6 +573,8 @@ struct ConfigParser {
         findings: inout [ConfigFinding]
     ) -> ProjectOutcome {
         var projectIsValid = true
+
+        checkForUnknownKeys(in: table, knownKeys: knownProjectKeys, section: "[[project]]", findings: &findings)
 
         let name = readNonEmptyString(
             from: table,
@@ -653,39 +671,37 @@ struct ConfigParser {
         // Remote SSH validation (VS Code Remote-SSH)
         var normalizedRemote: String?
         if let remote {
-            if !remote.hasPrefix("ssh-remote+") {
+            switch ApSSHHelpers.parseRemoteAuthority(remote) {
+            case .success:
+                normalizedRemote = remote
+            case .failure(.missingPrefix):
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].remote: SSH remote authority must start with 'ssh-remote+'",
                     fix: "Use format: remote = \"ssh-remote+user@host\""
                 ))
                 projectIsValid = false
-            } else if remote.contains(where: { $0.isWhitespace }) {
+            case .failure(.containsWhitespace):
                 findings.append(ConfigFinding(
                     severity: .fail,
                     title: "project[\(index)].remote: SSH remote authority must not contain whitespace",
                     fix: "Use format: remote = \"ssh-remote+user@host\""
                 ))
                 projectIsValid = false
-            } else {
-                let authority = remote.dropFirst("ssh-remote+".count)
-                if authority.isEmpty {
-                    findings.append(ConfigFinding(
-                        severity: .fail,
-                        title: "project[\(index)].remote: SSH remote authority is missing host (expected ssh-remote+user@host)",
-                        fix: "Use format: remote = \"ssh-remote+user@host\""
-                    ))
-                    projectIsValid = false
-                } else if authority.hasPrefix("-") {
-                    findings.append(ConfigFinding(
-                        severity: .fail,
-                        title: "project[\(index)].remote: SSH remote authority must not start with '-'",
-                        fix: "Use format: remote = \"ssh-remote+user@host\""
-                    ))
-                    projectIsValid = false
-                } else {
-                    normalizedRemote = remote
-                }
+            case .failure(.missingTarget):
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority is missing host (expected ssh-remote+user@host)",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
+            case .failure(.targetStartsWithDash):
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "project[\(index)].remote: SSH remote authority must not start with '-'",
+                    fix: "Use format: remote = \"ssh-remote+user@host\""
+                ))
+                projectIsValid = false
             }
         }
 
@@ -765,6 +781,44 @@ struct ConfigParser {
             chromeDefaultTabs: chromeDefaultTabs
         )
         return ProjectOutcome(config: projectConfig)
+    }
+
+    // MARK: - Unknown Key Detection
+
+    /// Known top-level keys in config.toml.
+    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project"]
+
+    /// Known keys in the [chrome] section.
+    private static let knownChromeKeys: Set<String> = ["pinnedTabs", "defaultTabs", "openGitRemote"]
+
+    /// Known keys in the [agentLayer] section.
+    private static let knownAgentLayerKeys: Set<String> = ["enabled"]
+
+    /// Known keys in each [[project]] entry.
+    private static let knownProjectKeys: Set<String> = [
+        "name", "remote", "path", "color", "useAgentLayer", "chromePinnedTabs", "chromeDefaultTabs"
+    ]
+
+    /// Checks for unrecognized keys in a TOMLTable and emits FAIL findings for each.
+    /// - Parameters:
+    ///   - table: The TOML table to check.
+    ///   - knownKeys: Set of recognized key names.
+    ///   - section: Human-readable section label (e.g., "top-level", "[chrome]", "project[0]").
+    ///   - findings: Findings array to append to.
+    private static func checkForUnknownKeys(
+        in table: TOMLTable,
+        knownKeys: Set<String>,
+        section: String,
+        findings: inout [ConfigFinding]
+    ) {
+        let unknown = Set(table.keys).subtracting(knownKeys).sorted()
+        for key in unknown {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "Unrecognized \(section) config key: \(key)",
+                fix: "Remove '\(key)' from config.toml. Known \(section) keys are: \(knownKeys.sorted().joined(separator: ", "))."
+            ))
+        }
     }
 
     // MARK: - Validation Helpers
@@ -961,21 +1015,39 @@ public enum ConfigLoadError: Error, Equatable, Sendable {
     case validationFailed(findings: [ConfigFinding])
 }
 
+// MARK: - ConfigLoadSuccess
+
+/// Successful result of loading configuration via `Config.loadDefault()`.
+///
+/// Carries the validated config and any non-fatal warnings from parsing.
+public struct ConfigLoadSuccess: Equatable, Sendable {
+    /// The validated configuration.
+    public let config: Config
+    /// Non-fatal warnings from config parsing (severity == .warn).
+    public let warnings: [ConfigFinding]
+
+    public init(config: Config, warnings: [ConfigFinding] = []) {
+        self.config = config
+        self.warnings = warnings
+    }
+}
+
 // MARK: - Config Public Loading API
 
 extension Config {
     /// Loads and validates configuration from the default path.
     ///
     /// This is the recommended entry point for App to load configuration.
-    /// It provides a simplified API that returns either a valid Config or
-    /// a descriptive error. Uses `ConfigLoader` as the single source of truth.
+    /// It provides a simplified API that returns either a valid `ConfigLoadSuccess`
+    /// (config + warnings) or a descriptive error. Uses `ConfigLoader` as the
+    /// single source of truth.
     ///
-    /// - Returns: Result with validated Config or ConfigLoadError.
-    public static func loadDefault() -> Result<Config, ConfigLoadError> {
+    /// - Returns: Result with ConfigLoadSuccess or ConfigLoadError.
+    public static func loadDefault() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         loadDefault(dataStore: DataPaths.default())
     }
 
-    static func loadDefault(dataStore: DataPaths) -> Result<Config, ConfigLoadError> {
+    static func loadDefault(dataStore: DataPaths) -> Result<ConfigLoadSuccess, ConfigLoadError> {
         let path = dataStore.configFile.path
 
         // Use ConfigLoader as single source of truth
@@ -1004,7 +1076,8 @@ extension Config {
                 return .failure(.validationFailed(findings: result.findings))
             }
 
-            return .success(config)
+            let warnings = result.findings.filter { $0.severity == .warn }
+            return .success(ConfigLoadSuccess(config: config, warnings: warnings))
         }
     }
 }

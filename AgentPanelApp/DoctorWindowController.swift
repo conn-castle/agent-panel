@@ -15,7 +15,7 @@ import AgentPanelCore
 ///
 /// Separates Doctor window UI concerns from the main AppDelegate.
 /// Uses callback-based interface for actions to maintain clear separation.
-final class DoctorWindowController {
+final class DoctorWindowController: NSObject, NSWindowDelegate {
     // MARK: - Action Callbacks
 
     /// Called when user requests to run Doctor.
@@ -30,6 +30,15 @@ final class DoctorWindowController {
     var onReloadConfig: (() -> Void)?
     /// Called when user closes the window.
     var onClose: (() -> Void)?
+
+    // MARK: - Focus Restoration
+
+    /// AeroSpace window focus captured before the Doctor window was first shown.
+    /// Only set on the first open; preserved across re-runs within the same Doctor session.
+    var capturedFocus: CapturedFocus?
+
+    /// Fallback: the frontmost app before the Doctor window was first shown.
+    var previousApp: NSRunningApplication?
 
     // MARK: - UI State
 
@@ -81,10 +90,17 @@ final class DoctorWindowController {
         let contentView = makeContentView(textView: textViewInstance, buttons: buttonsInstance)
         windowInstance.contentView = contentView
         windowInstance.isReleasedWhenClosed = false
+        windowInstance.delegate = self
 
         window = windowInstance
         textView = textViewInstance
         buttons = buttonsInstance
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 
     private func makeWindow() -> NSWindow {
@@ -211,7 +227,8 @@ final class DoctorWindowController {
     }
 
     @objc private func handleClose() {
-        onClose?()
+        // Close the window, which triggers windowWillClose → onClose callback.
+        window?.close()
     }
 }
 

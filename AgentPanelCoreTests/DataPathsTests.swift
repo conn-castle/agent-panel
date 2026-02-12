@@ -20,12 +20,6 @@ final class DataPathsTests: XCTestCase {
             store.chromeTabsFile(projectId: "my-project").path,
             "/Users/testuser/.local/state/agent-panel/chrome-tabs/my-project.json"
         )
-
-        XCTAssertEqual(store.vscodeWorkspaceDirectory.path, "/Users/testuser/.local/state/agent-panel/vscode")
-        XCTAssertEqual(
-            store.vscodeWorkspaceFile(projectId: "my-project").path,
-            "/Users/testuser/.local/state/agent-panel/vscode/my-project.code-workspace"
-        )
     }
 
     func testHomeDirectoryIsStandardized() {

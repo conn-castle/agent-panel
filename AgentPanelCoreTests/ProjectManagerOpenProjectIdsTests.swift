@@ -178,7 +178,7 @@ final class ProjectManagerSortingTests: XCTestCase {
         let manager = makeManager(
             configLoader: {
                 .success(
-                    Config(projects: [
+                    ConfigLoadSuccess(config: Config(projects: [
                         ProjectConfig(
                             id: "a",
                             name: "Alpha",
@@ -186,7 +186,7 @@ final class ProjectManagerSortingTests: XCTestCase {
                             color: "blue",
                             useAgentLayer: false
                         )
-                    ])
+                    ]))
                 )
             }
         )
@@ -194,8 +194,8 @@ final class ProjectManagerSortingTests: XCTestCase {
         switch manager.loadConfig() {
         case .failure(let error):
             XCTFail("Expected loadConfig to succeed, got: \(error)")
-        case .success(let config):
-            XCTAssertEqual(config.projects.map(\.id), ["a"])
+        case .success(let success):
+            XCTAssertEqual(success.config.projects.map(\.id), ["a"])
         }
 
         XCTAssertEqual(manager.projects.map(\.id), ["a"])
@@ -207,13 +207,94 @@ final class ProjectManagerSortingTests: XCTestCase {
         )
 
         switch manager.loadConfig() {
-        case .success(let config):
-            XCTFail("Expected failure, got config: \(config)")
+        case .success(let success):
+            XCTFail("Expected failure, got config: \(success)")
         case .failure(let error):
             XCTAssertEqual(error, .parseFailed(detail: "bad toml"))
         }
 
         XCTAssertEqual(manager.projects, [])
+    }
+
+    func testLoadConfigStoresWarningsFromConfigLoadSuccess() {
+        let warning = ConfigFinding(severity: .warn, title: "Deprecated field: foo")
+        let manager = makeManager(
+            configLoader: {
+                .success(
+                    ConfigLoadSuccess(
+                        config: Config(projects: []),
+                        warnings: [warning]
+                    )
+                )
+            }
+        )
+
+        switch manager.loadConfig() {
+        case .failure(let error):
+            XCTFail("Expected success, got error: \(error)")
+        case .success(let success):
+            XCTAssertEqual(success.warnings.count, 1)
+            XCTAssertEqual(success.warnings[0].title, "Deprecated field: foo")
+        }
+
+        XCTAssertEqual(manager.configWarnings.count, 1)
+        XCTAssertEqual(manager.configWarnings[0].title, "Deprecated field: foo")
+    }
+
+    func testLoadConfigClearsWarningsOnNoWarnings() {
+        var loadCount = 0
+        let warning = ConfigFinding(severity: .warn, title: "Deprecated field: foo")
+        let manager = makeManager(
+            configLoader: {
+                loadCount += 1
+                if loadCount == 1 {
+                    return .success(
+                        ConfigLoadSuccess(
+                            config: Config(projects: []),
+                            warnings: [warning]
+                        )
+                    )
+                } else {
+                    return .success(
+                        ConfigLoadSuccess(
+                            config: Config(projects: []),
+                            warnings: []
+                        )
+                    )
+                }
+            }
+        )
+
+        // First load — has warnings
+        _ = manager.loadConfig()
+        XCTAssertEqual(manager.configWarnings.count, 1)
+
+        // Second load — no warnings, should clear
+        _ = manager.loadConfig()
+        XCTAssertTrue(manager.configWarnings.isEmpty)
+    }
+
+    func testLoadConfigClearsWarningsOnFailure() {
+        var shouldSucceed = true
+        let warning = ConfigFinding(severity: .warn, title: "Deprecated field: foo")
+        let manager = makeManager(
+            configLoader: {
+                if shouldSucceed {
+                    return .success(ConfigLoadSuccess(config: Config(projects: []), warnings: [warning]))
+                } else {
+                    return .failure(.parseFailed(detail: "bad"))
+                }
+            }
+        )
+
+        // First load — has warnings
+        _ = manager.loadConfig()
+        XCTAssertEqual(manager.configWarnings.count, 1)
+
+        // Second load — failure clears warnings
+        shouldSucceed = false
+        _ = manager.loadConfig()
+        XCTAssertTrue(manager.configWarnings.isEmpty)
     }
 
     func testSortedProjectsUsesRecencyWhenQueryEmpty() {
@@ -338,7 +419,7 @@ final class ProjectManagerSortingTests: XCTestCase {
     private func makeManager(
         aerospace: AeroSpaceProviding = RecordingFocusAeroSpaceStub(),
         recencyFilePath: URL? = nil,
-        configLoader: @escaping () -> Result<Config, ConfigLoadError> = { .success(Config(projects: [])) }
+        configLoader: @escaping () -> Result<ConfigLoadSuccess, ConfigLoadError> = { .success(ConfigLoadSuccess(config: Config(projects: []))) }
     ) -> ProjectManager {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let effectiveRecencyFilePath = recencyFilePath
