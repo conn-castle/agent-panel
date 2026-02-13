@@ -40,6 +40,11 @@ public struct DataPaths: Sendable {
         stateDirectory.appendingPathComponent("recent-projects.json", isDirectory: false)
     }
 
+    /// Returns `~/.local/state/agent-panel/window-layouts.json`.
+    var windowLayoutsFile: URL {
+        stateDirectory.appendingPathComponent("window-layouts.json", isDirectory: false)
+    }
+
     /// Returns `~/.local/state/agent-panel/chrome-tabs/`.
     var chromeTabsDirectory: URL {
         stateDirectory.appendingPathComponent("chrome-tabs", isDirectory: true)

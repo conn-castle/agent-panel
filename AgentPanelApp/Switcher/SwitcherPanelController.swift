@@ -888,10 +888,16 @@ final class SwitcherPanelController: NSObject {
                 switch result {
                 case .success(let activation):
                     if let warning = activation.tabRestoreWarning {
-                        // Panel is already being dismissed — can't show in status bar.
-                        // Log only; the user will see Chrome opened without their tabs.
                         self.session.logEvent(
                             event: "switcher.project.tab_restore_warning",
+                            level: .warn,
+                            message: warning,
+                            context: ["project_id": projectId]
+                        )
+                    }
+                    if let warning = activation.layoutWarning {
+                        self.session.logEvent(
+                            event: "switcher.project.layout_warning",
                             level: .warn,
                             message: warning,
                             context: ["project_id": projectId]

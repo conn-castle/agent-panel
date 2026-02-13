@@ -46,7 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHealthRefreshInFlight: Bool = false
     private var lastHealthRefreshAt: Date?
     private let logger: AgentPanelLogging = AgentPanelLogger()
-    private let projectManager = ProjectManager()
+    private let projectManager = ProjectManager(
+        windowPositioner: AXWindowPositioner(),
+        screenModeDetector: ScreenModeDetector()
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run onboarding check asynchronously before setting up the app
@@ -450,7 +453,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeDoctor() -> Doctor {
         Doctor(
             runningApplicationChecker: AppKitRunningApplicationChecker(),
-            hotkeyStatusProvider: hotkeyManager
+            hotkeyStatusProvider: hotkeyManager,
+            windowPositioner: AXWindowPositioner()
         )
     }
 
@@ -531,6 +535,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             { $0.reloadAeroSpaceConfig() },
             requestedEvent: "doctor.reload_aerospace.requested",
             completedEvent: "doctor.reload_aerospace.completed"
+        )
+    }
+
+    /// Requests Accessibility permission and refreshes the report.
+    private func requestAccessibility() {
+        runDoctorAction(
+            { $0.requestAccessibility() },
+            requestedEvent: "doctor.request_accessibility.requested",
+            completedEvent: "doctor.request_accessibility.completed"
         )
     }
 
@@ -651,6 +664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onInstallAeroSpace = { [weak self] in self?.installAeroSpace() }
         controller.onStartAeroSpace = { [weak self] in self?.startAeroSpace() }
         controller.onReloadConfig = { [weak self] in self?.reloadAeroSpaceConfig() }
+        controller.onRequestAccessibility = { [weak self] in self?.requestAccessibility() }
         controller.onClose = { [weak self] in self?.closeDoctorWindow() }
         doctorController = controller
         return controller

@@ -330,6 +330,155 @@ final class DoctorSSHTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: dataStore.configFile.path))
     }
 
+    // MARK: - Accessibility permission check
+
+    func testRunReportsAccessibilityPassWhenTrusted() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            windowPositioner: StubWindowPositioner(trusted: true)
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title == "Accessibility permission granted"
+        })
+    }
+
+    func testRunReportsAccessibilityFailWhenNotTrusted() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            windowPositioner: StubWindowPositioner(trusted: false)
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .fail && $0.title == "Accessibility permission not granted"
+        })
+    }
+
+    func testCanRequestAccessibilityTrueWhenNotTrusted() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            windowPositioner: StubWindowPositioner(trusted: false)
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.actions.canRequestAccessibility)
+    }
+
+    func testCanRequestAccessibilityFalseWhenTrusted() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            windowPositioner: StubWindowPositioner(trusted: true)
+        )
+
+        let report = doctor.run()
+
+        XCTAssertFalse(report.actions.canRequestAccessibility)
+    }
+
+    func testCanRequestAccessibilityFalseWhenNoPositioner() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true
+        )
+
+        let report = doctor.run()
+
+        XCTAssertFalse(report.actions.canRequestAccessibility)
+    }
+
+    func testRequestAccessibilityCallsPromptAndReturnsReport() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let positioner = StubWindowPositioner(trusted: false)
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            windowPositioner: positioner
+        )
+
+        let report = doctor.requestAccessibility()
+
+        XCTAssertEqual(positioner.promptCalls, 1)
+        // The report should still exist (re-runs Doctor after prompting)
+        XCTAssertFalse(report.findings.isEmpty)
+    }
+
+    func testRunOmitsAccessibilityCheckWhenNoPositioner() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true
+        )
+
+        let report = doctor.run()
+
+        XCTAssertFalse(report.findings.contains {
+            $0.title.contains("Accessibility")
+        })
+    }
+
     // MARK: - SSH exit 1 → FAIL (path missing)
 
     func testSSHProjectExitOneFailsFinding() {
@@ -711,7 +860,8 @@ final class DoctorSSHTests: XCTestCase {
         runningAeroSpace: Bool,
         appDiscoveryInstalled: Bool,
         aerospaceHealth: AeroSpaceHealthChecking = StubAeroSpaceHealth(),
-        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        windowPositioner: WindowPositioning? = nil
     ) throws -> Doctor {
         let configDir = tempDir.appendingPathComponent(".config/agent-panel", isDirectory: true)
         try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
@@ -740,7 +890,8 @@ final class DoctorSSHTests: XCTestCase {
             appDiscovery: appDiscovery,
             executableResolver: resolver,
             commandRunner: runner,
-            dataStore: dataStore
+            dataStore: dataStore,
+            windowPositioner: windowPositioner
         )
     }
 }
@@ -863,6 +1014,32 @@ private class StubCommandRunner: CommandRunning {
     ) -> Result<ApCommandResult, ApCoreError> {
         allArguments.append(arguments)
         return result
+    }
+}
+
+private class StubWindowPositioner: WindowPositioning {
+    let trusted: Bool
+    private(set) var promptCalls = 0
+
+    init(trusted: Bool) {
+        self.trusted = trusted
+    }
+
+    func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
+        .failure(ApCoreError(category: .window, message: "stub"))
+    }
+
+    func setWindowFrames(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
+        .failure(ApCoreError(category: .window, message: "stub"))
+    }
+
+    func isAccessibilityTrusted() -> Bool {
+        trusted
+    }
+
+    func promptForAccessibility() -> Bool {
+        promptCalls += 1
+        return trusted
     }
 }
 

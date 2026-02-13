@@ -72,9 +72,34 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: All call sites (ProjectManager, CLI handlers, App, tests) required migration to unwrap `.config` from the success value.
 
 - Decision 2026-02-10 covgate: Coverage gate enforced via scripts/test.sh
-    Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`, `AgentPanelAppKit`) via `scripts/coverage_gate.sh`. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
-    Reason: Deterministic quality bar for core/business logic; presentation/UI code is intentionally not gated.
-    Tradeoffs: UI target coverage is not enforced; developers must install git hooks locally (CI still enforces).
+    Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`) via `scripts/coverage_gate.sh`. `AgentPanelAppKit` is excluded because it contains system-level code (AX APIs, NSScreen, CGDisplay) that requires a live window server — not exercisable in CI unit tests. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
+    Reason: Deterministic quality bar for core/business logic; presentation/UI code and system integration code are intentionally not gated.
+    Tradeoffs: UI and AppKit target coverage is not enforced; developers must install git hooks locally (CI still enforces).
+
+- Decision 2026-02-12 windowlayout: Window positioning uses AX APIs with Core/AppKit protocol layering
+    Decision: Window positioning protocols (WindowPositioning, ScreenModeDetecting) are defined in Core using only Foundation/CG types. Concrete implementations (AXWindowPositioner, ScreenModeDetector) live in AppKit module. ProjectManager accepts them as optional init params from App/CLI callers.
+    Reason: Core cannot import AppKit. Protocols with Foundation/CG types allow business logic (layout engine, position store, config validation) to stay in Core and be fully unit-testable, while AX/NSScreen code stays in AppKit.
+    Tradeoffs: AppKit code (~350 lines) is not coverage-gated (requires live window server). AgentPanelAppKit excluded from coverage gate.
+
+- Decision 2026-02-12 cascadematch: Multiple AX window matches are cascaded, not rejected
+    Decision: When multiple windows match the `AP:<projectId>` title token for a bundle ID, the first window (title-sorted) gets the target frame; subsequent matches are offset by 0.5 inches down-right (cascade pattern).
+    Reason: Users may have duplicate tagged windows from VS Code reload or Chrome reopens. Rejecting the positioning on multi-match would be surprising and unhelpful.
+    Tradeoffs: Cascade offset is fixed at 0.5 inches regardless of window count; deeply stacked windows may overlap.
+
+- Decision 2026-02-12 hardfaillayout: Invalid [layout] config values produce FAIL findings (hard-fail, no per-field fallback)
+    Decision: If any `[layout]` value is out of range or the wrong type, it is a FAIL finding that prevents config from loading. No per-field fallback to defaults.
+    Reason: Silent fallback to defaults on invalid values violates the "fail loudly" principle and can produce confusing positioning behavior.
+    Tradeoffs: A single typo in `[layout]` blocks all config loading. Users must fix the value to proceed.
+
+- Decision 2026-02-12 axprompt: Accessibility prompt via Doctor button only (not app launch)
+    Decision: Do not auto-prompt for Accessibility permission on app launch. Instead, Doctor shows a "Request Accessibility" button when the check is FAIL.
+    Reason: Auto-prompting on every launch is invasive UX — the system dialog is modal and disruptive, especially when the user may not need window positioning.
+    Tradeoffs: Users must open Doctor to trigger the Accessibility prompt. First-time users won't be prompted until they check Doctor or try window positioning.
+
+- Decision 2026-02-12 axvaluetype: CFGetTypeID-based AXValue type checking (not Swift conditional cast)
+    Decision: Use `CFGetTypeID(obj) == AXValueGetTypeID()` to validate AXValue types before downcasting, instead of `as? AXValue`.
+    Reason: Swift `as?` conditional cast always succeeds for CoreFoundation bridged types — it never returns nil for AXValue, making it useless as a type guard.
+    Tradeoffs: Slightly more verbose code, but actually catches type mismatches that `as?` silently passes through.
 
 - Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
     Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.

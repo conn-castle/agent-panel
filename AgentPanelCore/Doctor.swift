@@ -73,22 +73,26 @@ public struct DoctorActionAvailability: Equatable, Sendable {
     public let canInstallAeroSpace: Bool
     public let canStartAeroSpace: Bool
     public let canReloadAeroSpaceConfig: Bool
+    public let canRequestAccessibility: Bool
 
     init(
         canInstallAeroSpace: Bool,
         canStartAeroSpace: Bool,
-        canReloadAeroSpaceConfig: Bool
+        canReloadAeroSpaceConfig: Bool,
+        canRequestAccessibility: Bool = false
     ) {
         self.canInstallAeroSpace = canInstallAeroSpace
         self.canStartAeroSpace = canStartAeroSpace
         self.canReloadAeroSpaceConfig = canReloadAeroSpaceConfig
+        self.canRequestAccessibility = canRequestAccessibility
     }
 
     /// Returns a disabled action set.
     static let none = DoctorActionAvailability(
         canInstallAeroSpace: false,
         canStartAeroSpace: false,
-        canReloadAeroSpaceConfig: false
+        canReloadAeroSpaceConfig: false,
+        canRequestAccessibility: false
     )
 }
 
@@ -202,6 +206,7 @@ public struct Doctor {
     private let commandRunner: CommandRunning
     private let fileSystem: FileSystem
     private let dataStore: DataPaths
+    private let windowPositioner: WindowPositioning?
 
     /// Creates a Doctor instance with default dependencies.
     /// - Parameters:
@@ -209,7 +214,8 @@ public struct Doctor {
     ///   - hotkeyStatusProvider: Optional hotkey status provider for hotkey registration checks.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
-        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        windowPositioner: WindowPositioning? = nil
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
@@ -220,6 +226,7 @@ public struct Doctor {
         self.commandRunner = ApSystemCommandRunner()
         self.fileSystem = DefaultFileSystem()
         self.dataStore = .default()
+        self.windowPositioner = windowPositioner
     }
 
     /// Creates a Doctor instance with full dependency injection (internal, for testing).
@@ -241,7 +248,8 @@ public struct Doctor {
         executableResolver: ExecutableResolver,
         commandRunner: CommandRunning,
         dataStore: DataPaths,
-        fileSystem: FileSystem = DefaultFileSystem()
+        fileSystem: FileSystem = DefaultFileSystem(),
+        windowPositioner: WindowPositioning? = nil
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
@@ -252,6 +260,7 @@ public struct Doctor {
         self.commandRunner = commandRunner
         self.dataStore = dataStore
         self.fileSystem = fileSystem
+        self.windowPositioner = windowPositioner
     }
 
     /// Builds a UTC ISO-8601 timestamp string with fractional seconds.
@@ -494,6 +503,25 @@ public struct Doctor {
             ))
         }
 
+        // Check Accessibility permission for window positioning
+        var accessibilityNotGranted = false
+        if let positioner = windowPositioner {
+            if positioner.isAccessibilityTrusted() {
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Accessibility permission granted"
+                ))
+            } else {
+                accessibilityNotGranted = true
+                findings.append(DoctorFinding(
+                    severity: .fail,
+                    title: "Accessibility permission not granted",
+                    detail: "Required for automatic window positioning when activating projects",
+                    fix: "Open System Settings > Privacy & Security > Accessibility > Enable AgentPanel"
+                ))
+            }
+        }
+
         // Check hotkey status if provider available
         if let provider = hotkeyStatusProvider {
             switch provider.hotkeyRegistrationStatus() {
@@ -535,7 +563,8 @@ public struct Doctor {
         let actions = DoctorActionAvailability(
             canInstallAeroSpace: !installStatus.isInstalled,
             canStartAeroSpace: installStatus.isInstalled && !aerospaceRunning,
-            canReloadAeroSpaceConfig: aerospaceRunning
+            canReloadAeroSpaceConfig: aerospaceRunning,
+            canRequestAccessibility: accessibilityNotGranted
         )
 
         return DoctorReport(metadata: metadata, findings: findings, actions: actions)
@@ -822,6 +851,12 @@ public struct Doctor {
     /// Reloads the AeroSpace config and returns an updated report.
     public func reloadAeroSpaceConfig() -> DoctorReport {
         _ = aerospaceHealth.healthReloadConfig()
+        return run()
+    }
+
+    /// Prompts for Accessibility permission and returns an updated report.
+    public func requestAccessibility() -> DoctorReport {
+        _ = windowPositioner?.promptForAccessibility()
         return run()
     }
 }

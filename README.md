@@ -53,6 +53,14 @@ pinnedTabs = ["https://dashboard.example.com"]   # optional; always-open tabs fo
 defaultTabs = ["https://docs.example.com"]        # optional; default tabs when no history
 openGitRemote = true                              # optional; auto-open git remote URL
 
+[layout]
+smallScreenThreshold = 24    # optional; inches; monitors below this are "small mode" (default: 24)
+windowHeight = 90            # optional; % of screen height (1–100, default: 90)
+maxWindowWidth = 18          # optional; inches; max window width cap (default: 18)
+idePosition = "left"         # optional; "left" or "right" (default: "left")
+justification = "right"      # optional; "left" or "right" — which edge windows align to (default: "right")
+maxGap = 10                  # optional; % of screen width for gap between windows (0–100, default: 10)
+
 [agentLayer]
 enabled = true   # optional; global default for useAgentLayer (default: false)
 
@@ -72,6 +80,8 @@ color = "teal"
 useAgentLayer = false                           # required for SSH projects (mutually exclusive)
 ```
 
+**Window layout:** The `[layout]` section controls automatic window positioning when activating projects. AgentPanel detects the physical monitor width via `CGDisplayScreenSize` and selects "small" mode (both windows maximized) or "wide" mode (side-by-side). In wide mode, IDE and Chrome windows are positioned based on `idePosition`, `justification`, `windowHeight`, `maxWindowWidth`, and `maxGap`. Window positions are saved per project per screen mode and restored on subsequent activations (with off-screen clamping). Requires Accessibility permission (System Settings > Privacy & Security > Accessibility). Invalid `[layout]` values cause a config load failure (no per-field fallback to defaults). All `[layout]` keys are optional — omit the entire section to use defaults.
+
 **Agent Layer:** The `[agentLayer]` section sets a global default for `useAgentLayer`. Each project can override this with an explicit `useAgentLayer = true` or `false`. When `useAgentLayer` is `true`, AgentPanel injects a `// >>> agent-panel` block into the project's `.vscode/settings.json` (for window identification), runs `al sync` (CWD = project path), and then launches VS Code via `al vscode --no-sync --new-window` (CWD = project path). This keeps Agent Layer environment variables like `CODEX_HOME` while avoiding the current `al vscode` dual-window issue by not passing a positional path. The `al` and `code` CLIs must be installed and on PATH.
 
 **SSH projects:** Set `project.remote` to a VS Code Remote-SSH authority (`ssh-remote+user@host`) and `project.path` to the remote absolute path. AgentPanel writes a `// >>> agent-panel` settings.json block on the remote via SSH (required for window identification) and then launches VS Code via `code --new-window --remote <authority> <remote-path>`. If the remote settings write fails, activation fails loudly. Doctor validates SSH project paths via `ssh test -d` and warns if the remote settings.json is missing the AgentPanel block. SSH projects cannot use Agent Layer: set `useAgentLayer = false` for SSH projects (this is required when `[agentLayer] enabled = true`).
@@ -89,6 +99,7 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 - Logs (rotated): `~/.local/state/agent-panel/logs/agent-panel.log.1` … `agent-panel.log.5`
 - Logs format: JSON Lines with UTC ISO-8601 timestamps; rotation at 10 MiB
 - Chrome tab snapshots: `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`
+- Window position history: `~/.local/state/agent-panel/window-layouts.json`
 - VS Code settings blocks: injected into `<project-path>/.vscode/settings.json` (local/AL projects) or remote via SSH
 - AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`)
 
@@ -117,6 +128,7 @@ Current checks include:
 - SSH project paths validated via `ssh test -d` (exit 0 = pass, 1 = fail, 255 = connection error)
 - Agent-layer CLI (`al`) installed (if any project has `useAgentLayer=true`)
 - Agent-layer directory exists for local projects with `useAgentLayer=true`
+- Accessibility permission for window positioning (PASS/FAIL)
 - Hotkey registration status (app only)
 
 ## CLI (`ap`)

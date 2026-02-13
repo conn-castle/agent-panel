@@ -329,6 +329,9 @@ public struct ApCLI {
                     if let warning = activation.tabRestoreWarning {
                         output.stderr("warning: \(warning)")
                     }
+                    if let warning = activation.layoutWarning {
+                        output.stderr("warning: \(warning)")
+                    }
                     output.stdout("Selected project: \(projectId)")
                     return ApExitCode.ok.rawValue
                 case .none:

@@ -10,7 +10,7 @@
 import Foundation
 
 /// Categories of errors from AgentPanelCore operations.
-enum ApCoreErrorCategory: String, Sendable {
+public enum ApCoreErrorCategory: String, Sendable {
     /// External command execution failures.
     case command
     /// Input validation failures.
@@ -21,6 +21,10 @@ enum ApCoreErrorCategory: String, Sendable {
     case configuration
     /// Output parsing failures.
     case parse
+    /// Window management failures (AX positioning, window resolution).
+    case window
+    /// System-level failures (display detection, permissions).
+    case system
 }
 
 /// Errors emitted by AgentPanelCore operations.
@@ -43,7 +47,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
     ///   - detail: Additional detail such as stderr output.
     ///   - command: Command that was executed.
     ///   - exitCode: Exit code from the command.
-    init(
+    public init(
         category: ApCoreErrorCategory,
         message: String,
         detail: String? = nil,

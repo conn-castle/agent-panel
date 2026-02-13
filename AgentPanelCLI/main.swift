@@ -9,9 +9,17 @@ let cli = ApCLI(
     parser: ApArgumentParser(),
     dependencies: ApCLIDependencies(
         version: { AgentPanel.version },
-        projectManagerFactory: { ProjectManager() },
+        projectManagerFactory: {
+            ProjectManager(
+                windowPositioner: AXWindowPositioner(),
+                screenModeDetector: ScreenModeDetector()
+            )
+        },
         doctorRunner: {
-            Doctor(runningApplicationChecker: AppKitRunningApplicationChecker()).run()
+            Doctor(
+                runningApplicationChecker: AppKitRunningApplicationChecker(),
+                windowPositioner: AXWindowPositioner()
+            ).run()
         }
     ),
     output: .standard

@@ -27,6 +27,21 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-12 ax-tiebreak: Duplicate-title AX window ordering may flip between enumerations
+    Priority: Low. Area: Window Positioning
+    Description: When multiple AX windows share identical titles, the secondary sort key `CFHash(AXUIElement)` is not guaranteed stable across independent enumerations. This could cause the "primary" window to flip between two identically-titled windows on successive activations.
+    Next step: If users report window position flipping, consider adding a more stable identity (e.g., AX window ID attribute or process-scoped index).
+
+- Issue 2026-02-12 aerospace-focus-crash: AeroSpace crashes with "MacWindow is already unbound" during FocusCommand
+    Priority: Medium. Area: AeroSpace/Upstream
+    Description: AeroSpace runtime error `MacWindow(windowId: N) is already unbound` in `FocusCommand.run` when dealing with floating windows. This is an upstream AeroSpace bug that can cascade into system freezes when AgentPanel polls AeroSpace CLI during the crash state.
+    Next step: File upstream issue with AeroSpace. AgentPanel mitigation: consider adding AeroSpace health check (process alive + responsive) before CLI calls during activation.
+
+- Issue 2026-02-12 light-mode-ui: Light mode UI theme needs improvement
+    Priority: Medium. Area: UI/UX
+    Description: The light mode theme in the application looks poor and needs a visual overhaul to ensure consistency and readability.
+    Next step: Audit light mode styles and identify specific elements (contrast, colors, spacing) that require refinement.
+
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE
     Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
@@ -42,6 +57,3 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Priority: Low. Area: Doctor/CLI
     Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
     Next step: Integrate a color-coding utility into the Doctor report rendering logic.
-
-
-

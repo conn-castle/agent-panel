@@ -64,14 +64,18 @@ public struct ProjectActivationSuccess: Equatable, Sendable {
     public let ideWindowId: Int
     /// Warning message if tab restore failed (non-fatal).
     public let tabRestoreWarning: String?
+    /// Warning message if window positioning failed (non-fatal).
+    public let layoutWarning: String?
 
     /// Creates a new activation success result.
     /// - Parameters:
     ///   - ideWindowId: AeroSpace window ID for the IDE window.
     ///   - tabRestoreWarning: Optional non-fatal warning if tab restore failed.
-    public init(ideWindowId: Int, tabRestoreWarning: String?) {
+    ///   - layoutWarning: Optional non-fatal warning if window positioning failed.
+    public init(ideWindowId: Int, tabRestoreWarning: String?, layoutWarning: String? = nil) {
         self.ideWindowId = ideWindowId
         self.tabRestoreWarning = tabRestoreWarning
+        self.layoutWarning = layoutWarning
     }
 }
 
@@ -185,6 +189,9 @@ public final class ProjectManager {
     private let chromeTabStore: ChromeTabStore
     private let chromeTabCapture: ChromeTabCapturing
     private let gitRemoteResolver: GitRemoteResolving
+    private let windowPositioner: WindowPositioning?
+    private let windowPositionStore: WindowPositionStoring?
+    private let screenModeDetector: ScreenModeDetecting?
     private let logger: AgentPanelLogging
 
     // MARK: - Public Properties
@@ -230,7 +237,14 @@ public final class ProjectManager {
     // MARK: - Initialization
 
     /// Creates a ProjectManager with default dependencies.
-    public init() {
+    ///
+    /// - Parameters:
+    ///   - windowPositioner: Window positioning provider (from AppKit module). Pass nil to disable positioning.
+    ///   - screenModeDetector: Screen mode detection provider (from AppKit module). Pass nil to disable positioning.
+    public init(
+        windowPositioner: WindowPositioning? = nil,
+        screenModeDetector: ScreenModeDetecting? = nil
+    ) {
         let dataPaths = DataPaths.default()
         self.aerospace = ApAeroSpace()
         self.ideLauncher = ApVSCodeLauncher()
@@ -239,6 +253,11 @@ public final class ProjectManager {
         self.chromeTabStore = ChromeTabStore(directory: dataPaths.chromeTabsDirectory)
         self.chromeTabCapture = ApChromeTabController()
         self.gitRemoteResolver = GitRemoteResolver()
+        self.windowPositioner = windowPositioner
+        self.screenModeDetector = screenModeDetector
+        self.windowPositionStore = (windowPositioner != nil && screenModeDetector != nil)
+            ? WindowPositionStore(filePath: dataPaths.windowLayoutsFile)
+            : nil
         self.logger = AgentPanelLogger()
         self.recencyFilePath = dataPaths.recentProjectsFile
         self.configLoader = { Config.loadDefault() }
@@ -259,7 +278,10 @@ public final class ProjectManager {
         logger: AgentPanelLogging,
         recencyFilePath: URL,
         configLoader: @escaping () -> Result<ConfigLoadSuccess, ConfigLoadError> = { Config.loadDefault() },
-        fileSystem: FileSystem = DefaultFileSystem()
+        fileSystem: FileSystem = DefaultFileSystem(),
+        windowPositioner: WindowPositioning? = nil,
+        windowPositionStore: WindowPositionStoring? = nil,
+        screenModeDetector: ScreenModeDetecting? = nil
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
@@ -268,6 +290,9 @@ public final class ProjectManager {
         self.chromeTabStore = chromeTabStore
         self.chromeTabCapture = chromeTabCapture
         self.gitRemoteResolver = gitRemoteResolver
+        self.windowPositioner = windowPositioner
+        self.windowPositionStore = windowPositionStore
+        self.screenModeDetector = screenModeDetector
         self.logger = logger
         self.recencyFilePath = recencyFilePath
         self.configLoader = configLoader
@@ -649,13 +674,17 @@ public final class ProjectManager {
             logEvent("select.chrome_fresh_launch", context: ["project_id": projectId])
         }
 
+        // Position windows (non-fatal)
+        let layoutWarning = positionWindows(projectId: projectId)
+
         // Record activation
         recordActivation(projectId: projectId)
         logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindowId)"])
 
         return .success(ProjectActivationSuccess(
             ideWindowId: ideWindowId,
-            tabRestoreWarning: tabRestoreWarning
+            tabRestoreWarning: tabRestoreWarning,
+            layoutWarning: layoutWarning
         ))
     }
 
@@ -671,6 +700,9 @@ public final class ProjectManager {
 
         // Capture Chrome tabs before closing (non-fatal)
         let tabCaptureWarning = performTabCapture(projectId: projectId)
+
+        // Capture window positions before closing (non-fatal)
+        captureWindowPositions(projectId: projectId)
 
         let workspace = Self.workspacePrefix + projectId
 
@@ -710,10 +742,13 @@ public final class ProjectManager {
             state = snapshot
         }
 
-        guard state.activeProjectId != nil else {
+        guard let activeProjectId = state.activeProjectId else {
             logEvent("exit.no_active_project", level: .warn)
             return .failure(.noActiveProject)
         }
+
+        // Capture window positions before exiting (non-fatal)
+        captureWindowPositions(projectId: activeProjectId)
 
         if let focus = focusStack.popFirstValid(isValid: { entry in
             self.focusWindow(windowId: entry.windowId)
@@ -898,6 +933,211 @@ public final class ProjectManager {
         }
 
         return .failure(.aeroSpaceError(detail: "Windows did not arrive in workspace within timeout"))
+    }
+
+    // MARK: - Window Positioning
+
+    /// Positions IDE and Chrome windows after activation.
+    ///
+    /// Non-fatal: returns a warning string on failure, nil on success.
+    /// Requires windowPositioner, screenModeDetector, and windowPositionStore to all be set.
+    /// If only some positioning dependencies are wired, returns a diagnostic warning.
+    private func positionWindows(projectId: String) -> String? {
+        // All three positioning deps must be present. If only some are wired, surface a warning.
+        let hasPositioner = windowPositioner != nil
+        let hasDetector = screenModeDetector != nil
+        let hasStore = windowPositionStore != nil
+        let hasAny = hasPositioner || hasDetector || hasStore
+        let hasAll = hasPositioner && hasDetector && hasStore
+
+        if hasAny && !hasAll {
+            let missing = [
+                hasPositioner ? nil : "windowPositioner",
+                hasDetector ? nil : "screenModeDetector",
+                hasStore ? nil : "windowPositionStore"
+            ].compactMap { $0 }
+            logEvent("position.partial_deps", level: .warn, message: "Missing: \(missing.joined(separator: ", "))")
+            return "Window positioning disabled: missing \(missing.joined(separator: ", "))"
+        }
+
+        guard let positioner = windowPositioner,
+              let detector = screenModeDetector,
+              let store = windowPositionStore,
+              let config = config else {
+            return nil
+        }
+
+        var warnings: [String] = []
+
+        // Read IDE frame to determine which monitor the windows are on
+        let ideFrame: CGRect
+        switch positioner.getPrimaryWindowFrame(bundleId: ApVSCodeLauncher.bundleId, projectId: projectId) {
+        case .success(let frame):
+            ideFrame = frame
+        case .failure(let error):
+            logEvent("position.ide_frame_read_failed", level: .warn, message: error.message)
+            return "Window positioning skipped: \(error.message)"
+        }
+
+        // Detect screen mode (use center of IDE frame as reference point)
+        let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
+        let screenMode: ScreenMode
+        let physicalWidth: Double
+        switch detector.detectMode(containingPoint: centerPoint, threshold: config.layout.smallScreenThreshold) {
+        case .success(let mode):
+            screenMode = mode
+        case .failure(let error):
+            // EDID failure: log WARN, use .wide as explicit fallback
+            logEvent("position.screen_mode_detection_failed", level: .warn, message: error.message)
+            screenMode = .wide
+        }
+
+        switch detector.physicalWidthInches(containingPoint: centerPoint) {
+        case .success(let width):
+            physicalWidth = width
+        case .failure(let error):
+            logEvent("position.physical_width_detection_failed", level: .warn, message: error.message)
+            physicalWidth = 32.0
+            warnings.append("Display physical width unknown (using 32\" fallback); layout may be imprecise")
+        }
+
+        guard let screenVisibleFrame = detector.screenVisibleFrame(containingPoint: centerPoint) else {
+            logEvent("position.screen_frame_not_found", level: .warn)
+            return "Window positioning skipped: screen not found"
+        }
+
+        // Determine target frames (saved or computed)
+        let targetLayout: WindowLayout
+        switch store.load(projectId: projectId, mode: screenMode) {
+        case .success(let savedFrames):
+            if let frames = savedFrames {
+                // Validate and clamp saved frames to current screen
+                let ideTarget = WindowLayoutEngine.clampToScreen(frame: frames.ide.cgRect, screenVisibleFrame: screenVisibleFrame)
+                let chromeTarget = WindowLayoutEngine.clampToScreen(frame: frames.chrome.cgRect, screenVisibleFrame: screenVisibleFrame)
+                targetLayout = WindowLayout(ideFrame: ideTarget, chromeFrame: chromeTarget)
+                logEvent("position.using_saved_frames", context: ["project_id": projectId, "mode": screenMode.rawValue])
+            } else {
+                targetLayout = WindowLayoutEngine.computeLayout(
+                    screenVisibleFrame: screenVisibleFrame,
+                    screenPhysicalWidthInches: physicalWidth,
+                    screenMode: screenMode,
+                    config: config.layout
+                )
+                logEvent("position.using_computed_frames", context: ["project_id": projectId, "mode": screenMode.rawValue])
+            }
+        case .failure(let error):
+            logEvent("position.store_load_failed", level: .warn, message: error.message)
+            targetLayout = WindowLayoutEngine.computeLayout(
+                screenVisibleFrame: screenVisibleFrame,
+                screenPhysicalWidthInches: physicalWidth,
+                screenMode: screenMode,
+                config: config.layout
+            )
+        }
+
+        // Compute cascade offset in points: 0.5 inches * (screen points / screen inches)
+        let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
+
+        // Position IDE windows
+        switch positioner.setWindowFrames(
+            bundleId: ApVSCodeLauncher.bundleId,
+            projectId: projectId,
+            primaryFrame: targetLayout.ideFrame,
+            cascadeOffsetPoints: cascadeOffsetPoints
+        ) {
+        case .success(let result):
+            if result.positioned < 1 {
+                logEvent("position.ide_set_none", level: .warn)
+                warnings.append("IDE: no windows were positioned")
+            } else if result.hasPartialFailure {
+                logEvent("position.ide_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                warnings.append("IDE: positioned \(result.positioned) of \(result.matched) windows")
+            } else {
+                logEvent("position.ide_positioned", context: ["count": "\(result.positioned)"])
+            }
+        case .failure(let error):
+            logEvent("position.ide_set_failed", level: .warn, message: error.message)
+            warnings.append("IDE positioning failed: \(error.message)")
+        }
+
+        // Position Chrome windows
+        switch positioner.setWindowFrames(
+            bundleId: ApChromeLauncher.bundleId,
+            projectId: projectId,
+            primaryFrame: targetLayout.chromeFrame,
+            cascadeOffsetPoints: cascadeOffsetPoints
+        ) {
+        case .success(let result):
+            if result.positioned < 1 {
+                logEvent("position.chrome_set_none", level: .warn)
+                warnings.append("Chrome: no windows were positioned")
+            } else if result.hasPartialFailure {
+                logEvent("position.chrome_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                warnings.append("Chrome: positioned \(result.positioned) of \(result.matched) windows")
+            } else {
+                logEvent("position.chrome_positioned", context: ["count": "\(result.positioned)"])
+            }
+        case .failure(let error):
+            logEvent("position.chrome_set_failed", level: .warn, message: error.message)
+            warnings.append("Chrome positioning failed: \(error.message)")
+        }
+
+        return warnings.isEmpty ? nil : warnings.joined(separator: "; ")
+    }
+
+    /// Captures current window positions for a project before closing or exiting.
+    ///
+    /// Non-fatal: failures are logged but do not block the caller.
+    private func captureWindowPositions(projectId: String) {
+        guard let positioner = windowPositioner,
+              let detector = screenModeDetector,
+              let store = windowPositionStore,
+              config != nil else {
+            return
+        }
+
+        // Read IDE primary frame
+        let ideFrame: CGRect
+        switch positioner.getPrimaryWindowFrame(bundleId: ApVSCodeLauncher.bundleId, projectId: projectId) {
+        case .success(let frame):
+            ideFrame = frame
+        case .failure(let error):
+            logEvent("capture_position.ide_read_failed", level: .warn, message: error.message)
+            return
+        }
+
+        // Read Chrome primary frame
+        let chromeFrame: CGRect
+        switch positioner.getPrimaryWindowFrame(bundleId: ApChromeLauncher.bundleId, projectId: projectId) {
+        case .success(let frame):
+            chromeFrame = frame
+        case .failure(let error):
+            logEvent("capture_position.chrome_read_failed", level: .warn, message: error.message)
+            return
+        }
+
+        // Detect screen mode
+        let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
+        let screenMode: ScreenMode
+        switch detector.detectMode(containingPoint: centerPoint, threshold: config!.layout.smallScreenThreshold) {
+        case .success(let mode):
+            screenMode = mode
+        case .failure(let error):
+            logEvent("capture_position.screen_mode_failed", level: .warn, message: error.message)
+            screenMode = .wide
+        }
+
+        // Save both frames
+        let frames = SavedWindowFrames(
+            ide: SavedFrame(rect: ideFrame),
+            chrome: SavedFrame(rect: chromeFrame)
+        )
+        switch store.save(projectId: projectId, mode: screenMode, frames: frames) {
+        case .success:
+            logEvent("capture_position.saved", context: ["project_id": projectId, "mode": screenMode.rawValue])
+        case .failure(let error):
+            logEvent("capture_position.save_failed", level: .warn, message: error.message)
+        }
     }
 
     // MARK: - Chrome Tab Operations

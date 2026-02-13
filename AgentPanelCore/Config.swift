@@ -84,11 +84,18 @@ public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
     public let chrome: ChromeConfig
     public let agentLayer: AgentLayerConfig
+    public let layout: LayoutConfig
 
-    init(projects: [ProjectConfig], chrome: ChromeConfig = ChromeConfig(), agentLayer: AgentLayerConfig = AgentLayerConfig()) {
+    init(
+        projects: [ProjectConfig],
+        chrome: ChromeConfig = ChromeConfig(),
+        agentLayer: AgentLayerConfig = AgentLayerConfig(),
+        layout: LayoutConfig = LayoutConfig()
+    ) {
         self.projects = projects
         self.chrome = chrome
         self.agentLayer = agentLayer
+        self.layout = layout
     }
 }
 
@@ -405,6 +412,7 @@ struct ConfigParser {
 
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
+        let layoutConfig = parseLayoutSection(table: table, findings: &findings)
         let projectOutcomes = parseProjects(
             table: table,
             globalAgentLayerEnabled: agentLayerConfig.enabled,
@@ -415,7 +423,7 @@ struct ConfigParser {
         let validationFailed = findings.contains { $0.severity == .fail }
         let config: Config? = validationFailed
             ? nil
-            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig)
+            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig, layout: layoutConfig)
 
         return ConfigLoadResult(
             config: config,
@@ -498,6 +506,143 @@ struct ConfigParser {
         )
 
         return AgentLayerConfig(enabled: enabled)
+    }
+
+    // MARK: - Layout Section Parsing
+
+    private static func parseLayoutSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> LayoutConfig {
+        guard table.contains(key: "layout") else {
+            return LayoutConfig()
+        }
+
+        guard let layoutTable = try? table.table(forKey: "layout") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[layout] must be a table",
+                fix: "Use [layout] as a TOML table section."
+            ))
+            return LayoutConfig()
+        }
+
+        checkForUnknownKeys(in: layoutTable, knownKeys: knownLayoutKeys, section: "[layout]", findings: &findings)
+
+        let smallScreenThreshold = readOptionalNumber(
+            from: layoutTable, key: "smallScreenThreshold",
+            label: "layout.smallScreenThreshold", findings: &findings
+        )
+        let windowHeight = readOptionalInteger(
+            from: layoutTable, key: "windowHeight",
+            label: "layout.windowHeight", findings: &findings
+        )
+        let maxWindowWidth = readOptionalNumber(
+            from: layoutTable, key: "maxWindowWidth",
+            label: "layout.maxWindowWidth", findings: &findings
+        )
+        let idePositionStr = readOptionalNonEmptyString(
+            from: layoutTable, key: "idePosition",
+            label: "layout.idePosition", findings: &findings
+        )
+        let justificationStr = readOptionalNonEmptyString(
+            from: layoutTable, key: "justification",
+            label: "layout.justification", findings: &findings
+        )
+        let maxGap = readOptionalInteger(
+            from: layoutTable, key: "maxGap",
+            label: "layout.maxGap", findings: &findings
+        )
+
+        // Validate bounds
+        var valid = true
+
+        if let v = smallScreenThreshold, v <= 0 {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "layout.smallScreenThreshold must be > 0",
+                detail: "Got \(v).",
+                fix: "Set smallScreenThreshold to a positive number (default: 24)."
+            ))
+            valid = false
+        }
+
+        if let v = windowHeight {
+            if v < 1 || v > 100 {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.windowHeight must be 1–100",
+                    detail: "Got \(v).",
+                    fix: "Set windowHeight to a value between 1 and 100 (default: 90)."
+                ))
+                valid = false
+            }
+        }
+
+        if let v = maxWindowWidth, v <= 0 {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "layout.maxWindowWidth must be > 0",
+                detail: "Got \(v).",
+                fix: "Set maxWindowWidth to a positive number (default: 18)."
+            ))
+            valid = false
+        }
+
+        var idePosition: LayoutConfig.IdePosition = LayoutConfig.Defaults.idePosition
+        if let str = idePositionStr {
+            if let pos = LayoutConfig.IdePosition(rawValue: str) {
+                idePosition = pos
+            } else {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.idePosition must be \"left\" or \"right\"",
+                    detail: "Got \"\(str)\".",
+                    fix: "Set idePosition to \"left\" or \"right\" (default: \"left\")."
+                ))
+                valid = false
+            }
+        }
+
+        var justification: LayoutConfig.Justification = LayoutConfig.Defaults.justification
+        if let str = justificationStr {
+            if let j = LayoutConfig.Justification(rawValue: str) {
+                justification = j
+            } else {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.justification must be \"left\" or \"right\"",
+                    detail: "Got \"\(str)\".",
+                    fix: "Set justification to \"left\" or \"right\" (default: \"right\")."
+                ))
+                valid = false
+            }
+        }
+
+        if let v = maxGap {
+            if v < 0 || v > 100 {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.maxGap must be 0–100",
+                    detail: "Got \(v).",
+                    fix: "Set maxGap to a value between 0 and 100 (default: 10)."
+                ))
+                valid = false
+            }
+        }
+
+        guard valid else {
+            return LayoutConfig()
+        }
+
+        return LayoutConfig(
+            smallScreenThreshold: smallScreenThreshold ?? LayoutConfig.Defaults.smallScreenThreshold,
+            windowHeight: windowHeight.map { Int($0) } ?? LayoutConfig.Defaults.windowHeight,
+            maxWindowWidth: maxWindowWidth ?? LayoutConfig.Defaults.maxWindowWidth,
+            idePosition: idePosition,
+            justification: justification,
+            maxGap: maxGap.map { Int($0) } ?? LayoutConfig.Defaults.maxGap
+        )
     }
 
     // MARK: - Project Parsing
@@ -786,13 +931,19 @@ struct ConfigParser {
     // MARK: - Unknown Key Detection
 
     /// Known top-level keys in config.toml.
-    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project"]
+    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project", "layout"]
 
     /// Known keys in the [chrome] section.
     private static let knownChromeKeys: Set<String> = ["pinnedTabs", "defaultTabs", "openGitRemote"]
 
     /// Known keys in the [agentLayer] section.
     private static let knownAgentLayerKeys: Set<String> = ["enabled"]
+
+    /// Known keys in the [layout] section.
+    private static let knownLayoutKeys: Set<String> = [
+        "smallScreenThreshold", "windowHeight", "maxWindowWidth",
+        "idePosition", "justification", "maxGap"
+    ]
 
     /// Known keys in each [[project]] entry.
     private static let knownProjectKeys: Set<String> = [
@@ -965,6 +1116,59 @@ struct ConfigParser {
                 fix: "Set \(label) to true or false."
             ))
             return defaultValue
+        }
+
+        return value
+    }
+
+    /// Reads an optional numeric value as Double. Accepts both TOML integers and floats.
+    /// Returns nil when the key is absent. Records a failure if the value is not a number.
+    private static func readOptionalNumber(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Double? {
+        guard table.contains(key: key) else {
+            return nil
+        }
+
+        // Try integer first (TOML 24 is integer, 24.0 is float)
+        if let intValue = try? table.integer(forKey: key) {
+            return Double(intValue)
+        }
+
+        if let floatValue = try? table.float(forKey: key) {
+            return floatValue
+        }
+
+        findings.append(ConfigFinding(
+            severity: .fail,
+            title: "\(label) must be a number",
+            fix: "Set \(label) to a numeric value."
+        ))
+        return nil
+    }
+
+    /// Reads an optional integer value as Int64. Accepts only TOML integers (not floats).
+    /// Returns nil when the key is absent. Records a failure if the value is not an integer.
+    private static func readOptionalInteger(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Int64? {
+        guard table.contains(key: key) else {
+            return nil
+        }
+
+        guard let value = try? table.integer(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be an integer",
+                fix: "Set \(label) to a whole number."
+            ))
+            return nil
         }
 
         return value
