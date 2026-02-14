@@ -46,10 +46,10 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Exact-match URL filtering is unreliable because Chrome redirects URLs (e.g., `todoist.com/` → `todoist.com/app/today`), git remote URLs differ from web URLs, and other dynamic URL changes.
     Tradeoffs: Snapshot may overlap with always-open config; harmless since the snapshot IS the intended tab state.
 
-- Decision 2026-02-09 allauncher: Agent Layer launcher uses `al sync` + direct `code` (two-step workaround)
-    Decision: AL launcher runs `al sync` (CWD = project path) then `code --new-window <projectPath>` directly, instead of using `al vscode`. Window identification uses a `// >>> agent-panel` block in `.vscode/settings.json` (see `vscodesettings` decision).
-    Reason: `al vscode` unconditionally appends `.` (CWD) to the `code` args (`internal/clients/vscode/launch.go`), causing two VS Code windows.
-    Tradeoffs: Loses `CODEX_HOME` env var (only needed by Codex VS Code extension). Once `al vscode` is fixed upstream (see ISSUES.md `al-dual-window`), revert to single-command launch for CODEX_HOME support.
+- Decision 2026-02-09 allauncher: Agent Layer VS Code launch uses `al sync` + `al vscode --no-sync --new-window`
+    Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then `al vscode --no-sync --new-window` (CWD = project path, no positional path so "." maps to repo root). This preserves Agent Layer env vars like `CODEX_HOME` while avoiding the upstream dual-window bug (`al vscode` appends "." to `code` args in `internal/clients/vscode/launch.go`). Window identification uses a `// >>> agent-panel` block in `.vscode/settings.json` (see `vscodesettings` decision).
+    Reason: Direct `code --new-window <path>` (original workaround) lost `CODEX_HOME`. Using `al vscode` without a positional path avoids the dual-window bug while keeping Agent Layer env vars.
+    Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows (see ISSUES.md `al-dual-window`).
 
 - Decision 2026-02-10 vscodesettings: VS Code window title via settings.json block (replaces workspace files)
     Decision: Inject a `// >>> agent-panel` / `// <<< agent-panel` marker block into the project's `.vscode/settings.json` with `window.title = "AP:<id> - ..."`. Block is always inserted at the top of the file (right after `{`) with trailing comma. For SSH projects, write settings.json on the remote via SSH (read → injectBlock → base64 → write). If SSH write fails, project activation fails loudly (no workspace fallback). Doctor verifies the block exists on SSH remotes (WARN if missing).
@@ -116,12 +116,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Config-as-truth avoids split-brain between the login item registration state and the config file. The config is always the canonical state.
     Tradeoffs: Menu toggle must write to disk (config file) on every change. If config write fails, the toggle reverts.
 
-- Decision 2026-02-13 vscolor: VS Code color differentiation via settings.json colorCustomizations
-    Decision: Inject `workbench.colorCustomizations` (titleBar, activityBar, statusBar — background + foreground) into the `// >>> agent-panel` settings.json block based on the project's `color` field. Foreground is white (#FFFFFF) if luminance < 0.5, black (#000000) otherwise.
-    Reason: Project color was already in config but not applied to VS Code. Settings.json block injection was already in place for window.title; extending it with colorCustomizations is minimal effort and immediately visible.
-    Tradeoffs: Only 6 VS Code color keys are set (title bar, activity bar, status bar). Other UI elements remain default. Invalid/unrecognized color strings silently skip color injection (no error).
-
-- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension (supersedes vscolor)
+- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension
     Decision: Replaced direct `workbench.colorCustomizations` injection (6 keys) with a single `"peacock.color": "#RRGGBB"` key in the settings.json block. The Peacock VS Code extension (`johnpapa.vscode-peacock`) reads this key and applies color across title bar, activity bar, and status bar. Doctor warns (not fails) if Peacock is not installed.
     Reason: Peacock provides better color theming with a single key instead of 6, handles foreground contrast automatically, and is a well-maintained community extension.
     Tradeoffs: Requires an additional VS Code extension install. Projects without Peacock installed will see the key in settings but no color effect (graceful degradation).
@@ -130,11 +125,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: When the "Launch at Login" toggle succeeds at the SMAppService level but fails to write back to config.toml, the SMAppService toggle is undone (re-register or unregister) and the menu title is reset to "Launch at Login" (not "(save failed)").
     Reason: Avoids split-brain between SMAppService state and config.toml as the source of truth.
     Tradeoffs: None significant; the rollback is best-effort (try?).
-
-- Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
-    Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
-    Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".
-    Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows.
 
 - Decision 2026-02-14 workspacetab: Workspace-scoped window cycling via native AeroSpace focus commands
     Decision: Use AeroSpace's native `focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next`/`dfs-prev` bound to Option-Tab / Option-Shift-Tab in the managed `aerospace-safe.toml` template. No custom CLI subcommand needed.
@@ -150,3 +140,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `AeroSpaceCircuitBreaker` (process-wide shared instance) sits between `ApAeroSpace` and `CommandRunning`. All `aerospace` CLI calls go through `runAerospace()`, which checks the breaker before spawning a process. On timeout, the breaker trips to "open" state for a 30s cooldown; subsequent calls fail immediately with a descriptive error. `start()` resets the breaker after a fresh AeroSpace launch.
     Reason: When AeroSpace crashes or its socket becomes unresponsive, every CLI call times out at 5s. With 15-20 calls in a Doctor check, this creates a ~90s freeze. The circuit breaker detects the first timeout and immediately fails the rest.
     Tradeoffs: A single transient timeout trips the breaker for 30s, potentially blocking legitimate calls. After cooldown, the next call acts as a probe to re-verify connectivity.
+
+- Decision 2026-02-14 doctorcolor: Doctor CLI output uses ANSI color codes with TTY auto-detection
+    Decision: `DoctorReport.rendered(colorize:)` wraps severity labels (PASS/WARN/FAIL) in ANSI escape codes when `colorize` is true. The CLI detects TTY via `isatty(STDOUT_FILENO)` and respects the `NO_COLOR` environment variable. Default is no color (backward compatible).
+    Reason: Color-coded severity improves scan-ability of Doctor output. TTY detection ensures piped output and `NO_COLOR` convention work correctly.
+    Tradeoffs: None significant; color is purely additive and opt-in via TTY detection.
+
+- Decision 2026-02-14 sshparallel: Doctor SSH project checks run concurrently via GCD
+    Decision: SSH project health checks (path existence + settings block) run in parallel using `DispatchQueue.concurrentPerform`. Local project checks remain sequential (fast). Thread-safe findings accumulation via `NSLock`.
+    Reason: Sequential SSH checks caused N*20s blocking for N SSH projects (two 10s-timeout calls per project). Parallelization reduces worst-case to ~20s regardless of project count (each project's two calls still run sequentially within its concurrent unit).
+    Tradeoffs: Same-severity SSH findings appear in non-deterministic order (acceptable — findings are sorted by severity in rendering, and tests validate presence not order). Test doubles must be thread-safe.

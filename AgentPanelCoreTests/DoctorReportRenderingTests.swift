@@ -114,6 +114,93 @@ final class DoctorReportRenderingTests: XCTestCase {
         XCTAssertTrue(rendered.contains("Raw line 2"))
     }
 
+    // MARK: - Colorized rendering tests
+
+    func testRenderedWithColorizeWrapsFailInRedAnsi() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [DoctorFinding(severity: .fail, title: "Something broke")]
+        )
+
+        let rendered = report.rendered(colorize: true)
+
+        XCTAssertTrue(rendered.contains("\u{1b}[31mFAIL\u{1b}[0m  Something broke"))
+    }
+
+    func testRenderedWithColorizeWrapsWarnInYellowAnsi() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [DoctorFinding(severity: .warn, title: "Heads up")]
+        )
+
+        let rendered = report.rendered(colorize: true)
+
+        XCTAssertTrue(rendered.contains("\u{1b}[33mWARN\u{1b}[0m  Heads up"))
+    }
+
+    func testRenderedWithColorizeWrapsPassInGreenAnsi() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [DoctorFinding(severity: .pass, title: "All good")]
+        )
+
+        let rendered = report.rendered(colorize: true)
+
+        XCTAssertTrue(rendered.contains("\u{1b}[32mPASS\u{1b}[0m  All good"))
+    }
+
+    func testRenderedWithColorizeColorizeSummaryLine() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [
+                DoctorFinding(severity: .pass, title: "OK"),
+                DoctorFinding(severity: .warn, title: "Hmm"),
+                DoctorFinding(severity: .fail, title: "Bad")
+            ]
+        )
+
+        let rendered = report.rendered(colorize: true)
+
+        XCTAssertTrue(rendered.contains("1 \u{1b}[32mPASS\u{1b}[0m"))
+        XCTAssertTrue(rendered.contains("1 \u{1b}[33mWARN\u{1b}[0m"))
+        XCTAssertTrue(rendered.contains("1 \u{1b}[31mFAIL\u{1b}[0m"))
+    }
+
+    func testRenderedWithoutColorizeHasNoAnsiCodes() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [
+                DoctorFinding(severity: .pass, title: "OK"),
+                DoctorFinding(severity: .warn, title: "Hmm"),
+                DoctorFinding(severity: .fail, title: "Bad")
+            ]
+        )
+
+        let rendered = report.rendered(colorize: false)
+
+        XCTAssertFalse(rendered.contains("\u{1b}["))
+    }
+
+    func testRenderedDefaultIsNotColorized() {
+        let report = DoctorReport(
+            metadata: makeMetadata(),
+            findings: [DoctorFinding(severity: .fail, title: "Bad")]
+        )
+
+        let rendered = report.rendered()
+
+        XCTAssertFalse(rendered.contains("\u{1b}["))
+        XCTAssertTrue(rendered.contains("FAIL  Bad"))
+    }
+
+    func testRenderedWithColorizeEmptyFindingsShowsGreenPass() {
+        let report = DoctorReport(metadata: makeMetadata(), findings: [])
+
+        let rendered = report.rendered(colorize: true)
+
+        XCTAssertTrue(rendered.contains("\u{1b}[32mPASS\u{1b}[0m  no issues found"))
+    }
+
     private func makeMetadata(
         aerospaceApp: String = "AVAILABLE",
         aerospaceCli: String = "AVAILABLE"

@@ -142,6 +142,9 @@ Current checks include:
 - Agent-layer directory exists for local projects with `useAgentLayer=true`
 - Peacock VS Code extension installed (WARN if missing when projects have colors)
 - Accessibility permission for window positioning (PASS/FAIL)
+- SSH remote VS Code settings block present (WARN if missing `// >>> agent-panel` block)
+- SSH authority and path format validation
+- SSH binary available (WARN if `ssh` not found, skips remote path checks)
 - Hotkey registration status (app only)
 
 ## CLI (`ap`)

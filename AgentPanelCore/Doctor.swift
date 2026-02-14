@@ -16,6 +16,23 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
         case .pass: return 2
         }
     }
+
+    /// ANSI escape code for this severity's color.
+    var ansiColor: String {
+        switch self {
+        case .pass: return "\u{1b}[32m" // green
+        case .warn: return "\u{1b}[33m" // yellow
+        case .fail: return "\u{1b}[31m" // red
+        }
+    }
+
+    /// ANSI reset escape code.
+    static let ansiReset = "\u{1b}[0m"
+
+    /// Returns the severity label wrapped in ANSI color codes.
+    func coloredLabel() -> String {
+        "\(ansiColor)\(rawValue)\(Self.ansiReset)"
+    }
 }
 
 /// A single Doctor finding rendered in the report.
@@ -131,7 +148,8 @@ public struct DoctorReport: Equatable, Sendable {
     }
 
     /// Renders the report as a human-readable string for CLI and App display.
-    public func rendered() -> String {
+    /// - Parameter colorize: When true, severity labels are wrapped in ANSI color codes.
+    public func rendered(colorize: Bool = false) -> String {
         let indexed = findings.enumerated()
         let sortedFindings = indexed.sorted { lhs, rhs in
             let leftOrder = lhs.element.severity.sortOrder
@@ -141,6 +159,10 @@ public struct DoctorReport: Equatable, Sendable {
             }
             return leftOrder < rightOrder
         }.map { $0.element }
+
+        func severityLabel(_ severity: DoctorSeverity) -> String {
+            colorize ? severity.coloredLabel() : severity.rawValue
+        }
 
         var lines: [String] = []
         lines.append("AgentPanel Doctor Report")
@@ -155,7 +177,7 @@ public struct DoctorReport: Equatable, Sendable {
         lines.append("")
 
         if sortedFindings.isEmpty {
-            lines.append("PASS  no issues found")
+            lines.append("\(severityLabel(.pass))  no issues found")
         } else {
             for finding in sortedFindings {
                 if finding.title.isEmpty {
@@ -165,7 +187,7 @@ public struct DoctorReport: Equatable, Sendable {
                     continue
                 }
 
-                lines.append("\(finding.severity.rawValue)  \(finding.title)")
+                lines.append("\(severityLabel(finding.severity))  \(finding.title)")
                 for line in finding.bodyLines {
                     lines.append(line)
                 }
@@ -186,7 +208,7 @@ public struct DoctorReport: Equatable, Sendable {
         let failCount = countedFindings.filter { $0.severity == .fail }.count
 
         lines.append("")
-        lines.append("Summary: \(passCount) PASS, \(warnCount) WARN, \(failCount) FAIL")
+        lines.append("Summary: \(passCount) \(severityLabel(.pass)), \(warnCount) \(severityLabel(.warn)), \(failCount) \(severityLabel(.fail))")
 
         return lines.joined(separator: "\n")
     }
@@ -481,14 +503,19 @@ public struct Doctor {
                 }
             }
 
-            // Check project paths exist and agent-layer if required
-            for project in result.projects {
-                if project.isSSH {
-                    checkSSHProjectPath(project: project, findings: &findings)
-                    checkSSHSettingsBlock(project: project, findings: &findings)
-                } else {
-                    checkLocalProjectPath(project: project, findings: &findings)
-                }
+            // Check project paths exist and agent-layer if required.
+            // Local checks are fast (filesystem); SSH checks may block on network I/O,
+            // so SSH projects are checked concurrently to avoid sequential timeouts.
+            let localProjects = result.projects.filter { !$0.isSSH }
+            let sshProjects = result.projects.filter { $0.isSSH }
+
+            for project in localProjects {
+                checkLocalProjectPath(project: project, findings: &findings)
+            }
+
+            if !sshProjects.isEmpty {
+                let sshFindings = concurrentSSHChecks(projects: sshProjects)
+                findings.append(contentsOf: sshFindings)
             }
         }
 
@@ -659,48 +686,44 @@ public struct Doctor {
     }
 
     /// Checks an SSH project's remote path exists via ssh command.
-    private func checkSSHProjectPath(project: ProjectConfig, findings: inout [DoctorFinding]) {
+    private func checkSSHProjectPath(project: ProjectConfig) -> [DoctorFinding] {
         guard let remoteAuthority = project.remote?.trimmingCharacters(in: .whitespacesAndNewlines),
               !remoteAuthority.isEmpty else {
             // Malformed remote authority — config validation should have caught this
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .fail,
                 title: "Malformed SSH remote authority: \(project.id)",
                 detail: project.remote,
                 fix: "Use format: remote = \"ssh-remote+user@host\" and path = \"/remote/path\""
-            ))
-            return
+            )]
         }
 
         guard let authority = ApSSHHelpers.extractTarget(from: remoteAuthority) else {
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .fail,
                 title: "Malformed SSH remote authority: \(project.id)",
                 detail: remoteAuthority,
                 fix: "Use format: remote = \"ssh-remote+user@host\""
-            ))
-            return
+            )]
         }
 
         let remotePath = project.path
         if remotePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !remotePath.hasPrefix("/") {
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .fail,
                 title: "Malformed SSH remote path: \(project.id)",
                 detail: remotePath,
                 fix: "Use format: path = \"/remote/absolute/path\""
-            ))
-            return
+            )]
         }
 
         // Pre-check: is ssh available?
         guard executableResolver.resolve("ssh") != nil else {
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .warn,
                 title: "ssh not found: cannot verify remote path for \(project.id)",
                 fix: "Install OpenSSH."
-            ))
-            return
+            )]
         }
 
         let escapedPath = ApSSHHelpers.shellEscape(remotePath)
@@ -719,74 +742,72 @@ public struct Doctor {
 
         switch result {
         case .failure(let error):
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .warn,
                 title: "Cannot verify remote path for \(project.id)",
                 detail: error.message,
                 fix: "Check SSH configuration and network connectivity to \(authority)."
-            ))
+            )]
         case .success(let cmdResult):
             switch cmdResult.exitCode {
             case 0:
-                findings.append(DoctorFinding(
+                return [DoctorFinding(
                     severity: .pass,
                     title: "Remote project path exists: \(project.id)",
                     detail: "\(remoteAuthority) \(remotePath)"
-                ))
+                )]
             case 1:
-                findings.append(DoctorFinding(
+                return [DoctorFinding(
                     severity: .fail,
                     title: "Remote project path missing: \(project.id)",
                     detail: "\(remoteAuthority) \(remotePath)",
                     fix: "Update path or create directory on remote host."
-                ))
+                )]
             case 255:
                 let stderr = cmdResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                findings.append(DoctorFinding(
+                return [DoctorFinding(
                     severity: .warn,
                     title: "Cannot verify remote path: \(project.id)",
                     detail: stderr.isEmpty ? "SSH connection failed" : stderr,
                     fix: "Check SSH configuration and connectivity to \(authority)."
-                ))
+                )]
             default:
                 let stderr = cmdResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-                findings.append(DoctorFinding(
+                return [DoctorFinding(
                     severity: .warn,
                     title: "Unexpected SSH result (exit \(cmdResult.exitCode)): \(project.id)",
                     detail: stderr.isEmpty ? nil : stderr,
                     fix: "Check SSH configuration."
-                ))
+                )]
             }
         }
-        // Skip .agent-layer directory check for SSH projects (not supported with SSH)
     }
 
     /// Checks whether the SSH project's remote `.vscode/settings.json` contains the agent-panel block.
     ///
     /// - PASS: File exists and contains `// >>> agent-panel`.
     /// - WARN: File is missing, missing the block, or SSH fails. Includes actionable snippet.
-    private func checkSSHSettingsBlock(project: ProjectConfig, findings: inout [DoctorFinding]) {
+    private func checkSSHSettingsBlock(project: ProjectConfig) -> [DoctorFinding] {
         guard let remoteAuthority = project.remote?.trimmingCharacters(in: .whitespacesAndNewlines),
               !remoteAuthority.isEmpty else {
-            return
+            return []
         }
 
         guard let sshTarget = ApSSHHelpers.extractTarget(from: remoteAuthority) else {
-            return
+            return []
         }
 
         let remotePath = project.path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !remotePath.isEmpty, remotePath.hasPrefix("/") else {
-            return
+            return []
         }
 
         guard executableResolver.resolve("ssh") != nil else {
-            findings.append(DoctorFinding(
+            return [DoctorFinding(
                 severity: .warn,
                 title: "Cannot check remote VS Code settings for \(project.id)",
                 detail: "ssh not available"
-            ))
-            return
+            )]
         }
 
         let settingsPath = ApSSHHelpers.shellEscape("\(remotePath)/.vscode/settings.json")
@@ -815,21 +836,21 @@ public struct Doctor {
 
         switch result {
         case .failure(let error):
-            findings.append(makeSettingsWarnFinding(
+            return [makeSettingsWarnFinding(
                 project: project,
                 remotePath: remotePath,
                 blockContent: blockContent,
                 fileExists: false,
                 checkErrorDetail: error.message
-            ))
+            )]
         case .success(let cmdResult):
             if cmdResult.exitCode == 0
                 && cmdResult.stdout.contains(ApVSCodeSettingsManager.startMarker)
                 && cmdResult.stdout.contains(ApVSCodeSettingsManager.endMarker) {
-                findings.append(DoctorFinding(
+                return [DoctorFinding(
                     severity: .pass,
                     title: "Remote VS Code settings block present: \(project.id)"
-                ))
+                )]
             } else {
                 let fileExists = cmdResult.exitCode == 0 && !cmdResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 let checkErrorDetail: String? = {
@@ -837,13 +858,13 @@ public struct Doctor {
                     let trimmed = cmdResult.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
                     return trimmed.isEmpty ? "SSH command failed (exit \(cmdResult.exitCode))" : trimmed
                 }()
-                findings.append(makeSettingsWarnFinding(
+                return [makeSettingsWarnFinding(
                     project: project,
                     remotePath: remotePath,
                     blockContent: blockContent,
                     fileExists: fileExists,
                     checkErrorDetail: checkErrorDetail
-                ))
+                )]
             }
         }
     }
@@ -882,6 +903,27 @@ public struct Doctor {
             snippet: snippet,
             snippetLanguage: "jsonc"
         )
+    }
+
+    /// Runs SSH project checks concurrently and returns all findings.
+    /// Each project's path check and settings block check run as a unit;
+    /// multiple projects run in parallel to avoid sequential timeout accumulation.
+    private func concurrentSSHChecks(projects: [ProjectConfig]) -> [DoctorFinding] {
+        let lock = NSLock()
+        var allFindings: [DoctorFinding] = []
+
+        DispatchQueue.concurrentPerform(iterations: projects.count) { index in
+            let project = projects[index]
+            var projectFindings: [DoctorFinding] = []
+            projectFindings.append(contentsOf: checkSSHProjectPath(project: project))
+            projectFindings.append(contentsOf: checkSSHSettingsBlock(project: project))
+
+            lock.lock()
+            allFindings.append(contentsOf: projectFindings)
+            lock.unlock()
+        }
+
+        return allFindings
     }
 
     /// Installs AeroSpace via Homebrew and returns an updated report.

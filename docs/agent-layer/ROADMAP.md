@@ -93,33 +93,15 @@ Incomplete:
 - VS Code settings.json block injection replacing workspace files (local + SSH), proactive write on config load.
 - Coverage gate (> 90%) enforced via `scripts/test.sh` + `scripts/coverage_gate.sh` + git pre-commit hook. Hit 95% coverage.
 
-## Phase 7 — Polish required features + harden daily use
-
-### Goal
-- Add polish and hardening to existing daily-driver features: better error recovery, visual differentiation, streamlined developer workflow, and quality-of-life improvements.
-- Keep the build/test pipeline fast and reliable.
-
-### Tasks
-- [x] Definitively fix light mode in the UI
-- [x] Auto-start at login (opt-in) (`auto-start`).
-- [x] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3] (`add-window-to-project`).
-- [x] Recover Agent Panel: menu item (visible only in `ap-*` workspace) that shrinks oversized windows to fit the screen and centers them, restoring original focus (`recover-agent-panel`).
-- [x] Recover All Windows: menu item that moves all windows from all workspaces to workspace "1", shrinks/centers each, shows progress UI, and restores original state (`recover-all-windows`).
-- [x] Add AeroSpace keybinding for Option-Tab / Option-Shift-Tab to cycle focus within the current workspace using native `focus dfs-next`/`dfs-prev` with `--boundaries workspace --boundaries-action wrap-around-the-workspace`. Keybindings are included in the managed `aerospace-safe.toml` template. Doctor warns if a managed config is stale (missing the keybindings). Compatibility check validates all required focus flags (`workspace-tab`).
-- [x] Automatically run Doctor on operational errors (for example project startup failure or command failure) in the background without lagging the app, surfacing a diagnostic report when relevant (`auto-doctor`).
-- [x] VS Code color differentiation: inject `peacock.color` into the settings.json block based on project color. The Peacock VS Code extension reads this key and applies color across title bar, activity bar, and status bar. Doctor warns if Peacock is not installed (`vscode-color`).
-- [x] ~~Chrome visual differentiation~~ — deferred to BACKLOG (no clean injection point; see `Backlog 2026-02-14 chromecolor`).
-- [x] Window layout engine: detect screen mode (small vs wide based on physical monitor width via `CGDisplayScreenSize`), calculate default window positions using configurable layout parameters, position IDE and Chrome windows via macOS Accessibility APIs (`AXUIElement` position/size), handle off-screen rescue (shrink and center oversized windows), map AeroSpace `window-id` to AX window by PID + title. Add `[layout]` config section with: `smallScreenThreshold` (inches, default 24), `windowHeight` (% of screen, default 90), `maxWindowWidth` (inches, default 18), `idePosition` (left/right, default left), `justification` (left/right, default right), `maxGap` (% of screen width, default 10). Add Doctor check for Accessibility permission with remediation guidance. Integrate with activation flow (position after focus). Small screen mode = maximized to `NSScreen.visibleFrame`. Wide screen mode = side-by-side with configurable height, width cap, justification, and gap (`window-layout`).
-- [x] Window position history: persist last window frame (origin + size) per project per screen mode (small/wide) in a JSON file under `~/.local/state/agent-panel/window-layouts/`. Capture positions via AX on project close/deactivate. On activation, restore saved positions if available; fall back to layout engine defaults if not. If a restored window exceeds the current monitor bounds, shrink to fit and center. History is keyed by `projectId` and `screenMode` (`window-history`).
-
-### Exit criteria
-- All tasks are implemented, tested, and documented.
-- Auto-doctor runs in the background on operational errors without blocking the main thread or lagging the app.
-- VS Code color differentiation is present via Peacock extension for projects with colors configured.
-- Window layout positions IDE and Chrome correctly in both small and wide screen modes on activation.
-- Window position history restores saved frames per project per screen mode; oversized windows are clamped.
-- Doctor checks for Accessibility permission and provides remediation guidance.
-- `[layout]` config section is documented in README with all configurable parameters and defaults.
+## Phase 7 ✅ — Polish required features + harden daily use
+- Light mode fix, auto-start at login (opt-in via `[app] autoStartAtLogin`), menu toggle with config-as-truth and rollback on write failure.
+- "Add Window to Project" submenu, "Recover Project" (shrink/center oversized windows), "Recover All Windows" (move all to workspace "1" with progress UI). `WindowRecoveryManager` in Core, `RecoveryProgressController` in App.
+- Workspace-scoped window cycling: Option-Tab / Option-Shift-Tab via native AeroSpace `focus dfs-next`/`dfs-prev` in managed config. Doctor warns on stale config missing keybindings.
+- Auto-doctor: `ErrorContext` with `isCritical` triggers background Doctor on operational errors; `DoctorMetadata.errorContext` carries trigger info.
+- VS Code color differentiation via Peacock extension: `peacock.color` injected into settings.json block. Doctor warns if Peacock not installed. Chrome color deferred to BACKLOG.
+- Window layout engine: `[layout]` config section, `LayoutConfig` type, `WindowLayoutEngine` (pure geometry), screen mode detection via `CGDisplayScreenSize`, AX-based positioning via `AXWindowPositioner`. Small mode = maximized; wide mode = side-by-side with configurable params.
+- Window position history: `WindowPositionStore` persists per-project per-mode frames in `window-layouts.json`. Capture on close, restore on activate with off-screen clamping.
+- Doctor checks for Accessibility permission with "Request Accessibility" button. AeroSpace circuit breaker (`AeroSpaceCircuitBreaker`, 30s cooldown) prevents timeout cascades.
 
 ## Phase 8 — Extra non-required features
 

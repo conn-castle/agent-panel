@@ -27,6 +27,26 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-14 peacock-reverts: Peacock colors sometimes revert shortly after loading
+    Priority: Medium. Area: VSCode/Peacock
+    Description: Peacock extension colors are observed to load correctly but then revert back to their previous state after a few seconds. The root cause for this "undoing" of the color application is unknown.
+    Next step: Investigate AgentPanel's VSCode settings synchronization and Peacock extension behavior to identify what triggers the revert.
+
+- Issue 2026-02-14 aerospace-config-mgmt: AeroSpace config should be 100% managed by AgentPanel
+    Priority: High. Area: AeroSpace/Configuration
+    Description: AgentPanel should take full ownership of the AeroSpace configuration file, automatically injecting workspace-scoped window cycling keybindings (Option-Tab / Option-Shift-Tab). If missing, Doctor should WARN rather than FAIL. Must support a user-configurable section that AgentPanel retains.
+    Next step: Implement configuration template merging in AeroSpaceConfigManager and update Doctor health checks to downgrade missing bindings to a warning.
+
+- Issue 2026-02-14 doctor-responsiveness: Doctor command may still freeze on non-SSH blocking calls
+    Priority: Medium. Area: Doctor/Performance
+    Description: SSH project checks are now parallelized (N*20s → ~20s ceiling, since each project runs two 10s-timeout SSH calls sequentially within its concurrent unit). Other blocking calls remain synchronous: login shell PATH resolution (5s timeout), AeroSpace CLI compatibility checks (up to 12s if all timeout). Full async refactor is needed for complete responsiveness.
+    Next step: Profile remaining blocking calls and consider async/await refactor or progress indicators for long-running checks.
+
+- Issue 2026-02-14 aerospace-recovery: Non-graceful recovery when AeroSpace fails
+    Priority: Medium. Area: AeroSpace/Resilience
+    Description: The system does not recover gracefully if the AeroSpace daemon fails or becomes unresponsive. While the circuit breaker prevents cascading timeouts, the user experience degrades significantly without an automated restart path or a robust fallback mode for window management.
+    Next step: Implement a recovery strategy that can detect AeroSpace failure and attempt a restart or provide a clear fallback state for the switcher.
+
 - Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
     Priority: Low. Area: Testing
     Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.
@@ -47,13 +67,7 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
     Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg, so path-based launches don't open two windows.
 
-
 - Issue 2026-02-09 fish-shell-path: Login shell PATH resolution may not work with fish shell
     Priority: Low. Area: System/PATH
     Description: `runLoginShellCommand` uses `$SHELL -l -c <command>` to resolve the login shell PATH. `$SHELL` is validated as an absolute path (non-absolute values fall back to `/bin/zsh`). Fish shell does not support the `-c` flag in the same way as bash/zsh. Users with `$SHELL=/usr/local/bin/fish` may get nil PATH resolution (safe — falls back to standard paths + process PATH).
     Next step: If a fish user reports missing executables in child processes, add fish-specific PATH resolution (`fish -l -c 'echo $PATH'` uses space-separated entries, not colon-separated).
-
-- Issue 2026-02-09 doctor-color-output: Color code the Doctor CLI output
-    Priority: Low. Area: Doctor/CLI
-    Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
-    Next step: Integrate a color-coding utility into the Doctor report rendering logic.

@@ -266,7 +266,9 @@ public struct ApCLI {
 
         case .doctor:
             let report = dependencies.doctorRunner()
-            output.stdout(report.rendered())
+            let useColor = isatty(STDOUT_FILENO) != 0
+                && ProcessInfo.processInfo.environment["NO_COLOR"] == nil
+            output.stdout(report.rendered(colorize: useColor))
             return report.hasFailures ? ApExitCode.failure.rawValue : ApExitCode.ok.rawValue
 
         case .showConfig:
