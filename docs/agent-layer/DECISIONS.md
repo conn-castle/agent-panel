@@ -135,3 +135,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
     Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".
     Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows.
+
+- Decision 2026-02-14 circuitbreaker: AeroSpace CLI circuit breaker prevents timeout cascades
+    Decision: `AeroSpaceCircuitBreaker` (process-wide shared instance) sits between `ApAeroSpace` and `CommandRunning`. All `aerospace` CLI calls go through `runAerospace()`, which checks the breaker before spawning a process. On timeout, the breaker trips to "open" state for a 30s cooldown; subsequent calls fail immediately with a descriptive error. `start()` resets the breaker after a fresh AeroSpace launch.
+    Reason: When AeroSpace crashes or its socket becomes unresponsive, every CLI call times out at 5s. With 15-20 calls in a Doctor check, this creates a ~90s freeze. The circuit breaker detects the first timeout and immediately fails the rest.
+    Tradeoffs: A single transient timeout trips the breaker for 30s, potentially blocking legitimate calls. After cooldown, the next call acts as a probe to re-verify connectivity.

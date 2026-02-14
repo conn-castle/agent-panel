@@ -46,26 +46,32 @@ public struct ApAeroSpace {
     private let commandRunner: CommandRunning
     private let appDiscovery: AppDiscovering
     private let fileSystem: FileSystem
+    private let circuitBreaker: AeroSpaceCircuitBreaker
 
     /// Creates a new AeroSpace wrapper with default dependencies.
     public init() {
         self.commandRunner = ApSystemCommandRunner()
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.fileSystem = DefaultFileSystem()
+        self.circuitBreaker = .shared
     }
 
     /// Creates a new AeroSpace wrapper with custom dependencies.
     /// - Parameters:
     ///   - commandRunner: Command runner for CLI operations.
     ///   - appDiscovery: App discovery for installation checks.
+    ///   - fileSystem: File system for path checks.
+    ///   - circuitBreaker: Circuit breaker for timeout cascade prevention.
     init(
         commandRunner: CommandRunning,
         appDiscovery: AppDiscovering,
-        fileSystem: FileSystem = DefaultFileSystem()
+        fileSystem: FileSystem = DefaultFileSystem(),
+        circuitBreaker: AeroSpaceCircuitBreaker = .shared
     ) {
         self.commandRunner = commandRunner
         self.appDiscovery = appDiscovery
         self.fileSystem = fileSystem
+        self.circuitBreaker = circuitBreaker
     }
 
     /// Returns the path to AeroSpace.app if installed.
@@ -122,6 +128,8 @@ public struct ApAeroSpace {
             guard result.exitCode == 0 else {
                 return .failure(commandError("open -a AeroSpace", result: result))
             }
+            // Fresh start — clear any tripped circuit breaker state
+            circuitBreaker.reset()
             // Poll for readiness instead of fixed sleep
             return waitForReadiness()
         }
@@ -148,7 +156,7 @@ public struct ApAeroSpace {
     /// Reloads the AeroSpace configuration.
     /// - Returns: Success or an error.
     func reloadConfig() -> Result<Void, ApCoreError> {
-        switch commandRunner.run(executable: "aerospace", arguments: ["reload-config"]) {
+        switch runAerospace(arguments: ["reload-config"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -168,7 +176,7 @@ public struct ApAeroSpace {
     /// Returns true when the aerospace CLI is available on PATH.
     /// - Returns: True if `aerospace --help` succeeds.
     public func isCliAvailable() -> Bool {
-        switch commandRunner.run(executable: "aerospace", arguments: ["--help"], timeoutSeconds: 2) {
+        switch runAerospace(arguments: ["--help"], timeoutSeconds: 2) {
         case .failure:
             return false
         case .success(let result):
@@ -225,7 +233,7 @@ public struct ApAeroSpace {
     /// Returns a list of focused AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
     func listWorkspacesFocused() -> Result<[String], ApCoreError> {
-        switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--focused"]) {
+        switch runAerospace(arguments: ["list-workspaces", "--focused"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -245,7 +253,7 @@ public struct ApAeroSpace {
     /// Returns a list of AeroSpace workspaces.
     /// - Returns: Workspace names on success, or an error.
     func getWorkspaces() -> Result<[String], ApCoreError> {
-        switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--all"]) {
+        switch runAerospace(arguments: ["list-workspaces", "--all"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -265,8 +273,7 @@ public struct ApAeroSpace {
     /// Returns all AeroSpace workspaces with focus metadata in a single query.
     /// - Returns: Workspace summaries on success, or an error.
     func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> {
-        switch commandRunner.run(
-            executable: "aerospace",
+        switch runAerospace(
             arguments: ["list-workspaces", "--all", "--format", "%{workspace}||%{workspace-is-focused}"]
         ) {
         case .failure(let error):
@@ -314,7 +321,7 @@ public struct ApAeroSpace {
             break
         }
 
-        switch commandRunner.run(executable: "aerospace", arguments: ["summon-workspace", trimmed]) {
+        switch runAerospace(arguments: ["summon-workspace", trimmed]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -380,10 +387,7 @@ public struct ApAeroSpace {
         }
 
         // Try summon-workspace first (preferred for multi-monitor)
-        let summonResult = commandRunner.run(
-            executable: "aerospace",
-            arguments: ["summon-workspace", trimmed]
-        )
+        let summonResult = runAerospace(arguments: ["summon-workspace", trimmed])
         if !Self.shouldAttemptCompatibilityFallback(summonResult) {
             switch summonResult {
             case .success(let result):
@@ -397,10 +401,7 @@ public struct ApAeroSpace {
         }
 
         // Fallback to workspace command
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: ["workspace", trimmed]
-        ) {
+        switch runAerospace(arguments: ["workspace", trimmed]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -423,16 +424,13 @@ public struct ApAeroSpace {
     /// - Returns: Window list or an error.
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> {
         // Preferred: global search (no --monitor flag)
-        let globalResult = commandRunner.run(
-            executable: "aerospace",
-            arguments: [
-                "list-windows",
-                "--app-bundle-id",
-                bundleId,
-                "--format",
-                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
-            ]
-        )
+        let globalResult = runAerospace(arguments: [
+            "list-windows",
+            "--app-bundle-id",
+            bundleId,
+            "--format",
+            "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+        ])
         if !Self.shouldAttemptCompatibilityFallback(globalResult) {
             switch globalResult {
             case .success(let result):
@@ -468,8 +466,7 @@ public struct ApAeroSpace {
 
         if focusFollows {
             // Try with --focus-follows-window first; fall back to plain move
-            let focusFollowsResult = commandRunner.run(
-                executable: "aerospace",
+            let focusFollowsResult = runAerospace(
                 arguments: ["move-node-to-workspace", "--focus-follows-window", "--window-id", "\(windowId)", trimmed]
             )
             if !Self.shouldAttemptCompatibilityFallback(focusFollowsResult) {
@@ -490,10 +487,7 @@ public struct ApAeroSpace {
             }
         }
 
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: ["move-node-to-workspace", "--window-id", "\(windowId)", trimmed]
-        ) {
+        switch runAerospace(arguments: ["move-node-to-workspace", "--window-id", "\(windowId)", trimmed]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -512,10 +506,7 @@ public struct ApAeroSpace {
             return .failure(validationError("Window ID must be positive."))
         }
 
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: ["focus", "--window-id", "\(windowId)"]
-        ) {
+        switch runAerospace(arguments: ["focus", "--window-id", "\(windowId)"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -529,16 +520,13 @@ public struct ApAeroSpace {
     /// Returns windows on the focused monitor.
     /// - Returns: Window list or an error.
     func listWindowsFocusedMonitor() -> Result<[ApWindow], ApCoreError> {
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: [
-                "list-windows",
-                "--monitor",
-                "focused",
-                "--format",
-                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
-            ]
-        ) {
+        switch runAerospace(arguments: [
+            "list-windows",
+            "--monitor",
+            "focused",
+            "--format",
+            "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+        ]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -553,18 +541,15 @@ public struct ApAeroSpace {
     /// - Parameter appBundleId: App bundle identifier to filter.
     /// - Returns: Window list or an error.
     func listWindowsOnFocusedMonitor(appBundleId: String) -> Result<[ApWindow], ApCoreError> {
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: [
-                "list-windows",
-                "--monitor",
-                "focused",
-                "--app-bundle-id",
-                appBundleId,
-                "--format",
-                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
-            ]
-        ) {
+        switch runAerospace(arguments: [
+            "list-windows",
+            "--monitor",
+            "focused",
+            "--app-bundle-id",
+            appBundleId,
+            "--format",
+            "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+        ]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -610,16 +595,13 @@ public struct ApAeroSpace {
     /// - Parameter workspace: Workspace name to query.
     /// - Returns: Window list or an error.
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: [
-                "list-windows",
-                "--workspace",
-                workspace,
-                "--format",
-                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
-            ]
-        ) {
+        switch runAerospace(arguments: [
+            "list-windows",
+            "--workspace",
+            workspace,
+            "--format",
+            "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+        ]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -654,20 +636,60 @@ public struct ApAeroSpace {
         return .success(allWindows)
     }
 
+    // MARK: - Circuit Breaker
+
+    /// Runs an aerospace CLI command with circuit breaker protection.
+    ///
+    /// Checks the breaker before spawning a process. If AeroSpace is unresponsive
+    /// (breaker open), returns a descriptive error immediately instead of waiting
+    /// for a 5s timeout. After the call, records the outcome so that a timeout
+    /// trips the breaker for subsequent calls.
+    ///
+    /// - Parameters:
+    ///   - arguments: Arguments to pass to the `aerospace` executable.
+    ///   - timeoutSeconds: Timeout in seconds. Defaults to 5s.
+    /// - Returns: Command result on success, or an error.
+    private func runAerospace(
+        arguments: [String],
+        timeoutSeconds: TimeInterval = 5
+    ) -> Result<ApCommandResult, ApCoreError> {
+        guard circuitBreaker.shouldAllow() else {
+            return .failure(ApCoreError(
+                category: .command,
+                message: "AeroSpace is unresponsive (circuit breaker open).",
+                detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
+            ))
+        }
+
+        let result = commandRunner.run(
+            executable: "aerospace",
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds
+        )
+
+        switch result {
+        case .success:
+            circuitBreaker.recordSuccess()
+        case .failure(let error):
+            if error.message.hasPrefix("Command timed out") {
+                circuitBreaker.recordTimeout()
+            }
+        }
+
+        return result
+    }
+
     // MARK: - Private Helpers
 
     /// Returns windows scoped to the focused window query.
     /// - Returns: Window list or an error.
     private func listWindowsFocused() -> Result<[ApWindow], ApCoreError> {
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: [
-                "list-windows",
-                "--focused",
-                "--format",
-                "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
-            ]
-        ) {
+        switch runAerospace(arguments: [
+            "list-windows",
+            "--focused",
+            "--format",
+            "%{window-id}||%{app-bundle-id}||%{workspace}||%{window-title}"
+        ]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -686,10 +708,7 @@ public struct ApAeroSpace {
             return .failure(validationError("Window ID must be positive."))
         }
 
-        switch commandRunner.run(
-            executable: "aerospace",
-            arguments: ["close", "--window-id", "\(windowId)"]
-        ) {
+        switch runAerospace(arguments: ["close", "--window-id", "\(windowId)"]) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):
@@ -820,7 +839,7 @@ public struct ApAeroSpace {
     /// - Parameter command: AeroSpace command name to query.
     /// - Returns: Help output or an error.
     private func commandHelpOutput(command: String) -> Result<String, ApCoreError> {
-        switch commandRunner.run(executable: "aerospace", arguments: [command, "--help"], timeoutSeconds: 2) {
+        switch runAerospace(arguments: [command, "--help"], timeoutSeconds: 2) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):

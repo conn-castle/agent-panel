@@ -39,8 +39,8 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-02-12 aerospace-focus-crash: AeroSpace crashes with "MacWindow is already unbound" during FocusCommand
     Priority: Medium. Area: AeroSpace/Upstream
-    Description: AeroSpace runtime error `MacWindow(windowId: N) is already unbound` in `FocusCommand.run` when dealing with floating windows. This is an upstream AeroSpace bug that can cascade into system freezes when AgentPanel polls AeroSpace CLI during the crash state.
-    Next step: File upstream issue with AeroSpace. AgentPanel mitigation: consider adding AeroSpace health check (process alive + responsive) before CLI calls during activation.
+    Description: AeroSpace runtime error `MacWindow is already unbound` triggered by concurrent CLI commands while floating switcher panel is visible. AgentPanel mitigations in place: (1) Doctor refresh deferred until after switcher session ends (`onSessionEnded` callback), (2) `AeroSpaceCircuitBreaker` trips on first timeout and fails fast for 30s cooldown, preventing ~90s cascade. Root cause is upstream — AeroSpace socket server concurrent unbind/rebind race.
+    Next step: File upstream issue with AeroSpace repo.
 
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE

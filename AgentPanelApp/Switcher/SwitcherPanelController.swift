@@ -210,6 +210,11 @@ final class SwitcherPanelController: NSObject {
     /// Used by AppDelegate to trigger a background health indicator refresh.
     var onProjectOperationFailed: ((ErrorContext) -> Void)?
 
+    /// Called when the switcher session ends (panel dismissed for any reason).
+    /// Used to defer background work (like Doctor refresh) until after the session
+    /// to avoid concurrent AeroSpace CLI calls.
+    var onSessionEnded: (() -> Void)?
+
     /// Creates a switcher panel controller.
     /// - Parameters:
     ///   - logger: Logger used for switcher diagnostics.
@@ -391,6 +396,8 @@ final class SwitcherPanelController: NSObject {
 
         capturedFocus = nil
         resetState(initialQuery: "")
+
+        onSessionEnded?()
     }
 
     // MARK: - Focus Capture and Restore

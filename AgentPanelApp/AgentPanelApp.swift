@@ -289,7 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        refreshHealthInBackground(trigger: "switcher_open")
         // Capture both the previously active app AND focus state BEFORE the menu dismisses
         // and before we activate. This ensures restore-on-cancel returns to the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
@@ -313,7 +312,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
         let capturedFocus = projectManager.captureCurrentFocus()
-        refreshHealthInBackground(trigger: "switcher_toggle")
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -333,6 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
         controller.onProjectOperationFailed = { [weak self] context in
             self?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
+        }
+        controller.onSessionEnded = { [weak self] in
+            self?.refreshHealthInBackground(trigger: "switcher_session_ended")
         }
         return controller
     }
