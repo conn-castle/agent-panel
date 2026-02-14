@@ -67,6 +67,7 @@ protocol FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws
     func appendFile(at url: URL, data: Data) throws
     func writeFile(at url: URL, data: Data) throws
+    func contentsOfDirectory(at url: URL) throws -> [String]
 }
 
 extension FileSystem {
@@ -75,6 +76,14 @@ extension FileSystem {
     /// Concrete file systems may override this to distinguish between files and directories.
     func directoryExists(at url: URL) -> Bool {
         false
+    }
+
+    /// Default directory listing.
+    ///
+    /// Returns an empty array by default. Override in production or test implementations
+    /// that need real directory enumeration.
+    func contentsOfDirectory(at url: URL) throws -> [String] {
+        []
     }
 }
 
@@ -140,6 +149,10 @@ struct DefaultFileSystem: FileSystem {
 
     func writeFile(at url: URL, data: Data) throws {
         try data.write(to: url, options: .atomic)
+    }
+
+    func contentsOfDirectory(at url: URL) throws -> [String] {
+        try fileManager.contentsOfDirectory(atPath: url.path)
     }
 }
 
@@ -217,6 +230,7 @@ protocol AeroSpaceProviding {
     // Window queries — global search with fallback to focused monitor
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError>
+    func listAllWindows() -> Result<[ApWindow], ApCoreError>
     func focusedWindow() -> Result<ApWindow, ApCoreError>
 
     // Window actions
@@ -237,7 +251,8 @@ protocol IdeLauncherProviding {
     ///     - SSH projects: remote absolute path.
     ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
     ///     When set, the workspace folder is opened via a `vscode-remote://` folder URI.
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError>
+    ///   - color: Optional project color for VS Code color customizations.
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for Chrome launching.
@@ -270,6 +285,123 @@ extension ApAeroSpace: AeroSpaceProviding {}
 extension ApVSCodeLauncher: IdeLauncherProviding {}
 extension ApAgentLayerVSCodeLauncher: IdeLauncherProviding {}
 extension ApChromeLauncher: ChromeLauncherProviding {}
+
+// MARK: - Window Positioning
+
+/// Window frame read/write operations via macOS Accessibility APIs.
+///
+/// Result of a `setWindowFrames` call, reporting how many windows matched and how many
+/// were successfully positioned.
+public struct WindowPositionResult: Equatable, Sendable {
+    /// Number of windows successfully positioned.
+    public let positioned: Int
+    /// Total number of windows that matched the title token.
+    public let matched: Int
+
+    public init(positioned: Int, matched: Int) {
+        self.positioned = positioned
+        self.matched = matched
+    }
+
+    /// True when some matched windows failed to be positioned.
+    public var hasPartialFailure: Bool { positioned < matched }
+}
+
+/// Outcome of a single window recovery attempt.
+public enum RecoveryOutcome: Equatable, Sendable {
+    /// Window was resized and/or moved to fit the screen.
+    case recovered
+    /// Window already fits on screen; no changes made.
+    case unchanged
+    /// No matching window was found (app not running, window closed, etc.).
+    case notFound
+}
+
+/// All frames use NSScreen coordinate space (origin bottom-left, Y up).
+/// Implementations handle coordinate conversion to/from AX space internally.
+public protocol WindowPositioning {
+    /// Returns the current frame of the primary matched window for the given app.
+    ///
+    /// Matches windows whose title contains `AP:<projectId>`. If multiple windows match,
+    /// uses the first (title-sorted) match.
+    ///
+    /// - Returns: `.failure` if no running app, no matching window, or AX calls fail/timeout.
+    func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError>
+
+    /// Sets window frames for all windows matching `AP:<projectId>`.
+    ///
+    /// Match index 0 gets `primaryFrame`. Match index N>0 gets cascaded by
+    /// `N * cascadeOffsetPoints` down-right in NSScreen space.
+    ///
+    /// - Returns: `.success` with positioned/matched counts, or `.failure` if no windows
+    ///   could be positioned (e.g., no running app, AX permission denied).
+    func setWindowFrames(
+        bundleId: String,
+        projectId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError>
+
+    /// Recovers a window by bundle ID and title.
+    ///
+    /// The caller should focus the target window (via AeroSpace) before calling this method
+    /// so that the implementation can prefer the focused window when multiple windows share
+    /// the same title. Reads the window's current frame; if wider or taller than
+    /// `screenVisibleFrame`, or if the window center is off-screen, shrinks to fit and centers.
+    ///
+    /// - Parameters:
+    ///   - bundleId: Bundle identifier of the owning application.
+    ///   - windowTitle: Expected window title (used for verification/fallback matching).
+    ///   - screenVisibleFrame: Screen visible frame to constrain within.
+    /// - Returns: `.recovered` if resized/moved, `.unchanged` if already fits,
+    ///   `.notFound` if no matching window, or `.failure` on AX error.
+    func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError>
+
+    /// Returns true if macOS Accessibility permission is granted.
+    func isAccessibilityTrusted() -> Bool
+
+    /// Prompts the user for Accessibility permission if not already granted.
+    /// Shows the macOS system Accessibility permission dialog.
+    /// - Returns: true if permission is already granted (no prompt shown).
+    func promptForAccessibility() -> Bool
+}
+
+/// Screen mode detection based on physical monitor dimensions.
+///
+/// Uses only Foundation/CoreGraphics types — no NSScreen, no AppKit import.
+/// Concrete implementation (`ScreenModeDetector`) lives in the AppKit module.
+public protocol ScreenModeDetecting {
+    /// Detects screen mode for the display containing the given point.
+    ///
+    /// - Returns: `.failure` if physical screen size cannot be determined (e.g., broken EDID).
+    func detectMode(containingPoint: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError>
+
+    /// Returns the physical width in inches for the display containing the given point.
+    ///
+    /// - Returns: `.failure` if physical screen size cannot be determined.
+    func physicalWidthInches(containingPoint: CGPoint) -> Result<Double, ApCoreError>
+
+    /// Returns the visible frame (minus dock/menu bar) of the display containing the given point.
+    ///
+    /// - Returns: `nil` if no display contains the point.
+    func screenVisibleFrame(containingPoint: CGPoint) -> CGRect?
+}
+
+/// Persistence for saved window positions per project per screen mode.
+protocol WindowPositionStoring {
+    /// Loads saved window frames for a project and screen mode.
+    ///
+    /// - Returns:
+    ///   - `.success(frames)` if saved frames exist.
+    ///   - `.success(nil)` if no saved frames (file missing or project not in file).
+    ///   - `.failure(error)` on decode errors (corrupt file, schema mismatch).
+    func load(projectId: String, mode: ScreenMode) -> Result<SavedWindowFrames?, ApCoreError>
+
+    /// Saves window frames for a project and screen mode.
+    ///
+    /// - Returns: `.failure` on write errors.
+    func save(projectId: String, mode: ScreenMode, frames: SavedWindowFrames) -> Result<Void, ApCoreError>
+}
 
 // MARK: - App Discovery
 

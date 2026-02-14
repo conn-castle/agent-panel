@@ -697,6 +697,7 @@ private final class FocusAeroSpaceStub: AeroSpaceProviding {
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
         .success(windowsByWorkspace[workspace] ?? [])
     }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
     func focusedWindow() -> Result<ApWindow, ApCoreError> { focusedWindowResult }
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
         focusedWindowIds.append(windowId)
@@ -721,7 +722,7 @@ private final class FocusIdeLauncherStub: IdeLauncherProviding {
     /// Optional callback invoked on launch — used to inject windows into AeroSpace stub.
     var onLaunch: ((String) -> Void)?
 
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> {
         called = true
         onLaunch?(identifier)
         return result

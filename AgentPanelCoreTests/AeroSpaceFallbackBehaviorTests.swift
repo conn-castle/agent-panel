@@ -452,7 +452,7 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
             .success(ApCommandResult(exitCode: 0, stdout: "--monitor --workspace --focused --app-bundle-id --format", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries --boundaries-action dfs-next dfs-prev wrap-around-the-workspace", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
@@ -473,7 +473,8 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
             .success(ApCommandResult(exitCode: 0, stdout: "--monitor", stderr: "--workspace --focused --app-bundle-id --format")),
             .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            // focus flags split across stdout/stderr
+            .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries dfs-next", stderr: "--boundaries-action dfs-prev wrap-around-the-workspace")),
             .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())

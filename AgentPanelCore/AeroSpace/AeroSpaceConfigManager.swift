@@ -169,6 +169,13 @@ public struct AeroSpaceConfigManager {
         }
     }
 
+    /// Returns the raw contents of the AeroSpace config file, or nil if the file
+    /// does not exist or cannot be read.
+    public func configContents() -> String? {
+        guard configExists() else { return nil }
+        return try? String(contentsOfFile: configPath, encoding: .utf8)
+    }
+
     /// Returns the status of the AeroSpace config for diagnostic purposes.
     public func configStatus() -> AeroSpaceConfigStatus {
         guard configExists() else {

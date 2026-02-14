@@ -40,6 +40,11 @@ public struct DataPaths: Sendable {
         stateDirectory.appendingPathComponent("recent-projects.json", isDirectory: false)
     }
 
+    /// Returns `~/.local/state/agent-panel/window-layouts.json`.
+    var windowLayoutsFile: URL {
+        stateDirectory.appendingPathComponent("window-layouts.json", isDirectory: false)
+    }
+
     /// Returns `~/.local/state/agent-panel/chrome-tabs/`.
     var chromeTabsDirectory: URL {
         stateDirectory.appendingPathComponent("chrome-tabs", isDirectory: true)
@@ -62,6 +67,15 @@ public struct DataPaths: Sendable {
     /// Returns `~/.local/state/agent-panel/logs/agent-panel.log`.
     public var primaryLogFile: URL {
         logsDirectory.appendingPathComponent("agent-panel.log", isDirectory: false)
+    }
+
+    // MARK: - VS Code paths
+
+    /// Returns `~/.vscode/extensions/`.
+    var vscodeExtensionsDirectory: URL {
+        homeDirectory
+            .appendingPathComponent(".vscode", isDirectory: true)
+            .appendingPathComponent("extensions", isDirectory: true)
     }
 
     // MARK: - Private

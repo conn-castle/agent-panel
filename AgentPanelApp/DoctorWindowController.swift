@@ -28,6 +28,8 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     var onStartAeroSpace: (() -> Void)?
     /// Called when user requests to reload AeroSpace config.
     var onReloadConfig: (() -> Void)?
+    /// Called when user requests Accessibility permission.
+    var onRequestAccessibility: (() -> Void)?
     /// Called when user closes the window.
     var onClose: (() -> Void)?
 
@@ -73,6 +75,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
             buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
             buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
             buttons.reloadConfig.isEnabled = report.actions.canReloadAeroSpaceConfig
+            buttons.requestAccessibility.isEnabled = report.actions.canRequestAccessibility
         }
     }
 
@@ -139,6 +142,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
         let secondaryRow = makeButtonRow(buttons: [
             buttons.reloadConfig,
+            buttons.requestAccessibility,
             buttons.close
         ])
 
@@ -174,6 +178,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         let installAeroSpaceButton = makeButton(title: "Install AeroSpace", action: #selector(handleInstallAeroSpace))
         let startAeroSpaceButton = makeButton(title: "Start AeroSpace", action: #selector(handleStartAeroSpace))
         let reloadConfigButton = makeButton(title: "Reload AeroSpace Config", action: #selector(handleReloadConfig))
+        let requestAccessibilityButton = makeButton(title: "Request Accessibility", action: #selector(handleRequestAccessibility))
         let closeButton = makeButton(title: "Close", action: #selector(handleClose))
 
         return DoctorButtons(
@@ -182,6 +187,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
             installAeroSpace: installAeroSpaceButton,
             startAeroSpace: startAeroSpaceButton,
             reloadConfig: reloadConfigButton,
+            requestAccessibility: requestAccessibilityButton,
             close: closeButton
         )
     }
@@ -226,6 +232,10 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         onReloadConfig?()
     }
 
+    @objc private func handleRequestAccessibility() {
+        onRequestAccessibility?()
+    }
+
     @objc private func handleClose() {
         // Close the window, which triggers windowWillClose → onClose callback.
         window?.close()
@@ -241,5 +251,6 @@ struct DoctorButtons {
     let installAeroSpace: NSButton
     let startAeroSpace: NSButton
     let reloadConfig: NSButton
+    let requestAccessibility: NSButton
     let close: NSButton
 }

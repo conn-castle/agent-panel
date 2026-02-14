@@ -123,7 +123,8 @@ final class DoctorReportRenderingTests: XCTestCase {
             agentPanelVersion: "dev",
             macOSVersion: "macOS 15.7 (Test)",
             aerospaceApp: aerospaceApp,
-            aerospaceCli: aerospaceCli
+            aerospaceCli: aerospaceCli,
+            errorContext: nil
         )
     }
 }

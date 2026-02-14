@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 import AgentPanelAppKit
@@ -33,20 +34,30 @@ struct AgentPanelApp: App {
 private struct MenuItems {
     let hotkeyWarning: NSMenuItem
     let openSwitcher: NSMenuItem
+    let recoverAgentPanel: NSMenuItem
+    let addWindowToProject: NSMenuItem
+    let recoverAllWindows: NSMenuItem
+    let launchAtLogin: NSMenuItem
 }
 
 /// App lifecycle hook used to create a minimal menu bar presence.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var doctorController: DoctorWindowController?
+    private var recoveryController: RecoveryProgressController?
     private var hotkeyManager: HotkeyManager?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
     private var isHealthRefreshInFlight: Bool = false
+    private var pendingCriticalContext: ErrorContext?
     private var lastHealthRefreshAt: Date?
+    private var menuFocusCapture: CapturedFocus?
     private let logger: AgentPanelLogging = AgentPanelLogger()
-    private let projectManager = ProjectManager()
+    private let projectManager = ProjectManager(
+        windowPositioner: AXWindowPositioner(),
+        screenModeDetector: ScreenModeDetector()
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run onboarding check asynchronously before setting up the app
@@ -90,7 +101,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Load config on the main thread (ProjectManager is not thread-safe), then
         // ensure VS Code settings blocks in the background (may use SSH).
         let configResult = projectManager.loadConfig()
-        let projects = (try? configResult.get())?.config.projects ?? []
+        let loadedConfig = try? configResult.get()
+        let projects = loadedConfig?.config.projects ?? []
+
+        // Apply auto-start at login from config (only when config loaded successfully)
+        if let loadedConfig {
+            syncLaunchAtLogin(configValue: loadedConfig.config.app.autoStartAtLogin)
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             if !projects.isEmpty {
@@ -197,6 +214,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        // Recovery and window management items
+        let recoverAgentPanelItem = NSMenuItem(
+            title: "Recover Project",
+            action: #selector(recoverAgentPanel),
+            keyEquivalent: ""
+        )
+        recoverAgentPanelItem.target = self
+        recoverAgentPanelItem.isEnabled = false // Toggled in menuNeedsUpdate
+        menu.addItem(recoverAgentPanelItem)
+
+        let addWindowToProjectItem = NSMenuItem(
+            title: "Add Window to Project",
+            action: nil,
+            keyEquivalent: ""
+        )
+        addWindowToProjectItem.submenu = NSMenu()
+        addWindowToProjectItem.isHidden = true // Toggled in menuNeedsUpdate
+        menu.addItem(addWindowToProjectItem)
+
+        let recoverAllWindowsItem = NSMenuItem(
+            title: "Recover All Windows...",
+            action: #selector(recoverAllWindowsAction),
+            keyEquivalent: ""
+        )
+        recoverAllWindowsItem.target = self
+        menu.addItem(recoverAllWindowsItem)
+
+        menu.addItem(.separator())
+
         menu.addItem(
             NSMenuItem(
                 title: "Run Doctor...",
@@ -204,6 +250,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyEquivalent: "d"
             )
         )
+        menu.addItem(.separator())
+
+        let launchAtLoginItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        menu.addItem(launchAtLoginItem)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(
@@ -213,7 +269,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        menuItems = MenuItems(hotkeyWarning: hotkeyWarningItem, openSwitcher: openSwitcherItem)
+        menu.delegate = self
+
+        menuItems = MenuItems(
+            hotkeyWarning: hotkeyWarningItem,
+            openSwitcher: openSwitcherItem,
+            recoverAgentPanel: recoverAgentPanelItem,
+            addWindowToProject: addWindowToProjectItem,
+            recoverAllWindows: recoverAllWindowsItem,
+            launchAtLogin: launchAtLoginItem
+        )
 
         return menu
     }
@@ -224,7 +289,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        refreshHealthInBackground(trigger: "switcher_open")
         // Capture both the previously active app AND focus state BEFORE the menu dismisses
         // and before we activate. This ensures restore-on-cancel returns to the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
@@ -248,7 +312,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication
         let capturedFocus = projectManager.captureCurrentFocus()
-        refreshHealthInBackground(trigger: "switcher_toggle")
         DispatchQueue.main.async { [weak self] in
             guard let self else {
                 return
@@ -266,8 +329,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Creates a new SwitcherPanelController instance.
     private func makeSwitcherController() -> SwitcherPanelController {
         let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
-        controller.onProjectOperationFailed = { [weak self] in
-            self?.refreshHealthInBackground(trigger: "project_operation_failed")
+        controller.onProjectOperationFailed = { [weak self] context in
+            self?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
+        }
+        controller.onSessionEnded = { [weak self] in
+            self?.refreshHealthInBackground(trigger: "switcher_session_ended")
         }
         return controller
     }
@@ -409,12 +475,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Debounced: skips the run if a refresh is already in flight or if the last
     /// refresh completed less than `MenuBarHealthIndicator.refreshDebounceSeconds` ago.
     /// Pass `force: true` to bypass debouncing (used for startup).
+    /// Critical errors (from `errorContext.isCritical`) skip debounce automatically.
     ///
     /// - Parameters:
     ///   - trigger: Log event name suffix describing what triggered the refresh.
     ///   - force: When true, bypasses the debounce window (e.g., for startup).
-    private func refreshHealthInBackground(trigger: String, force: Bool = false) {
+    ///   - errorContext: Optional error context that triggered this refresh.
+    private func refreshHealthInBackground(
+        trigger: String,
+        force: Bool = false,
+        errorContext: ErrorContext? = nil
+    ) {
+        let skipDebounce = force || (errorContext?.isCritical == true)
+
         guard !isHealthRefreshInFlight else {
+            // Store critical context so it's not dropped when in-flight
+            if let errorContext, errorContext.isCritical {
+                pendingCriticalContext = errorContext
+            }
             logAppEvent(
                 event: "doctor.refresh.skipped",
                 context: ["trigger": trigger, "reason": "in_flight"]
@@ -422,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if !force, let lastRefresh = lastHealthRefreshAt,
+        if !skipDebounce, let lastRefresh = lastHealthRefreshAt,
            Date().timeIntervalSince(lastRefresh) < MenuBarHealthIndicator.refreshDebounceSeconds {
             logAppEvent(
                 event: "doctor.refresh.skipped",
@@ -436,12 +514,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let report = self.makeDoctor().run()
+            let report = self.makeDoctor().run(context: errorContext)
             DispatchQueue.main.async {
                 self.isHealthRefreshInFlight = false
                 self.lastHealthRefreshAt = Date()
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
                 self.logDoctorSummary(report, event: "doctor.refresh.completed")
+
+                // Auto-show Doctor window for critical errors with FAIL findings
+                if let ctx = errorContext, ctx.isCritical, report.hasFailures {
+                    self.logAppEvent(
+                        event: "doctor.auto_show",
+                        context: ["trigger": ctx.trigger, "category": ctx.category.rawValue]
+                    )
+                    self.showDoctorReport(report)
+                }
+
+                // If a critical error was queued while in-flight, trigger a new refresh
+                if let pending = self.pendingCriticalContext {
+                    self.pendingCriticalContext = nil
+                    self.refreshHealthInBackground(
+                        trigger: pending.trigger,
+                        errorContext: pending
+                    )
+                }
             }
         }
     }
@@ -450,7 +546,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeDoctor() -> Doctor {
         Doctor(
             runningApplicationChecker: AppKitRunningApplicationChecker(),
-            hotkeyStatusProvider: hotkeyManager
+            hotkeyStatusProvider: hotkeyManager,
+            windowPositioner: AXWindowPositioner()
         )
     }
 
@@ -534,6 +631,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    /// Requests Accessibility permission and refreshes the report.
+    private func requestAccessibility() {
+        runDoctorAction(
+            { $0.requestAccessibility() },
+            requestedEvent: "doctor.request_accessibility.requested",
+            completedEvent: "doctor.request_accessibility.completed"
+        )
+    }
+
     /// Closes the Doctor window and restores previously captured focus.
     ///
     /// Focus restoration runs on a detached task so AeroSpace CLI calls don't block the main
@@ -610,6 +716,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    // MARK: - Launch at Login
+
+    /// Syncs SMAppService registration with the config value.
+    /// - Parameter configValue: The `autoStartAtLogin` value from config.
+    private func syncLaunchAtLogin(configValue: Bool) {
+        let service = SMAppService.mainApp
+        if configValue {
+            do {
+                try service.register()
+                logAppEvent(event: "launch_at_login.registered")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.register_failed",
+                    level: .warn,
+                    message: "Launch at login configured but registration failed: \(error.localizedDescription)"
+                )
+            }
+        } else {
+            do {
+                try service.unregister()
+                logAppEvent(event: "launch_at_login.unregistered")
+            } catch {
+                // Unregister failure when not registered is expected; only warn if meaningful
+                logAppEvent(
+                    event: "launch_at_login.unregister_failed",
+                    level: .warn,
+                    message: "\(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    /// Toggles the Launch at Login menu item.
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        let isCurrentlyEnabled = service.status == .enabled
+        let newValue = !isCurrentlyEnabled
+
+        if newValue {
+            do {
+                try service.register()
+                logAppEvent(event: "launch_at_login.toggled_on")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.toggle_register_failed",
+                    level: .error,
+                    message: "Failed to enable launch at login: \(error.localizedDescription)"
+                )
+                return
+            }
+        } else {
+            do {
+                try service.unregister()
+                logAppEvent(event: "launch_at_login.toggled_off")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.toggle_unregister_failed",
+                    level: .error,
+                    message: "Failed to disable launch at login: \(error.localizedDescription)"
+                )
+                return
+            }
+        }
+
+        // Write back to config.toml
+        let configURL = DataPaths.default().configFile
+        do {
+            try ConfigWriteBack.setAutoStartAtLogin(newValue, in: configURL)
+            logAppEvent(event: "launch_at_login.config_written", context: ["value": "\(newValue)"])
+            menuItems?.launchAtLogin.title = "Launch at Login"
+        } catch {
+            logAppEvent(
+                event: "launch_at_login.config_write_failed",
+                level: .error,
+                message: "Config save failed: \(error.localizedDescription)"
+            )
+            // Rollback SMAppService toggle since config write failed
+            if newValue {
+                try? service.unregister()
+            } else {
+                try? service.register()
+            }
+            menuItems?.launchAtLogin.title = "Launch at Login"
+        }
+    }
+
     // MARK: - App Lifecycle State Management
 
     /// Called when the app is about to terminate.
@@ -651,8 +843,197 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onInstallAeroSpace = { [weak self] in self?.installAeroSpace() }
         controller.onStartAeroSpace = { [weak self] in self?.startAeroSpace() }
         controller.onReloadConfig = { [weak self] in self?.reloadAeroSpaceConfig() }
+        controller.onRequestAccessibility = { [weak self] in self?.requestAccessibility() }
         controller.onClose = { [weak self] in self?.closeDoctorWindow() }
         doctorController = controller
         return controller
+    }
+
+    // MARK: - Window Recovery & Move to Project
+
+    /// Creates a WindowRecoveryManager with an already-captured screen frame.
+    /// The screen frame must be read on the main thread before calling this.
+    private func makeWindowRecoveryManager(screenFrame: CGRect) -> WindowRecoveryManager {
+        WindowRecoveryManager(
+            windowPositioner: AXWindowPositioner(),
+            screenVisibleFrame: screenFrame,
+            logger: logger
+        )
+    }
+
+    /// Recovers all windows in the current project workspace.
+    @objc private func recoverAgentPanel() {
+        logAppEvent(event: "recover_agent_panel.requested")
+        statusItem?.menu?.cancelTracking()
+
+        guard let focus = menuFocusCapture, focus.workspace.hasPrefix(ProjectManager.workspacePrefix) else {
+            logAppEvent(event: "recover_agent_panel.skipped", level: .warn, message: "Not in a project workspace")
+            return
+        }
+
+        // Capture screen frame on main thread (AppKit API)
+        guard let screenFrame = NSScreen.main?.visibleFrame else {
+            logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+            return
+        }
+
+        let workspace = focus.workspace
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+            let result = manager.recoverWorkspaceWindows(workspace: workspace)
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let recovery):
+                    self.logAppEvent(
+                        event: "recover_agent_panel.completed",
+                        context: [
+                            "processed": "\(recovery.windowsProcessed)",
+                            "recovered": "\(recovery.windowsRecovered)"
+                        ]
+                    )
+                case .failure(let error):
+                    self.logAppEvent(
+                        event: "recover_agent_panel.failed",
+                        level: .error,
+                        message: error.message
+                    )
+                }
+            }
+        }
+    }
+
+    /// Recovers all windows across all workspaces, moving them to workspace "1".
+    @objc private func recoverAllWindowsAction() {
+        logAppEvent(event: "recover_all_windows.requested")
+        statusItem?.menu?.cancelTracking()
+
+        // Capture screen frame on main thread (AppKit API)
+        guard let screenFrame = NSScreen.main?.visibleFrame else {
+            logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+            return
+        }
+
+        // Show progress panel
+        let controller = RecoveryProgressController()
+        controller.onClose = { [weak self] in
+            self?.recoveryController = nil
+        }
+        recoveryController = controller
+        controller.show()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+
+            let result = manager.recoverAllWindows { current, total in
+                DispatchQueue.main.async {
+                    self.recoveryController?.updateProgress(current: current, total: total)
+                }
+            }
+
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let recovery):
+                    let message: String
+                    if recovery.errors.isEmpty {
+                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
+                    } else {
+                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
+                    }
+                    self.recoveryController?.showCompletion(message: message)
+                    self.logAppEvent(
+                        event: "recover_all_windows.completed",
+                        context: [
+                            "processed": "\(recovery.windowsProcessed)",
+                            "recovered": "\(recovery.windowsRecovered)",
+                            "errors": "\(recovery.errors.count)"
+                        ]
+                    )
+                case .failure(let error):
+                    self.recoveryController?.showCompletion(
+                        message: "Recovery failed: \(error.message)"
+                    )
+                    self.logAppEvent(
+                        event: "recover_all_windows.failed",
+                        level: .error,
+                        message: error.message
+                    )
+                }
+            }
+        }
+    }
+
+    /// Moves the focused window to the selected project's workspace.
+    @objc private func addWindowToProject(_ sender: NSMenuItem) {
+        guard let projectId = sender.representedObject as? String else { return }
+        guard let focus = menuFocusCapture else {
+            logAppEvent(event: "add_window_to_project.no_focus", level: .warn)
+            return
+        }
+
+        logAppEvent(
+            event: "add_window_to_project.requested",
+            context: ["window_id": "\(focus.windowId)", "project_id": projectId]
+        )
+
+        let result = projectManager.moveWindowToProject(windowId: focus.windowId, projectId: projectId)
+        switch result {
+        case .success:
+            logAppEvent(
+                event: "add_window_to_project.completed",
+                context: ["window_id": "\(focus.windowId)", "project_id": projectId]
+            )
+        case .failure(let error):
+            logAppEvent(
+                event: "add_window_to_project.failed",
+                level: .error,
+                message: "\(error)"
+            )
+        }
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension AppDelegate: NSMenuDelegate {
+    /// Updates dynamic menu items each time the menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Capture focus before the menu fully appears
+        menuFocusCapture = projectManager.captureCurrentFocus()
+
+        guard let menuItems else { return }
+
+        // Reflect Launch at Login state
+        menuItems.launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
+
+        // Toggle "Recover Project" — enabled only in ap-* workspaces
+        let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false
+        menuItems.recoverAgentPanel.isEnabled = inProjectWorkspace
+
+        // Populate "Add Window to Project" submenu
+        let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()
+        submenu.removeAllItems()
+
+        var hasOpenProjects = false
+        if let state = try? projectManager.workspaceState().get() {
+            let openProjects = projectManager.projects.filter { state.openProjectIds.contains($0.id) }
+            if !openProjects.isEmpty {
+                hasOpenProjects = true
+                for project in openProjects {
+                    let item = NSMenuItem(
+                        title: project.name,
+                        action: #selector(addWindowToProject(_:)),
+                        keyEquivalent: ""
+                    )
+                    item.target = self
+                    item.representedObject = project.id
+                    submenu.addItem(item)
+                }
+            }
+        }
+
+        menuItems.addWindowToProject.submenu = submenu
+        menuItems.addWindowToProject.isHidden = !hasOpenProjects
     }
 }

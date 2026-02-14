@@ -72,11 +72,81 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: All call sites (ProjectManager, CLI handlers, App, tests) required migration to unwrap `.config` from the success value.
 
 - Decision 2026-02-10 covgate: Coverage gate enforced via scripts/test.sh
-    Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`, `AgentPanelAppKit`) via `scripts/coverage_gate.sh`. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
-    Reason: Deterministic quality bar for core/business logic; presentation/UI code is intentionally not gated.
-    Tradeoffs: UI target coverage is not enforced; developers must install git hooks locally (CI still enforces).
+    Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`) via `scripts/coverage_gate.sh`. `AgentPanelAppKit` is excluded because it contains system-level code (AX APIs, NSScreen, CGDisplay) that requires a live window server — not exercisable in CI unit tests. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
+    Reason: Deterministic quality bar for core/business logic; presentation/UI code and system integration code are intentionally not gated.
+    Tradeoffs: UI and AppKit target coverage is not enforced; developers must install git hooks locally (CI still enforces).
+
+- Decision 2026-02-12 windowlayout: Window positioning uses AX APIs with Core/AppKit protocol layering
+    Decision: Window positioning protocols (WindowPositioning, ScreenModeDetecting) are defined in Core using only Foundation/CG types. Concrete implementations (AXWindowPositioner, ScreenModeDetector) live in AppKit module. ProjectManager accepts them as optional init params from App/CLI callers.
+    Reason: Core cannot import AppKit. Protocols with Foundation/CG types allow business logic (layout engine, position store, config validation) to stay in Core and be fully unit-testable, while AX/NSScreen code stays in AppKit.
+    Tradeoffs: AppKit code (~350 lines) is not coverage-gated (requires live window server). AgentPanelAppKit excluded from coverage gate.
+
+- Decision 2026-02-12 cascadematch: Multiple AX window matches are cascaded, not rejected
+    Decision: When multiple windows match the `AP:<projectId>` title token for a bundle ID, the first window (title-sorted) gets the target frame; subsequent matches are offset by 0.5 inches down-right (cascade pattern).
+    Reason: Users may have duplicate tagged windows from VS Code reload or Chrome reopens. Rejecting the positioning on multi-match would be surprising and unhelpful.
+    Tradeoffs: Cascade offset is fixed at 0.5 inches regardless of window count; deeply stacked windows may overlap.
+
+- Decision 2026-02-12 hardfaillayout: Invalid [layout] config values produce FAIL findings (hard-fail, no per-field fallback)
+    Decision: If any `[layout]` value is out of range or the wrong type, it is a FAIL finding that prevents config from loading. No per-field fallback to defaults.
+    Reason: Silent fallback to defaults on invalid values violates the "fail loudly" principle and can produce confusing positioning behavior.
+    Tradeoffs: A single typo in `[layout]` blocks all config loading. Users must fix the value to proceed.
+
+- Decision 2026-02-12 axprompt: Accessibility prompt via Doctor button only (not app launch)
+    Decision: Do not auto-prompt for Accessibility permission on app launch. Instead, Doctor shows a "Request Accessibility" button when the check is FAIL.
+    Reason: Auto-prompting on every launch is invasive UX — the system dialog is modal and disruptive, especially when the user may not need window positioning.
+    Tradeoffs: Users must open Doctor to trigger the Accessibility prompt. First-time users won't be prompted until they check Doctor or try window positioning.
+
+- Decision 2026-02-12 axvaluetype: CFGetTypeID-based AXValue type checking (not Swift conditional cast)
+    Decision: Use `CFGetTypeID(obj) == AXValueGetTypeID()` to validate AXValue types before downcasting, instead of `as? AXValue`.
+    Reason: Swift `as?` conditional cast always succeeds for CoreFoundation bridged types — it never returns nil for AXValue, making it useless as a type guard.
+    Tradeoffs: Slightly more verbose code, but actually catches type mismatches that `as?` silently passes through.
+
+- Decision 2026-02-12 recoverymatch: Window recovery prefers focused window, falls back to title match
+    Decision: `recoverWindow()` in AXWindowPositioner first checks the app's AX focused window (via `kAXFocusedWindowAttribute`). If its title matches, uses it directly. Falls back to title enumeration only if the focused window doesn't match. `WindowRecoveryManager` calls `aerospace.focusWindow(windowId:)` before each recovery to set up the focused window.
+    Reason: Duplicate-title windows (common for Chrome/VS Code) would cause the same window to be found on every recovery call. By focusing each AeroSpace window first, the AX focused window is unambiguous regardless of title.
+    Tradeoffs: Recovery now changes window focus as a side effect (restored at end). Slightly more AeroSpace CLI calls (one focus per window).
+
+- Decision 2026-02-12 recoverywm: WindowRecoveryManager is separate from ProjectManager
+    Decision: Window recovery logic lives in a new `WindowRecoveryManager` class, not in ProjectManager.
+    Reason: ProjectManager is already large. Recovery is orthogonal to project lifecycle (it operates on arbitrary windows, not projects). Separate class keeps responsibilities clear and testable.
+    Tradeoffs: App layer must wire a second manager. Minor complexity increase.
+
+- Decision 2026-02-13 autostart: Auto-start at login uses config as source of truth
+    Decision: `[app] autoStartAtLogin` in `config.toml` is the authoritative source for launch-at-login state. The menu toggle writes back to config. `SMAppService.mainApp` registers/unregisters the login item.
+    Reason: Config-as-truth avoids split-brain between the login item registration state and the config file. The config is always the canonical state.
+    Tradeoffs: Menu toggle must write to disk (config file) on every change. If config write fails, the toggle reverts.
+
+- Decision 2026-02-13 vscolor: VS Code color differentiation via settings.json colorCustomizations
+    Decision: Inject `workbench.colorCustomizations` (titleBar, activityBar, statusBar — background + foreground) into the `// >>> agent-panel` settings.json block based on the project's `color` field. Foreground is white (#FFFFFF) if luminance < 0.5, black (#000000) otherwise.
+    Reason: Project color was already in config but not applied to VS Code. Settings.json block injection was already in place for window.title; extending it with colorCustomizations is minimal effort and immediately visible.
+    Tradeoffs: Only 6 VS Code color keys are set (title bar, activity bar, status bar). Other UI elements remain default. Invalid/unrecognized color strings silently skip color injection (no error).
+
+- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension (supersedes vscolor)
+    Decision: Replaced direct `workbench.colorCustomizations` injection (6 keys) with a single `"peacock.color": "#RRGGBB"` key in the settings.json block. The Peacock VS Code extension (`johnpapa.vscode-peacock`) reads this key and applies color across title bar, activity bar, and status bar. Doctor warns (not fails) if Peacock is not installed.
+    Reason: Peacock provides better color theming with a single key instead of 6, handles foreground contrast automatically, and is a well-maintained community extension.
+    Tradeoffs: Requires an additional VS Code extension install. Projects without Peacock installed will see the key in settings but no color effect (graceful degradation).
+
+- Decision 2026-02-14 autostart-rollback: Config write failure rolls back SMAppService toggle
+    Decision: When the "Launch at Login" toggle succeeds at the SMAppService level but fails to write back to config.toml, the SMAppService toggle is undone (re-register or unregister) and the menu title is reset to "Launch at Login" (not "(save failed)").
+    Reason: Avoids split-brain between SMAppService state and config.toml as the source of truth.
+    Tradeoffs: None significant; the rollback is best-effort (try?).
 
 - Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
     Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
     Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".
     Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows.
+
+- Decision 2026-02-14 workspacetab: Workspace-scoped window cycling via native AeroSpace focus commands
+    Decision: Use AeroSpace's native `focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next`/`dfs-prev` bound to Option-Tab / Option-Shift-Tab in the managed `aerospace-safe.toml` template. No custom CLI subcommand needed.
+    Reason: AeroSpace's DFS-order focus natively includes floating windows (unless `--ignore-floating` is set). A custom `ap cycle-focus` CLI was considered but rejected because AeroSpace's `exec-and-forget` would need `ap` on PATH, which is brittle for GUI apps.
+    Tradeoffs: DFS order is not identical to macOS Cmd-Tab (MRU order), but provides deterministic, predictable cycling within a workspace. Existing users with a managed config must reload to get the new keybindings; Doctor warns about stale configs.
+
+- Decision 2026-02-14 chromecolordefer: Chrome visual differentiation deferred permanently to BACKLOG
+    Decision: Removed `chrome-color` from Phase 7 and moved to BACKLOG. Chrome has no clean programmatic injection point for window color theming.
+    Reason: Unlike VS Code (which has Peacock extension reading a single settings.json key), Chrome provides no equivalent mechanism. Chrome profiles could work but require complex profile management. A custom Chrome extension is possible but out of scope for polish work.
+    Tradeoffs: Chrome windows have no visual color correlation with their project. Users must rely on tab content to identify project Chrome windows.
+
+- Decision 2026-02-14 circuitbreaker: AeroSpace CLI circuit breaker prevents timeout cascades
+    Decision: `AeroSpaceCircuitBreaker` (process-wide shared instance) sits between `ApAeroSpace` and `CommandRunning`. All `aerospace` CLI calls go through `runAerospace()`, which checks the breaker before spawning a process. On timeout, the breaker trips to "open" state for a 30s cooldown; subsequent calls fail immediately with a descriptive error. `start()` resets the breaker after a fresh AeroSpace launch.
+    Reason: When AeroSpace crashes or its socket becomes unresponsive, every CLI call times out at 5s. With 15-20 calls in a Doctor check, this creates a ~90s freeze. The circuit breaker detects the first timeout and immediately fails the rest.
+    Tradeoffs: A single transient timeout trips the breaker for 30s, potentially blocking legitimate calls. After cooldown, the next call acts as a probe to re-verify connectivity.

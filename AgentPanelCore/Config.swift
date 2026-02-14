@@ -69,6 +69,16 @@ public struct ChromeConfig: Equatable, Sendable {
     }
 }
 
+/// Application-level configuration.
+public struct AppConfig: Equatable, Sendable {
+    /// When true, register as a login item via SMAppService on startup.
+    public let autoStartAtLogin: Bool
+
+    public init(autoStartAtLogin: Bool = false) {
+        self.autoStartAtLogin = autoStartAtLogin
+    }
+}
+
 /// Global Agent Layer configuration.
 public struct AgentLayerConfig: Equatable, Sendable {
     /// When true, projects default to using Agent Layer unless overridden per-project.
@@ -84,11 +94,21 @@ public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
     public let chrome: ChromeConfig
     public let agentLayer: AgentLayerConfig
+    public let layout: LayoutConfig
+    public let app: AppConfig
 
-    init(projects: [ProjectConfig], chrome: ChromeConfig = ChromeConfig(), agentLayer: AgentLayerConfig = AgentLayerConfig()) {
+    init(
+        projects: [ProjectConfig],
+        chrome: ChromeConfig = ChromeConfig(),
+        agentLayer: AgentLayerConfig = AgentLayerConfig(),
+        layout: LayoutConfig = LayoutConfig(),
+        app: AppConfig = AppConfig()
+    ) {
         self.projects = projects
         self.chrome = chrome
         self.agentLayer = agentLayer
+        self.layout = layout
+        self.app = app
     }
 }
 
@@ -273,6 +293,9 @@ struct ConfigLoader {
     private static let starterConfigTemplate = """
 # AgentPanel configuration
 #
+# [app] (optional) — Application settings
+# - autoStartAtLogin: launch AgentPanel when you log in (default: false)
+#
 # [agentLayer] (optional) — Global Agent Layer settings
 # - enabled: default useAgentLayer value for all projects (default: false)
 #
@@ -280,6 +303,14 @@ struct ConfigLoader {
 # - pinnedTabs: URLs always opened as leftmost tabs in every fresh Chrome window
 # - defaultTabs: URLs opened when no tab history exists for a project
 # - openGitRemote: auto-detect git remote URL and add it as an always-open tab (default: false)
+#
+# [layout] (optional) — Window positioning settings (requires Accessibility permission)
+# - smallScreenThreshold: physical monitor width in inches below which "small mode" is used (default: 24)
+# - windowHeight: window height as % of screen height, 1–100 (default: 90)
+# - maxWindowWidth: max window width in inches (default: 18)
+# - idePosition: IDE window side, "left" or "right" (default: "left")
+# - justification: which screen edge windows align to, "left" or "right" (default: "right")
+# - maxGap: max gap between windows as % of screen width, 0–100 (default: 10)
 #
 # Each [[project]] entry describes one git repo (local or SSH remote).
 # - name: Display name (id is derived by lowercasing and replacing non [a-z0-9] with '-')
@@ -292,6 +323,9 @@ struct ConfigLoader {
 #
 # Example:
 #
+# [app]
+# autoStartAtLogin = true
+#
 # [agentLayer]
 # enabled = true
 #
@@ -300,10 +334,19 @@ struct ConfigLoader {
 # defaultTabs = ["https://docs.example.com"]
 # openGitRemote = true
 #
+# [layout]
+# smallScreenThreshold = 24
+# windowHeight = 90
+# maxWindowWidth = 18
+# idePosition = "left"
+# justification = "right"
+# maxGap = 10
+#
 # [[project]]
 # name = "AgentPanel"
 # path = "/Users/you/src/agent-panel"
 # color = "indigo"
+# useAgentLayer = false
 # chromePinnedTabs = ["https://api.example.com"]
 # chromeDefaultTabs = ["https://jira.example.com"]
 #
@@ -403,8 +446,10 @@ struct ConfigParser {
 
         checkForUnknownKeys(in: table, knownKeys: knownTopLevelKeys, section: "top-level", findings: &findings)
 
+        let appConfig = parseAppSection(table: table, findings: &findings)
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
+        let layoutConfig = parseLayoutSection(table: table, findings: &findings)
         let projectOutcomes = parseProjects(
             table: table,
             globalAgentLayerEnabled: agentLayerConfig.enabled,
@@ -415,7 +460,7 @@ struct ConfigParser {
         let validationFailed = findings.contains { $0.severity == .fail }
         let config: Config? = validationFailed
             ? nil
-            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig)
+            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig, layout: layoutConfig, app: appConfig)
 
         return ConfigLoadResult(
             config: config,
@@ -470,6 +515,36 @@ struct ConfigParser {
         )
     }
 
+    // MARK: - App Section Parsing
+
+    private static func parseAppSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> AppConfig {
+        guard table.contains(key: "app") else {
+            return AppConfig()
+        }
+
+        guard let appTable = try? table.table(forKey: "app") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[app] must be a table",
+                fix: "Use [app] as a TOML table section."
+            ))
+            return AppConfig()
+        }
+
+        checkForUnknownKeys(in: appTable, knownKeys: knownAppKeys, section: "[app]", findings: &findings)
+
+        let autoStartAtLogin = readOptionalBool(
+            from: appTable, key: "autoStartAtLogin",
+            defaultValue: false,
+            label: "app.autoStartAtLogin", findings: &findings
+        )
+
+        return AppConfig(autoStartAtLogin: autoStartAtLogin)
+    }
+
     // MARK: - Agent Layer Section Parsing
 
     private static func parseAgentLayerSection(
@@ -498,6 +573,143 @@ struct ConfigParser {
         )
 
         return AgentLayerConfig(enabled: enabled)
+    }
+
+    // MARK: - Layout Section Parsing
+
+    private static func parseLayoutSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> LayoutConfig {
+        guard table.contains(key: "layout") else {
+            return LayoutConfig()
+        }
+
+        guard let layoutTable = try? table.table(forKey: "layout") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[layout] must be a table",
+                fix: "Use [layout] as a TOML table section."
+            ))
+            return LayoutConfig()
+        }
+
+        checkForUnknownKeys(in: layoutTable, knownKeys: knownLayoutKeys, section: "[layout]", findings: &findings)
+
+        let smallScreenThreshold = readOptionalNumber(
+            from: layoutTable, key: "smallScreenThreshold",
+            label: "layout.smallScreenThreshold", findings: &findings
+        )
+        let windowHeight = readOptionalInteger(
+            from: layoutTable, key: "windowHeight",
+            label: "layout.windowHeight", findings: &findings
+        )
+        let maxWindowWidth = readOptionalNumber(
+            from: layoutTable, key: "maxWindowWidth",
+            label: "layout.maxWindowWidth", findings: &findings
+        )
+        let idePositionStr = readOptionalNonEmptyString(
+            from: layoutTable, key: "idePosition",
+            label: "layout.idePosition", findings: &findings
+        )
+        let justificationStr = readOptionalNonEmptyString(
+            from: layoutTable, key: "justification",
+            label: "layout.justification", findings: &findings
+        )
+        let maxGap = readOptionalInteger(
+            from: layoutTable, key: "maxGap",
+            label: "layout.maxGap", findings: &findings
+        )
+
+        // Validate bounds
+        var valid = true
+
+        if let v = smallScreenThreshold, v <= 0 {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "layout.smallScreenThreshold must be > 0",
+                detail: "Got \(v).",
+                fix: "Set smallScreenThreshold to a positive number (default: 24)."
+            ))
+            valid = false
+        }
+
+        if let v = windowHeight {
+            if v < 1 || v > 100 {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.windowHeight must be 1–100",
+                    detail: "Got \(v).",
+                    fix: "Set windowHeight to a value between 1 and 100 (default: 90)."
+                ))
+                valid = false
+            }
+        }
+
+        if let v = maxWindowWidth, v <= 0 {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "layout.maxWindowWidth must be > 0",
+                detail: "Got \(v).",
+                fix: "Set maxWindowWidth to a positive number (default: 18)."
+            ))
+            valid = false
+        }
+
+        var idePosition: LayoutConfig.IdePosition = LayoutConfig.Defaults.idePosition
+        if let str = idePositionStr {
+            if let pos = LayoutConfig.IdePosition(rawValue: str) {
+                idePosition = pos
+            } else {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.idePosition must be \"left\" or \"right\"",
+                    detail: "Got \"\(str)\".",
+                    fix: "Set idePosition to \"left\" or \"right\" (default: \"left\")."
+                ))
+                valid = false
+            }
+        }
+
+        var justification: LayoutConfig.Justification = LayoutConfig.Defaults.justification
+        if let str = justificationStr {
+            if let j = LayoutConfig.Justification(rawValue: str) {
+                justification = j
+            } else {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.justification must be \"left\" or \"right\"",
+                    detail: "Got \"\(str)\".",
+                    fix: "Set justification to \"left\" or \"right\" (default: \"right\")."
+                ))
+                valid = false
+            }
+        }
+
+        if let v = maxGap {
+            if v < 0 || v > 100 {
+                findings.append(ConfigFinding(
+                    severity: .fail,
+                    title: "layout.maxGap must be 0–100",
+                    detail: "Got \(v).",
+                    fix: "Set maxGap to a value between 0 and 100 (default: 10)."
+                ))
+                valid = false
+            }
+        }
+
+        guard valid else {
+            return LayoutConfig()
+        }
+
+        return LayoutConfig(
+            smallScreenThreshold: smallScreenThreshold ?? LayoutConfig.Defaults.smallScreenThreshold,
+            windowHeight: windowHeight.map { Int($0) } ?? LayoutConfig.Defaults.windowHeight,
+            maxWindowWidth: maxWindowWidth ?? LayoutConfig.Defaults.maxWindowWidth,
+            idePosition: idePosition,
+            justification: justification,
+            maxGap: maxGap.map { Int($0) } ?? LayoutConfig.Defaults.maxGap
+        )
     }
 
     // MARK: - Project Parsing
@@ -786,13 +998,22 @@ struct ConfigParser {
     // MARK: - Unknown Key Detection
 
     /// Known top-level keys in config.toml.
-    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project"]
+    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project", "layout", "app"]
 
     /// Known keys in the [chrome] section.
     private static let knownChromeKeys: Set<String> = ["pinnedTabs", "defaultTabs", "openGitRemote"]
 
     /// Known keys in the [agentLayer] section.
     private static let knownAgentLayerKeys: Set<String> = ["enabled"]
+
+    /// Known keys in the [app] section.
+    private static let knownAppKeys: Set<String> = ["autoStartAtLogin"]
+
+    /// Known keys in the [layout] section.
+    private static let knownLayoutKeys: Set<String> = [
+        "smallScreenThreshold", "windowHeight", "maxWindowWidth",
+        "idePosition", "justification", "maxGap"
+    ]
 
     /// Known keys in each [[project]] entry.
     private static let knownProjectKeys: Set<String> = [
@@ -970,6 +1191,59 @@ struct ConfigParser {
         return value
     }
 
+    /// Reads an optional numeric value as Double. Accepts both TOML integers and floats.
+    /// Returns nil when the key is absent. Records a failure if the value is not a number.
+    private static func readOptionalNumber(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Double? {
+        guard table.contains(key: key) else {
+            return nil
+        }
+
+        // Try integer first (TOML 24 is integer, 24.0 is float)
+        if let intValue = try? table.integer(forKey: key) {
+            return Double(intValue)
+        }
+
+        if let floatValue = try? table.float(forKey: key) {
+            return floatValue
+        }
+
+        findings.append(ConfigFinding(
+            severity: .fail,
+            title: "\(label) must be a number",
+            fix: "Set \(label) to a numeric value."
+        ))
+        return nil
+    }
+
+    /// Reads an optional integer value as Int64. Accepts only TOML integers (not floats).
+    /// Returns nil when the key is absent. Records a failure if the value is not an integer.
+    private static func readOptionalInteger(
+        from table: TOMLTable,
+        key: String,
+        label: String,
+        findings: inout [ConfigFinding]
+    ) -> Int64? {
+        guard table.contains(key: key) else {
+            return nil
+        }
+
+        guard let value = try? table.integer(forKey: key) else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "\(label) must be an integer",
+                fix: "Set \(label) to a whole number."
+            ))
+            return nil
+        }
+
+        return value
+    }
+
     /// Validates that all URLs in the array start with http:// or https://.
     /// Returns true if all valid, false if any invalid (adds findings for invalids).
     @discardableResult
@@ -1079,5 +1353,108 @@ extension Config {
             let warnings = result.findings.filter { $0.severity == .warn }
             return .success(ConfigLoadSuccess(config: config, warnings: warnings))
         }
+    }
+}
+
+// MARK: - Config Write-Back
+
+/// Targeted config.toml write-back for the `[app]` section.
+///
+/// Reads the existing file, finds or inserts the `[app]` section,
+/// and sets `autoStartAtLogin` to the desired value.
+/// Preserves all other content and comments.
+public struct ConfigWriteBack {
+    /// Sets `autoStartAtLogin` in the `[app]` section of the config file.
+    /// - Parameters:
+    ///   - value: The desired boolean value.
+    ///   - fileURL: URL of the config.toml file.
+    /// - Throws: If the file cannot be read or written.
+    public static func setAutoStartAtLogin(
+        _ value: Bool,
+        in fileURL: URL
+    ) throws {
+        try setAutoStartAtLogin(value, in: fileURL, fileSystem: DefaultFileSystem())
+    }
+
+    /// Sets `autoStartAtLogin` in the `[app]` section of the config file.
+    /// - Parameters:
+    ///   - value: The desired boolean value.
+    ///   - fileURL: URL of the config.toml file.
+    ///   - fileSystem: File system abstraction for testability.
+    /// - Throws: If the file cannot be read or written.
+    static func setAutoStartAtLogin(
+        _ value: Bool,
+        in fileURL: URL,
+        fileSystem: FileSystem
+    ) throws {
+        let data = try fileSystem.readFile(at: fileURL)
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw ApCoreError(message: "Config file is not valid UTF-8")
+        }
+
+        let updated = updateAutoStartAtLogin(in: content, value: value)
+
+        guard let newData = updated.data(using: .utf8) else {
+            throw ApCoreError(message: "Failed to encode updated config as UTF-8")
+        }
+        try fileSystem.writeFile(at: fileURL, data: newData)
+    }
+
+    /// Pure-function core: updates `autoStartAtLogin` in the given TOML string.
+    /// - Parameters:
+    ///   - content: The existing config.toml content.
+    ///   - value: The desired boolean value.
+    /// - Returns: Updated config.toml content.
+    static func updateAutoStartAtLogin(in content: String, value: Bool) -> String {
+        let valueStr = value ? "true" : "false"
+        var lines = content.components(separatedBy: "\n")
+
+        // Find existing [app] section
+        var appSectionIndex: Int?
+        for (i, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Strip inline comment (TOML allows `[app] # comment`)
+            let beforeComment = trimmed.split(separator: "#", maxSplits: 1).first
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? trimmed
+            if beforeComment == "[app]" {
+                appSectionIndex = i
+                break
+            }
+        }
+
+        if let sectionStart = appSectionIndex {
+            // Look for existing autoStartAtLogin key within the section
+            var keyIndex: Int?
+            for i in (sectionStart + 1)..<lines.count {
+                let trimmed = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                // Stop at next section header (both [section] and [[array]])
+                if trimmed.hasPrefix("[") {
+                    break
+                }
+                if trimmed.hasPrefix("autoStartAtLogin"),
+                   trimmed.count == "autoStartAtLogin".count
+                       || trimmed[trimmed.index(trimmed.startIndex, offsetBy: "autoStartAtLogin".count)].isWhitespace
+                       || trimmed[trimmed.index(trimmed.startIndex, offsetBy: "autoStartAtLogin".count)] == "=" {
+                    keyIndex = i
+                    break
+                }
+            }
+
+            if let ki = keyIndex {
+                lines[ki] = "autoStartAtLogin = \(valueStr)"
+            } else {
+                lines.insert("autoStartAtLogin = \(valueStr)", at: sectionStart + 1)
+            }
+        } else {
+            // No [app] section exists — append one
+            // Ensure trailing newline before new section
+            if let last = lines.last, !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lines.append("")
+            }
+            lines.append("[app]")
+            lines.append("autoStartAtLogin = \(valueStr)")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }

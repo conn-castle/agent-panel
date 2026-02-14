@@ -34,9 +34,10 @@ struct ApVSCodeSettingsManager {
     /// - Parameters:
     ///   - content: Existing file content (JSONC).
     ///   - identifier: Project identifier for the `AP:<id>` window title.
+    ///   - color: Optional project color string (named or hex) for VS Code color customizations.
     /// - Returns: Updated file content with the agent-panel block injected, or an error
     ///   if the content has no opening `{`.
-    static func injectBlock(into content: String, identifier: String) -> Result<String, ApCoreError> {
+    static func injectBlock(into content: String, identifier: String, color: String? = nil) -> Result<String, ApCoreError> {
         let hasStart = content.contains(startMarker)
         let hasEnd = content.contains(endMarker)
         if hasStart != hasEnd {
@@ -62,12 +63,20 @@ struct ApVSCodeSettingsManager {
 
         let windowTitle = "\(ApIdeToken.prefix)\(identifier) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
 
-        let block = [
+        var blockLines = [
             "  \(startMarker)",
             "  // Managed by AgentPanel. Do not edit this block manually.",
-            "  \"window.title\": \"\(windowTitle)\",",
-            "  \(endMarker)"
-        ].joined(separator: "\n")
+            "  \"window.title\": \"\(windowTitle)\","
+        ]
+
+        // Add Peacock color if a valid color is provided
+        if let color, let hex = VSCodeColorPalette.peacockColorHex(for: color) {
+            blockLines.append("  \"peacock.color\": \"\(hex)\",")
+        }
+
+        blockLines.append("  \(endMarker)")
+
+        let block = blockLines.joined(separator: "\n")
 
         // Insert after `{`
         let afterBrace = cleaned.index(after: braceIndex)
@@ -128,8 +137,9 @@ struct ApVSCodeSettingsManager {
     /// - Parameters:
     ///   - projectPath: Absolute path to the project directory.
     ///   - identifier: Project identifier for the `AP:<id>` window title.
+    ///   - color: Optional project color for VS Code color customizations.
     /// - Returns: Success or an error.
-    func writeLocalSettings(projectPath: String, identifier: String) -> Result<Void, ApCoreError> {
+    func writeLocalSettings(projectPath: String, identifier: String, color: String? = nil) -> Result<Void, ApCoreError> {
         let projectURL = URL(fileURLWithPath: projectPath, isDirectory: true)
 
         // Fail loudly on misconfigured paths. Do not create missing project directories.
@@ -161,7 +171,7 @@ struct ApVSCodeSettingsManager {
         }
 
         let updatedContent: String
-        switch Self.injectBlock(into: existingContent, identifier: identifier) {
+        switch Self.injectBlock(into: existingContent, identifier: identifier, color: color) {
         case .failure(let error):
             return .failure(error)
         case .success(let content):
@@ -192,11 +202,13 @@ struct ApVSCodeSettingsManager {
     ///   - remoteAuthority: VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
     ///   - remotePath: Remote absolute path to the project directory.
     ///   - identifier: Project identifier for the `AP:<id>` window title.
+    ///   - color: Optional project color for VS Code color customizations.
     /// - Returns: Success or an error.
     func writeRemoteSettings(
         remoteAuthority: String,
         remotePath: String,
-        identifier: String
+        identifier: String,
+        color: String? = nil
     ) -> Result<Void, ApCoreError> {
         guard let commandRunner else {
             return .failure(ApCoreError(message: "Command runner not available for remote settings write"))
@@ -249,7 +261,7 @@ struct ApVSCodeSettingsManager {
 
         // Inject block
         let updatedContent: String
-        switch Self.injectBlock(into: existingContent, identifier: identifier) {
+        switch Self.injectBlock(into: existingContent, identifier: identifier, color: color) {
         case .failure(let error):
             return .failure(error)
         case .success(let content):
@@ -321,12 +333,14 @@ struct ApVSCodeSettingsManager {
                 results[project.id] = writeRemoteSettings(
                     remoteAuthority: remote,
                     remotePath: project.path,
-                    identifier: project.id
+                    identifier: project.id,
+                    color: project.color
                 )
             } else {
                 results[project.id] = writeLocalSettings(
                     projectPath: project.path,
-                    identifier: project.id
+                    identifier: project.id,
+                    color: project.color
                 )
             }
         }

@@ -113,6 +113,7 @@ private final class WorkspaceStateAeroSpaceStub: AeroSpaceProviding {
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
         .success([])
     }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
 
     func focusedWindow() -> Result<ApWindow, ApCoreError> {
         .failure(ApCoreError(message: "not used in this test"))
@@ -132,7 +133,7 @@ private final class WorkspaceStateAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct WorkspaceStateIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> {
         .success(())
     }
 }
@@ -453,6 +454,7 @@ private final class RecordingFocusAeroSpaceStub: AeroSpaceProviding {
     func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
     func focusedWindow() -> Result<ApWindow, ApCoreError> { .failure(ApCoreError(message: "not used")) }
 
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
@@ -479,6 +481,7 @@ private final class AlwaysDifferentFocusAeroSpaceStub: AeroSpaceProviding {
     func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
 
     func focusedWindow() -> Result<ApWindow, ApCoreError> {
         .success(ApWindow(windowId: 999, appBundleId: "other", workspace: "main", windowTitle: "Other"))

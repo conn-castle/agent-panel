@@ -1,12 +1,17 @@
 # Managed by AgentPanel - do not edit manually
 # Purpose: AeroSpace sits idle until AgentPanel explicitly controls it.
-# This config intentionally disables automatic tiling and keybindings.
+# All windows are floating; tiling is disabled. AgentPanel provides the
+# primary UX (switcher, workspace management). Keybindings below add
+# workspace-scoped window cycling (Option-Tab / Option-Shift-Tab) as a
+# replacement for macOS Cmd-Tab, which crosses workspace boundaries.
 
 config-version = 2
 start-at-login = false
 
 [mode.main.binding]
-# Intentionally empty. AgentPanel provides the UX.
+# Cycle focus through windows in the current workspace (DFS order, wrapping).
+alt-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next'
+alt-shift-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-prev'
 
 [[on-window-detected]]
 check-further-callbacks = true

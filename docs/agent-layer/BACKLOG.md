@@ -28,11 +28,11 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
-- Backlog 2026-02-11 offscreen-window-rescue: Rescue off-screen floating IDE/app windows
-    Priority: Medium. Area: Activation/Focus
-    Description: When AgentPanel activates a project or restores focus (ap return / close / exit), detect if the target VS Code or Chrome window is mostly off-screen (stale coordinates after monitor/Space changes) and reposition it into a visible NSScreen.visibleFrame. Use macOS Accessibility (AX) APIs for absolute window positioning, map AeroSpace window-id to AX window, and add a Doctor check for the required Accessibility permission.
-    Acceptance criteria: Off-screen windows are automatically repositioned on activation/return/close; Doctor checks for Accessibility permission; geometry logic and integration paths have unit tests; README documents behavior and permission requirement.
-    Notes: AeroSpace floating mode does not conflict with AX positioning. No absolute positioning command exists in AeroSpace CLI — AX is the only option.
+- Backlog 2026-02-14 chromecolor: Chrome visual differentiation matching VS Code project color
+    Priority: Low. Area: Core/Chrome
+    Description: Apply project color to the Chrome window to visually match the associated VS Code window. Possible approaches: Chrome profile customization, theme injection, or Chrome extension.
+    Acceptance criteria: Chrome window for a project visually reflects the project's configured color.
+    Notes: Deferred from Phase 7. Chrome has no clean programmatic injection point for color theming (unlike VS Code's Peacock extension). May require a custom Chrome extension or Chrome profile switching.
 
 - Backlog 2026-02-09 trackpad-hotcorners: Hot Corners and Trackpad activation/switching
     Priority: Medium. Area: App/UX

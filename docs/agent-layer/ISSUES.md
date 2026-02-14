@@ -27,6 +27,21 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
+    Priority: Low. Area: Testing
+    Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.
+    Next step: Evaluate whether an `AgentPanelAppTests` target is feasible (AppKit requires a running app host). If not, document critical app-layer paths as manual test checklist.
+
+- Issue 2026-02-12 ax-tiebreak: Duplicate-title AX window ordering may flip between enumerations
+    Priority: Low. Area: Window Positioning
+    Description: When multiple AX windows share identical titles, the secondary sort key `CFHash(AXUIElement)` is not guaranteed stable across independent enumerations. This could cause the "primary" window to flip between two identically-titled windows on successive activations.
+    Next step: If users report window position flipping, consider adding a more stable identity (e.g., AX window ID attribute or process-scoped index).
+
+- Issue 2026-02-12 aerospace-focus-crash: AeroSpace crashes with "MacWindow is already unbound" during FocusCommand
+    Priority: Medium. Area: AeroSpace/Upstream
+    Description: AeroSpace runtime error `MacWindow is already unbound` triggered by concurrent CLI commands while floating switcher panel is visible. AgentPanel mitigations in place: (1) Doctor refresh deferred until after switcher session ends (`onSessionEnded` callback), (2) `AeroSpaceCircuitBreaker` trips on first timeout and fails fast for 30s cooldown, preventing ~90s cascade. Root cause is upstream — AeroSpace socket server concurrent unbind/rebind race.
+    Next step: File upstream issue with AeroSpace repo.
+
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE
     Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
@@ -42,6 +57,3 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Priority: Low. Area: Doctor/CLI
     Description: The Doctor CLI output is currently plain text. Adding color (e.g., Red for FAIL, Yellow for WARN, Green for OK) would significantly improve readability and quick scanning of health checks.
     Next step: Integrate a color-coding utility into the Doctor report rendering logic.
-
-
-
