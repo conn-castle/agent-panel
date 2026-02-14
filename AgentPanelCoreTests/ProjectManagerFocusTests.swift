@@ -722,7 +722,7 @@ private final class FocusIdeLauncherStub: IdeLauncherProviding {
     /// Optional callback invoked on launch — used to inject windows into AeroSpace stub.
     var onLaunch: ((String) -> Void)?
 
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> {
         called = true
         onLaunch?(identifier)
         return result

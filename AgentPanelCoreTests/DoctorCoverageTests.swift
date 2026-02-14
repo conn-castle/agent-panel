@@ -204,6 +204,98 @@ final class DoctorCoverageTests: XCTestCase {
         })
     }
 
+    // MARK: - Peacock VS Code extension check
+
+    func testRunReportsPeacockInstalledPass() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // Create the Peacock extension directory
+        let extensionsDir = tempDir
+            .appendingPathComponent(".vscode", isDirectory: true)
+            .appendingPathComponent("extensions", isDirectory: true)
+        let peacockDir = extensionsDir.appendingPathComponent("johnpapa.vscode-peacock-4.0.0", isDirectory: true)
+        try FileManager.default.createDirectory(at: peacockDir, withIntermediateDirectories: true)
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title == "Peacock VS Code extension installed"
+        })
+    }
+
+    func testRunReportsPeacockNotInstalledWarn() throws {
+        let toml = """
+        [[project]]
+        name = "Local"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // No Peacock extension directory created
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true
+        )
+
+        let report = doctor.run()
+
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .warn && $0.title == "Peacock VS Code extension not found"
+        })
+    }
+
+    func testRunSkipsPeacockCheckWhenNoColorProjects() throws {
+        // Config with no projects (parsing fails, hasValidProjects=false)
+        let toml = """
+        # empty config, no projects
+        """
+
+        let configDir = tempDir.appendingPathComponent(".config/agent-panel", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+        let configFile = configDir.appendingPathComponent("config.toml")
+        try toml.write(to: configFile, atomically: true, encoding: .utf8)
+
+        let dataStore = DataPaths(homeDirectory: tempDir)
+        try? FileManager.default.createDirectory(at: dataStore.logsDirectory, withIntermediateDirectories: true)
+
+        let resolver = ExecutableResolver(
+            fileSystem: SelectiveFileSystem(executablePaths: ["/usr/bin/brew"]),
+            searchPaths: ["/usr/bin"],
+            loginShellFallbackEnabled: false
+        )
+
+        let doctor = Doctor(
+            runningApplicationChecker: StubRunningAppCheckerOverride(runningAeroSpace: true),
+            hotkeyStatusProvider: nil,
+            dateProvider: StubDateProvider(),
+            aerospaceHealth: StubAeroSpaceHealth(),
+            appDiscovery: StubAppDiscovery(),
+            executableResolver: resolver,
+            commandRunner: StubCommandRunner(result: .failure(ApCoreError(message: "stub"))),
+            dataStore: dataStore
+        )
+
+        let report = doctor.run()
+
+        // Should NOT contain any Peacock finding
+        XCTAssertFalse(report.findings.contains {
+            $0.title.contains("Peacock")
+        })
+    }
+
     // MARK: - Doctor.checkSSHProjectPath() uncovered branches
     //
     // NOTE: Many checkSSHProjectPath branches are unreachable through normal config parsing:
@@ -256,7 +348,8 @@ final class DoctorCoverageTests: XCTestCase {
             agentPanelVersion: "1.0.0",
             macOSVersion: "15.0",
             aerospaceApp: "FOUND",
-            aerospaceCli: "AVAILABLE"
+            aerospaceCli: "AVAILABLE",
+            errorContext: nil
         )
         let report = DoctorReport(metadata: metadata, findings: [], actions: .none)
 
@@ -271,7 +364,8 @@ final class DoctorCoverageTests: XCTestCase {
             agentPanelVersion: "1.0.0",
             macOSVersion: "15.0",
             aerospaceApp: "FOUND",
-            aerospaceCli: "AVAILABLE"
+            aerospaceCli: "AVAILABLE",
+            errorContext: nil
         )
         let finding = DoctorFinding(
             severity: .pass,

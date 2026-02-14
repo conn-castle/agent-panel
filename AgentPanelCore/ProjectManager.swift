@@ -607,7 +607,8 @@ public final class ProjectManager {
                 selectedIdeLauncher.openNewWindow(
                     identifier: projectId,
                     projectPath: project.path,
-                    remoteAuthority: project.remote
+                    remoteAuthority: project.remote,
+                    color: project.color
                 )
             },
             windowLabel: "VS Code",

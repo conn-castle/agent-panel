@@ -69,6 +69,15 @@ public struct DataPaths: Sendable {
         logsDirectory.appendingPathComponent("agent-panel.log", isDirectory: false)
     }
 
+    // MARK: - VS Code paths
+
+    /// Returns `~/.vscode/extensions/`.
+    var vscodeExtensionsDirectory: URL {
+        homeDirectory
+            .appendingPathComponent(".vscode", isDirectory: true)
+            .appendingPathComponent("extensions", isDirectory: true)
+    }
+
     // MARK: - Private
 
     private var configDirectory: URL {

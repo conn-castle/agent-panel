@@ -57,6 +57,7 @@ final class ActionRowView: NSTableCellView {
     let iconView = NSImageView()
     let titleLabel = NSTextField(labelWithString: "")
     let shortcutLabel = NSTextField(labelWithString: "")
+    private let shortcutContainer = NSView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -78,16 +79,17 @@ final class ActionRowView: NSTableCellView {
         titleLabel.stringValue = "Back to Previous Window"
 
         shortcutLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
-        shortcutLabel.textColor = .tertiaryLabelColor
+        shortcutLabel.textColor = .secondaryLabelColor
         shortcutLabel.stringValue = "\u{21E7}\u{21A9}"
         shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
-        shortcutLabel.wantsLayer = true
-        shortcutLabel.layer?.cornerRadius = 6
-        shortcutLabel.layer?.masksToBounds = true
-        shortcutLabel.layer?.backgroundColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
 
-        let shortcutContainer = NSView()
         shortcutContainer.translatesAutoresizingMaskIntoConstraints = false
+        shortcutContainer.wantsLayer = true
+        shortcutContainer.layer?.cornerRadius = 6
+        shortcutContainer.layer?.masksToBounds = true
+        shortcutContainer.layer?.backgroundColor = NSColor.controlColor.cgColor
+        shortcutContainer.layer?.borderWidth = 1
+        shortcutContainer.layer?.borderColor = NSColor.separatorColor.cgColor
         shortcutContainer.addSubview(shortcutLabel)
 
         let spacer = NSView()
@@ -112,6 +114,12 @@ final class ActionRowView: NSTableCellView {
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
         ])
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        shortcutContainer.layer?.backgroundColor = NSColor.controlColor.cgColor
+        shortcutContainer.layer?.borderColor = NSColor.separatorColor.cgColor
     }
 }
 
@@ -165,7 +173,7 @@ final class ProjectRowView: NSTableCellView {
         currentPillContainer.wantsLayer = true
         currentPillContainer.layer?.cornerRadius = 9
         currentPillContainer.layer?.masksToBounds = true
-        currentPillContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.2).cgColor
+        currentPillContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
         currentPillContainer.translatesAutoresizingMaskIntoConstraints = false
         currentPillContainer.isHidden = true
 
@@ -218,6 +226,11 @@ final class ProjectRowView: NSTableCellView {
         updateCloseButtonAppearance()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        currentPillContainer.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingAreaRef {
@@ -265,7 +278,7 @@ final class ProjectRowView: NSTableCellView {
         let emphasized = isHovered || isRowSelected
         let alpha: CGFloat
         if canClose {
-            alpha = emphasized ? 0.72 : 0.38
+            alpha = emphasized ? 0.72 : 0.5
         } else {
             alpha = 0.0
         }
@@ -422,12 +435,10 @@ func emptyStateCell(message: String, tableView: NSTableView) -> NSTableCellView 
 ///   - query: Search query.
 /// - Returns: Attributed display name with matched ranges emphasized.
 func highlightedProjectName(_ name: String, query: String) -> NSAttributedString {
-    let baseColor = NSColor.labelColor
-    let subtleMatchColor = baseColor.blended(withFraction: 0.18, of: NSColor.controlAccentColor) ?? NSColor.secondaryLabelColor
     let attributed = NSMutableAttributedString(
         string: name,
         attributes: [
-            .foregroundColor: baseColor,
+            .foregroundColor: NSColor.labelColor,
             .font: NSFont.systemFont(ofSize: 13, weight: .medium)
         ]
     )
@@ -447,10 +458,7 @@ func highlightedProjectName(_ name: String, query: String) -> NSAttributedString
           ) {
         let nsRange = NSRange(range, in: name)
         attributed.addAttributes(
-            [
-                .foregroundColor: subtleMatchColor,
-                .font: NSFont.systemFont(ofSize: 13, weight: .medium)
-            ],
+            [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)],
             range: nsRange
         )
         searchStart = range.upperBound

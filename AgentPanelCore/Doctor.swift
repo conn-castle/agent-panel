@@ -66,6 +66,7 @@ struct DoctorMetadata: Equatable, Sendable {
     let macOSVersion: String
     let aerospaceApp: String
     let aerospaceCli: String
+    let errorContext: ErrorContext?
 }
 
 /// Action availability for Doctor UI buttons.
@@ -148,6 +149,9 @@ public struct DoctorReport: Equatable, Sendable {
         lines.append("macOS version: \(metadata.macOSVersion)")
         lines.append("AeroSpace app: \(metadata.aerospaceApp)")
         lines.append("aerospace CLI: \(metadata.aerospaceCli)")
+        if let ctx = metadata.errorContext {
+            lines.append("Triggered by: \(ctx.trigger) (\(ctx.category.rawValue)): \(ctx.message)")
+        }
         lines.append("")
 
         if sortedFindings.isEmpty {
@@ -273,7 +277,8 @@ public struct Doctor {
     }
 
     /// Runs all Doctor checks and returns a report.
-    public func run() -> DoctorReport {
+    /// - Parameter context: Optional error context that triggered this run (informational, for logging).
+    public func run(context: ErrorContext? = nil) -> DoctorReport {
         var findings: [DoctorFinding] = []
 
         // Check Homebrew
@@ -503,6 +508,31 @@ public struct Doctor {
             ))
         }
 
+        // Check Peacock VS Code extension (only when any project has a color)
+        if hasValidProjects {
+            let extensionsDir = dataStore.vscodeExtensionsDirectory
+            let hasPeacock: Bool
+            if let entries = try? fileSystem.contentsOfDirectory(at: extensionsDir) {
+                hasPeacock = entries.contains { $0.hasPrefix("johnpapa.vscode-peacock-") }
+            } else {
+                hasPeacock = false
+            }
+
+            if hasPeacock {
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Peacock VS Code extension installed"
+                ))
+            } else {
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "Peacock VS Code extension not found",
+                    detail: "Required for project color differentiation in VS Code",
+                    fix: "Install: code --install-extension johnpapa.vscode-peacock"
+                ))
+            }
+        }
+
         // Check Accessibility permission for window positioning
         var accessibilityNotGranted = false
         if let positioner = windowPositioner {
@@ -557,7 +587,8 @@ public struct Doctor {
             agentPanelVersion: AgentPanel.version,
             macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             aerospaceApp: aerospaceAppLabel,
-            aerospaceCli: aerospaceCliLabel
+            aerospaceCli: aerospaceCliLabel,
+            errorContext: context
         )
 
         let actions = DoctorActionAvailability(

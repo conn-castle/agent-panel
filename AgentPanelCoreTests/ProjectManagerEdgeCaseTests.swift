@@ -695,7 +695,7 @@ private final class EdgeAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct EdgeIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> { .success(()) }
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> { .success(()) }
 }
 
 private struct EdgeChromeLauncherStub: ChromeLauncherProviding {

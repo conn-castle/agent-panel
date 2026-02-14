@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 import AgentPanelAppKit
@@ -36,6 +37,7 @@ private struct MenuItems {
     let recoverAgentPanel: NSMenuItem
     let addWindowToProject: NSMenuItem
     let recoverAllWindows: NSMenuItem
+    let launchAtLogin: NSMenuItem
 }
 
 /// App lifecycle hook used to create a minimal menu bar presence.
@@ -48,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
     private var isHealthRefreshInFlight: Bool = false
+    private var pendingCriticalContext: ErrorContext?
     private var lastHealthRefreshAt: Date?
     private var menuFocusCapture: CapturedFocus?
     private let logger: AgentPanelLogging = AgentPanelLogger()
@@ -98,7 +101,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Load config on the main thread (ProjectManager is not thread-safe), then
         // ensure VS Code settings blocks in the background (may use SSH).
         let configResult = projectManager.loadConfig()
-        let projects = (try? configResult.get())?.config.projects ?? []
+        let loadedConfig = try? configResult.get()
+        let projects = loadedConfig?.config.projects ?? []
+
+        // Apply auto-start at login from config (only when config loaded successfully)
+        if let loadedConfig {
+            syncLaunchAtLogin(configValue: loadedConfig.config.app.autoStartAtLogin)
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             if !projects.isEmpty {
@@ -242,6 +251,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
         menu.addItem(.separator())
+
+        let launchAtLoginItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        menu.addItem(launchAtLoginItem)
+
+        menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(
                 title: "Quit",
@@ -257,7 +276,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openSwitcher: openSwitcherItem,
             recoverAgentPanel: recoverAgentPanelItem,
             addWindowToProject: addWindowToProjectItem,
-            recoverAllWindows: recoverAllWindowsItem
+            recoverAllWindows: recoverAllWindowsItem,
+            launchAtLogin: launchAtLoginItem
         )
 
         return menu
@@ -311,8 +331,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Creates a new SwitcherPanelController instance.
     private func makeSwitcherController() -> SwitcherPanelController {
         let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
-        controller.onProjectOperationFailed = { [weak self] in
-            self?.refreshHealthInBackground(trigger: "project_operation_failed")
+        controller.onProjectOperationFailed = { [weak self] context in
+            self?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
         }
         return controller
     }
@@ -454,12 +474,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Debounced: skips the run if a refresh is already in flight or if the last
     /// refresh completed less than `MenuBarHealthIndicator.refreshDebounceSeconds` ago.
     /// Pass `force: true` to bypass debouncing (used for startup).
+    /// Critical errors (from `errorContext.isCritical`) skip debounce automatically.
     ///
     /// - Parameters:
     ///   - trigger: Log event name suffix describing what triggered the refresh.
     ///   - force: When true, bypasses the debounce window (e.g., for startup).
-    private func refreshHealthInBackground(trigger: String, force: Bool = false) {
+    ///   - errorContext: Optional error context that triggered this refresh.
+    private func refreshHealthInBackground(
+        trigger: String,
+        force: Bool = false,
+        errorContext: ErrorContext? = nil
+    ) {
+        let skipDebounce = force || (errorContext?.isCritical == true)
+
         guard !isHealthRefreshInFlight else {
+            // Store critical context so it's not dropped when in-flight
+            if let errorContext, errorContext.isCritical {
+                pendingCriticalContext = errorContext
+            }
             logAppEvent(
                 event: "doctor.refresh.skipped",
                 context: ["trigger": trigger, "reason": "in_flight"]
@@ -467,7 +499,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if !force, let lastRefresh = lastHealthRefreshAt,
+        if !skipDebounce, let lastRefresh = lastHealthRefreshAt,
            Date().timeIntervalSince(lastRefresh) < MenuBarHealthIndicator.refreshDebounceSeconds {
             logAppEvent(
                 event: "doctor.refresh.skipped",
@@ -481,12 +513,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let report = self.makeDoctor().run()
+            let report = self.makeDoctor().run(context: errorContext)
             DispatchQueue.main.async {
                 self.isHealthRefreshInFlight = false
                 self.lastHealthRefreshAt = Date()
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
                 self.logDoctorSummary(report, event: "doctor.refresh.completed")
+
+                // Auto-show Doctor window for critical errors with FAIL findings
+                if let ctx = errorContext, ctx.isCritical, report.hasFailures {
+                    self.logAppEvent(
+                        event: "doctor.auto_show",
+                        context: ["trigger": ctx.trigger, "category": ctx.category.rawValue]
+                    )
+                    self.showDoctorReport(report)
+                }
+
+                // If a critical error was queued while in-flight, trigger a new refresh
+                if let pending = self.pendingCriticalContext {
+                    self.pendingCriticalContext = nil
+                    self.refreshHealthInBackground(
+                        trigger: pending.trigger,
+                        errorContext: pending
+                    )
+                }
             }
         }
     }
@@ -663,6 +713,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() {
         logAppEvent(event: "app.quit.requested")
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - Launch at Login
+
+    /// Syncs SMAppService registration with the config value.
+    /// - Parameter configValue: The `autoStartAtLogin` value from config.
+    private func syncLaunchAtLogin(configValue: Bool) {
+        let service = SMAppService.mainApp
+        if configValue {
+            do {
+                try service.register()
+                logAppEvent(event: "launch_at_login.registered")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.register_failed",
+                    level: .warn,
+                    message: "Launch at login configured but registration failed: \(error.localizedDescription)"
+                )
+            }
+        } else {
+            do {
+                try service.unregister()
+                logAppEvent(event: "launch_at_login.unregistered")
+            } catch {
+                // Unregister failure when not registered is expected; only warn if meaningful
+                logAppEvent(
+                    event: "launch_at_login.unregister_failed",
+                    level: .warn,
+                    message: "\(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    /// Toggles the Launch at Login menu item.
+    @objc private func toggleLaunchAtLogin() {
+        let service = SMAppService.mainApp
+        let isCurrentlyEnabled = service.status == .enabled
+        let newValue = !isCurrentlyEnabled
+
+        if newValue {
+            do {
+                try service.register()
+                logAppEvent(event: "launch_at_login.toggled_on")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.toggle_register_failed",
+                    level: .error,
+                    message: "Failed to enable launch at login: \(error.localizedDescription)"
+                )
+                return
+            }
+        } else {
+            do {
+                try service.unregister()
+                logAppEvent(event: "launch_at_login.toggled_off")
+            } catch {
+                logAppEvent(
+                    event: "launch_at_login.toggle_unregister_failed",
+                    level: .error,
+                    message: "Failed to disable launch at login: \(error.localizedDescription)"
+                )
+                return
+            }
+        }
+
+        // Write back to config.toml
+        let configURL = DataPaths.default().configFile
+        do {
+            try ConfigWriteBack.setAutoStartAtLogin(newValue, in: configURL)
+            logAppEvent(event: "launch_at_login.config_written", context: ["value": "\(newValue)"])
+            menuItems?.launchAtLogin.title = "Launch at Login"
+        } catch {
+            logAppEvent(
+                event: "launch_at_login.config_write_failed",
+                level: .error,
+                message: "Config save failed: \(error.localizedDescription)"
+            )
+            // Rollback SMAppService toggle since config write failed
+            if newValue {
+                try? service.unregister()
+            } else {
+                try? service.register()
+            }
+            menuItems?.launchAtLogin.title = "Launch at Login"
+        }
     }
 
     // MARK: - App Lifecycle State Management
@@ -866,6 +1002,9 @@ extension AppDelegate: NSMenuDelegate {
         menuFocusCapture = projectManager.captureCurrentFocus()
 
         guard let menuItems else { return }
+
+        // Reflect Launch at Login state
+        menuItems.launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
         // Toggle "Recover Project" — enabled only in ap-* workspaces
         let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false

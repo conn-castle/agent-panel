@@ -14,6 +14,9 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 - SSH remote projects: VS Code Remote-SSH with Doctor path validation
 - Close project with automatic focus restoration (stack or workspace fallback)
 - "View Config File" menu item (opens Finder to config, creates starter if missing)
+- Launch at Login: opt-in via `[app] autoStartAtLogin = true` with menu toggle
+- VS Code color differentiation via Peacock extension (`peacock.color` in settings.json)
+- Auto-doctor: operational errors trigger background Doctor run; critical errors auto-show results
 - Doctor UI in the app menu (restores previous focus on close)
 - `ap doctor` CLI
 
@@ -25,6 +28,7 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 4) Google Chrome (required for project activation)
 5) VS Code (required for project activation)
 6) Agent Layer CLI (`al`) — required if any project uses `useAgentLayer=true`
+7) Peacock VS Code extension (optional, for project color differentiation): `code --install-extension johnpapa.vscode-peacock`
 
 ## First run (onboarding)
 
@@ -61,6 +65,9 @@ idePosition = "left"         # optional; "left" or "right" (default: "left")
 justification = "right"      # optional; "left" or "right" — which edge windows align to (default: "right")
 maxGap = 10                  # optional; % of screen width for gap between windows (0–100, default: 10)
 
+[app]
+autoStartAtLogin = true   # optional; launch AgentPanel at login (default: false)
+
 [agentLayer]
 enabled = true   # optional; global default for useAgentLayer (default: false)
 
@@ -79,6 +86,10 @@ path = "/Users/nconn/project"                   # Remote absolute path
 color = "teal"
 useAgentLayer = false                           # required for SSH projects (mutually exclusive)
 ```
+
+**Auto-start:** Set `[app] autoStartAtLogin = true` to launch AgentPanel at login. The menu bar toggle ("Launch at Login") writes back to config as the source of truth.
+
+**VS Code color differentiation:** When a project has a `color` (named or `#RRGGBB`), AgentPanel injects `"peacock.color": "#RRGGBB"` into the project's `.vscode/settings.json` block. The Peacock VS Code extension (`johnpapa.vscode-peacock`) reads this key and applies the color across the title bar, activity bar, and status bar. Install the extension: `code --install-extension johnpapa.vscode-peacock`. Doctor warns if Peacock is not installed when projects have colors configured.
 
 **Window layout:** The `[layout]` section controls automatic window positioning when activating projects. AgentPanel detects the physical monitor width via `CGDisplayScreenSize` and selects "small" mode (both windows maximized) or "wide" mode (side-by-side). In wide mode, IDE and Chrome windows are positioned based on `idePosition`, `justification`, `windowHeight`, `maxWindowWidth`, and `maxGap`. Window positions are saved per project per screen mode and restored on subsequent activations (with off-screen clamping). Requires Accessibility permission (System Settings > Privacy & Security > Accessibility). Invalid `[layout]` values cause a config load failure (no per-field fallback to defaults). All `[layout]` keys are optional — omit the entire section to use defaults.
 
@@ -128,6 +139,7 @@ Current checks include:
 - SSH project paths validated via `ssh test -d` (exit 0 = pass, 1 = fail, 255 = connection error)
 - Agent-layer CLI (`al`) installed (if any project has `useAgentLayer=true`)
 - Agent-layer directory exists for local projects with `useAgentLayer=true`
+- Peacock VS Code extension installed (WARN if missing when projects have colors)
 - Accessibility permission for window positioning (PASS/FAIL)
 - Hotkey registration status (app only)
 

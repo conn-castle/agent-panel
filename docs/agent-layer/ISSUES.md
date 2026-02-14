@@ -27,6 +27,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
+    Priority: Low. Area: Testing
+    Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.
+    Next step: Evaluate whether an `AgentPanelAppTests` target is feasible (AppKit requires a running app host). If not, document critical app-layer paths as manual test checklist.
+
 - Issue 2026-02-12 ax-tiebreak: Duplicate-title AX window ordering may flip between enumerations
     Priority: Low. Area: Window Positioning
     Description: When multiple AX windows share identical titles, the secondary sort key `CFHash(AXUIElement)` is not guaranteed stable across independent enumerations. This could cause the "primary" window to flip between two identically-titled windows on successive activations.
@@ -36,11 +41,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Priority: Medium. Area: AeroSpace/Upstream
     Description: AeroSpace runtime error `MacWindow(windowId: N) is already unbound` in `FocusCommand.run` when dealing with floating windows. This is an upstream AeroSpace bug that can cascade into system freezes when AgentPanel polls AeroSpace CLI during the crash state.
     Next step: File upstream issue with AeroSpace. AgentPanel mitigation: consider adding AeroSpace health check (process alive + responsive) before CLI calls during activation.
-
-- Issue 2026-02-12 light-mode-ui: Light mode UI theme needs improvement
-    Priority: Medium. Area: UI/UX
-    Description: The light mode theme in the application looks poor and needs a visual overhaul to ensure consistency and readability.
-    Next step: Audit light mode styles and identify specific elements (contrast, colors, spacing) that require refinement.
 
 - Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
     Priority: Low. Area: Agent Layer/IDE

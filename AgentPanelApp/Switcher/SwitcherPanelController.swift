@@ -180,6 +180,7 @@ final class SwitcherPanelController: NSObject {
     private let scrollView: NSScrollView
     private let statusLabel: NSTextField
     private let keybindHintLabel: NSTextField
+    private var visualEffectView: NSVisualEffectView?
 
     private var allProjects: [ProjectConfig] = []
     private var filteredProjects: [ProjectConfig] = []
@@ -207,7 +208,7 @@ final class SwitcherPanelController: NSObject {
 
     /// Called when a project operation fails (select, close, exit, workspace query, config load).
     /// Used by AppDelegate to trigger a background health indicator refresh.
-    var onProjectOperationFailed: (() -> Void)?
+    var onProjectOperationFailed: ((ErrorContext) -> Void)?
 
     /// Creates a switcher panel controller.
     /// - Parameters:
@@ -501,6 +502,7 @@ final class SwitcherPanelController: NSObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
+        panel.isMovableByWindowBackground = true
         panel.delegate = self
         panel.hasShadow = true
         panel.isOpaque = false
@@ -529,7 +531,8 @@ final class SwitcherPanelController: NSObject {
         tableView.headerView = nil
         tableView.usesAlternatingRowBackgroundColors = false
         tableView.selectionHighlightStyle = .regular
-        tableView.intercellSpacing = NSSize(width: 0, height: 2)
+        tableView.intercellSpacing = NSSize(width: 0, height: 4)
+        tableView.backgroundColor = .clear
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
@@ -548,7 +551,7 @@ final class SwitcherPanelController: NSObject {
 
     /// Configures the keybind hints footer label.
     private func configureKeybindHints() {
-        keybindHintLabel.textColor = .tertiaryLabelColor
+        keybindHintLabel.textColor = .secondaryLabelColor
         keybindHintLabel.font = NSFont.systemFont(ofSize: 11)
         keybindHintLabel.alignment = .left
         keybindHintLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -560,12 +563,28 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
-        contentView.wantsLayer = true
-        contentView.layer?.cornerRadius = 20
-        contentView.layer?.masksToBounds = true
-        contentView.layer?.borderWidth = 1
-        contentView.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.4).cgColor
-        contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.97).cgColor
+        let vfxView = NSVisualEffectView()
+        vfxView.material = .contentBackground
+        vfxView.blendingMode = .withinWindow
+        vfxView.state = .active
+        vfxView.wantsLayer = true
+        vfxView.layer?.cornerRadius = 20
+        vfxView.layer?.masksToBounds = true
+        vfxView.layer?.backgroundColor =
+            NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+        vfxView.layer?.borderWidth = 1
+        vfxView.layer?.borderColor =
+            NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        vfxView.translatesAutoresizingMaskIntoConstraints = false
+        self.visualEffectView = vfxView
+
+        contentView.addSubview(vfxView)
+        NSLayoutConstraint.activate([
+            vfxView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            vfxView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            vfxView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            vfxView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+        ])
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
@@ -584,13 +603,13 @@ final class SwitcherPanelController: NSObject {
         stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        contentView.addSubview(stack)
+        vfxView.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -18),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
+            stack.leadingAnchor.constraint(equalTo: vfxView.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: vfxView.trailingAnchor, constant: -18),
+            stack.topAnchor.constraint(equalTo: vfxView.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(equalTo: vfxView.bottomAnchor, constant: -16)
         ])
     }
 
@@ -632,6 +651,7 @@ final class SwitcherPanelController: NSObject {
     /// switcher is invoked from a different workspace. The system handles keyboard focus
     /// via "key focus theft" - the panel becomes key while the previous app remains active.
     private func showPanel(selectAllQuery: Bool) {
+        applyChromeColors()
         updatePanelSizeForCurrentRows()
         centerPanelOnActiveDisplay()
         panel.orderFrontRegardless()
@@ -642,6 +662,19 @@ final class SwitcherPanelController: NSObject {
             DispatchQueue.main.async { [weak self] in
                 self?.searchField.selectText(nil)
             }
+        }
+    }
+
+    /// Re-applies dynamic layer colors for the current effective appearance.
+    /// Called on show and should be called on appearance changes.
+    private func applyChromeColors() {
+        guard let vfx = visualEffectView else { return }
+
+        vfx.effectiveAppearance.performAsCurrentDrawingAppearance {
+            vfx.layer?.backgroundColor =
+                NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
+            vfx.layer?.borderColor =
+                NSColor.separatorColor.withAlphaComponent(0.35).cgColor
         }
     }
 
@@ -660,7 +693,11 @@ final class SwitcherPanelController: NSObject {
                 level: .error,
                 message: configErrorMessage
             )
-            onProjectOperationFailed?()
+            onProjectOperationFailed?(ErrorContext(
+                category: .configuration,
+                message: configErrorMessage ?? "Config load failed",
+                trigger: "configLoad"
+            ))
 
         case .success(let success):
             allProjects = success.config.projects
@@ -692,7 +729,11 @@ final class SwitcherPanelController: NSObject {
                 level: .warn,
                 message: "\(error)"
             )
-            onProjectOperationFailed?()
+            onProjectOperationFailed?(ErrorContext(
+                category: .command,
+                message: "\(error)",
+                trigger: "workspaceQuery"
+            ))
         }
     }
 
@@ -914,7 +955,11 @@ final class SwitcherPanelController: NSObject {
                         message: "\(error)",
                         context: ["project_id": projectId]
                     )
-                    self.onProjectOperationFailed?()
+                    self.onProjectOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "activation"
+                    ))
                 }
             }
         }
@@ -1034,7 +1079,11 @@ final class SwitcherPanelController: NSObject {
                 message: "\(error)",
                 context: ["project_id": projectId]
             )
-            onProjectOperationFailed?()
+            onProjectOperationFailed?(ErrorContext(
+                category: .command,
+                message: "\(error)",
+                trigger: "closeProject"
+            ))
         }
     }
 
@@ -1093,7 +1142,11 @@ final class SwitcherPanelController: NSObject {
                 level: .error,
                 message: "\(error)"
             )
-            onProjectOperationFailed?()
+            onProjectOperationFailed?(ErrorContext(
+                category: .command,
+                message: "\(error)",
+                trigger: "exitToPrevious"
+            ))
             NSSound.beep()
 
             // Refresh row validity in case active-project state changed.

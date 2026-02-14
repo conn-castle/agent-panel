@@ -73,6 +73,35 @@ public struct ApCoreError: Error, Equatable, Sendable {
     }
 }
 
+/// Context for an operational error that may trigger an auto-Doctor run.
+///
+/// Used to pass error information from call sites to the Doctor trigger logic.
+/// The `isCritical` property determines whether the error should skip debounce
+/// and auto-show the Doctor window.
+public struct ErrorContext: Equatable, Sendable {
+    /// Error category from the original error.
+    public let category: ApCoreErrorCategory
+    /// Human-readable error message.
+    public let message: String
+    /// What operation triggered the error (e.g., "activation", "configLoad").
+    public let trigger: String
+
+    public init(category: ApCoreErrorCategory, message: String, trigger: String) {
+        self.category = category
+        self.message = message
+        self.trigger = trigger
+    }
+
+    /// Whether this error is critical enough to skip debounce and auto-show Doctor.
+    ///
+    /// Critical errors are activation failures and config load failures — operations
+    /// where the user's intent was blocked and diagnostic help is immediately valuable.
+    public var isCritical: Bool {
+        (category == .command && trigger == "activation")
+            || (category == .configuration && trigger == "configLoad")
+    }
+}
+
 /// Builds an ApCoreError from a failed command result.
 ///
 /// Extracts stderr output (trimmed) as the detail field and formats a consistent error message.

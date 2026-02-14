@@ -133,7 +133,7 @@ private final class WorkspaceStateAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct WorkspaceStateIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> {
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> {
         .success(())
     }
 }

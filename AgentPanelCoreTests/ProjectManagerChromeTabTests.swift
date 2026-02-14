@@ -260,7 +260,7 @@ private final class PMAeroSpaceStub: AeroSpaceProviding {
 }
 
 private struct PMIdeLauncherStub: IdeLauncherProviding {
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> { .success(()) }
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> { .success(()) }
 }
 
 private struct PMChromeLauncherStub: ChromeLauncherProviding {

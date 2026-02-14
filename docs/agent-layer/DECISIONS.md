@@ -111,6 +111,26 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: ProjectManager is already large. Recovery is orthogonal to project lifecycle (it operates on arbitrary windows, not projects). Separate class keeps responsibilities clear and testable.
     Tradeoffs: App layer must wire a second manager. Minor complexity increase.
 
+- Decision 2026-02-13 autostart: Auto-start at login uses config as source of truth
+    Decision: `[app] autoStartAtLogin` in `config.toml` is the authoritative source for launch-at-login state. The menu toggle writes back to config. `SMAppService.mainApp` registers/unregisters the login item.
+    Reason: Config-as-truth avoids split-brain between the login item registration state and the config file. The config is always the canonical state.
+    Tradeoffs: Menu toggle must write to disk (config file) on every change. If config write fails, the toggle reverts.
+
+- Decision 2026-02-13 vscolor: VS Code color differentiation via settings.json colorCustomizations
+    Decision: Inject `workbench.colorCustomizations` (titleBar, activityBar, statusBar — background + foreground) into the `// >>> agent-panel` settings.json block based on the project's `color` field. Foreground is white (#FFFFFF) if luminance < 0.5, black (#000000) otherwise.
+    Reason: Project color was already in config but not applied to VS Code. Settings.json block injection was already in place for window.title; extending it with colorCustomizations is minimal effort and immediately visible.
+    Tradeoffs: Only 6 VS Code color keys are set (title bar, activity bar, status bar). Other UI elements remain default. Invalid/unrecognized color strings silently skip color injection (no error).
+
+- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension (supersedes vscolor)
+    Decision: Replaced direct `workbench.colorCustomizations` injection (6 keys) with a single `"peacock.color": "#RRGGBB"` key in the settings.json block. The Peacock VS Code extension (`johnpapa.vscode-peacock`) reads this key and applies color across title bar, activity bar, and status bar. Doctor warns (not fails) if Peacock is not installed.
+    Reason: Peacock provides better color theming with a single key instead of 6, handles foreground contrast automatically, and is a well-maintained community extension.
+    Tradeoffs: Requires an additional VS Code extension install. Projects without Peacock installed will see the key in settings but no color effect (graceful degradation).
+
+- Decision 2026-02-14 autostart-rollback: Config write failure rolls back SMAppService toggle
+    Decision: When the "Launch at Login" toggle succeeds at the SMAppService level but fails to write back to config.toml, the SMAppService toggle is undone (re-register or unregister) and the menu title is reset to "Launch at Login" (not "(save failed)").
+    Reason: Avoids split-brain between SMAppService state and config.toml as the source of truth.
+    Tradeoffs: None significant; the rollback is best-effort (try?).
+
 - Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
     Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
     Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".

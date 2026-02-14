@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFEA52B096500A617A9783 /* LoggerTests.swift */; };
+		0563D807E75A5AAA485BE4DA /* ErrorContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */; };
 		08382A3C82BA6B765B7A4DEC /* ProjectManagerChromeTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792EA59F2896815CA8062275 /* ProjectManagerChromeTabTests.swift */; };
 		085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */; };
 		0A9D9F52EF8359CA874498CC /* ChromeConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8EF52077E9BE5CDECD6C61 /* ChromeConfigTests.swift */; };
@@ -22,13 +23,16 @@
 		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
 		1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */; };
 		1C6CBACBED263A63C510AA30 /* SwitcherDismissPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */; };
+		1DA3092146E7E22C7F00842C /* VSCodeColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A490F533EB3BC03A15DC4B /* VSCodeColorPalette.swift */; };
 		1F6C1865590F67A36D702863 /* DataPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */; };
 		22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */; };
 		255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */; };
+		29DA27D454BB7B4314632482 /* AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B3CFD02BB3D49CBCB70F7BF /* AppConfigTests.swift */; };
 		2D004103669A5EBBB770F1AF /* WindowRecoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0FA6B487E72C63168C91525 /* WindowRecoveryManager.swift */; };
 		2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
 		2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */; };
 		31625350B6505009A8424B51 /* AgentPanelCLICore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */; };
+		3BD2378907414DE0E558745A /* VSCodeColorPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A846E0437C8F257A5EBE57CD /* VSCodeColorPaletteTests.swift */; };
 		3C956B5C9547AB6A385C1F6F /* ColorValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */; };
 		3D5FED0BD2393E5330E50867 /* DependenciesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CBD0FE2C6DF91C6CEA318A9 /* DependenciesTests.swift */; };
 		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
@@ -181,6 +185,7 @@
 		32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPositionStore.swift; sourceTree = "<group>"; };
 		33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPanelApp.swift; sourceTree = "<group>"; };
 		351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceConfigManager.swift; sourceTree = "<group>"; };
+		37A490F533EB3BC03A15DC4B /* VSCodeColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPalette.swift; sourceTree = "<group>"; };
 		3CC240A74C38218E4C33B36B /* ProjectManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManager.swift; sourceTree = "<group>"; };
 		422A67E2D8FA409FACB7DBDF /* AgentPanelCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentPanelCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */ = {isa = PBXFileReference; path = "aerospace-safe.toml"; sourceTree = "<group>"; };
@@ -204,6 +209,7 @@
 		896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApArgumentParserTests.swift; sourceTree = "<group>"; };
 		8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeSettingsManagerRemoteTests.swift; sourceTree = "<group>"; };
 		8D9DD5D6EFEEEE1BAF5BA17E /* AeroSpaceFallbackBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFallbackBehaviorTests.swift; sourceTree = "<group>"; };
+		8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorContextTests.swift; sourceTree = "<group>"; };
 		90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
 		91616BD52F8F0B9C3B94A6D4 /* ChromeTabResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabResolverTests.swift; sourceTree = "<group>"; };
 		930B37D5D8A0F77FABC52946 /* ChromeTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabs.swift; sourceTree = "<group>"; };
@@ -212,9 +218,11 @@
 		97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigLoaderTests.swift; sourceTree = "<group>"; };
 		98F56A9B2D3B18E280767106 /* ProjectManagerFocusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerFocusTests.swift; sourceTree = "<group>"; };
 		99CC898051808DC63C4089ED /* DataPathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataPathsTests.swift; sourceTree = "<group>"; };
+		9B3CFD02BB3D49CBCB70F7BF /* AppConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigTests.swift; sourceTree = "<group>"; };
 		9E0C3DAA0280728917003498 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		A2095712C0FAC7312D63559A /* DoctorSSHTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorSSHTests.swift; sourceTree = "<group>"; };
 		A28604104E568953BB98A138 /* AeroSpaceConfigManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceConfigManagerTests.swift; sourceTree = "<group>"; };
+		A846E0437C8F257A5EBE57CD /* VSCodeColorPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPaletteTests.swift; sourceTree = "<group>"; };
 		A8AFEA52B096500A617A9783 /* LoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerTests.swift; sourceTree = "<group>"; };
 		AD2A435AAD0A46F9C41D8214 /* RecoveryProgressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryProgressController.swift; sourceTree = "<group>"; };
 		B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
@@ -311,6 +319,7 @@
 				8D9DD5D6EFEEEE1BAF5BA17E /* AeroSpaceFallbackBehaviorTests.swift */,
 				2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */,
 				B42F36263EBFB132E20DC2CD /* AgentLayerLauncherTests.swift */,
+				9B3CFD02BB3D49CBCB70F7BF /* AppConfigTests.swift */,
 				5B15ECCB069CA875EE2198D9 /* AppKitRunningApplicationCheckerTests.swift */,
 				DB8EF52077E9BE5CDECD6C61 /* ChromeConfigTests.swift */,
 				1FC5E105388E71A646F7C555 /* ChromeTabCaptureTests.swift */,
@@ -325,6 +334,7 @@
 				D51D100373F078D8660A112C /* DoctorCoverageTests.swift */,
 				B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */,
 				A2095712C0FAC7312D63559A /* DoctorSSHTests.swift */,
+				8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */,
 				4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */,
 				DDCF207DCD3CAB37C2756708 /* FocusStackTests.swift */,
 				1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */,
@@ -342,6 +352,7 @@
 				77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */,
 				90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */,
 				BECFF67CD5B93BC36E3D4CF4 /* UTCTimestampTests.swift */,
+				A846E0437C8F257A5EBE57CD /* VSCodeColorPaletteTests.swift */,
 				8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */,
 				D2A6F5B4B87B51292A7B3F26 /* VSCodeSettingsManagerTests.swift */,
 				BABEBED25D4A01500C091AE4 /* VSCodeSSHWorkspaceTests.swift */,
@@ -375,6 +386,7 @@
 				BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */,
 				0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */,
 				B8D8C73BDF50CEB78DBA5853 /* System.swift */,
+				37A490F533EB3BC03A15DC4B /* VSCodeColorPalette.swift */,
 				87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */,
 				E0FA6B487E72C63168C91525 /* WindowRecoveryManager.swift */,
 				D70EE9EFFE9128D41FD8C855 /* AeroSpace */,
@@ -722,6 +734,7 @@
 				F58FB3748B210924E0CCE882 /* ScreenMode.swift in Sources */,
 				1C6CBACBED263A63C510AA30 /* SwitcherDismissPolicy.swift in Sources */,
 				E1A3D5707DC2114E42745583 /* System.swift in Sources */,
+				1DA3092146E7E22C7F00842C /* VSCodeColorPalette.swift in Sources */,
 				1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */,
 				CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */,
 				CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */,
@@ -764,6 +777,7 @@
 				E5E94C3AAA17D4A1AB80665D /* AeroSpaceFallbackBehaviorTests.swift in Sources */,
 				958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */,
 				17A33C82BE771A134F5317EC /* AgentLayerLauncherTests.swift in Sources */,
+				29DA27D454BB7B4314632482 /* AppConfigTests.swift in Sources */,
 				DC1D6772FC0CC83095FB41F2 /* AppKitRunningApplicationCheckerTests.swift in Sources */,
 				0A9D9F52EF8359CA874498CC /* ChromeConfigTests.swift in Sources */,
 				5FB1D70D002D0F89F4815E61 /* ChromeTabCaptureTests.swift in Sources */,
@@ -778,6 +792,7 @@
 				521329AD085C9ED2DAA84EE9 /* DoctorCoverageTests.swift in Sources */,
 				12346D4F33A1FB23A5C18AC4 /* DoctorReportRenderingTests.swift in Sources */,
 				F9B3F3241C29CD9386229E1D /* DoctorSSHTests.swift in Sources */,
+				0563D807E75A5AAA485BE4DA /* ErrorContextTests.swift in Sources */,
 				2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */,
 				5809D0E1DCD96BB407B71026 /* FocusStackTests.swift in Sources */,
 				7BE9E07FA842E9FAA46EA5E1 /* GitRemoteResolverTests.swift in Sources */,
@@ -795,6 +810,7 @@
 				629C70BE0A769CE6A0F013CD /* SwitcherDismissPolicyTests.swift in Sources */,
 				22D51BBD2143AD77D6B77FC2 /* SystemCommandRunnerTests.swift in Sources */,
 				E14DFFA0BA6AE37F217EE45F /* UTCTimestampTests.swift in Sources */,
+				3BD2378907414DE0E558745A /* VSCodeColorPaletteTests.swift in Sources */,
 				7FD3930962ACAD6D46827DF1 /* VSCodeSSHWorkspaceTests.swift in Sources */,
 				D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */,
 				DB4DD95E24CF9477ABF998C6 /* VSCodeSettingsManagerTests.swift in Sources */,

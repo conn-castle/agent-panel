@@ -579,7 +579,8 @@ private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {
         agentPanelVersion: "test",
         macOSVersion: "macOS 15.7",
         aerospaceApp: "AVAILABLE",
-        aerospaceCli: "AVAILABLE"
+        aerospaceCli: "AVAILABLE",
+        errorContext: nil
     )
     let findings = hasFailures
         ? [DoctorFinding(severity: .fail, title: "Failure")]

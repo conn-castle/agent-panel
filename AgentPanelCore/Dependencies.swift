@@ -67,6 +67,7 @@ protocol FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws
     func appendFile(at url: URL, data: Data) throws
     func writeFile(at url: URL, data: Data) throws
+    func contentsOfDirectory(at url: URL) throws -> [String]
 }
 
 extension FileSystem {
@@ -75,6 +76,14 @@ extension FileSystem {
     /// Concrete file systems may override this to distinguish between files and directories.
     func directoryExists(at url: URL) -> Bool {
         false
+    }
+
+    /// Default directory listing.
+    ///
+    /// Returns an empty array by default. Override in production or test implementations
+    /// that need real directory enumeration.
+    func contentsOfDirectory(at url: URL) throws -> [String] {
+        []
     }
 }
 
@@ -140,6 +149,10 @@ struct DefaultFileSystem: FileSystem {
 
     func writeFile(at url: URL, data: Data) throws {
         try data.write(to: url, options: .atomic)
+    }
+
+    func contentsOfDirectory(at url: URL) throws -> [String] {
+        try fileManager.contentsOfDirectory(atPath: url.path)
     }
 }
 
@@ -238,7 +251,8 @@ protocol IdeLauncherProviding {
     ///     - SSH projects: remote absolute path.
     ///   - remoteAuthority: Optional VS Code SSH remote authority (e.g., `ssh-remote+user@host`).
     ///     When set, the workspace folder is opened via a `vscode-remote://` folder URI.
-    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError>
+    ///   - color: Optional project color for VS Code color customizations.
+    func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for Chrome launching.

@@ -69,6 +69,16 @@ public struct ChromeConfig: Equatable, Sendable {
     }
 }
 
+/// Application-level configuration.
+public struct AppConfig: Equatable, Sendable {
+    /// When true, register as a login item via SMAppService on startup.
+    public let autoStartAtLogin: Bool
+
+    public init(autoStartAtLogin: Bool = false) {
+        self.autoStartAtLogin = autoStartAtLogin
+    }
+}
+
 /// Global Agent Layer configuration.
 public struct AgentLayerConfig: Equatable, Sendable {
     /// When true, projects default to using Agent Layer unless overridden per-project.
@@ -85,17 +95,20 @@ public struct Config: Equatable, Sendable {
     public let chrome: ChromeConfig
     public let agentLayer: AgentLayerConfig
     public let layout: LayoutConfig
+    public let app: AppConfig
 
     init(
         projects: [ProjectConfig],
         chrome: ChromeConfig = ChromeConfig(),
         agentLayer: AgentLayerConfig = AgentLayerConfig(),
-        layout: LayoutConfig = LayoutConfig()
+        layout: LayoutConfig = LayoutConfig(),
+        app: AppConfig = AppConfig()
     ) {
         self.projects = projects
         self.chrome = chrome
         self.agentLayer = agentLayer
         self.layout = layout
+        self.app = app
     }
 }
 
@@ -280,6 +293,9 @@ struct ConfigLoader {
     private static let starterConfigTemplate = """
 # AgentPanel configuration
 #
+# [app] (optional) — Application settings
+# - autoStartAtLogin: launch AgentPanel when you log in (default: false)
+#
 # [agentLayer] (optional) — Global Agent Layer settings
 # - enabled: default useAgentLayer value for all projects (default: false)
 #
@@ -287,6 +303,14 @@ struct ConfigLoader {
 # - pinnedTabs: URLs always opened as leftmost tabs in every fresh Chrome window
 # - defaultTabs: URLs opened when no tab history exists for a project
 # - openGitRemote: auto-detect git remote URL and add it as an always-open tab (default: false)
+#
+# [layout] (optional) — Window positioning settings (requires Accessibility permission)
+# - smallScreenThreshold: physical monitor width in inches below which "small mode" is used (default: 24)
+# - windowHeight: window height as % of screen height, 1–100 (default: 90)
+# - maxWindowWidth: max window width in inches (default: 18)
+# - idePosition: IDE window side, "left" or "right" (default: "left")
+# - justification: which screen edge windows align to, "left" or "right" (default: "right")
+# - maxGap: max gap between windows as % of screen width, 0–100 (default: 10)
 #
 # Each [[project]] entry describes one git repo (local or SSH remote).
 # - name: Display name (id is derived by lowercasing and replacing non [a-z0-9] with '-')
@@ -299,6 +323,9 @@ struct ConfigLoader {
 #
 # Example:
 #
+# [app]
+# autoStartAtLogin = true
+#
 # [agentLayer]
 # enabled = true
 #
@@ -307,10 +334,19 @@ struct ConfigLoader {
 # defaultTabs = ["https://docs.example.com"]
 # openGitRemote = true
 #
+# [layout]
+# smallScreenThreshold = 24
+# windowHeight = 90
+# maxWindowWidth = 18
+# idePosition = "left"
+# justification = "right"
+# maxGap = 10
+#
 # [[project]]
 # name = "AgentPanel"
 # path = "/Users/you/src/agent-panel"
 # color = "indigo"
+# useAgentLayer = false
 # chromePinnedTabs = ["https://api.example.com"]
 # chromeDefaultTabs = ["https://jira.example.com"]
 #
@@ -410,6 +446,7 @@ struct ConfigParser {
 
         checkForUnknownKeys(in: table, knownKeys: knownTopLevelKeys, section: "top-level", findings: &findings)
 
+        let appConfig = parseAppSection(table: table, findings: &findings)
         let chromeConfig = parseChromeSection(table: table, findings: &findings)
         let agentLayerConfig = parseAgentLayerSection(table: table, findings: &findings)
         let layoutConfig = parseLayoutSection(table: table, findings: &findings)
@@ -423,7 +460,7 @@ struct ConfigParser {
         let validationFailed = findings.contains { $0.severity == .fail }
         let config: Config? = validationFailed
             ? nil
-            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig, layout: layoutConfig)
+            : Config(projects: parsedProjects, chrome: chromeConfig, agentLayer: agentLayerConfig, layout: layoutConfig, app: appConfig)
 
         return ConfigLoadResult(
             config: config,
@@ -476,6 +513,36 @@ struct ConfigParser {
             defaultTabs: defaultTabs,
             openGitRemote: openGitRemote
         )
+    }
+
+    // MARK: - App Section Parsing
+
+    private static func parseAppSection(
+        table: TOMLTable,
+        findings: inout [ConfigFinding]
+    ) -> AppConfig {
+        guard table.contains(key: "app") else {
+            return AppConfig()
+        }
+
+        guard let appTable = try? table.table(forKey: "app") else {
+            findings.append(ConfigFinding(
+                severity: .fail,
+                title: "[app] must be a table",
+                fix: "Use [app] as a TOML table section."
+            ))
+            return AppConfig()
+        }
+
+        checkForUnknownKeys(in: appTable, knownKeys: knownAppKeys, section: "[app]", findings: &findings)
+
+        let autoStartAtLogin = readOptionalBool(
+            from: appTable, key: "autoStartAtLogin",
+            defaultValue: false,
+            label: "app.autoStartAtLogin", findings: &findings
+        )
+
+        return AppConfig(autoStartAtLogin: autoStartAtLogin)
     }
 
     // MARK: - Agent Layer Section Parsing
@@ -931,13 +998,16 @@ struct ConfigParser {
     // MARK: - Unknown Key Detection
 
     /// Known top-level keys in config.toml.
-    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project", "layout"]
+    private static let knownTopLevelKeys: Set<String> = ["chrome", "agentLayer", "project", "layout", "app"]
 
     /// Known keys in the [chrome] section.
     private static let knownChromeKeys: Set<String> = ["pinnedTabs", "defaultTabs", "openGitRemote"]
 
     /// Known keys in the [agentLayer] section.
     private static let knownAgentLayerKeys: Set<String> = ["enabled"]
+
+    /// Known keys in the [app] section.
+    private static let knownAppKeys: Set<String> = ["autoStartAtLogin"]
 
     /// Known keys in the [layout] section.
     private static let knownLayoutKeys: Set<String> = [
@@ -1283,5 +1353,108 @@ extension Config {
             let warnings = result.findings.filter { $0.severity == .warn }
             return .success(ConfigLoadSuccess(config: config, warnings: warnings))
         }
+    }
+}
+
+// MARK: - Config Write-Back
+
+/// Targeted config.toml write-back for the `[app]` section.
+///
+/// Reads the existing file, finds or inserts the `[app]` section,
+/// and sets `autoStartAtLogin` to the desired value.
+/// Preserves all other content and comments.
+public struct ConfigWriteBack {
+    /// Sets `autoStartAtLogin` in the `[app]` section of the config file.
+    /// - Parameters:
+    ///   - value: The desired boolean value.
+    ///   - fileURL: URL of the config.toml file.
+    /// - Throws: If the file cannot be read or written.
+    public static func setAutoStartAtLogin(
+        _ value: Bool,
+        in fileURL: URL
+    ) throws {
+        try setAutoStartAtLogin(value, in: fileURL, fileSystem: DefaultFileSystem())
+    }
+
+    /// Sets `autoStartAtLogin` in the `[app]` section of the config file.
+    /// - Parameters:
+    ///   - value: The desired boolean value.
+    ///   - fileURL: URL of the config.toml file.
+    ///   - fileSystem: File system abstraction for testability.
+    /// - Throws: If the file cannot be read or written.
+    static func setAutoStartAtLogin(
+        _ value: Bool,
+        in fileURL: URL,
+        fileSystem: FileSystem
+    ) throws {
+        let data = try fileSystem.readFile(at: fileURL)
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw ApCoreError(message: "Config file is not valid UTF-8")
+        }
+
+        let updated = updateAutoStartAtLogin(in: content, value: value)
+
+        guard let newData = updated.data(using: .utf8) else {
+            throw ApCoreError(message: "Failed to encode updated config as UTF-8")
+        }
+        try fileSystem.writeFile(at: fileURL, data: newData)
+    }
+
+    /// Pure-function core: updates `autoStartAtLogin` in the given TOML string.
+    /// - Parameters:
+    ///   - content: The existing config.toml content.
+    ///   - value: The desired boolean value.
+    /// - Returns: Updated config.toml content.
+    static func updateAutoStartAtLogin(in content: String, value: Bool) -> String {
+        let valueStr = value ? "true" : "false"
+        var lines = content.components(separatedBy: "\n")
+
+        // Find existing [app] section
+        var appSectionIndex: Int?
+        for (i, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // Strip inline comment (TOML allows `[app] # comment`)
+            let beforeComment = trimmed.split(separator: "#", maxSplits: 1).first
+                .map { $0.trimmingCharacters(in: .whitespaces) } ?? trimmed
+            if beforeComment == "[app]" {
+                appSectionIndex = i
+                break
+            }
+        }
+
+        if let sectionStart = appSectionIndex {
+            // Look for existing autoStartAtLogin key within the section
+            var keyIndex: Int?
+            for i in (sectionStart + 1)..<lines.count {
+                let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                // Stop at next section header (both [section] and [[array]])
+                if trimmed.hasPrefix("[") {
+                    break
+                }
+                if trimmed.hasPrefix("autoStartAtLogin"),
+                   trimmed.count == "autoStartAtLogin".count
+                       || trimmed[trimmed.index(trimmed.startIndex, offsetBy: "autoStartAtLogin".count)].isWhitespace
+                       || trimmed[trimmed.index(trimmed.startIndex, offsetBy: "autoStartAtLogin".count)] == "=" {
+                    keyIndex = i
+                    break
+                }
+            }
+
+            if let ki = keyIndex {
+                lines[ki] = "autoStartAtLogin = \(valueStr)"
+            } else {
+                lines.insert("autoStartAtLogin = \(valueStr)", at: sectionStart + 1)
+            }
+        } else {
+            // No [app] section exists — append one
+            // Ensure trailing newline before new section
+            if let last = lines.last, !last.trimmingCharacters(in: .whitespaces).isEmpty {
+                lines.append("")
+            }
+            lines.append("[app]")
+            lines.append("autoStartAtLogin = \(valueStr)")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }

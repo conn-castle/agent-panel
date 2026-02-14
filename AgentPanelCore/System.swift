@@ -450,7 +450,8 @@ struct ApVSCodeLauncher {
     func openNewWindow(
         identifier: String,
         projectPath: String? = nil,
-        remoteAuthority: String? = nil
+        remoteAuthority: String? = nil,
+        color: String? = nil
     ) -> Result<Void, ApCoreError> {
         let trimmedId = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedId.isEmpty else {
@@ -472,21 +473,23 @@ struct ApVSCodeLauncher {
             return openSSHWindow(
                 identifier: trimmedId,
                 remotePath: projectPath,
-                remoteAuthority: remoteAuthority
+                remoteAuthority: remoteAuthority,
+                color: color
             )
         }
 
         // Local project with path: use settings.json
-        return openLocalWindow(identifier: trimmedId, projectPath: projectPath)
+        return openLocalWindow(identifier: trimmedId, projectPath: projectPath, color: color)
     }
 
     // MARK: - Local project
 
     private func openLocalWindow(
         identifier: String,
-        projectPath: String
+        projectPath: String,
+        color: String? = nil
     ) -> Result<Void, ApCoreError> {
-        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier) {
+        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier, color: color) {
         case .failure(let error):
             return .failure(error)
         case .success:
@@ -501,14 +504,16 @@ struct ApVSCodeLauncher {
     private func openSSHWindow(
         identifier: String,
         remotePath: String,
-        remoteAuthority: String
+        remoteAuthority: String,
+        color: String? = nil
     ) -> Result<Void, ApCoreError> {
         // Write settings.json on the remote host. Without this, we cannot reliably tag the
         // window title for AeroSpace window identification.
         switch settingsManager.writeRemoteSettings(
             remoteAuthority: remoteAuthority,
             remotePath: remotePath,
-            identifier: identifier
+            identifier: identifier,
+            color: color
         ) {
         case .failure(let error):
             return .failure(error)
@@ -679,7 +684,8 @@ struct ApAgentLayerVSCodeLauncher {
     func openNewWindow(
         identifier: String,
         projectPath: String?,
-        remoteAuthority: String? = nil
+        remoteAuthority: String? = nil,
+        color: String? = nil
     ) -> Result<Void, ApCoreError> {
         if let remoteAuthority = remoteAuthority?.trimmingCharacters(in: .whitespacesAndNewlines),
            !remoteAuthority.isEmpty {
@@ -692,7 +698,7 @@ struct ApAgentLayerVSCodeLauncher {
         }
 
         // Inject AP:<id> window title into .vscode/settings.json
-        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier) {
+        switch settingsManager.writeLocalSettings(projectPath: projectPath, identifier: identifier, color: color) {
         case .failure(let error):
             return .failure(error)
         case .success:

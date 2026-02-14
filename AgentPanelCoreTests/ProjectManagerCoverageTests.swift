@@ -18,7 +18,7 @@ final class ProjectManagerCoverageTests: XCTestCase {
     }
 
     private struct NoopIdeLauncher: IdeLauncherProviding {
-        func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?) -> Result<Void, ApCoreError> { .success(()) }
+        func openNewWindow(identifier: String, projectPath: String?, remoteAuthority: String?, color: String?) -> Result<Void, ApCoreError> { .success(()) }
     }
 
     private final class ChromeLauncherFailingOnTabsStub: ChromeLauncherProviding {
