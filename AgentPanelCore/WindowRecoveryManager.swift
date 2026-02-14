@@ -111,9 +111,8 @@ public final class WindowRecoveryManager {
     ) -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_all.started")
 
-        // Capture original state for restoration
+        // Capture originally focused window for restoration
         let originalFocus = try? aerospace.focusedWindow().get()
-        let originalWorkspace = originalFocus?.workspace
 
         // Get all workspaces, then iterate each to collect windows (surfaces per-workspace errors)
         let workspaces: [String]
