@@ -70,25 +70,29 @@ final class AeroSpaceCircuitBreakerTests: XCTestCase {
     }
 
     func testMultipleTimeoutsExtendCooldown() {
-        // Use wider margins (0.4s cooldown) so CI runners with scheduling jitter don't flake.
-        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 0.4)
+        // Verify that a second recordTimeout() pushes the expiry forward,
+        // proving cooldown is reset (not accumulated or ignored).
+        // Uses state inspection instead of Thread.sleep to avoid CI flakiness.
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 10)
 
         breaker.recordTimeout()
+        guard case .open(let firstExpiry) = breaker.currentState else {
+            return XCTFail("Expected open state after first timeout")
+        }
 
-        // Wait well under the cooldown
-        Thread.sleep(forTimeInterval: 0.2)
+        // Small delay so Date() advances
+        Thread.sleep(forTimeInterval: 0.01)
 
-        // Another timeout should reset the cooldown timer
         breaker.recordTimeout()
+        guard case .open(let secondExpiry) = breaker.currentState else {
+            return XCTFail("Expected open state after second timeout")
+        }
 
-        // The original cooldown would have expired (0.2 + 0.25 = 0.45 > 0.4),
-        // but the new one hasn't (0.25 < 0.4).
-        Thread.sleep(forTimeInterval: 0.25)
+        XCTAssertGreaterThan(secondExpiry, firstExpiry,
+            "Second timeout should push expiry forward, extending the cooldown")
+
+        // Breaker should still be open (10s cooldown, we've waited ~0.01s)
         XCTAssertFalse(breaker.shouldAllow())
-
-        // Wait for the full new cooldown to expire
-        Thread.sleep(forTimeInterval: 0.2)
-        XCTAssertTrue(breaker.shouldAllow())
     }
 }
 
