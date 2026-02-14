@@ -129,7 +129,128 @@ public struct AXWindowPositioner: WindowPositioning {
         return trusted
     }
 
+    public func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        defer {
+            let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            Self.logger.debug("ax.recover_window bundleId=\(bundleId) elapsed=\(String(format: "%.1f", ms))ms")
+        }
+
+        // Prefer the app's focused window (set by AeroSpace focus before this call),
+        // falling back to title enumeration if the focused window title doesn't match.
+        let element: AXUIElement
+        switch findFocusedOrTitledWindow(bundleId: bundleId, title: windowTitle) {
+        case .success(let match):
+            guard let match else {
+                return .success(.notFound)
+            }
+            element = match
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        // Read current frame
+        let currentFrame: CGRect
+        switch readFrameNSScreen(element: element, bundleId: bundleId) {
+        case .success(let frame):
+            currentFrame = frame
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        // Compute recovered frame: shrink if oversized, then center on screen
+        let needsShrinkWidth = currentFrame.width > screenVisibleFrame.width
+        let needsShrinkHeight = currentFrame.height > screenVisibleFrame.height
+        let isOffScreen = !screenVisibleFrame.contains(CGPoint(x: currentFrame.midX, y: currentFrame.midY))
+
+        guard needsShrinkWidth || needsShrinkHeight || isOffScreen else {
+            return .success(.unchanged)
+        }
+
+        let width = needsShrinkWidth ? screenVisibleFrame.width : currentFrame.width
+        let height = needsShrinkHeight ? screenVisibleFrame.height : currentFrame.height
+
+        let centeredFrame = CGRect(
+            x: screenVisibleFrame.minX + (screenVisibleFrame.width - width) / 2,
+            y: screenVisibleFrame.minY + (screenVisibleFrame.height - height) / 2,
+            width: width,
+            height: height
+        )
+
+        switch writeFrameNSScreen(element: element, frame: centeredFrame, bundleId: bundleId) {
+        case .success:
+            return .success(.recovered)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
     // MARK: - AX Window Resolution
+
+    /// Finds the target window for recovery, preferring the app's focused window.
+    ///
+    /// Strategy: First checks the app's focused window (set by AeroSpace focus before this call).
+    /// If its title matches, uses it directly (avoids duplicate-title ambiguity). Falls back to
+    /// title enumeration if the focused window doesn't match or isn't available.
+    /// Returns `.success(nil)` if no matching window is found (not an error).
+    private func findFocusedOrTitledWindow(bundleId: String, title: String) -> Result<AXUIElement?, ApCoreError> {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        guard !apps.isEmpty else {
+            return .success(nil) // App not running — not an error for recovery
+        }
+
+        let sortedPids = apps.map { $0.processIdentifier }.sorted()
+        var lastEnumerationError: AXError?
+        var anyEnumerationSucceeded = false
+
+        // Phase 1: Check the app's focused window (most likely the one AeroSpace just focused)
+        for pid in sortedPids {
+            let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, Self.axTimeoutSeconds)
+
+            var focusedValue: AnyObject?
+            let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedValue)
+            if focusResult == .success, let focusedRef = focusedValue, CFGetTypeID(focusedRef) == AXUIElementGetTypeID() {
+                let focusedWindow = focusedRef as! AXUIElement
+                AXUIElementSetMessagingTimeout(focusedWindow, Self.axTimeoutSeconds)
+                if let focusedTitle = readTitle(element: focusedWindow, bundleId: bundleId), focusedTitle == title {
+                    return .success(focusedWindow)
+                }
+            }
+        }
+
+        // Phase 2: Fall back to title enumeration (focused window didn't match)
+        for pid in sortedPids {
+            let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, Self.axTimeoutSeconds)
+
+            var windowsValue: AnyObject?
+            let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
+
+            guard result == .success, let windows = windowsValue as? [AXUIElement] else {
+                lastEnumerationError = result
+                continue
+            }
+
+            anyEnumerationSucceeded = true
+            for window in windows {
+                AXUIElementSetMessagingTimeout(window, Self.axTimeoutSeconds)
+                if let windowTitle = readTitle(element: window, bundleId: bundleId), windowTitle == title {
+                    return .success(window)
+                }
+            }
+        }
+
+        if !anyEnumerationSucceeded, let axError = lastEnumerationError {
+            return .failure(ApCoreError(
+                category: .window,
+                message: "Failed to enumerate windows for \(bundleId)",
+                detail: "AX error: \(axError.rawValue) (may indicate missing Accessibility permission)"
+            ))
+        }
+
+        return .success(nil) // No matching window
+    }
 
     /// Finds all AX windows matching the title token, sorted by title for stable ordering.
     ///

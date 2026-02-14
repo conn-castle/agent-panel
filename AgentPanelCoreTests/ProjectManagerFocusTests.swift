@@ -697,6 +697,7 @@ private final class FocusAeroSpaceStub: AeroSpaceProviding {
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
         .success(windowsByWorkspace[workspace] ?? [])
     }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
     func focusedWindow() -> Result<ApWindow, ApCoreError> { focusedWindowResult }
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
         focusedWindowIds.append(windowId)

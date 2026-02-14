@@ -671,6 +671,7 @@ private final class EdgeAeroSpaceStub: AeroSpaceProviding {
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
         .success(windowsByWorkspace[workspace] ?? [])
     }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
 
     func focusedWindow() -> Result<ApWindow, ApCoreError> { focusedWindowResult }
 
@@ -751,6 +752,8 @@ private final class EdgeRecordingPositioner: WindowPositioning {
         return setFrameResults[key] ?? .success(WindowPositionResult(positioned: 1, matched: 1))
     }
 
+    func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> { .success(.unchanged) }
+
     func isAccessibilityTrusted() -> Bool { trusted }
 
     func promptForAccessibility() -> Bool { trusted }
@@ -808,6 +811,7 @@ private final class EdgeSimpleAeroSpaceStub: AeroSpaceProviding {
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
         .success([chromeWindow, ideWindow])
     }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
     func focusedWindow() -> Result<ApWindow, ApCoreError> { .success(ideWindow) }
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
     func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> { .success(()) }

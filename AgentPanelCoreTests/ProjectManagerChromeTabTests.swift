@@ -250,6 +250,7 @@ private final class PMAeroSpaceStub: AeroSpaceProviding {
     func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
     func focusedWindow() -> Result<ApWindow, ApCoreError> {
         .failure(ApCoreError(category: .command, message: "stub"))
     }

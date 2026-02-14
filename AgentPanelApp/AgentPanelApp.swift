@@ -33,18 +33,23 @@ struct AgentPanelApp: App {
 private struct MenuItems {
     let hotkeyWarning: NSMenuItem
     let openSwitcher: NSMenuItem
+    let recoverAgentPanel: NSMenuItem
+    let addWindowToProject: NSMenuItem
+    let recoverAllWindows: NSMenuItem
 }
 
 /// App lifecycle hook used to create a minimal menu bar presence.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var doctorController: DoctorWindowController?
+    private var recoveryController: RecoveryProgressController?
     private var hotkeyManager: HotkeyManager?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
     private var isHealthRefreshInFlight: Bool = false
     private var lastHealthRefreshAt: Date?
+    private var menuFocusCapture: CapturedFocus?
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
@@ -200,6 +205,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        // Recovery and window management items
+        let recoverAgentPanelItem = NSMenuItem(
+            title: "Recover Project",
+            action: #selector(recoverAgentPanel),
+            keyEquivalent: ""
+        )
+        recoverAgentPanelItem.target = self
+        recoverAgentPanelItem.isEnabled = false // Toggled in menuNeedsUpdate
+        menu.addItem(recoverAgentPanelItem)
+
+        let addWindowToProjectItem = NSMenuItem(
+            title: "Add Window to Project",
+            action: nil,
+            keyEquivalent: ""
+        )
+        addWindowToProjectItem.submenu = NSMenu()
+        addWindowToProjectItem.isHidden = true // Toggled in menuNeedsUpdate
+        menu.addItem(addWindowToProjectItem)
+
+        let recoverAllWindowsItem = NSMenuItem(
+            title: "Recover All Windows...",
+            action: #selector(recoverAllWindowsAction),
+            keyEquivalent: ""
+        )
+        recoverAllWindowsItem.target = self
+        menu.addItem(recoverAllWindowsItem)
+
+        menu.addItem(.separator())
+
         menu.addItem(
             NSMenuItem(
                 title: "Run Doctor...",
@@ -216,7 +250,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         )
 
-        menuItems = MenuItems(hotkeyWarning: hotkeyWarningItem, openSwitcher: openSwitcherItem)
+        menu.delegate = self
+
+        menuItems = MenuItems(
+            hotkeyWarning: hotkeyWarningItem,
+            openSwitcher: openSwitcherItem,
+            recoverAgentPanel: recoverAgentPanelItem,
+            addWindowToProject: addWindowToProjectItem,
+            recoverAllWindows: recoverAllWindowsItem
+        )
 
         return menu
     }
@@ -668,5 +710,190 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onClose = { [weak self] in self?.closeDoctorWindow() }
         doctorController = controller
         return controller
+    }
+
+    // MARK: - Window Recovery & Move to Project
+
+    /// Creates a WindowRecoveryManager with an already-captured screen frame.
+    /// The screen frame must be read on the main thread before calling this.
+    private func makeWindowRecoveryManager(screenFrame: CGRect) -> WindowRecoveryManager {
+        WindowRecoveryManager(
+            windowPositioner: AXWindowPositioner(),
+            screenVisibleFrame: screenFrame,
+            logger: logger
+        )
+    }
+
+    /// Recovers all windows in the current project workspace.
+    @objc private func recoverAgentPanel() {
+        logAppEvent(event: "recover_agent_panel.requested")
+        statusItem?.menu?.cancelTracking()
+
+        guard let focus = menuFocusCapture, focus.workspace.hasPrefix(ProjectManager.workspacePrefix) else {
+            logAppEvent(event: "recover_agent_panel.skipped", level: .warn, message: "Not in a project workspace")
+            return
+        }
+
+        // Capture screen frame on main thread (AppKit API)
+        guard let screenFrame = NSScreen.main?.visibleFrame else {
+            logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+            return
+        }
+
+        let workspace = focus.workspace
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+            let result = manager.recoverWorkspaceWindows(workspace: workspace)
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let recovery):
+                    self.logAppEvent(
+                        event: "recover_agent_panel.completed",
+                        context: [
+                            "processed": "\(recovery.windowsProcessed)",
+                            "recovered": "\(recovery.windowsRecovered)"
+                        ]
+                    )
+                case .failure(let error):
+                    self.logAppEvent(
+                        event: "recover_agent_panel.failed",
+                        level: .error,
+                        message: error.message
+                    )
+                }
+            }
+        }
+    }
+
+    /// Recovers all windows across all workspaces, moving them to workspace "1".
+    @objc private func recoverAllWindowsAction() {
+        logAppEvent(event: "recover_all_windows.requested")
+        statusItem?.menu?.cancelTracking()
+
+        // Capture screen frame on main thread (AppKit API)
+        guard let screenFrame = NSScreen.main?.visibleFrame else {
+            logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+            return
+        }
+
+        // Show progress panel
+        let controller = RecoveryProgressController()
+        controller.onClose = { [weak self] in
+            self?.recoveryController = nil
+        }
+        recoveryController = controller
+        controller.show()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+
+            let result = manager.recoverAllWindows { current, total in
+                DispatchQueue.main.async {
+                    self.recoveryController?.updateProgress(current: current, total: total)
+                }
+            }
+
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let recovery):
+                    let message: String
+                    if recovery.errors.isEmpty {
+                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
+                    } else {
+                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
+                    }
+                    self.recoveryController?.showCompletion(message: message)
+                    self.logAppEvent(
+                        event: "recover_all_windows.completed",
+                        context: [
+                            "processed": "\(recovery.windowsProcessed)",
+                            "recovered": "\(recovery.windowsRecovered)",
+                            "errors": "\(recovery.errors.count)"
+                        ]
+                    )
+                case .failure(let error):
+                    self.recoveryController?.showCompletion(
+                        message: "Recovery failed: \(error.message)"
+                    )
+                    self.logAppEvent(
+                        event: "recover_all_windows.failed",
+                        level: .error,
+                        message: error.message
+                    )
+                }
+            }
+        }
+    }
+
+    /// Moves the focused window to the selected project's workspace.
+    @objc private func addWindowToProject(_ sender: NSMenuItem) {
+        guard let projectId = sender.representedObject as? String else { return }
+        guard let focus = menuFocusCapture else {
+            logAppEvent(event: "add_window_to_project.no_focus", level: .warn)
+            return
+        }
+
+        logAppEvent(
+            event: "add_window_to_project.requested",
+            context: ["window_id": "\(focus.windowId)", "project_id": projectId]
+        )
+
+        let result = projectManager.moveWindowToProject(windowId: focus.windowId, projectId: projectId)
+        switch result {
+        case .success:
+            logAppEvent(
+                event: "add_window_to_project.completed",
+                context: ["window_id": "\(focus.windowId)", "project_id": projectId]
+            )
+        case .failure(let error):
+            logAppEvent(
+                event: "add_window_to_project.failed",
+                level: .error,
+                message: "\(error)"
+            )
+        }
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension AppDelegate: NSMenuDelegate {
+    /// Updates dynamic menu items each time the menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Capture focus before the menu fully appears
+        menuFocusCapture = projectManager.captureCurrentFocus()
+
+        guard let menuItems else { return }
+
+        // Toggle "Recover Project" — enabled only in ap-* workspaces
+        let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false
+        menuItems.recoverAgentPanel.isEnabled = inProjectWorkspace
+
+        // Populate "Add Window to Project" submenu
+        let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()
+        submenu.removeAllItems()
+
+        var hasOpenProjects = false
+        if let state = try? projectManager.workspaceState().get() {
+            let openProjects = projectManager.projects.filter { state.openProjectIds.contains($0.id) }
+            if !openProjects.isEmpty {
+                hasOpenProjects = true
+                for project in openProjects {
+                    let item = NSMenuItem(
+                        title: project.name,
+                        action: #selector(addWindowToProject(_:)),
+                        keyEquivalent: ""
+                    )
+                    item.target = self
+                    item.representedObject = project.id
+                    submenu.addItem(item)
+                }
+            }
+        }
+
+        menuItems.addWindowToProject.submenu = submenu
+        menuItems.addWindowToProject.isHidden = !hasOpenProjects
     }
 }

@@ -1033,6 +1033,8 @@ private class StubWindowPositioner: WindowPositioning {
         .failure(ApCoreError(category: .window, message: "stub"))
     }
 
+    func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> { .success(.unchanged) }
+
     func isAccessibilityTrusted() -> Bool {
         trusted
     }

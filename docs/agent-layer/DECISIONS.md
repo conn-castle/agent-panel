@@ -101,6 +101,16 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Swift `as?` conditional cast always succeeds for CoreFoundation bridged types — it never returns nil for AXValue, making it useless as a type guard.
     Tradeoffs: Slightly more verbose code, but actually catches type mismatches that `as?` silently passes through.
 
+- Decision 2026-02-12 recoverymatch: Window recovery prefers focused window, falls back to title match
+    Decision: `recoverWindow()` in AXWindowPositioner first checks the app's AX focused window (via `kAXFocusedWindowAttribute`). If its title matches, uses it directly. Falls back to title enumeration only if the focused window doesn't match. `WindowRecoveryManager` calls `aerospace.focusWindow(windowId:)` before each recovery to set up the focused window.
+    Reason: Duplicate-title windows (common for Chrome/VS Code) would cause the same window to be found on every recovery call. By focusing each AeroSpace window first, the AX focused window is unambiguous regardless of title.
+    Tradeoffs: Recovery now changes window focus as a side effect (restored at end). Slightly more AeroSpace CLI calls (one focus per window).
+
+- Decision 2026-02-12 recoverywm: WindowRecoveryManager is separate from ProjectManager
+    Decision: Window recovery logic lives in a new `WindowRecoveryManager` class, not in ProjectManager.
+    Reason: ProjectManager is already large. Recovery is orthogonal to project lifecycle (it operates on arbitrary windows, not projects). Separate class keeps responsibilities clear and testable.
+    Tradeoffs: App layer must wire a second manager. Minor complexity increase.
+
 - Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
     Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
     Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".

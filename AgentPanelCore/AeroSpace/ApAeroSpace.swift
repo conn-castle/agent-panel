@@ -630,6 +630,30 @@ public struct ApAeroSpace {
         }
     }
 
+    /// Returns all windows across all workspaces.
+    /// - Returns: Combined window list from all workspaces, or an error.
+    func listAllWindows() -> Result<[ApWindow], ApCoreError> {
+        let workspaces: [String]
+        switch getWorkspaces() {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let result):
+            workspaces = result
+        }
+
+        var allWindows: [ApWindow] = []
+        for workspace in workspaces {
+            switch listWindowsWorkspace(workspace: workspace) {
+            case .success(let windows):
+                allWindows.append(contentsOf: windows)
+            case .failure:
+                // Skip workspaces that fail (e.g., transient workspaces that disappeared)
+                continue
+            }
+        }
+        return .success(allWindows)
+    }
+
     // MARK: - Private Helpers
 
     /// Returns windows scoped to the focused window query.

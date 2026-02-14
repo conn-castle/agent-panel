@@ -217,6 +217,7 @@ protocol AeroSpaceProviding {
     // Window queries — global search with fallback to focused monitor
     func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError>
     func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError>
+    func listAllWindows() -> Result<[ApWindow], ApCoreError>
     func focusedWindow() -> Result<ApWindow, ApCoreError>
 
     // Window actions
@@ -292,6 +293,16 @@ public struct WindowPositionResult: Equatable, Sendable {
     public var hasPartialFailure: Bool { positioned < matched }
 }
 
+/// Outcome of a single window recovery attempt.
+public enum RecoveryOutcome: Equatable, Sendable {
+    /// Window was resized and/or moved to fit the screen.
+    case recovered
+    /// Window already fits on screen; no changes made.
+    case unchanged
+    /// No matching window was found (app not running, window closed, etc.).
+    case notFound
+}
+
 /// All frames use NSScreen coordinate space (origin bottom-left, Y up).
 /// Implementations handle coordinate conversion to/from AX space internally.
 public protocol WindowPositioning {
@@ -316,6 +327,21 @@ public protocol WindowPositioning {
         primaryFrame: CGRect,
         cascadeOffsetPoints: CGFloat
     ) -> Result<WindowPositionResult, ApCoreError>
+
+    /// Recovers a window by bundle ID and title.
+    ///
+    /// The caller should focus the target window (via AeroSpace) before calling this method
+    /// so that the implementation can prefer the focused window when multiple windows share
+    /// the same title. Reads the window's current frame; if wider or taller than
+    /// `screenVisibleFrame`, or if the window center is off-screen, shrinks to fit and centers.
+    ///
+    /// - Parameters:
+    ///   - bundleId: Bundle identifier of the owning application.
+    ///   - windowTitle: Expected window title (used for verification/fallback matching).
+    ///   - screenVisibleFrame: Screen visible frame to constrain within.
+    /// - Returns: `.recovered` if resized/moved, `.unchanged` if already fits,
+    ///   `.notFound` if no matching window, or `.failure` on AX error.
+    func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError>
 
     /// Returns true if macOS Accessibility permission is granted.
     func isAccessibilityTrusted() -> Bool

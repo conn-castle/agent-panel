@@ -49,6 +49,13 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
             return setFrameResults[key] ?? .success(WindowPositionResult(positioned: 1, matched: 1))
         }
 
+        var recoverWindowCalls: [(bundleId: String, windowTitle: String)] = []
+        var recoverWindowResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
+        func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+            recoverWindowCalls.append((bundleId: bundleId, windowTitle: windowTitle))
+            return recoverWindowResult
+        }
+
         func isAccessibilityTrusted() -> Bool { trusted }
 
         func promptForAccessibility() -> Bool { trusted }
@@ -129,6 +136,7 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
             .success([chromeWindow, ideWindow])
         }
+        func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
 
         func focusedWindow() -> Result<ApWindow, ApCoreError> { .success(ideWindow) }
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }

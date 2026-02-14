@@ -732,6 +732,36 @@ public final class ProjectManager {
         return .success(ProjectCloseSuccess(tabCaptureWarning: tabCaptureWarning))
     }
 
+    /// Moves a window to the specified project's workspace.
+    /// - Parameters:
+    ///   - windowId: AeroSpace window ID of the window to move.
+    ///   - projectId: Target project ID (workspace will be `ap-<projectId>`).
+    /// - Returns: Success or error.
+    public func moveWindowToProject(windowId: Int, projectId: String) -> Result<Void, ProjectError> {
+        guard config != nil else {
+            return .failure(.configNotLoaded)
+        }
+        guard projects.contains(where: { $0.id == projectId }) else {
+            return .failure(.projectNotFound(projectId: projectId))
+        }
+        let targetWorkspace = Self.workspacePrefix + projectId
+        switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: windowId, focusFollows: false) {
+        case .success:
+            logEvent("move_window.completed", context: [
+                "window_id": "\(windowId)",
+                "project_id": projectId,
+                "workspace": targetWorkspace
+            ])
+            return .success(())
+        case .failure(let error):
+            logEvent("move_window.failed", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)",
+                "project_id": projectId
+            ])
+            return .failure(.aeroSpaceError(detail: error.message))
+        }
+    }
+
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError> {
         let state: ProjectWorkspaceState
