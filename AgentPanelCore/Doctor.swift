@@ -211,6 +211,7 @@ public struct Doctor {
     private let fileSystem: FileSystem
     private let dataStore: DataPaths
     private let windowPositioner: WindowPositioning?
+    private let configManager: AeroSpaceConfigManager
 
     /// Creates a Doctor instance with default dependencies.
     /// - Parameters:
@@ -231,6 +232,7 @@ public struct Doctor {
         self.fileSystem = DefaultFileSystem()
         self.dataStore = .default()
         self.windowPositioner = windowPositioner
+        self.configManager = AeroSpaceConfigManager()
     }
 
     /// Creates a Doctor instance with full dependency injection (internal, for testing).
@@ -243,6 +245,7 @@ public struct Doctor {
     ///   - executableResolver: Resolver for checking CLI tools.
     ///   - commandRunner: Command runner for SSH remote path checks.
     ///   - dataStore: Data store for path checks.
+    ///   - configManager: AeroSpace config manager for config status and content checks.
     init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding?,
@@ -253,7 +256,8 @@ public struct Doctor {
         commandRunner: CommandRunning,
         dataStore: DataPaths,
         fileSystem: FileSystem = DefaultFileSystem(),
-        windowPositioner: WindowPositioning? = nil
+        windowPositioner: WindowPositioning? = nil,
+        configManager: AeroSpaceConfigManager = AeroSpaceConfigManager()
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
@@ -265,6 +269,7 @@ public struct Doctor {
         self.dataStore = dataStore
         self.fileSystem = fileSystem
         self.windowPositioner = windowPositioner
+        self.configManager = configManager
     }
 
     /// Builds a UTC ISO-8601 timestamp string with fractional seconds.
@@ -367,13 +372,25 @@ public struct Doctor {
         }
 
         // Check AeroSpace config
-        let configManager = AeroSpaceConfigManager()
         switch configManager.configStatus() {
         case .managedByAgentPanel:
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace config managed by AgentPanel"
             ))
+            // Check for stale config (missing workspace cycling keybindings)
+            if let contents = configManager.configContents() {
+                let hasAltTab = contents.contains("alt-tab =")
+                let hasAltShiftTab = contents.contains("alt-shift-tab =")
+                if !hasAltTab || !hasAltShiftTab {
+                    findings.append(DoctorFinding(
+                        severity: .warn,
+                        title: "AeroSpace config is stale (missing workspace cycling keybindings)",
+                        detail: "The managed config is missing Option-Tab / Option-Shift-Tab keybindings for workspace-scoped focus cycling.",
+                        fix: "Reload the AeroSpace config to update keybindings."
+                    ))
+                }
+            }
         case .missing:
             findings.append(DoctorFinding(
                 severity: .fail,

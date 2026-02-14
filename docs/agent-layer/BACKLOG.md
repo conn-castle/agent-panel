@@ -28,6 +28,12 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-14 chromecolor: Chrome visual differentiation matching VS Code project color
+    Priority: Low. Area: Core/Chrome
+    Description: Apply project color to the Chrome window to visually match the associated VS Code window. Possible approaches: Chrome profile customization, theme injection, or Chrome extension.
+    Acceptance criteria: Chrome window for a project visually reflects the project's configured color.
+    Notes: Deferred from Phase 7. Chrome has no clean programmatic injection point for color theming (unlike VS Code's Peacock extension). May require a custom Chrome extension or Chrome profile switching.
+
 - Backlog 2026-02-09 trackpad-hotcorners: Hot Corners and Trackpad activation/switching
     Priority: Medium. Area: App/UX
     Description: Add support for Hot Corners and trackpad gestures (e.g., specific swipes) to trigger the project switcher or quickly toggle between recent projects. This aims to streamline navigation for laptop users who may prefer gesture-based interaction over keyboard shortcuts.

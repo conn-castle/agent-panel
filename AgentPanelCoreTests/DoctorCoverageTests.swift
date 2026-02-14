@@ -382,7 +382,156 @@ final class DoctorCoverageTests: XCTestCase {
         XCTAssertFalse(rendered.contains("PASS  This is a body line"))
     }
 
+    // MARK: - Stale AeroSpace config checks
+
+    func testStaleConfigWarnWhenManagedConfigMissingAltTab() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManager(contents: """
+        \(AeroSpaceConfigManager.managedByMarker)
+        [mode.main.binding]
+        alt-shift-tab = 'focus dfs-prev'
+        """)
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let stale = report.findings.first { $0.title.contains("stale") }
+        XCTAssertNotNil(stale)
+        XCTAssertEqual(stale?.severity, .warn)
+    }
+
+    func testStaleConfigWarnWhenManagedConfigMissingAltShiftTab() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManager(contents: """
+        \(AeroSpaceConfigManager.managedByMarker)
+        [mode.main.binding]
+        alt-tab = 'focus dfs-next'
+        """)
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let stale = report.findings.first { $0.title.contains("stale") }
+        XCTAssertNotNil(stale)
+        XCTAssertEqual(stale?.severity, .warn)
+    }
+
+    func testNoStaleConfigWarnWhenBothKeybindingsPresent() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManager(contents: """
+        \(AeroSpaceConfigManager.managedByMarker)
+        [mode.main.binding]
+        alt-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next'
+        alt-shift-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-prev'
+        """)
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let stale = report.findings.first { $0.title.contains("stale") }
+        XCTAssertNil(stale)
+    }
+
+    func testNoStaleConfigCheckForExternalConfig() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // External config (no marker) — stale check should be skipped
+        let configManager = try makeConfigManager(contents: "external = true\n")
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let stale = report.findings.first { $0.title.contains("stale") }
+        XCTAssertNil(stale)
+    }
+
+    func testNoStaleConfigCheckForMissingConfig() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // No config file at all
+        let configDir = tempDir.appendingPathComponent("aero-missing", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+        let configManager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configDir.appendingPathComponent(".aerospace.toml").path,
+            backupPath: configDir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let stale = report.findings.first { $0.title.contains("stale") }
+        XCTAssertNil(stale)
+    }
+
     // MARK: - Helpers
+
+    private func makeConfigManager(contents: String) throws -> AeroSpaceConfigManager {
+        let dir = tempDir.appendingPathComponent("aero-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try contents.write(to: configURL, atomically: true, encoding: .utf8)
+        return AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+    }
 
     private func makeDoctorForRun(
         toml: String,
@@ -393,7 +542,8 @@ final class DoctorCoverageTests: XCTestCase {
         hotkeyStatusProvider: HotkeyStatusProviding? = nil,
         windowPositioner: WindowPositioning? = nil,
         ensureLogsDirectoryExists: Bool = true,
-        commandRunner: (any CommandRunning)? = nil
+        commandRunner: (any CommandRunning)? = nil,
+        configManager: AeroSpaceConfigManager? = nil
     ) throws -> Doctor {
         let configDir = tempDir.appendingPathComponent(".config/agent-panel", isDirectory: true)
         try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
@@ -419,17 +569,32 @@ final class DoctorCoverageTests: XCTestCase {
             result: .failure(ApCoreError(message: "unexpected ssh invocation"))
         )
 
-        return Doctor(
-            runningApplicationChecker: runningChecker,
-            hotkeyStatusProvider: hotkeyStatusProvider,
-            dateProvider: StubDateProvider(),
-            aerospaceHealth: aerospaceHealth,
-            appDiscovery: appDiscovery,
-            executableResolver: resolver,
-            commandRunner: runner,
-            dataStore: dataStore,
-            windowPositioner: windowPositioner
-        )
+        if let configManager {
+            return Doctor(
+                runningApplicationChecker: runningChecker,
+                hotkeyStatusProvider: hotkeyStatusProvider,
+                dateProvider: StubDateProvider(),
+                aerospaceHealth: aerospaceHealth,
+                appDiscovery: appDiscovery,
+                executableResolver: resolver,
+                commandRunner: runner,
+                dataStore: dataStore,
+                windowPositioner: windowPositioner,
+                configManager: configManager
+            )
+        } else {
+            return Doctor(
+                runningApplicationChecker: runningChecker,
+                hotkeyStatusProvider: hotkeyStatusProvider,
+                dateProvider: StubDateProvider(),
+                aerospaceHealth: aerospaceHealth,
+                appDiscovery: appDiscovery,
+                executableResolver: resolver,
+                commandRunner: runner,
+                dataStore: dataStore,
+                windowPositioner: windowPositioner
+            )
+        }
     }
 }
 

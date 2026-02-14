@@ -247,6 +247,60 @@ final class AeroSpaceConfigManagerTests: XCTestCase {
         }
     }
 
+    // MARK: - configContents()
+
+    func testConfigContentsReturnsContentsWhenFileExists() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let expected = "\(AeroSpaceConfigManager.managedByMarker)\nalt-tab = 'focus'\n"
+        try expected.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        XCTAssertEqual(manager.configContents(), expected)
+    }
+
+    func testConfigContentsReturnsNilWhenFileMissing() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: dir.appendingPathComponent(".aerospace.toml").path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        XCTAssertNil(manager.configContents())
+    }
+
+    func testConfigContentsReturnsNilWhenFileUnreadable() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Point configPath at a directory so reading as a file fails.
+        let configDirURL = dir.appendingPathComponent(".aerospace.toml", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDirURL, withIntermediateDirectories: true)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configDirURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        XCTAssertNil(manager.configContents())
+    }
+
+    // MARK: - writeSafeConfig failure cases
+
     func testWriteSafeConfigFailsWhenWritingConfigFails() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

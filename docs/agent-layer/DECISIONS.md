@@ -136,6 +136,16 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".
     Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows.
 
+- Decision 2026-02-14 workspacetab: Workspace-scoped window cycling via native AeroSpace focus commands
+    Decision: Use AeroSpace's native `focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next`/`dfs-prev` bound to Option-Tab / Option-Shift-Tab in the managed `aerospace-safe.toml` template. No custom CLI subcommand needed.
+    Reason: AeroSpace's DFS-order focus natively includes floating windows (unless `--ignore-floating` is set). A custom `ap cycle-focus` CLI was considered but rejected because AeroSpace's `exec-and-forget` would need `ap` on PATH, which is brittle for GUI apps.
+    Tradeoffs: DFS order is not identical to macOS Cmd-Tab (MRU order), but provides deterministic, predictable cycling within a workspace. Existing users with a managed config must reload to get the new keybindings; Doctor warns about stale configs.
+
+- Decision 2026-02-14 chromecolordefer: Chrome visual differentiation deferred permanently to BACKLOG
+    Decision: Removed `chrome-color` from Phase 7 and moved to BACKLOG. Chrome has no clean programmatic injection point for window color theming.
+    Reason: Unlike VS Code (which has Peacock extension reading a single settings.json key), Chrome provides no equivalent mechanism. Chrome profiles could work but require complex profile management. A custom Chrome extension is possible but out of scope for polish work.
+    Tradeoffs: Chrome windows have no visual color correlation with their project. Users must rely on tab content to identify project Chrome windows.
+
 - Decision 2026-02-14 circuitbreaker: AeroSpace CLI circuit breaker prevents timeout cascades
     Decision: `AeroSpaceCircuitBreaker` (process-wide shared instance) sits between `ApAeroSpace` and `CommandRunning`. All `aerospace` CLI calls go through `runAerospace()`, which checks the breaker before spawning a process. On timeout, the breaker trips to "open" state for a 30s cooldown; subsequent calls fail immediately with a descriptive error. `start()` resets the breaker after a fresh AeroSpace launch.
     Reason: When AeroSpace crashes or its socket becomes unresponsive, every CLI call times out at 5s. With 15-20 calls in a Doctor check, this creates a ~90s freeze. The circuit breaker detects the first timeout and immediately fails the rest.

@@ -194,7 +194,7 @@ public struct ApAeroSpace {
             ("list-windows", ["--monitor", "--workspace", "--focused", "--app-bundle-id", "--format"]),
             ("summon-workspace", []),
             ("move-node-to-workspace", ["--window-id"]),
-            ("focus", ["--window-id"]),
+            ("focus", ["--window-id", "--boundaries", "--boundaries-action", "dfs-next", "dfs-prev", "wrap-around-the-workspace"]),
             ("close", ["--window-id"])
         ]
 
