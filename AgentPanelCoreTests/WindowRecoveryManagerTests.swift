@@ -388,7 +388,7 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(progressCalls[2].1, 3)
     }
 
-    func testRecoverAll_restoresOriginalWorkspaceAndFocus() {
+    func testRecoverAll_restoresOriginalFocus() {
         let aerospace = StubAeroSpace()
         let original = makeWindow(id: 42, workspace: "ap-myproject", title: "My Window")
         aerospace.focusedWindowResult = .success(original)
@@ -398,9 +398,11 @@ final class WindowRecoveryManagerTests: XCTestCase {
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
-        // Should restore workspace and then window
-        XCTAssertEqual(aerospace.focusWorkspaceCalls.last, "ap-myproject")
+        // Should restore focus to original window (now on workspace "1")
         XCTAssertEqual(aerospace.focusWindowCalls.last, 42)
+        // Should NOT call focusWorkspace — all windows are on "1", restoring
+        // the original workspace would briefly switch to an empty workspace
+        XCTAssertTrue(aerospace.focusWorkspaceCalls.isEmpty)
     }
 
     func testRecoverAll_moveFailure_continuesAndRecordsError() {

@@ -102,7 +102,7 @@ public final class WindowRecoveryManager {
     /// per-workspace failures as non-fatal errors rather than silently skipping them.
     /// Focuses each window via AeroSpace before recovery to disambiguate duplicate titles.
     /// Reports progress via callback after each window.
-    /// Restores original workspace and focused window at the end.
+    /// Restores focus to the originally focused window at the end.
     ///
     /// - Parameter progress: Called with `(currentIndex, totalCount)` after each window.
     /// - Returns: Recovery result with counts and any errors.
@@ -169,10 +169,8 @@ public final class WindowRecoveryManager {
             progress(index + 1, allWindows.count)
         }
 
-        // Restore original workspace and focus
-        if let originalWorkspace {
-            _ = aerospace.focusWorkspace(name: originalWorkspace)
-        }
+        // Restore original window focus (all windows are now on workspace "1",
+        // so restoring the workspace is unnecessary — focusWindow handles it).
         if let originalFocus {
             _ = aerospace.focusWindow(windowId: originalFocus.windowId)
         }

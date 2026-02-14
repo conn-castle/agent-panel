@@ -1412,10 +1412,10 @@ public struct ConfigWriteBack {
         // Find existing [app] section
         var appSectionIndex: Int?
         for (i, line) in lines.enumerated() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             // Strip inline comment (TOML allows `[app] # comment`)
             let beforeComment = trimmed.split(separator: "#", maxSplits: 1).first
-                .map { $0.trimmingCharacters(in: .whitespaces) } ?? trimmed
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? trimmed
             if beforeComment == "[app]" {
                 appSectionIndex = i
                 break
@@ -1426,7 +1426,7 @@ public struct ConfigWriteBack {
             // Look for existing autoStartAtLogin key within the section
             var keyIndex: Int?
             for i in (sectionStart + 1)..<lines.count {
-                let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+                let trimmed = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
                 // Stop at next section header (both [section] and [[array]])
                 if trimmed.hasPrefix("[") {
                     break
@@ -1448,7 +1448,7 @@ public struct ConfigWriteBack {
         } else {
             // No [app] section exists — append one
             // Ensure trailing newline before new section
-            if let last = lines.last, !last.trimmingCharacters(in: .whitespaces).isEmpty {
+            if let last = lines.last, !last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 lines.append("")
             }
             lines.append("[app]")
