@@ -10,7 +10,8 @@ The public API of `AgentPanelCore` has these main concerns:
 6. **VS Code Color** — Project color differentiation via Peacock extension
 7. **Error Context** — Structured error context for auto-doctor
 8. **Logging** — Structured JSON logging
-9. **Onboarding Support** — AeroSpace installation and configuration
+9. **Window Cycling** — Workspace-scoped window focus cycling
+10. **Onboarding Support** — AeroSpace installation and configuration
 
 ## Design Principles
 
@@ -702,6 +703,26 @@ public enum LogWriteError: Error, Equatable, Sendable {
 
 ---
 
+## Window Cycling
+
+Cycles focus between windows in the focused AeroSpace workspace. The App layer registers global hotkeys (Option-Tab / Option-Shift-Tab) via Carbon API and dispatches to `WindowCycler`.
+
+```swift
+public enum CycleDirection: Sendable {
+    case next
+    case previous
+}
+
+public struct WindowCycler {
+    public init()
+    public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
+}
+```
+
+`cycleFocus` calls `focusedWindow()` → `listWindowsWorkspace(workspace:)` → `focusWindow(windowId:)`, wrapping at list boundaries. Returns `.success(())` when there are 0–1 windows or the focused window is not in the list.
+
+---
+
 ## Onboarding Support
 
 For first-launch setup, the App uses these types directly.
@@ -769,12 +790,24 @@ public enum AeroSpaceConfigStatus: String, Sendable {
     case unknown
 }
 
+public enum ConfigUpdateResult: Equatable, Sendable {
+    case freshInstall
+    case updated(fromVersion: Int, toVersion: Int)
+    case alreadyCurrent
+    case skippedExternal
+}
+
 public struct AeroSpaceConfigManager {
     public static var configPath: String { get }
 
     public init()
 
     public func writeSafeConfig() -> Result<Void, ApCoreError>
+    public func configContents() -> String?
     public func configStatus() -> AeroSpaceConfigStatus
+    public func templateVersion() -> Int?
+    public func currentConfigVersion() -> Int?
+    public func updateManagedConfig() -> Result<Void, ApCoreError>
+    public func ensureUpToDate() -> Result<ConfigUpdateResult, ApCoreError>
 }
 ```

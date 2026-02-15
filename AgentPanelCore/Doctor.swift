@@ -400,18 +400,16 @@ public struct Doctor {
                 severity: .pass,
                 title: "AeroSpace config managed by AgentPanel"
             ))
-            // Check for stale config (missing workspace cycling keybindings)
-            if let contents = configManager.configContents() {
-                let hasAltTab = contents.contains("alt-tab =")
-                let hasAltShiftTab = contents.contains("alt-shift-tab =")
-                if !hasAltTab || !hasAltShiftTab {
-                    findings.append(DoctorFinding(
-                        severity: .warn,
-                        title: "AeroSpace config is stale (missing workspace cycling keybindings)",
-                        detail: "The managed config is missing Option-Tab / Option-Shift-Tab keybindings for workspace-scoped focus cycling.",
-                        fix: "Reload the AeroSpace config to update keybindings."
-                    ))
-                }
+            // Check config version staleness
+            let currentVer = configManager.currentConfigVersion()
+            let templateVer = configManager.templateVersion()
+            if let templateVer, currentVer == nil || currentVer! < templateVer {
+                let currentLabel = currentVer.map { "\($0)" } ?? "none"
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "AeroSpace config is outdated (version \(currentLabel), latest is \(templateVer))",
+                    fix: "Restart AgentPanel to auto-update, or run `ap doctor` for details."
+                ))
             }
         case .missing:
             findings.append(DoctorFinding(

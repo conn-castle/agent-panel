@@ -21,6 +21,18 @@ public enum AeroSpaceConfigStatus: String, Sendable {
     case unknown
 }
 
+/// Result of an `ensureUpToDate()` config update check.
+public enum ConfigUpdateResult: Equatable, Sendable {
+    /// No config existed; a fresh install was written.
+    case freshInstall
+    /// The config was updated from one version to another.
+    case updated(fromVersion: Int, toVersion: Int)
+    /// The config is already at the latest version.
+    case alreadyCurrent
+    /// The config is not managed by AgentPanel; skipped.
+    case skippedExternal
+}
+
 /// Manages the AeroSpace configuration file.
 public struct AeroSpaceConfigManager {
     /// Marker comment that identifies configs managed by AgentPanel.
@@ -191,4 +203,188 @@ public struct AeroSpaceConfigManager {
             return .externalConfig
         }
     }
+
+    // MARK: - Config Version & User Section Management
+
+    /// Marker prefix for the config version line.
+    static let versionPrefix = "# ap-config-version: "
+
+    /// Start marker for user keybindings section.
+    static let userKeybindingsStart = "# >>> user-keybindings"
+    /// End marker for user keybindings section.
+    static let userKeybindingsEnd = "# <<< user-keybindings"
+    /// Start marker for user config section.
+    static let userConfigStart = "# >>> user-config"
+    /// End marker for user config section.
+    static let userConfigEnd = "# <<< user-config"
+
+    /// Extracts the `ap-config-version` number from config content.
+    /// - Parameter content: The config file content.
+    /// - Returns: The version number, or nil if not found or malformed.
+    static func parseConfigVersion(from content: String) -> Int? {
+        for line in content.components(separatedBy: .newlines) {
+            if line.hasPrefix(versionPrefix) {
+                let versionString = line.dropFirst(versionPrefix.count).trimmingCharacters(in: .whitespaces)
+                return Int(versionString)
+            }
+        }
+        return nil
+    }
+
+    /// Extracts the content between two markers (exclusive of the markers themselves).
+    /// - Parameters:
+    ///   - content: The full config content to search.
+    ///   - startMarker: The start marker line.
+    ///   - endMarker: The end marker line.
+    /// - Returns: The content between the markers, or nil if markers are not found.
+    static func extractUserSection(from content: String?, startMarker: String, endMarker: String) -> String? {
+        guard let content else { return nil }
+        let lines = content.components(separatedBy: .newlines)
+        guard let startIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == startMarker }),
+              let endIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == endMarker }),
+              endIndex > startIndex else {
+            return nil
+        }
+        let sectionLines = Array(lines[(startIndex + 1)..<endIndex])
+        return sectionLines.joined(separator: "\n")
+    }
+
+    /// Replaces the content between two markers with new content.
+    /// - Parameters:
+    ///   - content: The full config content.
+    ///   - startMarker: The start marker line.
+    ///   - endMarker: The end marker line.
+    ///   - replacement: The new content to insert between markers.
+    /// - Returns: The updated config content.
+    static func replaceUserSection(in content: String, startMarker: String, endMarker: String, with replacement: String) -> String {
+        let lines = content.components(separatedBy: .newlines)
+        guard let startIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == startMarker }),
+              let endIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == endMarker }),
+              endIndex > startIndex else {
+            return content
+        }
+
+        var result = Array(lines[0...startIndex])
+        let replacementLines = replacement.components(separatedBy: .newlines)
+        result.append(contentsOf: replacementLines)
+        result.append(contentsOf: Array(lines[endIndex...]))
+        return result.joined(separator: "\n")
+    }
+
+    /// Returns the config version from the bundled template.
+    /// - Returns: The template version number, or nil if the template is missing or has no version.
+    public func templateVersion() -> Int? {
+        guard let template = loadSafeConfigFromBundle() else { return nil }
+        return Self.parseConfigVersion(from: template)
+    }
+
+    /// Returns the config version from the existing config file.
+    /// - Returns: The current config version number, or nil if the file is missing or has no version.
+    public func currentConfigVersion() -> Int? {
+        guard let contents = configContents() else { return nil }
+        return Self.parseConfigVersion(from: contents)
+    }
+
+    /// Updates a managed config by merging user sections from the existing config into the template.
+    /// - Returns: Success, or an error if the template cannot be loaded or the file cannot be written.
+    public func updateManagedConfig() -> Result<Void, ApCoreError> {
+        guard let template = loadSafeConfigFromBundle() else {
+            return .failure(fileSystemError(
+                "Failed to load aerospace-safe.toml from app bundle.",
+                detail: "The app may be corrupted."
+            ))
+        }
+
+        let existingContents = configContents()
+
+        // Extract user sections from existing config (nil if markers don't exist)
+        let userKeybindings = Self.extractUserSection(
+            from: existingContents,
+            startMarker: Self.userKeybindingsStart,
+            endMarker: Self.userKeybindingsEnd
+        )
+        let userConfig = Self.extractUserSection(
+            from: existingContents,
+            startMarker: Self.userConfigStart,
+            endMarker: Self.userConfigEnd
+        )
+
+        // Start with the template and replace user sections if we have content to preserve
+        var merged = template
+        if let userKeybindings {
+            merged = Self.replaceUserSection(
+                in: merged,
+                startMarker: Self.userKeybindingsStart,
+                endMarker: Self.userKeybindingsEnd,
+                with: userKeybindings
+            )
+        }
+        if let userConfig {
+            merged = Self.replaceUserSection(
+                in: merged,
+                startMarker: Self.userConfigStart,
+                endMarker: Self.userConfigEnd,
+                with: userConfig
+            )
+        }
+
+        do {
+            try merged.write(toFile: configPath, atomically: true, encoding: .utf8)
+            return .success(())
+        } catch {
+            return .failure(fileSystemError(
+                "Failed to write updated AeroSpace config.",
+                detail: error.localizedDescription
+            ))
+        }
+    }
+
+    /// Ensures the AeroSpace config is up to date.
+    ///
+    /// - `.missing` → writes a fresh config via `writeSafeConfig()`, returns `.freshInstall`.
+    /// - `.managedByAgentPanel` with stale version → calls `updateManagedConfig()`, returns `.updated`.
+    /// - `.managedByAgentPanel` with current version → returns `.alreadyCurrent`.
+    /// - `.externalConfig` / `.unknown` → returns `.skippedExternal`.
+    ///
+    /// - Returns: The update result, or an error if writing fails.
+    public func ensureUpToDate() -> Result<ConfigUpdateResult, ApCoreError> {
+        switch configStatus() {
+        case .missing:
+            switch writeSafeConfig() {
+            case .failure(let error):
+                return .failure(error)
+            case .success:
+                return .success(.freshInstall)
+            }
+
+        case .managedByAgentPanel:
+            let currentVersion = currentConfigVersion()
+            let latestVersion = templateVersion()
+
+            // If the template cannot be loaded or lacks a version, this is a broken bundle
+            guard let latestVersion else {
+                return .failure(fileSystemError(
+                    "Cannot determine template config version.",
+                    detail: "The bundled aerospace-safe.toml is missing or has no ap-config-version line."
+                ))
+            }
+
+            // If the installed config has no version or a lower version, update it
+            if currentVersion == nil || currentVersion! < latestVersion {
+                let fromVersion = currentVersion ?? 0
+                switch updateManagedConfig() {
+                case .failure(let error):
+                    return .failure(error)
+                case .success:
+                    return .success(.updated(fromVersion: fromVersion, toVersion: latestVersion))
+                }
+            }
+
+            return .success(.alreadyCurrent)
+
+        case .externalConfig, .unknown:
+            return .success(.skippedExternal)
+        }
+    }
+
 }

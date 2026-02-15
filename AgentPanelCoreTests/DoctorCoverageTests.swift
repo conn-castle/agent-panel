@@ -384,87 +384,6 @@ final class DoctorCoverageTests: XCTestCase {
 
     // MARK: - Stale AeroSpace config checks
 
-    func testStaleConfigWarnWhenManagedConfigMissingAltTab() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-shift-tab = 'focus dfs-prev'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNotNil(stale)
-        XCTAssertEqual(stale?.severity, .warn)
-    }
-
-    func testStaleConfigWarnWhenManagedConfigMissingAltShiftTab() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-tab = 'focus dfs-next'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNotNil(stale)
-        XCTAssertEqual(stale?.severity, .warn)
-    }
-
-    func testNoStaleConfigWarnWhenBothKeybindingsPresent() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next'
-        alt-shift-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-prev'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNil(stale)
-    }
-
     func testNoStaleConfigCheckForExternalConfig() throws {
         let toml = """
         [[project]]
@@ -518,6 +437,114 @@ final class DoctorCoverageTests: XCTestCase {
         XCTAssertNil(stale)
     }
 
+    func testVersionStalenessWarnWhenConfigVersionBehindTemplate() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 2
+            [mode.main.binding]
+            alt-tab = 'new command'
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNotNil(outdated)
+        XCTAssertEqual(outdated?.severity, .warn)
+        XCTAssertTrue(outdated?.title.contains("version 1") == true)
+        XCTAssertTrue(outdated?.title.contains("latest is 2") == true)
+    }
+
+    func testVersionStalenessWarnWhenConfigHasNoVersion() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNotNil(outdated)
+        XCTAssertEqual(outdated?.severity, .warn)
+        XCTAssertTrue(outdated?.title.contains("version none") == true)
+    }
+
+    func testNoVersionStalenessWhenVersionMatches() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNil(outdated)
+    }
+
     // MARK: - Helpers
 
     private func makeConfigManager(contents: String) throws -> AeroSpaceConfigManager {
@@ -530,6 +557,19 @@ final class DoctorCoverageTests: XCTestCase {
             configPath: configURL.path,
             backupPath: dir.appendingPathComponent(".backup").path,
             safeConfigLoader: { nil }
+        )
+    }
+
+    private func makeConfigManagerWithTemplate(configContents: String, templateContents: String) throws -> AeroSpaceConfigManager {
+        let dir = tempDir.appendingPathComponent("aero-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try configContents.write(to: configURL, atomically: true, encoding: .utf8)
+        return AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { templateContents }
         )
     }
 

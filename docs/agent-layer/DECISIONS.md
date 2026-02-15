@@ -129,7 +129,12 @@ A rolling log of important, non-obvious decisions that materially affect future 
 - Decision 2026-02-14 workspacetab: Workspace-scoped window cycling via native AeroSpace focus commands
     Decision: Use AeroSpace's native `focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next`/`dfs-prev` bound to Option-Tab / Option-Shift-Tab in the managed `aerospace-safe.toml` template. No custom CLI subcommand needed.
     Reason: AeroSpace's DFS-order focus natively includes floating windows (unless `--ignore-floating` is set). A custom `ap cycle-focus` CLI was considered but rejected because AeroSpace's `exec-and-forget` would need `ap` on PATH, which is brittle for GUI apps.
-    Tradeoffs: DFS order is not identical to macOS Cmd-Tab (MRU order), but provides deterministic, predictable cycling within a workspace. Existing users with a managed config must reload to get the new keybindings; Doctor warns about stale configs.
+    Tradeoffs: DFS order is not identical to macOS Cmd-Tab (MRU order), but provides deterministic, predictable cycling within a workspace. Config is now auto-updated on startup with user sections preserved.
+
+- Decision 2026-02-14 compatvaluefix: Compatibility check validates flags, not flag values
+    Decision: Removed `wrap-around-the-workspace` from the `focus` command compatibility check. The check verifies `--boundaries-action` (the flag) is supported; `wrap-around-the-workspace` is a *value* for that flag and is not listed in `aerospace focus --help`.
+    Reason: The help text shows `<action>` placeholder, not enumerated values. The value works at runtime (exit code 0) but string-matching against help output produces a false-negative FAIL.
+    Tradeoffs: If a future AeroSpace version removes `wrap-around-the-workspace` as a valid value, the compatibility check won't catch it. Acceptable because the keybinding would fail at runtime with an error, which is observable.
 
 - Decision 2026-02-14 chromecolordefer: Chrome visual differentiation deferred permanently to BACKLOG
     Decision: Removed `chrome-color` from Phase 7 and moved to BACKLOG. Chrome has no clean programmatic injection point for window color theming.
@@ -146,7 +151,17 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Color-coded severity improves scan-ability of Doctor output. TTY detection ensures piped output and `NO_COLOR` convention work correctly.
     Tradeoffs: None significant; color is purely additive and opt-in via TTY detection.
 
+- Decision 2026-02-14 aeroconfigown: AeroSpace config full ownership with versioned template and user sections
+    Decision: AgentPanel fully owns `~/.aerospace.toml` via a versioned template (`# ap-config-version: N`). On startup, `ensureUpToDate()` compares the installed config version against the template version and auto-updates if stale, preserving user content between `# >>> user-keybindings` / `# <<< user-keybindings` and `# >>> user-config` / `# <<< user-config` markers. After a successful update, AeroSpace is reloaded via `aerospace reload-config` so the running process picks up changes. Pre-migration configs (no version/markers) are updated with default placeholders. Missing template version is a hard failure (fail loudly).
+    Reason: Previous approach only wrote the config once during onboarding. Template changes (new keybindings, config options) left users on stale configs with no auto-update path. Doctor detected stale keybindings but the fix was manual.
+    Tradeoffs: Users must place custom config within the marker sections; content outside markers is overwritten on update. The version bump requires incrementing the `# ap-config-version` line in `aerospace-safe.toml`.
+
 - Decision 2026-02-14 sshparallel: Doctor SSH project checks run concurrently via GCD
     Decision: SSH project health checks (path existence + settings block) run in parallel using `DispatchQueue.concurrentPerform`. Local project checks remain sequential (fast). Thread-safe findings accumulation via `NSLock`.
     Reason: Sequential SSH checks caused N*20s blocking for N SSH projects (two 10s-timeout calls per project). Parallelization reduces worst-case to ~20s regardless of project count (each project's two calls still run sequentially within its concurrent unit).
     Tradeoffs: Same-severity SSH findings appear in non-deterministic order (acceptable — findings are sorted by severity in rendering, and tests validate presence not order). Test doubles must be thread-safe.
+
+- Decision 2026-02-14 floatingfocusfix: Native Swift window cycling replaces AeroSpace dfs-next/dfs-prev
+    Decision: Option-Tab / Option-Shift-Tab is handled natively in Swift via `WindowCycler` (Core) and `FocusCycleHotkeyManager` (App, Carbon API). WindowCycler calls `focusedWindow()` → `listWindowsWorkspace()` → `focusWindow()` to cycle through all workspace windows with wrapping. AeroSpace config template (v3) no longer contains alt-tab keybindings; Doctor keybinding check removed.
+    Reason: AeroSpace's DFS traversal (`rootTilingContainer.allLeafWindowsRecursive`) does not include floating windows, and all windows are floating in AgentPanel's managed config. An intermediate script-based approach was rejected because Swift code is easier to test, maintain, and debug than shell scripts invoked via `exec-and-forget`.
+    Tradeoffs: Carbon global hotkeys require the app to be running (acceptable — AgentPanel is a background agent). Supersedes decisions `workspacetab` and the intermediate script approach.

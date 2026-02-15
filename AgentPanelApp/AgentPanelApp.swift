@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var doctorController: DoctorWindowController?
     private var recoveryController: RecoveryProgressController?
     private var hotkeyManager: HotkeyManager?
+    private var focusCycleHotkeyManager: FocusCycleHotkeyManager?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
@@ -97,6 +98,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Auto-start AeroSpace if installed but not running
         ensureAeroSpaceRunning()
+
+        // Auto-update AeroSpace config if stale (preserves user sections)
+        let aeroConfigManager = AeroSpaceConfigManager()
+        switch aeroConfigManager.ensureUpToDate() {
+        case .success(let result):
+            if case .updated(let from, let to) = result {
+                logAppEvent(event: "aerospace_config.updated", context: ["from": "\(from)", "to": "\(to)"])
+                // Apply updated config to the running AeroSpace process
+                let aerospace = ApAeroSpace()
+                switch aerospace.reloadConfig() {
+                case .success:
+                    logAppEvent(event: "aerospace_config.reloaded")
+                case .failure(let error):
+                    logAppEvent(event: "aerospace_config.reload_failed", level: .warn, message: error.message)
+                }
+            }
+            // Cleanup stale focus scripts from the script-based approach
+            cleanupStaleFocusScripts()
+        case .failure(let error):
+            logAppEvent(event: "aerospace_config.update_failed", level: .warn, message: error.message)
+        }
+
+        // Register window cycling hotkeys (Option-Tab / Option-Shift-Tab)
+        let windowCycler = WindowCycler()
+        let focusCycleManager = FocusCycleHotkeyManager()
+        focusCycleManager.onCycleNext = { [weak self] in
+            DispatchQueue.global(qos: .userInteractive).async {
+                if case .failure(let error) = windowCycler.cycleFocus(direction: .next) {
+                    self?.logAppEvent(event: "focus_cycle.next.failed", level: .warn, message: error.message)
+                }
+            }
+        }
+        focusCycleManager.onCyclePrevious = { [weak self] in
+            DispatchQueue.global(qos: .userInteractive).async {
+                if case .failure(let error) = windowCycler.cycleFocus(direction: .previous) {
+                    self?.logAppEvent(event: "focus_cycle.prev.failed", level: .warn, message: error.message)
+                }
+            }
+        }
+        focusCycleManager.registerHotkeys()
+        self.focusCycleHotkeyManager = focusCycleManager
 
         // Load config on the main thread (ProjectManager is not thread-safe), then
         // ensure VS Code settings blocks in the background (may use SSH).
@@ -170,6 +212,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     level: .error,
                     message: error.message
                 )
+            }
+        }
+    }
+
+    /// Removes stale focus cycling scripts from the previous script-based approach.
+    private func cleanupStaleFocusScripts() {
+        let binDir = NSHomeDirectory() + "/.config/agent-panel/bin"
+        for name in ["ap-focus-next", "ap-focus-prev"] {
+            let path = (binDir as NSString).appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.removeItem(atPath: path)
             }
         }
     }

@@ -155,7 +155,7 @@ public struct ApAeroSpace {
 
     /// Reloads the AeroSpace configuration.
     /// - Returns: Success or an error.
-    func reloadConfig() -> Result<Void, ApCoreError> {
+    public func reloadConfig() -> Result<Void, ApCoreError> {
         switch runAerospace(arguments: ["reload-config"]) {
         case .failure(let error):
             return .failure(error)
@@ -194,7 +194,7 @@ public struct ApAeroSpace {
             ("list-windows", ["--monitor", "--workspace", "--focused", "--app-bundle-id", "--format"]),
             ("summon-workspace", []),
             ("move-node-to-workspace", ["--window-id"]),
-            ("focus", ["--window-id", "--boundaries", "--boundaries-action", "dfs-next", "dfs-prev", "wrap-around-the-workspace"]),
+            ("focus", ["--window-id", "--boundaries", "--boundaries-action", "dfs-next", "dfs-prev"]),
             ("close", ["--window-id"])
         ]
 

@@ -32,11 +32,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: Peacock extension colors are observed to load correctly but then revert back to their previous state after a few seconds. The root cause for this "undoing" of the color application is unknown.
     Next step: Investigate AgentPanel's VSCode settings synchronization and Peacock extension behavior to identify what triggers the revert.
 
-- Issue 2026-02-14 aerospace-config-mgmt: AeroSpace config should be 100% managed by AgentPanel
-    Priority: High. Area: AeroSpace/Configuration
-    Description: AgentPanel should take full ownership of the AeroSpace configuration file, automatically injecting workspace-scoped window cycling keybindings (Option-Tab / Option-Shift-Tab). If missing, Doctor should WARN rather than FAIL. Must support a user-configurable section that AgentPanel retains.
-    Next step: Implement configuration template merging in AeroSpaceConfigManager and update Doctor health checks to downgrade missing bindings to a warning.
-
 - Issue 2026-02-14 doctor-responsiveness: Doctor command may still freeze on non-SSH blocking calls
     Priority: Medium. Area: Doctor/Performance
     Description: SSH project checks are now parallelized (N*20s → ~20s ceiling, since each project runs two 10s-timeout SSH calls sequentially within its concurrent unit). Other blocking calls remain synchronous: login shell PATH resolution (5s timeout), AeroSpace CLI compatibility checks (up to 12s if all timeout). Full async refactor is needed for complete responsiveness.

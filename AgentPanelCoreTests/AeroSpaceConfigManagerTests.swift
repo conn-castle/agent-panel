@@ -324,4 +324,544 @@ final class AeroSpaceConfigManagerTests: XCTestCase {
             XCTAssertEqual(error.category, .fileSystem)
         }
     }
+
+    // MARK: - parseConfigVersion
+
+    func testParseConfigVersionFromValidConfig() {
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 3
+        config-version = 2
+        """
+        XCTAssertEqual(AeroSpaceConfigManager.parseConfigVersion(from: content), 3)
+    }
+
+    func testParseConfigVersionMissingLine() {
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # Purpose: old config without version
+        config-version = 2
+        """
+        XCTAssertNil(AeroSpaceConfigManager.parseConfigVersion(from: content))
+    }
+
+    func testParseConfigVersionInvalidFormat() {
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: abc
+        """
+        XCTAssertNil(AeroSpaceConfigManager.parseConfigVersion(from: content))
+    }
+
+    // MARK: - extractUserSection
+
+    func testExtractUserSectionWithContent() {
+        let content = """
+        [mode.main.binding]
+        alt-tab = 'focus dfs-next'
+        # >>> user-keybindings
+        alt-a = 'workspace 1'
+        alt-b = 'workspace 2'
+        # <<< user-keybindings
+        """
+        let section = AeroSpaceConfigManager.extractUserSection(
+            from: content,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd
+        )
+        XCTAssertEqual(section, "alt-a = 'workspace 1'\nalt-b = 'workspace 2'")
+    }
+
+    func testExtractUserSectionEmpty() {
+        let content = """
+        # >>> user-keybindings
+        # Add your custom keybindings below. AgentPanel preserves this section across updates.
+        # <<< user-keybindings
+        """
+        let section = AeroSpaceConfigManager.extractUserSection(
+            from: content,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd
+        )
+        XCTAssertEqual(section, "# Add your custom keybindings below. AgentPanel preserves this section across updates.")
+    }
+
+    func testExtractUserSectionMissing() {
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        config-version = 2
+        """
+        let section = AeroSpaceConfigManager.extractUserSection(
+            from: content,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd
+        )
+        XCTAssertNil(section)
+    }
+
+    func testExtractUserSectionFromNilContent() {
+        let section = AeroSpaceConfigManager.extractUserSection(
+            from: nil,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd
+        )
+        XCTAssertNil(section)
+    }
+
+    // MARK: - replaceUserSection
+
+    func testReplaceUserSectionInsertsContent() {
+        let template = """
+        [mode.main.binding]
+        alt-tab = 'focus dfs-next'
+        # >>> user-keybindings
+        # Add your custom keybindings below. AgentPanel preserves this section across updates.
+        # <<< user-keybindings
+        """
+        let result = AeroSpaceConfigManager.replaceUserSection(
+            in: template,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd,
+            with: "alt-a = 'workspace 1'\nalt-b = 'workspace 2'"
+        )
+        XCTAssertTrue(result.contains("alt-a = 'workspace 1'"))
+        XCTAssertTrue(result.contains("alt-b = 'workspace 2'"))
+        XCTAssertTrue(result.contains(AeroSpaceConfigManager.userKeybindingsStart))
+        XCTAssertTrue(result.contains(AeroSpaceConfigManager.userKeybindingsEnd))
+        XCTAssertFalse(result.contains("Add your custom keybindings"))
+    }
+
+    func testReplaceUserSectionNoMarkersReturnsOriginal() {
+        let content = "no markers here\n"
+        let result = AeroSpaceConfigManager.replaceUserSection(
+            in: content,
+            startMarker: AeroSpaceConfigManager.userKeybindingsStart,
+            endMarker: AeroSpaceConfigManager.userKeybindingsEnd,
+            with: "new content"
+        )
+        XCTAssertEqual(result, content)
+    }
+
+    // MARK: - templateVersion / currentConfigVersion
+
+    func testTemplateVersionReturnsVersionFromLoader() {
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 5
+        config-version = 2
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: "/nonexistent",
+            backupPath: "/nonexistent",
+            safeConfigLoader: { template }
+        )
+        XCTAssertEqual(manager.templateVersion(), 5)
+    }
+
+    func testTemplateVersionReturnsNilWhenLoaderReturnsNil() {
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: "/nonexistent",
+            backupPath: "/nonexistent",
+            safeConfigLoader: { nil }
+        )
+        XCTAssertNil(manager.templateVersion())
+    }
+
+    func testCurrentConfigVersionReturnsVersionFromFile() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 2
+        config-version = 2
+        """
+        try content.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+        XCTAssertEqual(manager.currentConfigVersion(), 2)
+    }
+
+    func testCurrentConfigVersionReturnsNilWhenFileMissing() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: dir.appendingPathComponent(".aerospace.toml").path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+        XCTAssertNil(manager.currentConfigVersion())
+    }
+
+    // MARK: - updateManagedConfig
+
+    func testUpdateManagedConfigPreservesUserSections() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let oldConfig = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        [mode.main.binding]
+        alt-tab = 'old command'
+        # >>> user-keybindings
+        alt-a = 'workspace 1'
+        # <<< user-keybindings
+        [[on-window-detected]]
+        run = 'layout floating'
+        # >>> user-config
+        [gaps]
+        inner.horizontal = 10
+        # <<< user-config
+        """
+        try oldConfig.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 2
+        [mode.main.binding]
+        alt-tab = 'new command'
+        # >>> user-keybindings
+        # placeholder
+        # <<< user-keybindings
+        [[on-window-detected]]
+        run = 'layout floating'
+        # >>> user-config
+        # placeholder
+        # <<< user-config
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        switch manager.updateManagedConfig() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success:
+            break
+        }
+
+        let updated = try String(contentsOf: configURL, encoding: .utf8)
+        // Template content should be present
+        XCTAssertTrue(updated.contains("ap-config-version: 2"))
+        XCTAssertTrue(updated.contains("alt-tab = 'new command'"))
+        // User keybindings should be preserved
+        XCTAssertTrue(updated.contains("alt-a = 'workspace 1'"))
+        // User config should be preserved
+        XCTAssertTrue(updated.contains("inner.horizontal = 10"))
+        // Template placeholder should be gone
+        XCTAssertFalse(updated.contains("# placeholder"))
+    }
+
+    func testUpdateManagedConfigHandlesPreMigrationConfig() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        // Old config without markers or version
+        let oldConfig = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        [mode.main.binding]
+        alt-tab = 'old command'
+        """
+        try oldConfig.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        [mode.main.binding]
+        alt-tab = 'new command'
+        # >>> user-keybindings
+        # default placeholder
+        # <<< user-keybindings
+        # >>> user-config
+        # default placeholder
+        # <<< user-config
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        switch manager.updateManagedConfig() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success:
+            break
+        }
+
+        let updated = try String(contentsOf: configURL, encoding: .utf8)
+        // Should have the new template content
+        XCTAssertTrue(updated.contains("ap-config-version: 1"))
+        XCTAssertTrue(updated.contains("alt-tab = 'new command'"))
+        // Default placeholders should be in place since old config had no markers
+        XCTAssertTrue(updated.contains("# default placeholder"))
+    }
+
+    func testUpdateManagedConfigFailsWhenTemplateMissing() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try "\(AeroSpaceConfigManager.managedByMarker)\nold\n".write(to: configURL, atomically: true, encoding: .utf8)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        switch manager.updateManagedConfig() {
+        case .success:
+            XCTFail("Expected failure when template is missing")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
+    // MARK: - ensureUpToDate
+
+    func testEnsureUpToDateWritesFreshOnMissing() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        config-version = 2
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: configURL.path))
+
+        switch manager.ensureUpToDate() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result, .freshInstall)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: configURL.path))
+    }
+
+    func testEnsureUpToDateSkipsCurrentVersion() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let content = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        config-version = 2
+        """
+        try content.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        config-version = 2
+        new-template-content = true
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result, .alreadyCurrent)
+        }
+
+        // File should be unchanged
+        let actual = try String(contentsOf: configURL, encoding: .utf8)
+        XCTAssertEqual(actual, content)
+    }
+
+    func testEnsureUpToDateUpdatesStaleVersion() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let oldContent = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        [mode.main.binding]
+        alt-tab = 'old'
+        # >>> user-keybindings
+        alt-x = 'custom'
+        # <<< user-keybindings
+        # >>> user-config
+        # <<< user-config
+        """
+        try oldContent.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 2
+        [mode.main.binding]
+        alt-tab = 'new'
+        # >>> user-keybindings
+        # placeholder
+        # <<< user-keybindings
+        # >>> user-config
+        # placeholder
+        # <<< user-config
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result, .updated(fromVersion: 1, toVersion: 2))
+        }
+
+        let updated = try String(contentsOf: configURL, encoding: .utf8)
+        XCTAssertTrue(updated.contains("ap-config-version: 2"))
+        XCTAssertTrue(updated.contains("alt-tab = 'new'"))
+        XCTAssertTrue(updated.contains("alt-x = 'custom'"))
+    }
+
+    func testEnsureUpToDateSkipsExternalConfig() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        let external = "external config\n"
+        try external.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { "\(AeroSpaceConfigManager.managedByMarker)\n# ap-config-version: 1\n" }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result, .skippedExternal)
+        }
+
+        // File should be unchanged
+        XCTAssertEqual(try String(contentsOf: configURL, encoding: .utf8), external)
+    }
+
+    func testEnsureUpToDateUpdatesConfigWithNoVersion() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        // Managed config but no version line (pre-migration)
+        let oldContent = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        config-version = 2
+        """
+        try oldContent.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let template = """
+        \(AeroSpaceConfigManager.managedByMarker)
+        # ap-config-version: 1
+        config-version = 2
+        # >>> user-keybindings
+        # placeholder
+        # <<< user-keybindings
+        # >>> user-config
+        # placeholder
+        # <<< user-config
+        """
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { template }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .failure(let error):
+            XCTFail("Expected success, got: \(error)")
+        case .success(let result):
+            XCTAssertEqual(result, .updated(fromVersion: 0, toVersion: 1))
+        }
+    }
+
+    func testEnsureUpToDateFailsWhenTemplateHasNoVersion() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try "\(AeroSpaceConfigManager.managedByMarker)\nold\n".write(to: configURL, atomically: true, encoding: .utf8)
+
+        // Template without a version line — broken bundle
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { "\(AeroSpaceConfigManager.managedByMarker)\nno version\n" }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .success:
+            XCTFail("Expected failure when template has no version")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
+    func testEnsureUpToDateFailsWhenTemplateLoaderReturnsNil() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try "\(AeroSpaceConfigManager.managedByMarker)\nold\n".write(to: configURL, atomically: true, encoding: .utf8)
+
+        // Template loader returns nil — template missing from bundle
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { nil }
+        )
+
+        switch manager.ensureUpToDate() {
+        case .success:
+            XCTFail("Expected failure when template is missing")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
 }
