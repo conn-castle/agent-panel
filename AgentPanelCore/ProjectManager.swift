@@ -241,12 +241,14 @@ public final class ProjectManager {
     /// - Parameters:
     ///   - windowPositioner: Window positioning provider (from AppKit module). Pass nil to disable positioning.
     ///   - screenModeDetector: Screen mode detection provider (from AppKit module). Pass nil to disable positioning.
+    ///   - processChecker: Process checker for AeroSpace auto-recovery. Pass nil to disable.
     public init(
         windowPositioner: WindowPositioning? = nil,
-        screenModeDetector: ScreenModeDetecting? = nil
+        screenModeDetector: ScreenModeDetecting? = nil,
+        processChecker: RunningApplicationChecking? = nil
     ) {
         let dataPaths = DataPaths.default()
-        self.aerospace = ApAeroSpace()
+        self.aerospace = ApAeroSpace(processChecker: processChecker)
         self.ideLauncher = ApVSCodeLauncher()
         self.agentLayerIdeLauncher = ApAgentLayerVSCodeLauncher()
         self.chromeLauncher = ApChromeLauncher()

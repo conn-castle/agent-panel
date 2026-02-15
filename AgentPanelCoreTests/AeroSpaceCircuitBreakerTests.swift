@@ -69,6 +69,166 @@ final class AeroSpaceCircuitBreakerTests: XCTestCase {
         XCTAssertEqual(breaker.currentState, .closed)
     }
 
+    // MARK: - Recovery Tracking
+
+    func testShouldAttemptRecoveryWhenOpenAndUnderLimit() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.shouldAttemptRecovery())
+    }
+
+    func testShouldNotAttemptRecoveryWhenClosed() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        XCTAssertFalse(breaker.shouldAttemptRecovery())
+    }
+
+    func testShouldNotAttemptRecoveryAfterCooldownExpired() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 0.01)
+        breaker.recordTimeout()
+        Thread.sleep(forTimeInterval: 0.05)
+        XCTAssertFalse(breaker.shouldAttemptRecovery())
+    }
+
+    func testBeginRecoveryReturnsTrueFirstTime() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.beginRecovery())
+        XCTAssertTrue(breaker.isRecoveryInProgress)
+    }
+
+    func testBeginRecoveryReturnsFalseWhenAlreadyInProgress() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.beginRecovery())
+        XCTAssertFalse(breaker.beginRecovery(), "Second concurrent recovery should be rejected")
+    }
+
+    func testBeginRecoveryReturnsFalseWhenClosed() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        XCTAssertFalse(breaker.beginRecovery())
+    }
+
+    func testEndRecoverySuccessResetsBreaker() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+        breaker.endRecovery(success: true)
+
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+        XCTAssertEqual(breaker.currentState, .closed)
+        XCTAssertTrue(breaker.shouldAllow())
+    }
+
+    func testEndRecoveryFailureIncrementsCount() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+        breaker.endRecovery(success: false)
+
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+        // Should still allow one more attempt
+        XCTAssertTrue(breaker.shouldAttemptRecovery())
+    }
+
+    func testEndRecoveryFailureReopensBreaker() {
+        // When recovery fails (e.g., start() launched AeroSpace but readiness
+        // timed out), start() may have reset the breaker to closed. endRecovery
+        // must re-open it so subsequent calls continue to fail fast.
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+
+        // Simulate what start() does: reset breaker to closed mid-recovery
+        breaker.reset()
+
+        breaker.endRecovery(success: false)
+
+        // Breaker must be open (not closed) to maintain fail-fast
+        if case .open = breaker.currentState {} else {
+            XCTFail("Expected breaker to be re-opened after failed recovery, got \(breaker.currentState)")
+        }
+        XCTAssertFalse(breaker.shouldAllow(), "Should fail fast after failed recovery")
+    }
+
+    func testMaxRecoveryAttemptsExhausted() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        // Exhaust all recovery attempts
+        for _ in 0..<AeroSpaceCircuitBreaker.maxRecoveryAttempts {
+            breaker.recordTimeout()
+            XCTAssertTrue(breaker.beginRecovery())
+            breaker.endRecovery(success: false)
+        }
+
+        // Should no longer attempt recovery
+        XCTAssertFalse(breaker.shouldAttemptRecovery())
+        XCTAssertFalse(breaker.beginRecovery())
+    }
+
+    func testRecordSuccessClearsRecoveryCount() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        // One failed recovery
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+        breaker.endRecovery(success: false)
+
+        // A normal success resets everything
+        breaker.recordSuccess()
+
+        // Trip again — recovery should be available from zero
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.shouldAttemptRecovery())
+    }
+
+    func testResetClearsRecoveryState() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+
+        breaker.reset()
+
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+        XCTAssertEqual(breaker.currentState, .closed)
+    }
+
+    func testNewTripAfterCooldownResetsRecoveryBudget() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 0.01)
+
+        // Exhaust recovery attempts on first trip
+        breaker.recordTimeout()
+        for _ in 0..<AeroSpaceCircuitBreaker.maxRecoveryAttempts {
+            _ = breaker.beginRecovery()
+            breaker.endRecovery(success: false)
+        }
+        XCTAssertFalse(breaker.shouldAttemptRecovery(), "Should be exhausted")
+
+        // Wait for cooldown → breaker transitions back to closed
+        Thread.sleep(forTimeInterval: 0.05)
+        XCTAssertTrue(breaker.shouldAllow())
+
+        // New trip should reset recovery budget
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.shouldAttemptRecovery(), "New trip should have fresh recovery budget")
+    }
+
+    func testRetripWhileOpenDoesNotResetRecoveryBudget() {
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        // First trip, exhaust one attempt
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+        breaker.endRecovery(success: false)
+
+        // Re-trip while still open (extends cooldown but same outage)
+        breaker.recordTimeout()
+
+        // Should still have only 1 attempt remaining, not reset to 2
+        _ = breaker.beginRecovery()
+        breaker.endRecovery(success: false)
+        XCTAssertFalse(breaker.shouldAttemptRecovery(), "Re-trip while open should not reset budget")
+    }
+
     func testMultipleTimeoutsExtendCooldown() {
         // Verify that a second recordTimeout() pushes the expiry forward,
         // proving cooldown is reset (not accumulated or ignored).
@@ -126,6 +286,25 @@ private struct StubAppDiscovery: AppDiscovering {
     func applicationURL(bundleIdentifier: String) -> URL? { nil }
     func applicationURL(named appName: String) -> URL? { nil }
     func bundleIdentifier(forApplicationAt url: URL) -> String? { nil }
+}
+
+/// Mock process checker that returns a configurable result.
+private final class MockProcessChecker: RunningApplicationChecking {
+    private let lock = NSLock()
+    private var _isRunning: Bool
+
+    init(isRunning: Bool) {
+        self._isRunning = isRunning
+    }
+
+    var isRunning: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _isRunning }
+        set { lock.lock(); _isRunning = newValue; lock.unlock() }
+    }
+
+    func isApplicationRunning(bundleIdentifier: String) -> Bool {
+        return isRunning
+    }
 }
 
 final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
@@ -301,5 +480,228 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
 
         // Only 1 actual command was sent to the runner
         XCTAssertEqual(runner.calls.count, 1)
+    }
+}
+
+// MARK: - Auto-Recovery Integration Tests
+
+final class AeroSpaceAutoRecoveryTests: XCTestCase {
+
+    /// When breaker is open, process is dead, and processChecker is wired,
+    /// auto-recovery should restart AeroSpace and retry the command.
+    func testAutoRecoveryRestartsAeroSpaceWhenProcessDead() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = MockProcessChecker(isRunning: false)
+
+        // Trip the breaker
+        breaker.recordTimeout()
+
+        // Set up results for recovery: open -a AeroSpace, readiness probe, then retried command
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),  // open -a AeroSpace
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),  // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: ""))  // retried getWorkspaces
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        // start() requires !Thread.isMainThread
+        let expectation = expectation(description: "recovery completes")
+        var result: Result<[String], ApCoreError>?
+        DispatchQueue.global().async {
+            result = aero.getWorkspaces()
+            expectation.fulfill()
+        }
+        waitForExpectations(timeout: 15)
+
+        if case .success(let workspaces) = result {
+            XCTAssertEqual(workspaces, ["ws-1"])
+        } else {
+            XCTFail("Expected success after auto-recovery, got: \(String(describing: result))")
+        }
+
+        // Breaker should be closed after successful recovery
+        XCTAssertEqual(breaker.currentState, .closed)
+    }
+
+    /// When processChecker is nil, no recovery is attempted — standard breaker error is returned.
+    func testNoRecoveryWhenProcessCheckerIsNil() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        // Trip the breaker
+        breaker.recordTimeout()
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker
+            // processChecker is nil (default)
+        )
+
+        let result = aero.getWorkspaces()
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("circuit breaker"))
+        } else {
+            XCTFail("Expected circuit breaker error without process checker")
+        }
+
+        // Runner should not have been called at all
+        XCTAssertEqual(runner.calls.count, 0)
+    }
+
+    /// When process is still running (hanging, not crashed), no recovery is attempted.
+    func testNoRecoveryWhenProcessIsRunning() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = MockProcessChecker(isRunning: true)
+
+        // Trip the breaker
+        breaker.recordTimeout()
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        let result = aero.getWorkspaces()
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("circuit breaker"))
+        } else {
+            XCTFail("Expected circuit breaker error when process is still running")
+        }
+
+        // Runner should not have been called
+        XCTAssertEqual(runner.calls.count, 0)
+    }
+
+    /// When recovery fails (start() fails), it should fall back to breaker error and
+    /// allow one more recovery attempt before exhausting the limit.
+    func testRecoveryFailureFallsBackToBreakerError() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = MockProcessChecker(isRunning: false)
+
+        // Trip the breaker
+        breaker.recordTimeout()
+
+        // Start fails (open -a AeroSpace fails)
+        runner.results = [
+            .failure(ApCoreError(message: "Executable not found: open"))
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        // Run off-main so recovery is synchronous and we can verify state immediately
+        let expectation = expectation(description: "recovery completes")
+        var result: Result<[String], ApCoreError>?
+        DispatchQueue.global().async {
+            result = aero.getWorkspaces()
+            expectation.fulfill()
+        }
+        waitForExpectations(timeout: 15)
+
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("circuit breaker"))
+        } else {
+            XCTFail("Expected circuit breaker error after failed recovery")
+        }
+
+        // Recovery should have been attempted (start called open -a AeroSpace)
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(runner.calls[0].arguments, ["-a", "AeroSpace"])
+
+        // Should still allow one more recovery attempt
+        XCTAssertTrue(breaker.shouldAttemptRecovery())
+    }
+
+    /// On the main thread, recovery fires asynchronously and the caller gets an
+    /// immediate breaker error (no main-thread stall).
+    func testMainThreadRecoveryFailsFastAndRecoversAsync() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = MockProcessChecker(isRunning: false)
+
+        breaker.recordTimeout()
+
+        // Provide results for async recovery: open -a AeroSpace + readiness probe
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        // Call on main thread — should return immediately with breaker error
+        let result = aero.getWorkspaces()
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("circuit breaker"),
+                "Main-thread caller should get immediate breaker error")
+        } else {
+            XCTFail("Expected immediate breaker error on main thread")
+        }
+
+        // Wait for async recovery to complete in background
+        let recovered = expectation(description: "async recovery completes")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            recovered.fulfill()
+        }
+        waitForExpectations(timeout: 5)
+
+        // Breaker should now be closed from the async recovery
+        XCTAssertEqual(breaker.currentState, .closed)
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// After maxRecoveryAttempts failed recoveries, no more attempts are made.
+    func testRecoveryExhaustedAfterMaxAttempts() {
+        let runner = MockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = MockProcessChecker(isRunning: false)
+
+        // Exhaust recovery attempts
+        for _ in 0..<AeroSpaceCircuitBreaker.maxRecoveryAttempts {
+            breaker.recordTimeout()
+            _ = breaker.beginRecovery()
+            breaker.endRecovery(success: false)
+        }
+
+        // Ensure breaker is still open
+        breaker.recordTimeout()
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        let result = aero.getWorkspaces()
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("circuit breaker"))
+        } else {
+            XCTFail("Expected circuit breaker error after exhausted recovery")
+        }
+
+        // Runner should not have been called (recovery not attempted)
+        XCTAssertEqual(runner.calls.count, 0)
     }
 }

@@ -5,8 +5,13 @@ The public API of `AgentPanelCore` has these main concerns:
 1. **ProjectManager** — Project listing, sorting, selection, and focus management
 2. **Doctor** — Diagnostics and remediation
 3. **Config** — Configuration loading and project definitions
-4. **Logging** — Structured JSON logging
-5. **Onboarding Support** — AeroSpace installation and configuration
+4. **Window Layout** — Layout engine, position store, and positioning protocols
+5. **Window Recovery** — Recover misplaced windows to correct positions
+6. **VS Code Color** — Project color differentiation via Peacock extension
+7. **Error Context** — Structured error context for auto-doctor
+8. **Logging** — Structured JSON logging
+9. **Window Cycling** — Workspace-scoped window focus cycling
+10. **Onboarding Support** — AeroSpace installation and configuration
 
 ## Design Principles
 
@@ -28,8 +33,30 @@ public enum AgentPanel {
 ## Errors
 
 ```swift
+public enum ApCoreErrorCategory: String, Sendable {
+    case command
+    case validation
+    case fileSystem
+    case configuration
+    case parse
+    case window
+    case system
+}
+
 public struct ApCoreError: Error, Equatable, Sendable {
     public let message: String
+
+    /// Full init with structured error fields.
+    public init(
+        category: ApCoreErrorCategory,
+        message: String,
+        detail: String? = nil,
+        command: String? = nil,
+        exitCode: Int32? = nil
+    )
+
+    /// Convenience init (defaults to .command category).
+    init(message: String)
 }
 ```
 
@@ -42,9 +69,16 @@ public struct Config: Equatable, Sendable {
     public let projects: [ProjectConfig]
     public let chrome: ChromeConfig
     public let agentLayer: AgentLayerConfig
+    public let layout: LayoutConfig
+    public let app: AppConfig
 
     /// Loads and validates configuration from the default path.
     public static func loadDefault() -> Result<ConfigLoadSuccess, ConfigLoadError>
+}
+
+public struct AppConfig: Equatable, Sendable {
+    public let autoStartAtLogin: Bool
+    public init(autoStartAtLogin: Bool = false)
 }
 
 public struct AgentLayerConfig: Equatable, Sendable {
@@ -158,7 +192,13 @@ public final class ProjectManager {
     public func workspaceState() -> Result<ProjectWorkspaceState, ProjectError>
 
     /// Creates a ProjectManager with default dependencies.
-    public init()
+    /// Pass window positioning and screen mode detection implementations from AppKit.
+    /// Pass processChecker for AeroSpace auto-recovery (nil disables).
+    public init(
+        windowPositioner: WindowPositioning? = nil,
+        screenModeDetector: ScreenModeDetecting? = nil,
+        processChecker: RunningApplicationChecking? = nil
+    )
 
     /// Loads configuration from the default path.
     @discardableResult
@@ -218,6 +258,12 @@ public final class ProjectManager {
     /// Closes a project by ID and restores focus to the previous non-project window.
     public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
 
+    /// Moves a window to the given project's workspace.
+    public func moveWindowToProject(
+        windowId: Int,
+        projectId: String
+    ) -> Result<Void, ProjectError>
+
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError>
 }
@@ -244,7 +290,8 @@ public enum ProjectError: Error, Equatable, Sendable {
 public struct ProjectActivationSuccess: Equatable, Sendable {
     public let ideWindowId: Int
     public let tabRestoreWarning: String?
-    public init(ideWindowId: Int, tabRestoreWarning: String?)
+    public let layoutWarning: String?
+    public init(ideWindowId: Int, tabRestoreWarning: String?, layoutWarning: String? = nil)
 }
 
 public struct ProjectCloseSuccess: Equatable, Sendable {
@@ -321,13 +368,17 @@ public struct SwitcherDismissPolicy: Sendable {
 
 ```swift
 public struct Doctor {
+    /// Creates a Doctor with production dependencies.
+    /// Pass `windowPositioner` from AppKit for Accessibility checks.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
-        hotkeyStatusProvider: HotkeyStatusProviding? = nil
+        hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        windowPositioner: WindowPositioning? = nil
     )
 
     /// Runs all diagnostic checks.
-    public func run() -> DoctorReport
+    /// Optionally pass an `ErrorContext` to include auto-doctor trigger info in the report.
+    public func run(context: ErrorContext? = nil) -> DoctorReport
 
     /// Installs AeroSpace via Homebrew.
     public func installAeroSpace() -> DoctorReport
@@ -337,6 +388,9 @@ public struct Doctor {
 
     /// Reloads AeroSpace configuration.
     public func reloadAeroSpaceConfig() -> DoctorReport
+
+    /// Prompts the user to grant Accessibility permission.
+    public func requestAccessibility() -> DoctorReport
 }
 
 public struct DoctorReport: Equatable, Sendable {
@@ -362,6 +416,7 @@ public struct DoctorActionAvailability: Equatable, Sendable {
     public let canInstallAeroSpace: Bool
     public let canStartAeroSpace: Bool
     public let canReloadAeroSpaceConfig: Bool
+    public let canRequestAccessibility: Bool
 }
 ```
 
@@ -381,6 +436,227 @@ public protocol HotkeyStatusProviding {
 public enum HotkeyRegistrationStatus: Equatable, Sendable {
     case registered
     case failed(osStatus: Int32)
+}
+```
+
+---
+
+## Window Layout
+
+Window positioning protocols are defined in Core using Foundation/CG types.
+Concrete implementations (`AXWindowPositioner`, `ScreenModeDetector`) live in the
+`AgentPanelAppKit` module since Core cannot import AppKit.
+
+### Protocols
+
+```swift
+public protocol WindowPositioning {
+    func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError>
+    func setWindowFrames(
+        bundleId: String,
+        projectId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError>
+    func recoverWindow(
+        bundleId: String,
+        windowTitle: String,
+        screenVisibleFrame: CGRect
+    ) -> Result<RecoveryOutcome, ApCoreError>
+    func isAccessibilityTrusted() -> Bool
+    func promptForAccessibility() -> Bool
+}
+
+public protocol ScreenModeDetecting {
+    func detectMode(containingPoint: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError>
+    func physicalWidthInches(containingPoint: CGPoint) -> Result<Double, ApCoreError>
+    func screenVisibleFrame(containingPoint: CGPoint) -> CGRect?
+}
+```
+
+### Screen Mode
+
+```swift
+public enum ScreenMode: String, Codable, Equatable, Sendable, CaseIterable {
+    case small
+    case wide
+}
+```
+
+### Layout Config
+
+```swift
+public struct LayoutConfig: Equatable, Sendable {
+    public let smallScreenThreshold: Double
+    public let windowHeight: Int
+    public let maxWindowWidth: Double
+    public let idePosition: IdePosition
+    public let justification: Justification
+    public let maxGap: Int
+
+    public enum IdePosition: String, Equatable, Sendable, CaseIterable {
+        case left
+        case right
+    }
+
+    public enum Justification: String, Equatable, Sendable, CaseIterable {
+        case left
+        case right
+    }
+
+    public init(
+        smallScreenThreshold: Double = Defaults.smallScreenThreshold,
+        windowHeight: Int = Defaults.windowHeight,
+        maxWindowWidth: Double = Defaults.maxWindowWidth,
+        idePosition: IdePosition = Defaults.idePosition,
+        justification: Justification = Defaults.justification,
+        maxGap: Int = Defaults.maxGap
+    )
+
+    public enum Defaults {
+        public static let smallScreenThreshold: Double = 24
+        public static let windowHeight: Int = 90
+        public static let maxWindowWidth: Double = 18
+        public static let idePosition: IdePosition = .left
+        public static let justification: Justification = .right
+        public static let maxGap: Int = 10
+    }
+}
+```
+
+### Layout Engine
+
+Pure geometry computation. No side effects.
+
+```swift
+public struct WindowLayout: Equatable, Sendable {
+    public let ideFrame: CGRect
+    public let chromeFrame: CGRect
+    public init(ideFrame: CGRect, chromeFrame: CGRect)
+}
+
+public struct WindowLayoutEngine {
+    /// Computes IDE + Chrome window frames for the given screen and config.
+    /// Small mode: both windows maximized to `screenVisibleFrame`.
+    /// Wide mode: side-by-side with configurable height, width cap, justification, and gap.
+    public static func computeLayout(
+        screenVisibleFrame: CGRect,
+        screenPhysicalWidthInches: Double,
+        screenMode: ScreenMode,
+        config: LayoutConfig
+    ) -> WindowLayout
+
+    /// Clamps a frame to fit within the screen visible area (off-screen rescue).
+    public static func clampToScreen(
+        frame: CGRect,
+        screenVisibleFrame: CGRect
+    ) -> CGRect
+}
+```
+
+### Position Store Types
+
+```swift
+public struct SavedFrame: Codable, Equatable, Sendable {
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+    public init(x: Double, y: Double, width: Double, height: Double)
+    public init(rect: CGRect)
+    public var cgRect: CGRect { get }
+}
+
+public struct SavedWindowFrames: Codable, Equatable, Sendable {
+    public let ide: SavedFrame
+    public let chrome: SavedFrame
+    public init(ide: SavedFrame, chrome: SavedFrame)
+}
+```
+
+### Window Position Result
+
+```swift
+public struct WindowPositionResult: Equatable, Sendable {
+    public let positioned: Int
+    public let matched: Int
+    public init(positioned: Int, matched: Int)
+    public var hasPartialFailure: Bool { get }
+}
+
+public enum RecoveryOutcome: Equatable, Sendable {
+    case recovered
+    case unchanged
+    case notFound
+}
+```
+
+---
+
+## Window Recovery
+
+Recovers misplaced or oversized windows. Separate from `ProjectManager` — operates
+on arbitrary windows, not project lifecycle.
+
+```swift
+public struct RecoveryResult: Equatable, Sendable {
+    public let windowsProcessed: Int
+    public let windowsRecovered: Int
+    public let errors: [String]
+    public init(windowsProcessed: Int, windowsRecovered: Int, errors: [String])
+}
+
+public final class WindowRecoveryManager {
+    /// Creates a recovery manager with production AeroSpace dependencies.
+    public init(
+        windowPositioner: WindowPositioning,
+        screenVisibleFrame: CGRect,
+        logger: AgentPanelLogging,
+        processChecker: RunningApplicationChecking? = nil
+    )
+
+    /// Recovers all windows in a single workspace (shrink/center oversized windows).
+    public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
+
+    /// Recovers all windows across all workspaces, reporting progress.
+    public func recoverAllWindows(
+        progress: @escaping (_ current: Int, _ total: Int) -> Void
+    ) -> Result<RecoveryResult, ApCoreError>
+}
+```
+
+---
+
+## VS Code Color
+
+Resolves project colors to hex values for the Peacock VS Code extension.
+
+```swift
+public enum VSCodeColorPalette {
+    /// Returns a `#RRGGBB` hex string for the Peacock extension, or nil if the color is unrecognized.
+    public static func peacockColorHex(for color: String) -> String?
+
+    /// Converts a ProjectColorRGB to `#RRGGBB` hex string.
+    public static func toHex(_ rgb: ProjectColorRGB) -> String
+}
+```
+
+---
+
+## Error Context
+
+Structured error context used by auto-doctor to trigger background diagnostics.
+
+```swift
+public struct ErrorContext: Equatable, Sendable {
+    public let category: ApCoreErrorCategory
+    public let message: String
+    public let trigger: String
+
+    public init(category: ApCoreErrorCategory, message: String, trigger: String)
+
+    /// True for errors that should auto-show Doctor results (e.g., AeroSpace failures).
+    public var isCritical: Bool { get }
 }
 ```
 
@@ -430,6 +706,26 @@ public enum LogWriteError: Error, Equatable, Sendable {
 
 ---
 
+## Window Cycling
+
+Cycles focus between windows in the focused AeroSpace workspace. The App layer registers global hotkeys (Option-Tab / Option-Shift-Tab) via Carbon API and dispatches to `WindowCycler`.
+
+```swift
+public enum CycleDirection: Sendable {
+    case next
+    case previous
+}
+
+public struct WindowCycler {
+    public init(processChecker: RunningApplicationChecking? = nil)
+    public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
+}
+```
+
+`cycleFocus` calls `focusedWindow()` → `listWindowsWorkspace(workspace:)` → `focusWindow(windowId:)`, wrapping at list boundaries. Returns `.success(())` when there are 0–1 windows or the focused window is not in the list.
+
+---
+
 ## Onboarding Support
 
 For first-launch setup, the App uses these types directly.
@@ -441,7 +737,11 @@ public struct ApAeroSpace {
     /// AeroSpace app bundle identifier.
     public static let bundleIdentifier: String  // "bobko.aerospace"
 
-    public init()
+    /// Creates a new AeroSpace wrapper.
+    /// - Parameter processChecker: Optional process checker for auto-recovery.
+    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
+    ///   automatically restarts AeroSpace (max 2 attempts). Pass nil (default) to disable.
+    public init(processChecker: RunningApplicationChecking? = nil)
 
     /// Returns true when AeroSpace.app is installed.
     public func isAppInstalled() -> Bool
@@ -497,12 +797,24 @@ public enum AeroSpaceConfigStatus: String, Sendable {
     case unknown
 }
 
+public enum ConfigUpdateResult: Equatable, Sendable {
+    case freshInstall
+    case updated(fromVersion: Int, toVersion: Int)
+    case alreadyCurrent
+    case skippedExternal
+}
+
 public struct AeroSpaceConfigManager {
     public static var configPath: String { get }
 
     public init()
 
     public func writeSafeConfig() -> Result<Void, ApCoreError>
+    public func configContents() -> String?
     public func configStatus() -> AeroSpaceConfigStatus
+    public func templateVersion() -> Int?
+    public func currentConfigVersion() -> Int?
+    public func updateManagedConfig() -> Result<Void, ApCoreError>
+    public func ensureUpToDate() -> Result<ConfigUpdateResult, ApCoreError>
 }
 ```

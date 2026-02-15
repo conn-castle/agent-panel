@@ -46,10 +46,10 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Exact-match URL filtering is unreliable because Chrome redirects URLs (e.g., `todoist.com/` → `todoist.com/app/today`), git remote URLs differ from web URLs, and other dynamic URL changes.
     Tradeoffs: Snapshot may overlap with always-open config; harmless since the snapshot IS the intended tab state.
 
-- Decision 2026-02-09 allauncher: Agent Layer launcher uses `al sync` + direct `code` (two-step workaround)
-    Decision: AL launcher runs `al sync` (CWD = project path) then `code --new-window <projectPath>` directly, instead of using `al vscode`. Window identification uses a `// >>> agent-panel` block in `.vscode/settings.json` (see `vscodesettings` decision).
-    Reason: `al vscode` unconditionally appends `.` (CWD) to the `code` args (`internal/clients/vscode/launch.go`), causing two VS Code windows.
-    Tradeoffs: Loses `CODEX_HOME` env var (only needed by Codex VS Code extension). Once `al vscode` is fixed upstream (see ISSUES.md `al-dual-window`), revert to single-command launch for CODEX_HOME support.
+- Decision 2026-02-09 allauncher: Agent Layer VS Code launch uses `al sync` + `al vscode --no-sync --new-window`
+    Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then `al vscode --no-sync --new-window` (CWD = project path, no positional path so "." maps to repo root). This preserves Agent Layer env vars like `CODEX_HOME` while avoiding the upstream dual-window bug (`al vscode` appends "." to `code` args in `internal/clients/vscode/launch.go`). Window identification uses a `// >>> agent-panel` block in `.vscode/settings.json` (see `vscodesettings` decision).
+    Reason: Direct `code --new-window <path>` (original workaround) lost `CODEX_HOME`. Using `al vscode` without a positional path avoids the dual-window bug while keeping Agent Layer env vars.
+    Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows (see ISSUES.md `al-dual-window`).
 
 - Decision 2026-02-10 vscodesettings: VS Code window title via settings.json block (replaces workspace files)
     Decision: Inject a `// >>> agent-panel` / `// <<< agent-panel` marker block into the project's `.vscode/settings.json` with `window.title = "AP:<id> - ..."`. Block is always inserted at the top of the file (right after `{`) with trailing comma. For SSH projects, write settings.json on the remote via SSH (read → injectBlock → base64 → write). If SSH write fails, project activation fails loudly (no workspace fallback). Doctor verifies the block exists on SSH remotes (WARN if missing).
@@ -61,16 +61,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Settings blocks must exist before VS Code opens the project (for reliable window identification), not just when AgentPanel activates it. Proactive writing early in app startup reduces "first activate" flakiness and keeps manual VS Code opens consistent.
     Tradeoffs: SSH write adds latency to background startup work (bounded by 10s timeout per SSH call, 2 calls per SSH project). Unreachable SSH hosts will log warnings but not block app startup.
 
-- Decision 2026-02-11 dismisspolicy: SwitcherDismissReason and policy extracted to Core
-    Decision: Moved `SwitcherDismissReason` enum and dismiss/restore policy logic from App (SwitcherPanelController) to Core (`SwitcherDismissPolicy.swift`). All types are `public`.
-    Reason: Enables unit testing of dismiss semantics without an App test target. The types are pure value types with no AppKit dependency.
-    Tradeoffs: Expands Core's public API surface with presentation-adjacent types. Accepted because the alternative (App test target with NSPanel mocks) is significantly more complex.
-
-- Decision 2026-02-11 configwarn: Config.loadDefault returns ConfigLoadSuccess with warnings
-    Decision: Changed `Config.loadDefault()` return type from `Result<Config, ConfigLoadError>` to `Result<ConfigLoadSuccess, ConfigLoadError>` where `ConfigLoadSuccess` carries both `config: Config` and `warnings: [ConfigFinding]`.
-    Reason: WARN-severity config findings (e.g., deprecated fields) were silently dropped because the previous return type had no way to convey non-fatal warnings alongside a valid config.
-    Tradeoffs: All call sites (ProjectManager, CLI handlers, App, tests) required migration to unwrap `.config` from the success value.
-
 - Decision 2026-02-10 covgate: Coverage gate enforced via scripts/test.sh
     Decision: `scripts/test.sh` enables code coverage and enforces a 90% minimum line-coverage gate on non-UI targets (`AgentPanelCore`, `AgentPanelCLICore`) via `scripts/coverage_gate.sh`. `AgentPanelAppKit` is excluded because it contains system-level code (AX APIs, NSScreen, CGDisplay) that requires a live window server — not exercisable in CI unit tests. A repo-managed git pre-commit hook (installed via `scripts/install_git_hooks.sh`) also runs `scripts/test.sh`.
     Reason: Deterministic quality bar for core/business logic; presentation/UI code and system integration code are intentionally not gated.
@@ -81,65 +71,20 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Core cannot import AppKit. Protocols with Foundation/CG types allow business logic (layout engine, position store, config validation) to stay in Core and be fully unit-testable, while AX/NSScreen code stays in AppKit.
     Tradeoffs: AppKit code (~350 lines) is not coverage-gated (requires live window server). AgentPanelAppKit excluded from coverage gate.
 
-- Decision 2026-02-12 cascadematch: Multiple AX window matches are cascaded, not rejected
-    Decision: When multiple windows match the `AP:<projectId>` title token for a bundle ID, the first window (title-sorted) gets the target frame; subsequent matches are offset by 0.5 inches down-right (cascade pattern).
-    Reason: Users may have duplicate tagged windows from VS Code reload or Chrome reopens. Rejecting the positioning on multi-match would be surprising and unhelpful.
-    Tradeoffs: Cascade offset is fixed at 0.5 inches regardless of window count; deeply stacked windows may overlap.
-
-- Decision 2026-02-12 hardfaillayout: Invalid [layout] config values produce FAIL findings (hard-fail, no per-field fallback)
-    Decision: If any `[layout]` value is out of range or the wrong type, it is a FAIL finding that prevents config from loading. No per-field fallback to defaults.
-    Reason: Silent fallback to defaults on invalid values violates the "fail loudly" principle and can produce confusing positioning behavior.
-    Tradeoffs: A single typo in `[layout]` blocks all config loading. Users must fix the value to proceed.
-
 - Decision 2026-02-12 axprompt: Accessibility prompt via Doctor button only (not app launch)
     Decision: Do not auto-prompt for Accessibility permission on app launch. Instead, Doctor shows a "Request Accessibility" button when the check is FAIL.
     Reason: Auto-prompting on every launch is invasive UX — the system dialog is modal and disruptive, especially when the user may not need window positioning.
     Tradeoffs: Users must open Doctor to trigger the Accessibility prompt. First-time users won't be prompted until they check Doctor or try window positioning.
-
-- Decision 2026-02-12 axvaluetype: CFGetTypeID-based AXValue type checking (not Swift conditional cast)
-    Decision: Use `CFGetTypeID(obj) == AXValueGetTypeID()` to validate AXValue types before downcasting, instead of `as? AXValue`.
-    Reason: Swift `as?` conditional cast always succeeds for CoreFoundation bridged types — it never returns nil for AXValue, making it useless as a type guard.
-    Tradeoffs: Slightly more verbose code, but actually catches type mismatches that `as?` silently passes through.
-
-- Decision 2026-02-12 recoverymatch: Window recovery prefers focused window, falls back to title match
-    Decision: `recoverWindow()` in AXWindowPositioner first checks the app's AX focused window (via `kAXFocusedWindowAttribute`). If its title matches, uses it directly. Falls back to title enumeration only if the focused window doesn't match. `WindowRecoveryManager` calls `aerospace.focusWindow(windowId:)` before each recovery to set up the focused window.
-    Reason: Duplicate-title windows (common for Chrome/VS Code) would cause the same window to be found on every recovery call. By focusing each AeroSpace window first, the AX focused window is unambiguous regardless of title.
-    Tradeoffs: Recovery now changes window focus as a side effect (restored at end). Slightly more AeroSpace CLI calls (one focus per window).
-
-- Decision 2026-02-12 recoverywm: WindowRecoveryManager is separate from ProjectManager
-    Decision: Window recovery logic lives in a new `WindowRecoveryManager` class, not in ProjectManager.
-    Reason: ProjectManager is already large. Recovery is orthogonal to project lifecycle (it operates on arbitrary windows, not projects). Separate class keeps responsibilities clear and testable.
-    Tradeoffs: App layer must wire a second manager. Minor complexity increase.
 
 - Decision 2026-02-13 autostart: Auto-start at login uses config as source of truth
     Decision: `[app] autoStartAtLogin` in `config.toml` is the authoritative source for launch-at-login state. The menu toggle writes back to config. `SMAppService.mainApp` registers/unregisters the login item.
     Reason: Config-as-truth avoids split-brain between the login item registration state and the config file. The config is always the canonical state.
     Tradeoffs: Menu toggle must write to disk (config file) on every change. If config write fails, the toggle reverts.
 
-- Decision 2026-02-13 vscolor: VS Code color differentiation via settings.json colorCustomizations
-    Decision: Inject `workbench.colorCustomizations` (titleBar, activityBar, statusBar — background + foreground) into the `// >>> agent-panel` settings.json block based on the project's `color` field. Foreground is white (#FFFFFF) if luminance < 0.5, black (#000000) otherwise.
-    Reason: Project color was already in config but not applied to VS Code. Settings.json block injection was already in place for window.title; extending it with colorCustomizations is minimal effort and immediately visible.
-    Tradeoffs: Only 6 VS Code color keys are set (title bar, activity bar, status bar). Other UI elements remain default. Invalid/unrecognized color strings silently skip color injection (no error).
-
-- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension (supersedes vscolor)
+- Decision 2026-02-14 peacock: VS Code color differentiation via Peacock extension
     Decision: Replaced direct `workbench.colorCustomizations` injection (6 keys) with a single `"peacock.color": "#RRGGBB"` key in the settings.json block. The Peacock VS Code extension (`johnpapa.vscode-peacock`) reads this key and applies color across title bar, activity bar, and status bar. Doctor warns (not fails) if Peacock is not installed.
     Reason: Peacock provides better color theming with a single key instead of 6, handles foreground contrast automatically, and is a well-maintained community extension.
     Tradeoffs: Requires an additional VS Code extension install. Projects without Peacock installed will see the key in settings but no color effect (graceful degradation).
-
-- Decision 2026-02-14 autostart-rollback: Config write failure rolls back SMAppService toggle
-    Decision: When the "Launch at Login" toggle succeeds at the SMAppService level but fails to write back to config.toml, the SMAppService toggle is undone (re-register or unregister) and the menu title is reset to "Launch at Login" (not "(save failed)").
-    Reason: Avoids split-brain between SMAppService state and config.toml as the source of truth.
-    Tradeoffs: None significant; the rollback is best-effort (try?).
-
-- Decision 2026-02-10 alvscodecwd: Agent Layer VS Code launch restores CODEX_HOME without dual-window bug
-    Decision: For `useAgentLayer = true`, AgentPanel runs `al sync` (CWD = project path) then launches VS Code via `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This supersedes the `allauncher` direct-`code` workaround.
-    Reason: `al vscode` sets repo-specific `CODEX_HOME` (needed by the Codex VS Code extension) and merges Agent Layer env vars, but passing an explicit path triggers the upstream dual-window bug because `al vscode` appends ".".
-    Tradeoffs: Relies on `al vscode` continuing to append "."; upstream fix is still desirable so path-based launches don't open two windows.
-
-- Decision 2026-02-14 workspacetab: Workspace-scoped window cycling via native AeroSpace focus commands
-    Decision: Use AeroSpace's native `focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next`/`dfs-prev` bound to Option-Tab / Option-Shift-Tab in the managed `aerospace-safe.toml` template. No custom CLI subcommand needed.
-    Reason: AeroSpace's DFS-order focus natively includes floating windows (unless `--ignore-floating` is set). A custom `ap cycle-focus` CLI was considered but rejected because AeroSpace's `exec-and-forget` would need `ap` on PATH, which is brittle for GUI apps.
-    Tradeoffs: DFS order is not identical to macOS Cmd-Tab (MRU order), but provides deterministic, predictable cycling within a workspace. Existing users with a managed config must reload to get the new keybindings; Doctor warns about stale configs.
 
 - Decision 2026-02-14 chromecolordefer: Chrome visual differentiation deferred permanently to BACKLOG
     Decision: Removed `chrome-color` from Phase 7 and moved to BACKLOG. Chrome has no clean programmatic injection point for window color theming.
@@ -150,3 +95,18 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `AeroSpaceCircuitBreaker` (process-wide shared instance) sits between `ApAeroSpace` and `CommandRunning`. All `aerospace` CLI calls go through `runAerospace()`, which checks the breaker before spawning a process. On timeout, the breaker trips to "open" state for a 30s cooldown; subsequent calls fail immediately with a descriptive error. `start()` resets the breaker after a fresh AeroSpace launch.
     Reason: When AeroSpace crashes or its socket becomes unresponsive, every CLI call times out at 5s. With 15-20 calls in a Doctor check, this creates a ~90s freeze. The circuit breaker detects the first timeout and immediately fails the rest.
     Tradeoffs: A single transient timeout trips the breaker for 30s, potentially blocking legitimate calls. After cooldown, the next call acts as a probe to re-verify connectivity.
+
+- Decision 2026-02-14 aeroconfigown: AeroSpace config full ownership with versioned template and user sections
+    Decision: AgentPanel fully owns `~/.aerospace.toml` via a versioned template (`# ap-config-version: N`). On startup, `ensureUpToDate()` compares the installed config version against the template version and auto-updates if stale, preserving user content between `# >>> user-keybindings` / `# <<< user-keybindings` and `# >>> user-config` / `# <<< user-config` markers. After a successful update, AeroSpace is reloaded via `aerospace reload-config` so the running process picks up changes. Pre-migration configs (no version/markers) are updated with default placeholders. Missing template version is a hard failure (fail loudly).
+    Reason: Previous approach only wrote the config once during onboarding. Template changes (new keybindings, config options) left users on stale configs with no auto-update path. Doctor detected stale keybindings but the fix was manual.
+    Tradeoffs: Users must place custom config within the marker sections; content outside markers is overwritten on update. The version bump requires incrementing the `# ap-config-version` line in `aerospace-safe.toml`.
+
+- Decision 2026-02-14 floatingfocusfix: Native Swift window cycling replaces AeroSpace dfs-next/dfs-prev
+    Decision: Option-Tab / Option-Shift-Tab is handled natively in Swift via `WindowCycler` (Core) and `FocusCycleHotkeyManager` (App, Carbon API). WindowCycler calls `focusedWindow()` → `listWindowsWorkspace()` → `focusWindow()` to cycle through all workspace windows with wrapping. AeroSpace config template (v3) no longer contains alt-tab keybindings; Doctor keybinding check removed.
+    Reason: AeroSpace's DFS traversal (`rootTilingContainer.allLeafWindowsRecursive`) does not include floating windows, and all windows are floating in AgentPanel's managed config. An intermediate script-based approach was rejected because Swift code is easier to test, maintain, and debug than shell scripts invoked via `exec-and-forget`.
+    Tradeoffs: Carbon global hotkeys require the app to be running (acceptable — AgentPanel is a background agent). Supersedes decisions `workspacetab` and the intermediate script approach.
+
+- Decision 2026-02-15 autorecovery: Auto-recovery restarts AeroSpace when circuit breaker trips on a crashed process
+    Decision: When `runAerospace()` finds the circuit breaker open, it checks if AeroSpace is still running via `RunningApplicationChecking`. If the process is dead, it automatically calls `start()` to restart AeroSpace and retries the original command. Max 2 recovery attempts per breaker trip. Recovery state tracked on `AeroSpaceCircuitBreaker` (thread-safe). Doctor does not get auto-recovery (processChecker is nil) so it reports the actual problem. Main-thread callers get immediate breaker error with fire-and-forget async recovery in the background; off-main callers recover synchronously and retry.
+    Reason: The most common AeroSpace failure mode is a crash (process dies). Auto-recovery makes the system self-healing for this case without user intervention. Hangs (process alive but unresponsive) are left to the existing cooldown-and-probe mechanism.
+    Tradeoffs: Off-main recovery adds up to ~10s latency per attempt (open + readiness poll). Main-thread callers fail fast (0ms) but must wait for background recovery to take effect on the next call. If AeroSpace repeatedly crashes, recovery stops after 2 attempts until a manual restart or the breaker cooldown resets naturally.

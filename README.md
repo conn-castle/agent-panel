@@ -9,7 +9,7 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 - Global switcher (Cmd+Shift+Space) to list/filter/activate projects
 - Project activation: opens IDE + Chrome, organizes windows in AeroSpace workspace
 - Chrome tab persistence: URLs captured on project close, restored on activate (snapshot-is-truth)
-- Workspace-scoped window cycling: Option-Tab / Option-Shift-Tab cycles focus through windows in the current AeroSpace workspace (DFS order, wrapping)
+- Workspace-scoped window cycling: Option-Tab / Option-Shift-Tab cycles focus through windows in the current AeroSpace workspace
 - LIFO focus stack: "exit project space" returns to last non-project window
 - Agent Layer integration: `al sync` + VS Code launch for projects with `useAgentLayer=true`
 - SSH remote projects: VS Code Remote-SSH with Doctor path validation
@@ -36,7 +36,7 @@ AgentPanel is a macOS menu bar app that provides a project switcher UI and a Doc
 On first launch, AgentPanel will prompt to install/configure AeroSpace if needed:
 
 - Installs AeroSpace via Homebrew (if missing)
-- Writes a safe `~/.aerospace.toml` (backs up any existing config to `~/.aerospace.toml.agentpanel-backup`). The managed config includes Option-Tab / Option-Shift-Tab keybindings for workspace-scoped window cycling.
+- Writes a safe `~/.aerospace.toml` (backs up any existing config to `~/.aerospace.toml.agentpanel-backup`). The managed config is versioned and auto-updated on subsequent launches, preserving user sections.
 - Attempts to start AeroSpace
 
 If you decline, AgentPanel quits.
@@ -113,7 +113,8 @@ Named colors are: black, blue, brown, cyan, gray, grey, green, indigo, orange, p
 - Chrome tab snapshots: `~/.local/state/agent-panel/chrome-tabs/<projectId>.json`
 - Window position history: `~/.local/state/agent-panel/window-layouts.json`
 - VS Code settings blocks: injected into `<project-path>/.vscode/settings.json` (local/AL projects) or remote via SSH
-- AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`). Existing users: if your managed config predates workspace cycling keybindings, run Doctor — it will warn about the stale config. Use "Reload AeroSpace Config" from the app menu (or re-run onboarding) to update.
+- AeroSpace config (managed): `~/.aerospace.toml` (backup: `~/.aerospace.toml.agentpanel-backup`). The config is versioned (`# ap-config-version: N`) and auto-updated on app startup, preserving user content in `# >>> user-keybindings` and `# >>> user-config` sections. AeroSpace is reloaded automatically after an update.
+- Window cycling: handled natively in Swift by `WindowCycler` (Core) and `FocusCycleHotkeyManager` (App, Carbon API global hotkeys)
 
 ## Doctor
 
@@ -131,7 +132,7 @@ Current checks include:
 - AeroSpace.app installed
 - `aerospace` CLI available + compatibility (required commands/flags including focus cycling support)
 - Whether AeroSpace is currently running
-- Whether `~/.aerospace.toml` is AgentPanel-managed (+ stale-config warning if managed but missing workspace cycling keybindings)
+- Whether `~/.aerospace.toml` is AgentPanel-managed (+ version staleness warning if config is behind the template)
 - VS Code installed (FAIL if valid projects are defined, WARN otherwise)
 - Google Chrome installed (FAIL if valid projects are defined, WARN otherwise)
 - Unrecognized `config.toml` keys (FAIL)
@@ -142,7 +143,11 @@ Current checks include:
 - Agent-layer directory exists for local projects with `useAgentLayer=true`
 - Peacock VS Code extension installed (WARN if missing when projects have colors)
 - Accessibility permission for window positioning (PASS/FAIL)
-- Hotkey registration status (app only)
+- SSH remote VS Code settings block present (WARN if missing `// >>> agent-panel` block)
+- SSH authority and path format validation
+- SSH binary available (WARN if `ssh` not found, skips remote path checks)
+- Switcher hotkey registration status (app only)
+- Focus cycling hotkey registration status (app only)
 
 ## CLI (`ap`)
 

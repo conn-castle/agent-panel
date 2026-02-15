@@ -79,11 +79,10 @@ final class HotkeyManager: HotkeyStatusProviding {
     private func installEventHandler() -> OSStatus {
         let handler: EventHandlerUPP = { _, eventRef, userData in
             guard let eventRef, let userData else {
-                return noErr
+                return OSStatus(eventNotHandledErr)
             }
             let manager = Unmanaged<HotkeyManager>.fromOpaque(userData).takeUnretainedValue()
-            manager.handleHotkeyEvent(eventRef)
-            return noErr
+            return manager.handleHotkeyEvent(eventRef)
         }
 
         handlerUPP = handler
@@ -103,7 +102,7 @@ final class HotkeyManager: HotkeyStatusProviding {
         )
     }
 
-    private func handleHotkeyEvent(_ event: EventRef) {
+    private func handleHotkeyEvent(_ event: EventRef) -> OSStatus {
         var eventHotKeyId = EventHotKeyID(signature: 0, id: 0)
         let status = GetEventParameter(
             event,
@@ -116,11 +115,11 @@ final class HotkeyManager: HotkeyStatusProviding {
         )
 
         guard status == noErr else {
-            return
+            return OSStatus(eventNotHandledErr)
         }
 
         guard eventHotKeyId.signature == hotkeySignature, eventHotKeyId.id == hotkeyId else {
-            return
+            return OSStatus(eventNotHandledErr)
         }
 
         _ = logger.log(
@@ -132,6 +131,7 @@ final class HotkeyManager: HotkeyStatusProviding {
         DispatchQueue.main.async { [weak self] in
             self?.onHotkey?()
         }
+        return noErr
     }
 
     private func unregisterHotkey() {

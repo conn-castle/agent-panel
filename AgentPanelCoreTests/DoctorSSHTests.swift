@@ -801,6 +801,105 @@ final class DoctorSSHTests: XCTestCase {
         XCTAssertEqual(finding?.snippetLanguage, "jsonc")
     }
 
+    // MARK: - Concurrent SSH checks
+
+    func testMultipleSSHProjectsAllProduceFindings() {
+        let toml = """
+        [[project]]
+        name = "Remote A"
+        remote = "ssh-remote+user@hostA"
+        path = "/home/user/a"
+        color = "blue"
+        useAgentLayer = false
+
+        [[project]]
+        name = "Remote B"
+        remote = "ssh-remote+user@hostB"
+        path = "/home/user/b"
+        color = "red"
+        useAgentLayer = false
+
+        [[project]]
+        name = "Remote C"
+        remote = "ssh-remote+user@hostC"
+        path = "/home/user/c"
+        color = "green"
+        useAgentLayer = false
+        """
+        let doctor = makeDoctor(
+            toml: toml,
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true
+        )
+
+        let report = doctor.run()
+
+        // All 3 SSH projects should have path check findings
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title.contains("Remote project path exists: remote-a")
+        })
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title.contains("Remote project path exists: remote-b")
+        })
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title.contains("Remote project path exists: remote-c")
+        })
+    }
+
+    func testConcurrentSSHChecksCollectAllFindingsFromMixedResults() {
+        // Use a per-host runner that returns different exit codes per host
+        let runner = PerHostCommandRunner(resultsByHost: [
+            "user@hostA": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            "user@hostB": .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "")),
+            "user@hostC": .success(ApCommandResult(exitCode: 255, stdout: "", stderr: "Connection refused"))
+        ])
+
+        let toml = """
+        [[project]]
+        name = "Remote A"
+        remote = "ssh-remote+user@hostA"
+        path = "/home/user/a"
+        color = "blue"
+        useAgentLayer = false
+
+        [[project]]
+        name = "Remote B"
+        remote = "ssh-remote+user@hostB"
+        path = "/home/user/b"
+        color = "red"
+        useAgentLayer = false
+
+        [[project]]
+        name = "Remote C"
+        remote = "ssh-remote+user@hostC"
+        path = "/home/user/c"
+        color = "green"
+        useAgentLayer = false
+        """
+
+        let doctor = makeDoctor(
+            toml: toml,
+            sshResult: .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            sshResolvable: true,
+            commandRunner: runner
+        )
+
+        let report = doctor.run()
+
+        // Host A: exit 0 → PASS
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title.contains("Remote project path exists: remote-a")
+        })
+        // Host B: exit 1 → FAIL
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .fail && $0.title.contains("Remote project path missing: remote-b")
+        })
+        // Host C: exit 255 → WARN
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .warn && $0.title.contains("Cannot verify remote path: remote-c")
+        })
+    }
+
     // MARK: - Helpers
 
     private static let sshConfigTOML = """
@@ -999,7 +1098,13 @@ private struct SelectiveFileSystem: FileSystem {
 
 private class StubCommandRunner: CommandRunning {
     let result: Result<ApCommandResult, ApCoreError>
-    private(set) var allArguments: [[String]] = []
+    private let lock = NSLock()
+    private var _allArguments: [[String]] = []
+    var allArguments: [[String]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _allArguments
+    }
     var lastArguments: [String]? { allArguments.last }
 
     init(result: Result<ApCommandResult, ApCoreError>) {
@@ -1012,7 +1117,9 @@ private class StubCommandRunner: CommandRunning {
         timeoutSeconds: TimeInterval?,
         workingDirectory: String?
     ) -> Result<ApCommandResult, ApCoreError> {
-        allArguments.append(arguments)
+        lock.lock()
+        _allArguments.append(arguments)
+        lock.unlock()
         return result
     }
 }
@@ -1045,10 +1152,47 @@ private class StubWindowPositioner: WindowPositioning {
     }
 }
 
-/// Command runner that returns different results for sequential calls.
+/// Command runner that routes results by SSH host (thread-safe, for concurrent SSH tests).
+private class PerHostCommandRunner: CommandRunning {
+    let resultsByHost: [String: Result<ApCommandResult, ApCoreError>]
+    let fallback: Result<ApCommandResult, ApCoreError>
+
+    init(
+        resultsByHost: [String: Result<ApCommandResult, ApCoreError>],
+        fallback: Result<ApCommandResult, ApCoreError> = .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+    ) {
+        self.resultsByHost = resultsByHost
+        self.fallback = fallback
+    }
+
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        // Extract the host from arguments: look for the argument after "--"
+        if let terminatorIndex = arguments.firstIndex(of: "--"),
+           terminatorIndex + 1 < arguments.count {
+            let host = arguments[terminatorIndex + 1]
+            if let result = resultsByHost[host] {
+                return result
+            }
+        }
+        return fallback
+    }
+}
+
+/// Command runner that returns different results for sequential calls (thread-safe).
 private class SequentialCommandRunner: CommandRunning {
+    private let lock = NSLock()
     private var results: [Result<ApCommandResult, ApCoreError>]
-    private(set) var lastArguments: [String]?
+    private var _lastArguments: [String]?
+    var lastArguments: [String]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastArguments
+    }
 
     init(results: [Result<ApCommandResult, ApCoreError>]) {
         self.results = results
@@ -1060,10 +1204,14 @@ private class SequentialCommandRunner: CommandRunning {
         timeoutSeconds: TimeInterval?,
         workingDirectory: String?
     ) -> Result<ApCommandResult, ApCoreError> {
-        lastArguments = arguments
+        lock.lock()
+        _lastArguments = arguments
         guard !results.isEmpty else {
+            lock.unlock()
             return .failure(ApCoreError(message: "SequentialCommandRunner: no results left"))
         }
-        return results.removeFirst()
+        let result = results.removeFirst()
+        lock.unlock()
+        return result
     }
 }

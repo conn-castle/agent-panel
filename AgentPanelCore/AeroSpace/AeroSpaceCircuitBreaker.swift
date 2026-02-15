@@ -34,10 +34,15 @@ final class AeroSpaceCircuitBreaker {
         case open(until: Date)
     }
 
+    /// Maximum number of automatic recovery attempts before giving up.
+    static let maxRecoveryAttempts = 2
+
     /// Cooldown period after a timeout trips the breaker (seconds).
     let cooldownSeconds: TimeInterval
 
     private var state: State = .closed
+    private var recoveryAttemptCount = 0
+    private var _isRecoveryInProgress = false
     private let lock = NSLock()
 
     /// Creates a circuit breaker.
@@ -74,20 +79,27 @@ final class AeroSpaceCircuitBreaker {
     }
 
     /// Records a timeout failure, tripping the breaker to open state.
+    ///
+    /// When transitioning from closed to open (new trip), resets the recovery
+    /// attempt count so auto-recovery gets a fresh budget per trip.
     func recordTimeout() {
         lock.lock()
         defer { lock.unlock() }
+        if case .closed = state {
+            recoveryAttemptCount = 0
+        }
         state = .open(until: Date().addingTimeInterval(cooldownSeconds))
     }
 
-    /// Records a successful call, closing the breaker.
+    /// Records a successful call, closing the breaker and resetting recovery counts.
     func recordSuccess() {
         lock.lock()
         defer { lock.unlock() }
         state = .closed
+        recoveryAttemptCount = 0
     }
 
-    /// Resets the breaker to closed state.
+    /// Resets the breaker to closed state and clears recovery tracking.
     ///
     /// Called after a fresh AeroSpace start to clear any tripped state,
     /// and by tests to ensure clean state.
@@ -95,5 +107,78 @@ final class AeroSpaceCircuitBreaker {
         lock.lock()
         defer { lock.unlock() }
         state = .closed
+        recoveryAttemptCount = 0
+        _isRecoveryInProgress = false
+    }
+
+    // MARK: - Recovery
+
+    /// Whether a recovery attempt is currently in progress (thread-safe).
+    var isRecoveryInProgress: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _isRecoveryInProgress
+    }
+
+    /// Returns true if auto-recovery should be attempted.
+    ///
+    /// Recovery is allowed when the breaker is open (cooldown not yet expired),
+    /// recovery attempts are below the maximum, and no recovery is already in progress.
+    func shouldAttemptRecovery() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        switch state {
+        case .closed:
+            return false
+        case .open(let until):
+            if Date() >= until {
+                return false // Cooldown expired — let normal probe path handle it
+            }
+            return recoveryAttemptCount < Self.maxRecoveryAttempts && !_isRecoveryInProgress
+        }
+    }
+
+    /// Atomically begins a recovery attempt if one is allowed.
+    ///
+    /// - Returns: `true` if recovery was started (caller should proceed with restart),
+    ///   `false` if recovery is not allowed (max attempts reached or already in progress).
+    func beginRecovery() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        switch state {
+        case .closed:
+            return false
+        case .open(let until):
+            if Date() >= until {
+                return false
+            }
+            guard recoveryAttemptCount < Self.maxRecoveryAttempts, !_isRecoveryInProgress else {
+                return false
+            }
+            _isRecoveryInProgress = true
+            return true
+        }
+    }
+
+    /// Ends a recovery attempt.
+    ///
+    /// - Parameter success: Whether the recovery (AeroSpace restart) succeeded.
+    ///   On success, the breaker resets to closed and counts clear.
+    ///   On failure, the attempt count increments and the breaker is re-opened
+    ///   to maintain fail-fast behavior (start() may have reset it to closed
+    ///   before the readiness poll failed).
+    func endRecovery(success: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        _isRecoveryInProgress = false
+        if success {
+            state = .closed
+            recoveryAttemptCount = 0
+        } else {
+            recoveryAttemptCount += 1
+            state = .open(until: Date().addingTimeInterval(cooldownSeconds))
+        }
     }
 }

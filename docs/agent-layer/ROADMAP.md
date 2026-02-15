@@ -93,33 +93,12 @@ Incomplete:
 - VS Code settings.json block injection replacing workspace files (local + SSH), proactive write on config load.
 - Coverage gate (> 90%) enforced via `scripts/test.sh` + `scripts/coverage_gate.sh` + git pre-commit hook. Hit 95% coverage.
 
-## Phase 7 — Polish required features + harden daily use
-
-### Goal
-- Add polish and hardening to existing daily-driver features: better error recovery, visual differentiation, streamlined developer workflow, and quality-of-life improvements.
-- Keep the build/test pipeline fast and reliable.
-
-### Tasks
-- [x] Definitively fix light mode in the UI
-- [x] Auto-start at login (opt-in) (`auto-start`).
-- [x] Add dropdown menu item to move the currently focused window to any of the open project's workspaces. The top level menu item would be Add Window to Project -> [Project 1, Project 2, Project 3] (`add-window-to-project`).
-- [x] Recover Agent Panel: menu item (visible only in `ap-*` workspace) that shrinks oversized windows to fit the screen and centers them, restoring original focus (`recover-agent-panel`).
-- [x] Recover All Windows: menu item that moves all windows from all workspaces to workspace "1", shrinks/centers each, shows progress UI, and restores original state (`recover-all-windows`).
-- [x] Add AeroSpace keybinding for Option-Tab / Option-Shift-Tab to cycle focus within the current workspace using native `focus dfs-next`/`dfs-prev` with `--boundaries workspace --boundaries-action wrap-around-the-workspace`. Keybindings are included in the managed `aerospace-safe.toml` template. Doctor warns if a managed config is stale (missing the keybindings). Compatibility check validates all required focus flags (`workspace-tab`).
-- [x] Automatically run Doctor on operational errors (for example project startup failure or command failure) in the background without lagging the app, surfacing a diagnostic report when relevant (`auto-doctor`).
-- [x] VS Code color differentiation: inject `peacock.color` into the settings.json block based on project color. The Peacock VS Code extension reads this key and applies color across title bar, activity bar, and status bar. Doctor warns if Peacock is not installed (`vscode-color`).
-- [x] ~~Chrome visual differentiation~~ — deferred to BACKLOG (no clean injection point; see `Backlog 2026-02-14 chromecolor`).
-- [x] Window layout engine: detect screen mode (small vs wide based on physical monitor width via `CGDisplayScreenSize`), calculate default window positions using configurable layout parameters, position IDE and Chrome windows via macOS Accessibility APIs (`AXUIElement` position/size), handle off-screen rescue (shrink and center oversized windows), map AeroSpace `window-id` to AX window by PID + title. Add `[layout]` config section with: `smallScreenThreshold` (inches, default 24), `windowHeight` (% of screen, default 90), `maxWindowWidth` (inches, default 18), `idePosition` (left/right, default left), `justification` (left/right, default right), `maxGap` (% of screen width, default 10). Add Doctor check for Accessibility permission with remediation guidance. Integrate with activation flow (position after focus). Small screen mode = maximized to `NSScreen.visibleFrame`. Wide screen mode = side-by-side with configurable height, width cap, justification, and gap (`window-layout`).
-- [x] Window position history: persist last window frame (origin + size) per project per screen mode (small/wide) in a JSON file under `~/.local/state/agent-panel/window-layouts/`. Capture positions via AX on project close/deactivate. On activation, restore saved positions if available; fall back to layout engine defaults if not. If a restored window exceeds the current monitor bounds, shrink to fit and center. History is keyed by `projectId` and `screenMode` (`window-history`).
-
-### Exit criteria
-- All tasks are implemented, tested, and documented.
-- Auto-doctor runs in the background on operational errors without blocking the main thread or lagging the app.
-- VS Code color differentiation is present via Peacock extension for projects with colors configured.
-- Window layout positions IDE and Chrome correctly in both small and wide screen modes on activation.
-- Window position history restores saved frames per project per screen mode; oversized windows are clamped.
-- Doctor checks for Accessibility permission and provides remediation guidance.
-- `[layout]` config section is documented in README with all configurable parameters and defaults.
+## Phase 7 ✅ — Polish required features + harden daily use
+- Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
+- Window recovery and management: "Add Window to Project", "Recover Project" / "Recover All Windows" menu items.
+- Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
+- AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
+- UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
 
 ## Phase 8 — Extra non-required features
 

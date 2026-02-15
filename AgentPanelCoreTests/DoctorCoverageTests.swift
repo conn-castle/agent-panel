@@ -382,88 +382,100 @@ final class DoctorCoverageTests: XCTestCase {
         XCTAssertFalse(rendered.contains("PASS  This is a body line"))
     }
 
+    // MARK: - Focus-cycle hotkey status checks
+
+    func testFocusCycleRegisteredEmitsPass() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            focusCycleStatusProvider: StubFocusCycleStatusProvider(status: .registered)
+        )
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.title.contains("Focus cycling hotkeys registered")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertEqual(finding?.severity, .pass)
+    }
+
+    func testFocusCycleFailedEmitsWarn() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            focusCycleStatusProvider: StubFocusCycleStatusProvider(status: .failed(osStatus: -1234))
+        )
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.title.contains("Focus cycling hotkey registration failed")
+        }
+        XCTAssertNotNil(finding)
+        XCTAssertEqual(finding?.severity, .warn)
+        XCTAssertTrue(finding?.bodyLines.contains(where: { $0.contains("-1234") }) == true)
+    }
+
+    func testFocusCycleNilStatusEmitsNoFinding() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            focusCycleStatusProvider: StubFocusCycleStatusProvider(status: nil)
+        )
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.title.contains("Focus cycling")
+        }
+        XCTAssertNil(finding, "nil status should produce no focus-cycle finding")
+    }
+
+    func testFocusCycleNoProviderEmitsNoFinding() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // No focusCycleStatusProvider (default nil)
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true
+        )
+        let report = doctor.run()
+
+        let finding = report.findings.first {
+            $0.title.contains("Focus cycling")
+        }
+        XCTAssertNil(finding, "nil provider should produce no focus-cycle finding")
+    }
+
     // MARK: - Stale AeroSpace config checks
-
-    func testStaleConfigWarnWhenManagedConfigMissingAltTab() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-shift-tab = 'focus dfs-prev'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNotNil(stale)
-        XCTAssertEqual(stale?.severity, .warn)
-    }
-
-    func testStaleConfigWarnWhenManagedConfigMissingAltShiftTab() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-tab = 'focus dfs-next'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNotNil(stale)
-        XCTAssertEqual(stale?.severity, .warn)
-    }
-
-    func testNoStaleConfigWarnWhenBothKeybindingsPresent() throws {
-        let toml = """
-        [[project]]
-        name = "Test"
-        path = "\(tempDir.path)"
-        color = "blue"
-        """
-        let configManager = try makeConfigManager(contents: """
-        \(AeroSpaceConfigManager.managedByMarker)
-        [mode.main.binding]
-        alt-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-next'
-        alt-shift-tab = 'focus --boundaries workspace --boundaries-action wrap-around-the-workspace dfs-prev'
-        """)
-
-        let doctor = try makeDoctorForRun(
-            toml: toml,
-            allowedExecutables: ["/usr/bin/brew"],
-            runningAeroSpace: true,
-            appDiscoveryInstalled: true,
-            configManager: configManager
-        )
-        let report = doctor.run()
-
-        let stale = report.findings.first { $0.title.contains("stale") }
-        XCTAssertNil(stale)
-    }
 
     func testNoStaleConfigCheckForExternalConfig() throws {
         let toml = """
@@ -518,6 +530,184 @@ final class DoctorCoverageTests: XCTestCase {
         XCTAssertNil(stale)
     }
 
+    func testVersionStalenessWarnWhenConfigVersionBehindTemplate() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 2
+            [mode.main.binding]
+            alt-tab = 'new command'
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNotNil(outdated)
+        XCTAssertEqual(outdated?.severity, .warn)
+        XCTAssertTrue(outdated?.title.contains("version 1") == true)
+        XCTAssertTrue(outdated?.title.contains("latest is 2") == true)
+    }
+
+    func testVersionStalenessWarnWhenConfigHasNoVersion() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNotNil(outdated)
+        XCTAssertEqual(outdated?.severity, .warn)
+        XCTAssertTrue(outdated?.title.contains("version none") == true)
+    }
+
+    func testNoVersionStalenessWhenVersionMatches() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            [mode.main.binding]
+            alt-tab = 'focus dfs-next'
+            alt-shift-tab = 'focus dfs-prev'
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let outdated = report.findings.first { $0.title.contains("outdated") }
+        XCTAssertNil(outdated)
+    }
+
+    func testNoTemplateFAILWhenTemplateUnavailableInCLIContext() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // Managed config exists, but template loader returns nil (CLI context)
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """,
+            templateContents: nil
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        // Should NOT contain a FAIL about template version
+        let templateFAIL = report.findings.first {
+            $0.severity == .fail && $0.title.contains("template")
+        }
+        XCTAssertNil(templateFAIL, "CLI context should not produce template FAIL when template resource is unavailable")
+
+        // Should still report managed config as PASS
+        XCTAssertTrue(report.findings.contains {
+            $0.severity == .pass && $0.title == "AeroSpace config managed by AgentPanel"
+        })
+    }
+
+    func testMissingTemplateVersionFailsWhenConfigIsManaged() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // Managed config exists, but template loader returns content with no version line
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            config-version = 2
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let templateFinding = report.findings.first { $0.title.contains("template has no version") }
+        XCTAssertNotNil(templateFinding)
+        XCTAssertEqual(templateFinding?.severity, .fail)
+    }
+
     // MARK: - Helpers
 
     private func makeConfigManager(contents: String) throws -> AeroSpaceConfigManager {
@@ -533,6 +723,19 @@ final class DoctorCoverageTests: XCTestCase {
         )
     }
 
+    private func makeConfigManagerWithTemplate(configContents: String, templateContents: String?) throws -> AeroSpaceConfigManager {
+        let dir = tempDir.appendingPathComponent("aero-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let configURL = dir.appendingPathComponent(".aerospace.toml")
+        try configContents.write(to: configURL, atomically: true, encoding: .utf8)
+        return AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { templateContents }
+        )
+    }
+
     private func makeDoctorForRun(
         toml: String,
         allowedExecutables: Set<String>,
@@ -540,6 +743,7 @@ final class DoctorCoverageTests: XCTestCase {
         appDiscoveryInstalled: Bool,
         aerospaceHealth: AeroSpaceHealthChecking = StubAeroSpaceHealth(),
         hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        focusCycleStatusProvider: FocusCycleStatusProviding? = nil,
         windowPositioner: WindowPositioning? = nil,
         ensureLogsDirectoryExists: Bool = true,
         commandRunner: (any CommandRunning)? = nil,
@@ -573,6 +777,7 @@ final class DoctorCoverageTests: XCTestCase {
             return Doctor(
                 runningApplicationChecker: runningChecker,
                 hotkeyStatusProvider: hotkeyStatusProvider,
+                focusCycleStatusProvider: focusCycleStatusProvider,
                 dateProvider: StubDateProvider(),
                 aerospaceHealth: aerospaceHealth,
                 appDiscovery: appDiscovery,
@@ -586,6 +791,7 @@ final class DoctorCoverageTests: XCTestCase {
             return Doctor(
                 runningApplicationChecker: runningChecker,
                 hotkeyStatusProvider: hotkeyStatusProvider,
+                focusCycleStatusProvider: focusCycleStatusProvider,
                 dateProvider: StubDateProvider(),
                 aerospaceHealth: aerospaceHealth,
                 appDiscovery: appDiscovery,
@@ -646,6 +852,14 @@ private final class RecordingAeroSpaceHealth: AeroSpaceHealthChecking {
     func healthInstallViaHomebrew() -> Bool { true }
     func healthStart() -> Bool { true }
     func healthReloadConfig() -> Bool { true }
+}
+
+private struct StubFocusCycleStatusProvider: FocusCycleStatusProviding {
+    let status: FocusCycleRegistrationStatus?
+
+    func focusCycleRegistrationStatus() -> FocusCycleRegistrationStatus? {
+        status
+    }
 }
 
 private struct StubAppDiscovery: AppDiscovering {

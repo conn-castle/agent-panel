@@ -48,6 +48,20 @@ public protocol HotkeyStatusProviding {
     func hotkeyRegistrationStatus() -> HotkeyRegistrationStatus?
 }
 
+/// Registration status for focus-cycle hotkeys (Option-Tab / Option-Shift-Tab).
+public enum FocusCycleRegistrationStatus: Equatable, Sendable {
+    /// Both Option-Tab and Option-Shift-Tab registered successfully.
+    case registered
+    /// Registration failed for one or both hotkeys.
+    case failed(osStatus: Int32)
+}
+
+/// Provides the last known focus-cycle hotkey registration status.
+public protocol FocusCycleStatusProviding {
+    /// Returns the current focus-cycle registration status, or nil if unknown.
+    func focusCycleRegistrationStatus() -> FocusCycleRegistrationStatus?
+}
+
 // MARK: - File System
 
 /// File system access protocol for testability.
