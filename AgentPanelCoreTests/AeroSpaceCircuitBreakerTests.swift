@@ -130,6 +130,26 @@ final class AeroSpaceCircuitBreakerTests: XCTestCase {
         XCTAssertTrue(breaker.shouldAttemptRecovery())
     }
 
+    func testEndRecoveryFailureReopensBreaker() {
+        // When recovery fails (e.g., start() launched AeroSpace but readiness
+        // timed out), start() may have reset the breaker to closed. endRecovery
+        // must re-open it so subsequent calls continue to fail fast.
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        breaker.recordTimeout()
+        _ = breaker.beginRecovery()
+
+        // Simulate what start() does: reset breaker to closed mid-recovery
+        breaker.reset()
+
+        breaker.endRecovery(success: false)
+
+        // Breaker must be open (not closed) to maintain fail-fast
+        if case .open = breaker.currentState {} else {
+            XCTFail("Expected breaker to be re-opened after failed recovery, got \(breaker.currentState)")
+        }
+        XCTAssertFalse(breaker.shouldAllow(), "Should fail fast after failed recovery")
+    }
+
     func testMaxRecoveryAttemptsExhausted() {
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
 

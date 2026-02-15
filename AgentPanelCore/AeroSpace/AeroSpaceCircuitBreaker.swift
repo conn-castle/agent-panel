@@ -166,7 +166,9 @@ final class AeroSpaceCircuitBreaker {
     ///
     /// - Parameter success: Whether the recovery (AeroSpace restart) succeeded.
     ///   On success, the breaker resets to closed and counts clear.
-    ///   On failure, the attempt count increments.
+    ///   On failure, the attempt count increments and the breaker is re-opened
+    ///   to maintain fail-fast behavior (start() may have reset it to closed
+    ///   before the readiness poll failed).
     func endRecovery(success: Bool) {
         lock.lock()
         defer { lock.unlock() }
@@ -176,6 +178,7 @@ final class AeroSpaceCircuitBreaker {
             recoveryAttemptCount = 0
         } else {
             recoveryAttemptCount += 1
+            state = .open(until: Date().addingTimeInterval(cooldownSeconds))
         }
     }
 }

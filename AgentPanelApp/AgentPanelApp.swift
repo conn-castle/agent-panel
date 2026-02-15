@@ -219,11 +219,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Removes stale focus cycling scripts from the previous script-based approach.
     private func cleanupStaleFocusScripts() {
-        let binDir = NSHomeDirectory() + "/.config/agent-panel/bin"
+        let binDir = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".config/agent-panel/bin")
         for name in ["ap-focus-next", "ap-focus-prev"] {
-            let path = (binDir as NSString).appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: path) {
-                try? FileManager.default.removeItem(atPath: path)
+            let fileURL = binDir.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: fileURL)
             }
         }
     }
