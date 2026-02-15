@@ -73,11 +73,15 @@ struct ExecutableResolver {
     /// including custom additions like Homebrew, nvm, pyenv, etc. This is needed
     /// because GUI apps inherit a minimal PATH that excludes most user-installed tools.
     ///
-    /// - Returns: The full PATH string from the login shell, or nil if resolution
-    ///   fails or login shell fallback is disabled.
+    /// Fish shell emits space-separated PATH entries via `echo $PATH`, so this method
+    /// uses `string join : $PATH` for fish to produce colon-separated output directly.
+    ///
+    /// - Returns: The colon-separated PATH string from the login shell, or nil if
+    ///   resolution fails or login shell fallback is disabled.
     func resolveLoginShellPath() -> String? {
         guard loginShellFallbackEnabled else { return nil }
-        return runLoginShellCommand("echo $PATH")
+        let command = Self.isFishShell ? "string join : $PATH" : "echo $PATH"
+        return runLoginShellCommand(command)
     }
 
     /// Falls back to login shell `which` for non-standard locations.
@@ -104,6 +108,14 @@ struct ExecutableResolver {
             return shell
         }
         return "/bin/zsh"
+    }
+
+    /// Whether the detected login shell is fish.
+    ///
+    /// Fish shell uses space-separated PATH entries and requires different commands
+    /// for PATH resolution (e.g., `string join : $PATH` instead of `echo $PATH`).
+    static var isFishShell: Bool {
+        loginShellPath.hasSuffix("/fish")
     }
 
     /// Runs a command in a login shell and returns the trimmed stdout.

@@ -32,9 +32,9 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Tradeoffs: Users without Homebrew cannot install or onboard. Any future direct-download path requires signing/notarization + updater work.
 
 - Decision 2026-02-03 guipath: GUI apps and child processes require PATH augmentation
-    Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c 'echo $PATH'`, validated as absolute path, falls back to `/bin/zsh`).
+    Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c <command>`, validated as absolute path, falls back to `/bin/zsh`). Fish shell is detected via `$SHELL` path suffix and uses `string join : $PATH` for colon-delimited output.
     Reason: macOS GUI apps launched via Finder/Dock inherit a minimal PATH missing Homebrew and user additions. Child processes (e.g., `al` calling `code`) inherit the same minimal PATH and fail. `/usr/bin/env` is not viable.
-    Tradeoffs: Login shell spawn at init (~50ms, cached). Non-POSIX shells (fish) may not work (safe fallback to standard paths).
+    Tradeoffs: Login shell spawn at init (~50ms, cached). Shells other than bash, zsh, and fish are untested (safe fallback to standard paths).
 
 - Decision 2026-02-08 chrometabs: Chrome has no scriptable tab-pinning API
     Decision: Use "always-open" tabs (regular tabs, leftmost position) instead of Chrome pinned tabs.
@@ -110,3 +110,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: When `runAerospace()` finds the circuit breaker open, it checks if AeroSpace is still running via `RunningApplicationChecking`. If the process is dead, it automatically calls `start()` to restart AeroSpace and retries the original command. Max 2 recovery attempts per breaker trip. Recovery state tracked on `AeroSpaceCircuitBreaker` (thread-safe). Doctor does not get auto-recovery (processChecker is nil) so it reports the actual problem. Main-thread callers get immediate breaker error with fire-and-forget async recovery in the background; off-main callers recover synchronously and retry.
     Reason: The most common AeroSpace failure mode is a crash (process dies). Auto-recovery makes the system self-healing for this case without user intervention. Hangs (process alive but unresponsive) are left to the existing cooldown-and-probe mechanism.
     Tradeoffs: Off-main recovery adds up to ~10s latency per attempt (open + readiness poll). Main-thread callers fail fast (0ms) but must wait for background recovery to take effect on the next call. If AeroSpace repeatedly crashes, recovery stops after 2 attempts until a manual restart or the breaker cooldown resets naturally.
+
+- Decision 2026-02-15 fishshell: Fish shell PATH resolution via `string join : $PATH`
+    Decision: `ExecutableResolver.resolveLoginShellPath()` detects fish shell via `$SHELL` path suffix (`hasSuffix("/fish")`) and uses `string join : $PATH` instead of `echo $PATH`. The `string` builtin (fish 2.3.0+, 2016) emits colon-separated output natively, preserving the colon-separated contract of `resolveLoginShellPath()`.
+    Reason: Fish shell's `echo $PATH` emits space-separated entries, which the downstream consumer (`buildAugmentedEnvironment`) splits on `:`, producing one invalid entry. Using a fish-native command avoids post-hoc parsing.
+    Tradeoffs: False positive requires a non-fish binary at a path ending in `/fish` — extremely narrow. Most likely `string join` is not found (exit 127) and `runLoginShellCommand` returns nil (same safe fallback). In the unlikely case the binary exits 0 with non-empty output, the output is accepted as a PATH string; invalid entries are harmless noise since standard paths and process PATH are always present.

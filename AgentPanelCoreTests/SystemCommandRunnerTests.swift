@@ -251,6 +251,128 @@ final class SystemCommandRunnerTests: XCTestCase {
         }
     }
 
+    // MARK: - Fish shell PATH resolution
+
+    func testIsFishShellReturnsTrueWhenShellIsFish() {
+        withShell("/usr/local/bin/fish") {
+            XCTAssertTrue(ExecutableResolver.isFishShell)
+        }
+    }
+
+    func testIsFishShellReturnsFalseForZsh() {
+        withShell("/bin/zsh") {
+            XCTAssertFalse(ExecutableResolver.isFishShell)
+        }
+    }
+
+    func testIsFishShellReturnsFalseForBash() {
+        withShell("/bin/bash") {
+            XCTAssertFalse(ExecutableResolver.isFishShell)
+        }
+    }
+
+    func testIsFishShellReturnsFalseForNonAbsolutePath() {
+        // Non-absolute SHELL falls back to /bin/zsh, which is not fish
+        withShell("fish") {
+            XCTAssertFalse(ExecutableResolver.isFishShell)
+        }
+    }
+
+    func testResolveLoginShellPathUsesStringJoinForFish() throws {
+        // Simulate a fish shell that receives "string join : $PATH" and emits colon-separated output.
+        // The stub script gates on the command argument: only succeeds if it contains "string join".
+        // This ensures a regression back to "echo $PATH" would cause a test failure.
+        let expectedPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FishShellPathTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Name the stub "fish" so loginShellPath.hasSuffix("/fish") is true
+        let shellURL = tempDir.appendingPathComponent("fish", isDirectory: false)
+        // The stub receives: -l -c "<command>"
+        // $3 is the command. Only succeed if it contains "string join" (fish-specific).
+        let script = """
+            #!/bin/sh
+            case "$3" in
+              *"string join"*) echo "\(expectedPath)" ;;
+              *) exit 1 ;;
+            esac
+            """
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            XCTAssertTrue(ExecutableResolver.isFishShell, "Shell path should be detected as fish")
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            let path = resolver.resolveLoginShellPath()
+            XCTAssertEqual(path, expectedPath)
+        }
+    }
+
+    func testAugmentedEnvironmentIncludesFishShellPATH() throws {
+        let expectedShellPath = "/fish/custom/bin:/usr/bin:/bin"
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FishAugmentedPATHTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("fish", isDirectory: false)
+        // Gate on "string join" to catch regressions
+        let script = """
+            #!/bin/sh
+            case "$3" in
+              *"string join"*) echo "\(expectedShellPath)" ;;
+              *) exit 1 ;;
+            esac
+            """
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            let env = ApSystemCommandRunner.buildAugmentedEnvironment(resolver: resolver)
+
+            guard let path = env["PATH"] else {
+                XCTFail("PATH should be present")
+                return
+            }
+
+            let components = path.split(separator: ":").map(String.init)
+            XCTAssertTrue(components.contains("/fish/custom/bin"),
+                          "Augmented PATH should include fish shell's custom path")
+        }
+    }
+
+    func testResolveLoginShellPathUsesEchoForNonFishShell() throws {
+        // With a non-fish shell, resolveLoginShellPath should use "echo $PATH" (default behavior).
+        // The stub gates on "echo" to catch regressions that send fish commands to non-fish shells.
+        let expectedPath = "/usr/bin:/bin:/usr/sbin:/sbin"
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NonFishShellPathTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let shellURL = tempDir.appendingPathComponent("zsh", isDirectory: false)
+        // Gate on "echo" — only succeed if the command contains "echo" (non-fish path)
+        let script = """
+            #!/bin/sh
+            case "$3" in
+              *"echo"*) echo "\(expectedPath)" ;;
+              *) exit 1 ;;
+            esac
+            """
+        try script.write(to: shellURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
+
+        withShell(shellURL.path) {
+            XCTAssertFalse(ExecutableResolver.isFishShell, "Shell path should not be detected as fish")
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            let path = resolver.resolveLoginShellPath()
+            XCTAssertEqual(path, expectedPath)
+        }
+    }
+
     func testResolveViaLoginShellReturnsNilWhenShellCommandTimesOut() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("LoginShellTimeoutTests-\(UUID().uuidString)", isDirectory: true)
