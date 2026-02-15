@@ -271,6 +271,14 @@ public struct AeroSpaceConfigManager {
         return result.joined(separator: "\n")
     }
 
+    /// Returns true if the safe config template resource is available.
+    ///
+    /// This is false when running from a CLI tool that does not bundle
+    /// `aerospace-safe.toml` (expected), and true when running from the app.
+    public func isTemplateAvailable() -> Bool {
+        loadSafeConfigFromBundle() != nil
+    }
+
     /// Returns the config version from the bundled template.
     /// - Returns: The template version number, or nil if the template is missing or has no version.
     public func templateVersion() -> Int? {
@@ -344,7 +352,8 @@ public struct AeroSpaceConfigManager {
     /// - `.missing` → writes a fresh config via `writeSafeConfig()`, returns `.freshInstall`.
     /// - `.managedByAgentPanel` with stale version → calls `updateManagedConfig()`, returns `.updated`.
     /// - `.managedByAgentPanel` with current version → returns `.alreadyCurrent`.
-    /// - `.externalConfig` / `.unknown` → returns `.skippedExternal`.
+    /// - `.externalConfig` → returns `.skippedExternal`.
+    /// - `.unknown` → returns `.failure` (cannot read config).
     ///
     /// - Returns: The update result, or an error if writing fails.
     public func ensureUpToDate() -> Result<ConfigUpdateResult, ApCoreError> {

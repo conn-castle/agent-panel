@@ -28,6 +28,11 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-15 window-cycling-ui: UI overlay for project window cycling (Option-Tab)
+    Priority: Medium. Area: App/UX
+    Description: Add a UI overlay for project-scoped window cycling (Option-Tab) that shows the available windows, similar to the macOS Command-Tab switcher. This provides visual feedback and allows for easier navigation between multiple windows within a project workspace.
+    Acceptance criteria: Pressing and holding Option while Tabbing displays a UI panel with window icons/titles; releasing Option selects the highlighted window.
+
 - Backlog 2026-02-14 chromecolor: Chrome visual differentiation matching VS Code project color
     Priority: Low. Area: Core/Chrome
     Description: Apply project color to the Chrome window to visually match the associated VS Code window. Possible approaches: Chrome profile customization, theme injection, or Chrome extension.

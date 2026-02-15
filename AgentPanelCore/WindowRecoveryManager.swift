@@ -31,12 +31,14 @@ public final class WindowRecoveryManager {
     ///   - windowPositioner: Window positioning provider for AX operations.
     ///   - screenVisibleFrame: The screen's visible frame (minus dock/menu bar) to clamp within.
     ///   - logger: Logger for structured event logging.
+    ///   - processChecker: Process checker for AeroSpace auto-recovery. Pass nil to disable.
     public init(
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
-        logger: AgentPanelLogging
+        logger: AgentPanelLogging,
+        processChecker: RunningApplicationChecking? = nil
     ) {
-        self.aerospace = ApAeroSpace()
+        self.aerospace = ApAeroSpace(processChecker: processChecker)
         self.windowPositioner = windowPositioner
         self.screenVisibleFrame = screenVisibleFrame
         self.logger = logger

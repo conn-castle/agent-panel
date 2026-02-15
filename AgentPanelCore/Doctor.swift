@@ -419,14 +419,16 @@ public struct Doctor {
                         fix: "Restart AgentPanel to auto-update, or run `ap doctor` for details."
                     ))
                 }
-            } else {
+            } else if configManager.isTemplateAvailable() {
+                // Template resource exists but has no version line — corrupted bundle
                 findings.append(DoctorFinding(
                     severity: .fail,
-                    title: "AeroSpace config template is missing or has no version",
-                    detail: "The bundled aerospace-safe.toml is missing or has no ap-config-version line.",
+                    title: "AeroSpace config template has no version",
+                    detail: "The bundled aerospace-safe.toml has no ap-config-version line.",
                     fix: "Reinstall AgentPanel — the app bundle may be corrupted."
                 ))
             }
+            // else: template not available (CLI context) — skip staleness check
         case .missing:
             findings.append(DoctorFinding(
                 severity: .fail,

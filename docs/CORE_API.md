@@ -193,9 +193,11 @@ public final class ProjectManager {
 
     /// Creates a ProjectManager with default dependencies.
     /// Pass window positioning and screen mode detection implementations from AppKit.
+    /// Pass processChecker for AeroSpace auto-recovery (nil disables).
     public init(
         windowPositioner: WindowPositioning? = nil,
-        screenModeDetector: ScreenModeDetecting? = nil
+        screenModeDetector: ScreenModeDetecting? = nil,
+        processChecker: RunningApplicationChecking? = nil
     )
 
     /// Loads configuration from the default path.
@@ -609,7 +611,8 @@ public final class WindowRecoveryManager {
     public init(
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
-        logger: AgentPanelLogging
+        logger: AgentPanelLogging,
+        processChecker: RunningApplicationChecking? = nil
     )
 
     /// Recovers all windows in a single workspace (shrink/center oversized windows).
@@ -714,7 +717,7 @@ public enum CycleDirection: Sendable {
 }
 
 public struct WindowCycler {
-    public init()
+    public init(processChecker: RunningApplicationChecking? = nil)
     public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
 }
 ```
@@ -734,7 +737,11 @@ public struct ApAeroSpace {
     /// AeroSpace app bundle identifier.
     public static let bundleIdentifier: String  // "bobko.aerospace"
 
-    public init()
+    /// Creates a new AeroSpace wrapper.
+    /// - Parameter processChecker: Optional process checker for auto-recovery.
+    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
+    ///   automatically restarts AeroSpace (max 2 attempts). Pass nil (default) to disable.
+    public init(processChecker: RunningApplicationChecking? = nil)
 
     /// Returns true when AeroSpace.app is installed.
     public func isAppInstalled() -> Bool

@@ -94,14 +94,11 @@ Incomplete:
 - Coverage gate (> 90%) enforced via `scripts/test.sh` + `scripts/coverage_gate.sh` + git pre-commit hook. Hit 95% coverage.
 
 ## Phase 7 ✅ — Polish required features + harden daily use
-- Light mode fix, auto-start at login (opt-in via `[app] autoStartAtLogin`), menu toggle with config-as-truth and rollback on write failure.
-- "Add Window to Project" submenu, "Recover Project" (shrink/center oversized windows), "Recover All Windows" (move all to workspace "1" with progress UI). `WindowRecoveryManager` in Core, `RecoveryProgressController` in App.
-- Workspace-scoped window cycling: Option-Tab / Option-Shift-Tab via native AeroSpace `focus dfs-next`/`dfs-prev` in managed config. Doctor warns on stale config missing keybindings.
-- Auto-doctor: `ErrorContext` with `isCritical` triggers background Doctor on operational errors; `DoctorMetadata.errorContext` carries trigger info.
-- VS Code color differentiation via Peacock extension: `peacock.color` injected into settings.json block. Doctor warns if Peacock not installed. Chrome color deferred to BACKLOG.
-- Window layout engine: `[layout]` config section, `LayoutConfig` type, `WindowLayoutEngine` (pure geometry), screen mode detection via `CGDisplayScreenSize`, AX-based positioning via `AXWindowPositioner`. Small mode = maximized; wide mode = side-by-side with configurable params.
-- Window position history: `WindowPositionStore` persists per-project per-mode frames in `window-layouts.json`. Capture on close, restore on activate with off-screen clamping.
-- Doctor checks for Accessibility permission with "Request Accessibility" button. AeroSpace circuit breaker (`AeroSpaceCircuitBreaker`, 30s cooldown) prevents timeout cascades.
+- Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
+- Window recovery and management: "Add Window to Project", "Recover Project" / "Recover All Windows" menu items.
+- Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
+- AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
+- UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
 
 ## Phase 8 — Extra non-required features
 

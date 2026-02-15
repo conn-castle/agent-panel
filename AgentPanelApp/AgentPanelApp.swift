@@ -57,7 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
-        screenModeDetector: ScreenModeDetector()
+        screenModeDetector: ScreenModeDetector(),
+        processChecker: AppKitRunningApplicationChecker()
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -121,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Register window cycling hotkeys (Option-Tab / Option-Shift-Tab)
-        let windowCycler = WindowCycler()
+        let windowCycler = WindowCycler(processChecker: AppKitRunningApplicationChecker())
         let focusCycleManager = FocusCycleHotkeyManager()
         focusCycleManager.onCycleNext = { [weak self] in
             DispatchQueue.global(qos: .userInteractive).async {
@@ -911,7 +912,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WindowRecoveryManager(
             windowPositioner: AXWindowPositioner(),
             screenVisibleFrame: screenFrame,
-            logger: logger
+            logger: logger,
+            processChecker: AppKitRunningApplicationChecker()
         )
     }
 

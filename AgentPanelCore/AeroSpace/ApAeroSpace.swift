@@ -47,13 +47,19 @@ public struct ApAeroSpace {
     private let appDiscovery: AppDiscovering
     private let fileSystem: FileSystem
     private let circuitBreaker: AeroSpaceCircuitBreaker
+    private let processChecker: RunningApplicationChecking?
 
     /// Creates a new AeroSpace wrapper with default dependencies.
-    public init() {
+    /// - Parameter processChecker: Optional process checker for auto-recovery.
+    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
+    ///   the wrapper will automatically attempt to restart AeroSpace.
+    ///   Pass `nil` to disable auto-recovery (e.g., for Doctor diagnostics).
+    public init(processChecker: RunningApplicationChecking? = nil) {
         self.commandRunner = ApSystemCommandRunner()
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.fileSystem = DefaultFileSystem()
         self.circuitBreaker = .shared
+        self.processChecker = processChecker
     }
 
     /// Creates a new AeroSpace wrapper with custom dependencies.
@@ -62,16 +68,19 @@ public struct ApAeroSpace {
     ///   - appDiscovery: App discovery for installation checks.
     ///   - fileSystem: File system for path checks.
     ///   - circuitBreaker: Circuit breaker for timeout cascade prevention.
+    ///   - processChecker: Optional process checker for auto-recovery.
     init(
         commandRunner: CommandRunning,
         appDiscovery: AppDiscovering,
         fileSystem: FileSystem = DefaultFileSystem(),
-        circuitBreaker: AeroSpaceCircuitBreaker = .shared
+        circuitBreaker: AeroSpaceCircuitBreaker = .shared,
+        processChecker: RunningApplicationChecking? = nil
     ) {
         self.commandRunner = commandRunner
         self.appDiscovery = appDiscovery
         self.fileSystem = fileSystem
         self.circuitBreaker = circuitBreaker
+        self.processChecker = processChecker
     }
 
     /// Returns the path to AeroSpace.app if installed.
@@ -198,29 +207,38 @@ public struct ApAeroSpace {
             ("close", ["--window-id"])
         ]
 
+        let lock = NSLock()
         var failures: [String] = []
-        failures.reserveCapacity(checks.count)
 
-        for check in checks {
+        DispatchQueue.concurrentPerform(iterations: checks.count) { index in
+            let check = checks[index]
+            var localFailure: String?
+
             switch commandHelpOutput(command: check.command) {
             case .failure(let error):
-                failures.append("aerospace \(check.command) --help failed: \(error.message)")
+                localFailure = "aerospace \(check.command) --help failed: \(error.message)"
             case .success(let output):
                 let missing = check.requiredFlags.filter { !output.contains($0) }
                 if !missing.isEmpty {
-                    failures.append(
-                        "aerospace \(check.command) missing flags: \(missing.joined(separator: ", "))"
-                    )
+                    localFailure = "aerospace \(check.command) missing flags: \(missing.joined(separator: ", "))"
                 }
+            }
+
+            if let failure = localFailure {
+                lock.lock()
+                failures.append(failure)
+                lock.unlock()
             }
         }
 
         guard failures.isEmpty else {
+            // Sort for deterministic output regardless of concurrent execution order
+            let sorted = failures.sorted()
             return .failure(
                 ApCoreError(
                     category: .validation,
                     message: "AeroSpace CLI compatibility check failed.",
-                    detail: failures.joined(separator: "\n")
+                    detail: sorted.joined(separator: "\n")
                 )
             )
         }
@@ -638,12 +656,16 @@ public struct ApAeroSpace {
 
     // MARK: - Circuit Breaker
 
-    /// Runs an aerospace CLI command with circuit breaker protection.
+    /// Runs an aerospace CLI command with circuit breaker protection and auto-recovery.
     ///
     /// Checks the breaker before spawning a process. If AeroSpace is unresponsive
     /// (breaker open), returns a descriptive error immediately instead of waiting
     /// for a 5s timeout. After the call, records the outcome so that a timeout
     /// trips the breaker for subsequent calls.
+    ///
+    /// When a `processChecker` is available and the breaker is open, checks whether
+    /// AeroSpace has actually crashed (process dead). If so, automatically attempts
+    /// to restart it (up to 2 attempts) and retries the original command.
     ///
     /// - Parameters:
     ///   - arguments: Arguments to pass to the `aerospace` executable.
@@ -653,14 +675,46 @@ public struct ApAeroSpace {
         arguments: [String],
         timeoutSeconds: TimeInterval = 5
     ) -> Result<ApCommandResult, ApCoreError> {
-        guard circuitBreaker.shouldAllow() else {
-            return .failure(ApCoreError(
-                category: .command,
-                message: "AeroSpace is unresponsive (circuit breaker open).",
-                detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
-            ))
+        if circuitBreaker.shouldAllow() {
+            return executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
         }
 
+        // Breaker is open — attempt auto-recovery if process checker is available
+        if let checker = processChecker,
+           !checker.isApplicationRunning(bundleIdentifier: Self.bundleIdentifier),
+           circuitBreaker.beginRecovery() {
+            if Thread.isMainThread {
+                // Main thread: fire-and-forget recovery in the background, fail fast now.
+                // start() blocks for up to ~10s (open + readiness poll) — unacceptable on main.
+                // The next off-main call will benefit from the recovered state.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    switch self.start() {
+                    case .success:
+                        self.circuitBreaker.endRecovery(success: true)
+                    case .failure:
+                        self.circuitBreaker.endRecovery(success: false)
+                    }
+                }
+            } else {
+                // Off-main: recover synchronously and retry the command.
+                switch start() {
+                case .success:
+                    circuitBreaker.endRecovery(success: true)
+                    return executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
+                case .failure:
+                    circuitBreaker.endRecovery(success: false)
+                }
+            }
+        }
+
+        return .failure(breakerOpenError())
+    }
+
+    /// Executes an aerospace command and records the outcome on the circuit breaker.
+    private func executeAndRecord(
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) -> Result<ApCommandResult, ApCoreError> {
         let result = commandRunner.run(
             executable: "aerospace",
             arguments: arguments,
@@ -677,6 +731,15 @@ public struct ApAeroSpace {
         }
 
         return result
+    }
+
+    /// Returns the standard error for when the circuit breaker is open.
+    private func breakerOpenError() -> ApCoreError {
+        ApCoreError(
+            category: .command,
+            message: "AeroSpace is unresponsive (circuit breaker open).",
+            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
+        )
     }
 
     // MARK: - Private Helpers

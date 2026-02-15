@@ -20,8 +20,9 @@ public struct WindowCycler {
     private let aerospace: AeroSpaceProviding
 
     /// Creates a window cycler with default dependencies.
-    public init() {
-        self.aerospace = ApAeroSpace()
+    /// - Parameter processChecker: Process checker for AeroSpace auto-recovery. Pass nil to disable.
+    public init(processChecker: RunningApplicationChecking? = nil) {
+        self.aerospace = ApAeroSpace(processChecker: processChecker)
     }
 
     /// Creates a window cycler with injected dependencies (for testing).

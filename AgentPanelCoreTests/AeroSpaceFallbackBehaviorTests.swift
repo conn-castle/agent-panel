@@ -1,19 +1,25 @@
 import XCTest
 @testable import AgentPanelCore
 
-/// Mock command runner that records all calls and returns scripted results.
+/// Thread-safe mock command runner that records all calls and returns scripted results.
 ///
-/// Call sites append `(executable, arguments)` tuples to `calls` and receive
-/// the next result from `results` in FIFO order. If `results` is exhausted
-/// the mock returns a generic failure so the test notices.
+/// Supports two modes:
+/// - **FIFO mode** (default): Call sites receive the next result from `results` in FIFO order.
+/// - **Keyed mode**: When `keyedResults` is populated, results are returned by matching
+///   the first argument (e.g., `"list-workspaces"`) against the key. Use for concurrent tests
+///   where call order is non-deterministic.
+///
+/// Thread-safe for concurrent access via NSLock.
 private final class MockCommandRunner: CommandRunning {
     struct Call: Equatable {
         let executable: String
         let arguments: [String]
     }
 
-    var calls: [Call] = []
+    private let lock = NSLock()
+    private(set) var calls: [Call] = []
     var results: [Result<ApCommandResult, ApCoreError>] = []
+    var keyedResults: [String: Result<ApCommandResult, ApCoreError>] = [:]
 
     func run(
         executable: String,
@@ -21,11 +27,24 @@ private final class MockCommandRunner: CommandRunning {
         timeoutSeconds: TimeInterval?,
         workingDirectory: String?
     ) -> Result<ApCommandResult, ApCoreError> {
+        lock.lock()
         calls.append(Call(executable: executable, arguments: arguments))
+
+        // Keyed mode: match by first argument (command name)
+        if !keyedResults.isEmpty, let firstArg = arguments.first,
+           let result = keyedResults[firstArg] {
+            lock.unlock()
+            return result
+        }
+
+        // FIFO mode
         guard !results.isEmpty else {
+            lock.unlock()
             return .failure(ApCoreError(message: "MockCommandRunner: no results left"))
         }
-        return results.removeFirst()
+        let result = results.removeFirst()
+        lock.unlock()
+        return result
     }
 }
 
@@ -447,13 +466,14 @@ final class AeroSpaceCliAvailabilityTests: XCTestCase {
 final class AeroSpaceCompatibilityTests: XCTestCase {
     func testCheckCompatibilitySucceedsWhenAllFlagsPresent() {
         let runner = MockCommandRunner()
-        runner.results = [
-            .success(ApCommandResult(exitCode: 0, stdout: "--all --focused", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--monitor --workspace --focused --app-bundle-id --format", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries --boundaries-action dfs-next dfs-prev", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
+        // Use keyed results: concurrent execution means FIFO order is non-deterministic
+        runner.keyedResults = [
+            "list-workspaces": .success(ApCommandResult(exitCode: 0, stdout: "--all --focused", stderr: "")),
+            "list-windows": .success(ApCommandResult(exitCode: 0, stdout: "--monitor --workspace --focused --app-bundle-id --format", stderr: "")),
+            "summon-workspace": .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
+            "move-node-to-workspace": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            "focus": .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries --boundaries-action dfs-next dfs-prev", stderr: "")),
+            "close": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
 
@@ -461,21 +481,17 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
 
         XCTAssertTrue(result.isSuccess)
         XCTAssertEqual(runner.calls.count, 6)
-        XCTAssertEqual(runner.calls[0].arguments, ["list-workspaces", "--help"])
     }
 
     func testCheckCompatibilityAcceptsFlagsFromStdoutAndStderr() {
         let runner = MockCommandRunner()
-        runner.results = [
-            // list-workspaces flags in stderr only
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "--all --focused")),
-            // list-windows flags split across stdout/stderr
-            .success(ApCommandResult(exitCode: 0, stdout: "--monitor", stderr: "--workspace --focused --app-bundle-id --format")),
-            .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
-            // focus flags split across stdout/stderr
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries dfs-next", stderr: "--boundaries-action dfs-prev")),
-            .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
+        runner.keyedResults = [
+            "list-workspaces": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "--all --focused")),
+            "list-windows": .success(ApCommandResult(exitCode: 0, stdout: "--monitor", stderr: "--workspace --focused --app-bundle-id --format")),
+            "summon-workspace": .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
+            "move-node-to-workspace": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            "focus": .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries dfs-next", stderr: "--boundaries-action dfs-prev")),
+            "close": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
 
@@ -487,15 +503,13 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
 
     func testCheckCompatibilityFailsWhenFlagsMissing() {
         let runner = MockCommandRunner()
-        runner.results = [
-            // list-workspaces missing --focused
-            .success(ApCommandResult(exitCode: 0, stdout: "--all", stderr: "")),
-            // remaining checks can be empty
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        runner.keyedResults = [
+            "list-workspaces": .success(ApCommandResult(exitCode: 0, stdout: "--all", stderr: "")),
+            "list-windows": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            "summon-workspace": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            "move-node-to-workspace": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            "focus": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            "close": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
 
@@ -508,6 +522,60 @@ final class AeroSpaceCompatibilityTests: XCTestCase {
             XCTAssertEqual(error.category, .validation)
             XCTAssertEqual(error.message, "AeroSpace CLI compatibility check failed.")
             XCTAssertNotNil(error.detail)
+        }
+    }
+
+    func testCheckCompatibilityFailureDetailIsSorted() {
+        let runner = MockCommandRunner()
+        // Two commands fail: "close" (alphabetically first) and "list-workspaces"
+        runner.keyedResults = [
+            "list-workspaces": .success(ApCommandResult(exitCode: 0, stdout: "--all", stderr: "")),
+            "list-windows": .success(ApCommandResult(exitCode: 0, stdout: "--monitor --workspace --focused --app-bundle-id --format", stderr: "")),
+            "summon-workspace": .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
+            "move-node-to-workspace": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+            "focus": .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries --boundaries-action dfs-next dfs-prev", stderr: "")),
+            "close": .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.checkCompatibility()
+
+        switch result {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(let error):
+            let lines = error.detail?.components(separatedBy: "\n") ?? []
+            XCTAssertEqual(lines.count, 2)
+            // Sorted: "close" before "list-workspaces"
+            XCTAssertTrue(lines[0].contains("close"), "First failure should be 'close' (alphabetical)")
+            XCTAssertTrue(lines[1].contains("list-workspaces"), "Second failure should be 'list-workspaces' (alphabetical)")
+        }
+    }
+
+    func testCheckCompatibilityConcurrentCallsAreAllRecorded() {
+        // Run compatibility check multiple times to exercise thread-safety
+        for _ in 0..<10 {
+            let runner = MockCommandRunner()
+            runner.keyedResults = [
+                "list-workspaces": .success(ApCommandResult(exitCode: 0, stdout: "--all --focused", stderr: "")),
+                "list-windows": .success(ApCommandResult(exitCode: 0, stdout: "--monitor --workspace --focused --app-bundle-id --format", stderr: "")),
+                "summon-workspace": .success(ApCommandResult(exitCode: 0, stdout: "ok", stderr: "")),
+                "move-node-to-workspace": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: "")),
+                "focus": .success(ApCommandResult(exitCode: 0, stdout: "--window-id --boundaries --boundaries-action dfs-next dfs-prev", stderr: "")),
+                "close": .success(ApCommandResult(exitCode: 0, stdout: "--window-id", stderr: ""))
+            ]
+            let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+            let result = aero.checkCompatibility()
+
+            XCTAssertTrue(result.isSuccess, "Iteration should succeed")
+            // All 6 commands should be recorded regardless of execution order
+            XCTAssertEqual(runner.calls.count, 6, "All 6 help checks should be recorded")
+            let commands = Set(runner.calls.map { $0.arguments.first ?? "" })
+            XCTAssertEqual(commands, [
+                "list-workspaces", "list-windows", "summon-workspace",
+                "move-node-to-workspace", "focus", "close"
+            ], "All 6 unique commands should appear")
         }
     }
 }
