@@ -132,7 +132,7 @@ Current checks include:
 - AeroSpace.app installed
 - `aerospace` CLI available + compatibility (required commands/flags including focus cycling support)
 - Whether AeroSpace is currently running
-- Whether `~/.aerospace.toml` is AgentPanel-managed (+ version staleness warning if config is behind the template, and keybinding check as secondary safety net)
+- Whether `~/.aerospace.toml` is AgentPanel-managed (+ version staleness warning if config is behind the template)
 - VS Code installed (FAIL if valid projects are defined, WARN otherwise)
 - Google Chrome installed (FAIL if valid projects are defined, WARN otherwise)
 - Unrecognized `config.toml` keys (FAIL)
@@ -146,7 +146,8 @@ Current checks include:
 - SSH remote VS Code settings block present (WARN if missing `// >>> agent-panel` block)
 - SSH authority and path format validation
 - SSH binary available (WARN if `ssh` not found, skips remote path checks)
-- Hotkey registration status (app only)
+- Switcher hotkey registration status (app only)
+- Focus cycling hotkey registration status (app only)
 
 ## CLI (`ap`)
 

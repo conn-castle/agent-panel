@@ -225,6 +225,7 @@ public struct Doctor {
 
     private let runningApplicationChecker: RunningApplicationChecking
     private let hotkeyStatusProvider: HotkeyStatusProviding?
+    private let focusCycleStatusProvider: FocusCycleStatusProviding?
     private let dateProvider: DateProviding
     private let aerospaceHealth: AeroSpaceHealthChecking
     private let appDiscovery: AppDiscovering
@@ -239,13 +240,16 @@ public struct Doctor {
     /// - Parameters:
     ///   - runningApplicationChecker: Running application checker (required, provided by CLI/App).
     ///   - hotkeyStatusProvider: Optional hotkey status provider for hotkey registration checks.
+    ///   - focusCycleStatusProvider: Optional focus-cycle hotkey status provider.
     public init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        focusCycleStatusProvider: FocusCycleStatusProviding? = nil,
         windowPositioner: WindowPositioning? = nil
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
+        self.focusCycleStatusProvider = focusCycleStatusProvider
         self.dateProvider = SystemDateProvider()
         self.aerospaceHealth = ApAeroSpace()
         self.appDiscovery = LaunchServicesAppDiscovery()
@@ -261,6 +265,7 @@ public struct Doctor {
     /// - Parameters:
     ///   - runningApplicationChecker: Running application checker.
     ///   - hotkeyStatusProvider: Optional hotkey status provider.
+    ///   - focusCycleStatusProvider: Optional focus-cycle hotkey status provider.
     ///   - dateProvider: Date provider for timestamps.
     ///   - aerospaceHealth: AeroSpace health checker for status and remediation actions.
     ///   - appDiscovery: App discovery for checking installed apps.
@@ -271,6 +276,7 @@ public struct Doctor {
     init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding?,
+        focusCycleStatusProvider: FocusCycleStatusProviding? = nil,
         dateProvider: DateProviding,
         aerospaceHealth: AeroSpaceHealthChecking,
         appDiscovery: AppDiscovering,
@@ -283,6 +289,7 @@ public struct Doctor {
     ) {
         self.runningApplicationChecker = runningApplicationChecker
         self.hotkeyStatusProvider = hotkeyStatusProvider
+        self.focusCycleStatusProvider = focusCycleStatusProvider
         self.dateProvider = dateProvider
         self.aerospaceHealth = aerospaceHealth
         self.appDiscovery = appDiscovery
@@ -403,12 +410,21 @@ public struct Doctor {
             // Check config version staleness
             let currentVer = configManager.currentConfigVersion()
             let templateVer = configManager.templateVersion()
-            if let templateVer, currentVer == nil || currentVer! < templateVer {
-                let currentLabel = currentVer.map { "\($0)" } ?? "none"
+            if let templateVer {
+                if currentVer == nil || currentVer! < templateVer {
+                    let currentLabel = currentVer.map { "\($0)" } ?? "none"
+                    findings.append(DoctorFinding(
+                        severity: .warn,
+                        title: "AeroSpace config is outdated (version \(currentLabel), latest is \(templateVer))",
+                        fix: "Restart AgentPanel to auto-update, or run `ap doctor` for details."
+                    ))
+                }
+            } else {
                 findings.append(DoctorFinding(
-                    severity: .warn,
-                    title: "AeroSpace config is outdated (version \(currentLabel), latest is \(templateVer))",
-                    fix: "Restart AgentPanel to auto-update, or run `ap doctor` for details."
+                    severity: .fail,
+                    title: "AeroSpace config template is missing or has no version",
+                    detail: "The bundled aerospace-safe.toml is missing or has no ap-config-version line.",
+                    fix: "Reinstall AgentPanel — the app bundle may be corrupted."
                 ))
             }
         case .missing:
@@ -608,6 +624,26 @@ public struct Doctor {
                     title: "Hotkey registration failed",
                     detail: "OSStatus: \(osStatus)",
                     fix: "Another application may have claimed Cmd+Shift+Space. Check System Settings > Keyboard > Keyboard Shortcuts."
+                ))
+            case .none:
+                break
+            }
+        }
+
+        // Check focus-cycle hotkey status if provider available
+        if let provider = focusCycleStatusProvider {
+            switch provider.focusCycleRegistrationStatus() {
+            case .registered:
+                findings.append(DoctorFinding(
+                    severity: .pass,
+                    title: "Focus cycling hotkeys registered (Option-Tab / Option-Shift-Tab)"
+                ))
+            case .failed(let osStatus):
+                findings.append(DoctorFinding(
+                    severity: .warn,
+                    title: "Focus cycling hotkey registration failed",
+                    detail: "OSStatus: \(osStatus)",
+                    fix: "Another application may have claimed Option-Tab. Check System Settings > Keyboard > Keyboard Shortcuts."
                 ))
             case .none:
                 break

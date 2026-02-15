@@ -864,4 +864,29 @@ final class AeroSpaceConfigManagerTests: XCTestCase {
         }
     }
 
+    func testEnsureUpToDateFailsOnUnknownConfigStatus() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // Point configPath at a directory so reading as a file fails → .unknown status
+        let configDirURL = dir.appendingPathComponent(".aerospace.toml", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDirURL, withIntermediateDirectories: true)
+
+        let manager = AeroSpaceConfigManager(
+            fileManager: .default,
+            configPath: configDirURL.path,
+            backupPath: dir.appendingPathComponent(".backup").path,
+            safeConfigLoader: { "\(AeroSpaceConfigManager.managedByMarker)\n# ap-config-version: 1\n" }
+        )
+
+        XCTAssertEqual(manager.configStatus(), .unknown)
+
+        switch manager.ensureUpToDate() {
+        case .success:
+            XCTFail("Expected failure for .unknown config status")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+        }
+    }
+
 }

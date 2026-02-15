@@ -545,6 +545,39 @@ final class DoctorCoverageTests: XCTestCase {
         XCTAssertNil(outdated)
     }
 
+    func testMissingTemplateVersionFailsWhenConfigIsManaged() throws {
+        let toml = """
+        [[project]]
+        name = "Test"
+        path = "\(tempDir.path)"
+        color = "blue"
+        """
+        // Managed config exists, but template loader returns content with no version line
+        let configManager = try makeConfigManagerWithTemplate(
+            configContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            # ap-config-version: 1
+            """,
+            templateContents: """
+            \(AeroSpaceConfigManager.managedByMarker)
+            config-version = 2
+            """
+        )
+
+        let doctor = try makeDoctorForRun(
+            toml: toml,
+            allowedExecutables: ["/usr/bin/brew"],
+            runningAeroSpace: true,
+            appDiscoveryInstalled: true,
+            configManager: configManager
+        )
+        let report = doctor.run()
+
+        let templateFinding = report.findings.first { $0.title.contains("template is missing") }
+        XCTAssertNotNil(templateFinding)
+        XCTAssertEqual(templateFinding?.severity, .fail)
+    }
+
     // MARK: - Helpers
 
     private func makeConfigManager(contents: String) throws -> AeroSpaceConfigManager {

@@ -595,11 +595,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Creates a Doctor instance with the current hotkey status provider.
+    /// Creates a Doctor instance with the current hotkey status providers.
     private func makeDoctor() -> Doctor {
         Doctor(
             runningApplicationChecker: AppKitRunningApplicationChecker(),
             hotkeyStatusProvider: hotkeyManager,
+            focusCycleStatusProvider: focusCycleHotkeyManager,
             windowPositioner: AXWindowPositioner()
         )
     }

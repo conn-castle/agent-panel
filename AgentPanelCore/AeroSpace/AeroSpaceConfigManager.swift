@@ -382,8 +382,14 @@ public struct AeroSpaceConfigManager {
 
             return .success(.alreadyCurrent)
 
-        case .externalConfig, .unknown:
+        case .externalConfig:
             return .success(.skippedExternal)
+
+        case .unknown:
+            return .failure(fileSystemError(
+                "Cannot read AeroSpace config file.",
+                detail: "Check file permissions on \(configPath)."
+            ))
         }
     }
 

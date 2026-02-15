@@ -7,12 +7,14 @@ import AgentPanelCore
 ///
 /// Separate from `HotkeyManager` to isolate risk from the switcher hotkey.
 /// Registers two Carbon hotkeys and dispatches to callbacks.
-final class FocusCycleHotkeyManager {
+/// Registration is atomic: both hotkeys must succeed or both are rolled back.
+final class FocusCycleHotkeyManager: FocusCycleStatusProviding {
     private let logger: AgentPanelLogging
     private var nextHotKeyRef: EventHotKeyRef?
     private var prevHotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
     private var handlerUPP: EventHandlerUPP?
+    private(set) var registrationStatus: FocusCycleRegistrationStatus?
 
     /// Called when Option-Tab is pressed.
     var onCycleNext: (() -> Void)?
@@ -28,6 +30,7 @@ final class FocusCycleHotkeyManager {
     }
 
     /// Registers Option-Tab and Option-Shift-Tab global hotkeys.
+    /// Registration is atomic: if either hotkey fails, both are unregistered.
     func registerHotkeys() {
         unregisterAll()
 
@@ -39,11 +42,12 @@ final class FocusCycleHotkeyManager {
                 message: "Failed to install focus cycle event handler",
                 context: ["osStatus": "\(statusHandler)"]
             )
+            registrationStatus = .failed(osStatus: statusHandler)
             return
         }
 
         // Option-Tab → cycle next (ID 10)
-        nextHotKeyRef = registerSingleHotkey(
+        let nextResult = registerSingleHotkey(
             keyCode: UInt32(kVK_Tab),
             modifiers: UInt32(optionKey),
             id: nextHotkeyId,
@@ -51,12 +55,42 @@ final class FocusCycleHotkeyManager {
         )
 
         // Option-Shift-Tab → cycle previous (ID 11)
-        prevHotKeyRef = registerSingleHotkey(
+        let prevResult = registerSingleHotkey(
             keyCode: UInt32(kVK_Tab),
             modifiers: UInt32(optionKey | shiftKey),
             id: prevHotkeyId,
             label: "Option-Shift-Tab"
         )
+
+        // Atomic: both must succeed
+        switch (nextResult.ref, nextResult.status, prevResult.ref, prevResult.status) {
+        case (let nextRef?, noErr, let prevRef?, noErr):
+            nextHotKeyRef = nextRef
+            prevHotKeyRef = prevRef
+            registrationStatus = .registered
+        default:
+            // Roll back any successful registration
+            if let ref = nextResult.ref { UnregisterEventHotKey(ref) }
+            if let ref = prevResult.ref { UnregisterEventHotKey(ref) }
+            if let handler = handlerRef {
+                RemoveEventHandler(handler)
+                handlerRef = nil
+            }
+            handlerUPP = nil
+            let failedStatus = nextResult.status != noErr ? nextResult.status : prevResult.status
+            registrationStatus = .failed(osStatus: failedStatus)
+            _ = logger.log(
+                event: "focus_cycle.registration_failed",
+                level: .error,
+                message: "Focus cycle hotkey registration failed (atomic rollback)",
+                context: ["nextStatus": "\(nextResult.status)", "prevStatus": "\(prevResult.status)"]
+            )
+        }
+    }
+
+    /// Returns the current focus-cycle registration status for Doctor integration.
+    func focusCycleRegistrationStatus() -> FocusCycleRegistrationStatus? {
+        registrationStatus
     }
 
     private func registerSingleHotkey(
@@ -64,7 +98,7 @@ final class FocusCycleHotkeyManager {
         modifiers: UInt32,
         id: UInt32,
         label: String
-    ) -> EventHotKeyRef? {
+    ) -> (ref: EventHotKeyRef?, status: OSStatus) {
         let hotKeyId = EventHotKeyID(signature: hotkeySignature, id: id)
         var ref: EventHotKeyRef?
 
@@ -84,7 +118,6 @@ final class FocusCycleHotkeyManager {
                 message: "\(label) hotkey registered",
                 context: ["hotkey": label]
             )
-            return ref
         } else {
             _ = logger.log(
                 event: "focus_cycle.registration_failed",
@@ -92,8 +125,9 @@ final class FocusCycleHotkeyManager {
                 message: "\(label) hotkey registration failed",
                 context: ["hotkey": label, "osStatus": "\(status)"]
             )
-            return nil
         }
+
+        return (ref, status)
     }
 
     private func installEventHandler() -> OSStatus {
