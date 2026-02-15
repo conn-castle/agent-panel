@@ -27,22 +27,18 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-02-14 peacock-reverts: Peacock colors sometimes revert shortly after loading
-    Priority: Medium. Area: VSCode/Peacock
-    Description: Peacock extension colors are observed to load correctly but then revert back to their previous state after a few seconds. The root cause for this "undoing" of the color application is unknown.
-    Next step: Investigate AgentPanel's VSCode settings synchronization and Peacock extension behavior to identify what triggers the revert.
+- Issue 2026-02-15 space-switching: Project selection fails to switch macOS desktop spaces
+    Priority: High. Area: Window Management
+    Description: When selecting a project from the menu while on a different macOS desktop space, the application sometimes fails to switch to the correct space where the project windows are located.
+    Next step: Investigate how `ProjectManager` and `AeroSpace` handle space/workspace switching and ensure reliable focus transitions across macOS spaces.
+
+- Issue 2026-02-15 recovery-layout: Window recovery should use default layout positions
+    Priority: Medium. Area: Window Management
+    Description: `WindowRecoveryManager` (via `AXWindowPositioner.recoverWindow`) currently centers windows on screen during recovery. It should instead attempt to move windows to their default positions based on project configs or global defaults, rather than just centering them.
+    Next step: Update `WindowRecoveryManager` to accept layout configuration and apply it during recovery.
 
 - Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
     Priority: Low. Area: Testing
     Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.
     Next step: Evaluate whether an `AgentPanelAppTests` target is feasible (AppKit requires a running app host). If not, document critical app-layer paths as manual test checklist.
 
-- Issue 2026-02-15 ax-tiebreak-residual: AX window tie-break relies on undocumented enumeration ordering
-    Priority: Low. Area: Window Positioning
-    Description: Duplicate-title AX window tie-break now uses enumeration index (PID ascending + kAXWindowsAttribute order) instead of CFHash. This is empirically stable but Apple does not formally document kAXWindowsAttribute ordering. If the ordering changes between calls (e.g., due to stacking order changes), windows with identical titles could still flip.
-    Next step: If users report continued position flipping with duplicate-title windows, escalate to CGWindowID-based identity via CGWindowListCopyWindowInfo cross-referencing.
-
-- Issue 2026-02-09 al-dual-window: al vscode unconditionally appends "." to code args, causing two VS Code windows
-    Priority: Low. Area: Agent Layer/IDE
-    Description: `al vscode` in `internal/clients/vscode/launch.go` always appends `.` (CWD) to the `code` args it constructs, so `al vscode --no-sync --new-window <path>` becomes `code --new-window <path> .` → two windows. Workaround in AgentPanel: run `al sync` (CWD = project path) then `al vscode --no-sync --new-window` with CWD = project path and no positional path (so "." maps to the repo root). This preserves Agent Layer env vars like `CODEX_HOME`.
-    Next step: Fix in `conn-castle/agent-layer` (GitHub issue filed): skip appending `.` when passArgs already contains a positional arg, so path-based launches don't open two windows.

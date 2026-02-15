@@ -27,9 +27,12 @@ struct ApVSCodeSettingsManager {
 
     /// Injects or replaces the agent-panel block at the top of a JSONC settings file.
     ///
-    /// The block is inserted right after the opening `{`, with a trailing comma on the
-    /// last property line. Trailing commas are valid JSONC. If an existing agent-panel
-    /// block is found, it is replaced.
+    /// The block is inserted right after the opening `{`. If an existing agent-panel
+    /// block is found, it is replaced. When a color is configured, the block includes
+    /// a `workbench.colorCustomizations` anchor so Peacock writes its colors in-place
+    /// (inside the agent-panel block, safe from agent-layer's `al sync`). Existing
+    /// Peacock-written color customizations are preserved across re-injections.
+    /// Trailing commas are added only when content follows the block.
     ///
     /// - Parameters:
     ///   - content: Existing file content (JSONC).
@@ -53,6 +56,9 @@ struct ApVSCodeSettingsManager {
             ))
         }
 
+        // Extract existing colorCustomizations before removing the block
+        let existingColorCustomizations = Self.extractColorCustomizations(from: content)
+
         // Remove existing block if present
         let cleaned = removeExistingBlock(from: content)
 
@@ -61,35 +67,52 @@ struct ApVSCodeSettingsManager {
             return .failure(ApCoreError(message: "Cannot inject settings block: content has no opening '{'."))
         }
 
+        // Determine whether content follows the block (for trailing-comma decisions)
+        let afterBrace = cleaned.index(after: braceIndex)
+        let before = String(cleaned[cleaned.startIndex..<afterBrace])
+        let after = String(cleaned[afterBrace...])
+        let trimmedAfter = after.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasContentAfter = trimmedAfter != "}"
+
         let windowTitle = "\(ApIdeToken.prefix)\(identifier) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
+
+        // Build property lines without trailing commas
+        var properties: [String] = [
+            "  \"window.title\": \"\(windowTitle)\""
+        ]
+
+        // Add Peacock color and colorCustomizations anchor when a valid color is provided.
+        // The colorCustomizations key acts as an in-place anchor so Peacock writes its
+        // colors inside the agent-panel block (safe from agent-layer's al sync).
+        if let color, let hex = VSCodeColorPalette.peacockColorHex(for: color) {
+            properties.append("  \"peacock.color\": \"\(hex)\"")
+            let colorValue = existingColorCustomizations ?? "{}"
+            properties.append("  \"workbench.colorCustomizations\": \(colorValue)")
+        }
+
+        // Add commas: all non-last properties always get one;
+        // the last property gets one only if there is content after the block.
+        for i in 0..<properties.count {
+            let isLast = (i == properties.count - 1)
+            if !isLast || hasContentAfter {
+                properties[i] = appendCommaToLastLine(of: properties[i])
+            }
+        }
 
         var blockLines = [
             "  \(startMarker)",
             "  // Managed by AgentPanel. Do not edit this block manually.",
-            "  \"window.title\": \"\(windowTitle)\","
         ]
-
-        // Add Peacock color if a valid color is provided
-        if let color, let hex = VSCodeColorPalette.peacockColorHex(for: color) {
-            blockLines.append("  \"peacock.color\": \"\(hex)\",")
-        }
-
+        blockLines.append(contentsOf: properties)
         blockLines.append("  \(endMarker)")
 
         let block = blockLines.joined(separator: "\n")
 
-        // Insert after `{`
-        let afterBrace = cleaned.index(after: braceIndex)
-        let before = String(cleaned[cleaned.startIndex..<afterBrace])
-        let after = String(cleaned[afterBrace...])
-
-        // Check if there's content after the brace (non-whitespace before closing `}`)
-        let trimmedAfter = after.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedAfter == "}" {
-            // Empty object: insert block with newline
+        if !hasContentAfter {
+            // Block is the only content
             return .success("\(before)\n\(block)\n}")
         } else {
-            // Has content: insert block then existing content
+            // Content follows the block
             return .success("\(before)\n\(block)\n\(after.drop(while: { $0 == "\n" || $0 == "\r" }))")
         }
     }
@@ -124,6 +147,73 @@ struct ApVSCodeSettingsManager {
         }
 
         return result.joined(separator: "\n")
+    }
+
+    /// Extracts the `workbench.colorCustomizations` JSON object value from an existing
+    /// agent-panel block, preserving Peacock-written color customizations across re-injections.
+    ///
+    /// - Parameter content: Full JSONC settings file content.
+    /// - Returns: The raw JSON object text (e.g., `{}` or multi-line `{ ... }`), or `nil`
+    ///   if no `workbench.colorCustomizations` key exists within the block.
+    static func extractColorCustomizations(from content: String) -> String? {
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var blockLines: [String] = []
+        var insideBlock = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == startMarker {
+                insideBlock = true
+                continue
+            }
+            if trimmed == endMarker {
+                break
+            }
+            if insideBlock {
+                blockLines.append(line)
+            }
+        }
+
+        guard !blockLines.isEmpty else { return nil }
+
+        let blockText = blockLines.joined(separator: "\n")
+        let key = "\"workbench.colorCustomizations\""
+        guard let keyRange = blockText.range(of: key) else { return nil }
+
+        // Find the colon after the key, then the opening brace of the JSON object value
+        let afterKey = blockText[keyRange.upperBound...]
+        guard let colonIndex = afterKey.firstIndex(of: ":") else { return nil }
+        let afterColon = blockText[blockText.index(after: colonIndex)...]
+        guard let openBrace = afterColon.firstIndex(of: "{") else { return nil }
+
+        // Match braces to find the corresponding closing }
+        var depth = 0
+        for index in blockText[openBrace...].indices {
+            let char = blockText[index]
+            if char == "{" { depth += 1 }
+            if char == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return String(blockText[openBrace...index])
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Appends a comma after the last line of a potentially multi-line property string.
+    ///
+    /// For single-line properties this simply appends `,`. For multi-line values
+    /// (e.g., `workbench.colorCustomizations` with Peacock content) the comma is
+    /// placed after the closing `}` on the final line.
+    private static func appendCommaToLastLine(of text: String) -> String {
+        if let lastNewline = text.lastIndex(of: "\n") {
+            let prefix = text[text.startIndex...lastNewline]
+            let lastLine = text[text.index(after: lastNewline)...]
+            return "\(prefix)\(lastLine),"
+        }
+        return "\(text),"
     }
 
     // MARK: - Local settings.json write

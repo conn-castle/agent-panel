@@ -66,7 +66,7 @@ final class VSCodeColorPaletteTests: XCTestCase {
         XCTAssertTrue(result.contains("// <<< agent-panel"))
         XCTAssertTrue(result.contains("\"window.title\": \"AP:my-proj"))
         XCTAssertTrue(result.contains("\"peacock.color\": \"#0000FF\""))
-        XCTAssertFalse(result.contains("workbench.colorCustomizations"))
+        XCTAssertTrue(result.contains("\"workbench.colorCustomizations\": {}"))
     }
 
     func testInjectBlockWithNilColorOmitsPeacockColor() throws {
