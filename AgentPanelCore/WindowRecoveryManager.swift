@@ -102,17 +102,19 @@ public final class WindowRecoveryManager {
         // Layout-aware phase for project workspaces
         var layoutRecovered = 0
         var layoutErrors: [String] = []
-        var layoutHandledBundleIds: Set<String> = []
+        var layoutHandledWindowIds: Set<Int> = []
 
         if let projectId = projectId(fromWorkspace: workspace), screenModeDetector != nil {
             let layoutResult = recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
             layoutRecovered = layoutResult.recovered
             layoutErrors = layoutResult.errors
-            layoutHandledBundleIds = layoutResult.handledBundleIds
+            layoutHandledWindowIds = layoutResult.handledWindowIds
         }
 
-        // Generic per-window recovery (shrink/center), skipping windows already handled by layout phase
-        let genericWindows = windows.filter { !layoutHandledBundleIds.contains($0.appBundleId) }
+        // Generic per-window recovery (shrink/center), skipping windows already handled by layout phase.
+        // Uses window-level IDs (not bundle IDs) so that non-token windows of the same bundle
+        // (e.g., extra VS Code windows without AP:<projectId>) still get generic recovery.
+        let genericWindows = windows.filter { !layoutHandledWindowIds.contains($0.windowId) }
         let genericResult = recoverWindows(genericWindows)
 
         // Merge counts: processed = all workspace windows, recovered = layout + generic (no overlap)
@@ -307,16 +309,18 @@ public final class WindowRecoveryManager {
     /// and applies them to IDE and Chrome windows via `setWindowFrames`.
     ///
     /// Only targets bundle IDs that have at least one window in the workspace (workspace-scoped).
-    /// Returns the set of bundle IDs that were handled so the caller can skip them in generic recovery.
+    /// Returns the set of window IDs (AeroSpace) that were handled so the caller can skip them
+    /// in generic recovery. Uses token matching (`AP:<projectId>`) to identify handled windows,
+    /// ensuring non-token windows of the same bundle still get generic recovery.
     ///
     /// - Parameters:
     ///   - projectId: The project identifier derived from the workspace name.
     ///   - workspaceWindows: Windows currently in the target workspace (from AeroSpace).
-    /// - Returns: Count of windows positioned, non-fatal errors, and set of handled bundle IDs.
+    /// - Returns: Count of windows positioned, non-fatal errors, and set of handled window IDs.
     private func recoverProjectWorkspaceLayout(
         projectId: String,
         workspaceWindows: [ApWindow]
-    ) -> (recovered: Int, errors: [String], handledBundleIds: Set<String>) {
+    ) -> (recovered: Int, errors: [String], handledWindowIds: Set<Int>) {
         guard let detector = screenModeDetector else { return (0, [], []) }
 
         var errors: [String] = []
@@ -364,10 +368,17 @@ public final class WindowRecoveryManager {
         // Compute cascade offset: 0.5 inches * (screen points / screen inches)
         let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
 
+        let token = "\(ApIdeToken.prefix)\(projectId)"
         var recovered = 0
-        var handledBundleIds: Set<String> = []
+        var handledWindowIds: Set<Int> = []
 
         for target in layoutTargets {
+            // Identify workspace windows that match this target's bundle AND have the project token.
+            // These are the windows setWindowFrames will position via AX.
+            let tokenMatchingWindows = workspaceWindows.filter {
+                $0.appBundleId == target.bundleId && $0.windowTitle.contains(token)
+            }
+
             switch windowPositioner.setWindowFrames(
                 bundleId: target.bundleId,
                 projectId: projectId,
@@ -375,8 +386,13 @@ public final class WindowRecoveryManager {
                 cascadeOffsetPoints: cascadeOffsetPoints
             ) {
             case .success(let result):
-                recovered += result.positioned
-                handledBundleIds.insert(target.bundleId)
+                // Cap recovered count at workspace-scoped matches (setWindowFrames may also
+                // position same-token windows outside this workspace via AX, but we only
+                // account for the ones in our workspace).
+                recovered += min(result.positioned, tokenMatchingWindows.count)
+                for w in tokenMatchingWindows {
+                    handledWindowIds.insert(w.windowId)
+                }
                 logEvent("recover_layout.\(target.label.lowercased())_positioned", context: [
                     "positioned": "\(result.positioned)", "matched": "\(result.matched)"
                 ])
@@ -386,7 +402,7 @@ public final class WindowRecoveryManager {
             }
         }
 
-        return (recovered, errors, handledBundleIds)
+        return (recovered, errors, handledWindowIds)
     }
 
     private func logEvent(

@@ -719,6 +719,45 @@ final class WindowRecoveryManagerTests: XCTestCase {
                       "Width failure should surface a warning: \(recovery.errors)")
     }
 
+    func testRecoverWorkspace_projectWorkspace_nonTokenWindowGetsGenericRecovery() {
+        let aerospace = StubAeroSpace()
+        let projectId = "myproj"
+        let workspace = "ap-\(projectId)"
+
+        // Token-matching VS Code window → handled by layout phase
+        let tokenWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                     title: "AP:\(projectId) - VS Code")
+        // Same bundle but NO token (e.g., manually added) → should get generic recovery
+        let extraWindow = makeWindow(id: 2, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                     title: "Untitled - Visual Studio Code")
+        aerospace.windowsByWorkspace[workspace] = .success([tokenWindow, extraWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Layout phase should have called setWindowFrames for VS Code (token window)
+        let setBundleIds = positioner.setFrameCalls.map { $0.bundleId }
+        XCTAssertTrue(setBundleIds.contains("com.microsoft.VSCode"),
+                      "Layout phase should position token-matching VS Code window")
+
+        // Generic recovery should run for the extra (non-token) VS Code window
+        let genericBundleIds = positioner.recoverCalls.map { $0.bundleId }
+        XCTAssertEqual(genericBundleIds, ["com.microsoft.VSCode"],
+                       "Non-token VS Code window should get generic recovery")
+
+        // Both windows processed
+        XCTAssertEqual(recovery.windowsProcessed, 2)
+    }
+
     func testRecoverAll_doesNotUseLayoutPhase() {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: "ap-proj",

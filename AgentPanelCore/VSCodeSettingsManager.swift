@@ -117,36 +117,37 @@ struct ApVSCodeSettingsManager {
         }
     }
 
+    /// Finds the line indices of the agent-panel block markers within an array of lines.
+    ///
+    /// - Parameter lines: Lines of the settings file.
+    /// - Returns: A tuple of `(startMarker, endMarker)` line indices, or `nil` if markers
+    ///   are missing or in the wrong order.
+    private static func findBlockMarkers(in lines: [String]) -> (startMarker: Int, endMarker: Int)? {
+        guard let startIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == startMarker }),
+              let endIndex = lines[lines.index(after: startIndex)...].firstIndex(where: {
+                  $0.trimmingCharacters(in: .whitespaces) == endMarker
+              }),
+              endIndex > startIndex else {
+            return nil
+        }
+        return (startIndex, endIndex)
+    }
+
     /// Removes an existing agent-panel block (markers + content between them) from the content.
     ///
     /// If the start marker exists but the end marker is missing (unbalanced markers),
     /// returns the content unchanged to prevent data loss.
     private static func removeExistingBlock(from content: String) -> String {
-        // Guard: only remove if both markers are present (balanced)
         let hasStart = content.contains(startMarker)
         let hasEnd = content.contains(endMarker)
         guard hasStart && hasEnd else { return content }
 
         let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        var result: [String] = []
-        var insideBlock = false
+        guard let markers = findBlockMarkers(in: lines) else { return content }
 
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed == startMarker {
-                insideBlock = true
-                continue
-            }
-            if trimmed == endMarker {
-                insideBlock = false
-                continue
-            }
-            if !insideBlock {
-                result.append(line)
-            }
-        }
-
-        return result.joined(separator: "\n")
+        let before = Array(lines[..<markers.startMarker])
+        let after = Array(lines[lines.index(after: markers.endMarker)...])
+        return (before + after).joined(separator: "\n")
     }
 
     /// Extracts the `workbench.colorCustomizations` JSON object value from an existing
@@ -157,24 +158,12 @@ struct ApVSCodeSettingsManager {
     ///   if no `workbench.colorCustomizations` key exists within the block.
     static func extractColorCustomizations(from content: String) -> String? {
         let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        var blockLines: [String] = []
-        var insideBlock = false
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed == startMarker {
-                insideBlock = true
-                continue
-            }
-            if trimmed == endMarker {
-                break
-            }
-            if insideBlock {
-                blockLines.append(line)
-            }
+        guard let markers = findBlockMarkers(in: lines),
+              markers.endMarker > markers.startMarker + 1 else {
+            return nil
         }
 
-        guard !blockLines.isEmpty else { return nil }
+        let blockLines = Array(lines[(markers.startMarker + 1)..<markers.endMarker])
 
         let blockText = blockLines.joined(separator: "\n")
         let key = "\"workbench.colorCustomizations\""
