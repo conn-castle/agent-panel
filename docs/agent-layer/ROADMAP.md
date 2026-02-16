@@ -100,26 +100,7 @@ Incomplete:
 - AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
 - UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
 
-## Phase 8 — Extra non-required features
-
-### Goal
-- Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
-
-### Tasks
-- [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
-- [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
-- [ ] Fuzzy search with ranking in the switcher.
-- [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
-- [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
-
-### Exit criteria
-- `make test` and `make coverage` work correctly; CI uses `make coverage` as its gate.
-- Optional UX features are implemented without regressing required daily-driver workflows.
-- AeroSpace icon visibility can be configured without disabling functional behavior.
-- Behavior and limitations are documented where needed.
-- New behavior is covered by tests.
-
-## Phase 9 — Release: packaging, verification, and documentation
+## Phase 8 — Release: packaging, verification, and documentation
 
 ### Goal
 - Ship a release-quality build with deterministic install/upgrade and scripted release steps.
@@ -138,7 +119,26 @@ Incomplete:
 - A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
 - CI is green and a release checklist exists.
 
-## Phase 10 — Future post-release features
+## Phase 9 — Extra non-required features
+
+### Goal
+- Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
+
+### Tasks
+- [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
+- [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
+- [ ] Fuzzy search with ranking in the switcher.
+- [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
+- [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
+
+### Exit criteria
+- `make test` and `make coverage` work correctly; CI uses `make coverage` as its gate.
+- Optional UX features are implemented without regressing required daily-driver workflows.
+- AeroSpace icon visibility can be configured without disabling functional behavior.
+- Behavior and limitations are documented where needed.
+- New behavior is covered by tests.
+
+## Phase 10 — Future features
 
 ### Goal
 - Track larger post-release product features that are intentionally deferred until after release.

@@ -18,6 +18,9 @@ public struct RecoveryResult: Equatable, Sendable {
 
 /// Handles window recovery operations: shrink oversized windows and center them on screen.
 ///
+/// For project workspaces (`ap-<projectId>`), an optional layout-aware recovery phase
+/// repositions IDE and Chrome windows using computed canonical layout before generic recovery.
+///
 /// Thread Safety: Not thread-safe. Call from a single queue (typically a background queue
 /// dispatched from the App layer). AeroSpace CLI calls and AX operations may block.
 public final class WindowRecoveryManager {
@@ -25,6 +28,8 @@ public final class WindowRecoveryManager {
     private let windowPositioner: WindowPositioning
     private let screenVisibleFrame: CGRect
     private let logger: AgentPanelLogging
+    private let screenModeDetector: ScreenModeDetecting?
+    private let layoutConfig: LayoutConfig
 
     /// Creates a WindowRecoveryManager with production defaults for AeroSpace.
     /// - Parameters:
@@ -32,16 +37,22 @@ public final class WindowRecoveryManager {
     ///   - screenVisibleFrame: The screen's visible frame (minus dock/menu bar) to clamp within.
     ///   - logger: Logger for structured event logging.
     ///   - processChecker: Process checker for AeroSpace auto-recovery. Pass nil to disable.
+    ///   - screenModeDetector: Screen mode detector for layout-aware recovery. Pass nil to disable layout phase.
+    ///   - layoutConfig: Layout configuration for computing canonical positions. Defaults to `LayoutConfig()`.
     public init(
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
         logger: AgentPanelLogging,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        screenModeDetector: ScreenModeDetecting? = nil,
+        layoutConfig: LayoutConfig = LayoutConfig()
     ) {
         self.aerospace = ApAeroSpace(processChecker: processChecker)
         self.windowPositioner = windowPositioner
         self.screenVisibleFrame = screenVisibleFrame
         self.logger = logger
+        self.screenModeDetector = screenModeDetector
+        self.layoutConfig = layoutConfig
     }
 
     /// Creates a WindowRecoveryManager with injected dependencies (for testing).
@@ -49,15 +60,23 @@ public final class WindowRecoveryManager {
         aerospace: AeroSpaceProviding,
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
-        logger: AgentPanelLogging
+        logger: AgentPanelLogging,
+        screenModeDetector: ScreenModeDetecting? = nil,
+        layoutConfig: LayoutConfig = LayoutConfig()
     ) {
         self.aerospace = aerospace
         self.windowPositioner = windowPositioner
         self.screenVisibleFrame = screenVisibleFrame
         self.logger = logger
+        self.screenModeDetector = screenModeDetector
+        self.layoutConfig = layoutConfig
     }
 
-    /// Recovers all windows in the given workspace by shrinking oversized windows and centering them.
+    /// Recovers all windows in the given workspace.
+    ///
+    /// For project workspaces (`ap-<projectId>`), runs a layout-aware phase first that
+    /// repositions IDE and Chrome windows to computed canonical positions. Then runs
+    /// generic per-window recovery (shrink/center) for all windows.
     ///
     /// Focuses each window via AeroSpace before recovery to disambiguate duplicate titles.
     /// Re-focuses the originally focused window at the end.
@@ -80,7 +99,30 @@ public final class WindowRecoveryManager {
             return .failure(error)
         }
 
-        let result = recoverWindows(windows)
+        // Layout-aware phase for project workspaces
+        var layoutRecovered = 0
+        var layoutErrors: [String] = []
+        var layoutHandledBundleIds: Set<String> = []
+
+        if let projectId = projectId(fromWorkspace: workspace), screenModeDetector != nil {
+            let layoutResult = recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
+            layoutRecovered = layoutResult.recovered
+            layoutErrors = layoutResult.errors
+            layoutHandledBundleIds = layoutResult.handledBundleIds
+        }
+
+        // Generic per-window recovery (shrink/center), skipping windows already handled by layout phase
+        let genericWindows = windows.filter { !layoutHandledBundleIds.contains($0.appBundleId) }
+        let genericResult = recoverWindows(genericWindows)
+
+        // Merge counts: processed = all workspace windows, recovered = layout + generic (no overlap)
+        let totalRecovered = layoutRecovered + genericResult.windowsRecovered
+        let totalErrors = layoutErrors + genericResult.errors
+        let result = RecoveryResult(
+            windowsProcessed: windows.count,
+            windowsRecovered: totalRecovered,
+            errors: totalErrors
+        )
 
         // Restore focus to original window
         if let originalFocus {
@@ -248,6 +290,103 @@ public final class WindowRecoveryManager {
             windowsRecovered: recovered,
             errors: errors
         )
+    }
+
+    // MARK: - Layout-Aware Recovery
+
+    private static let workspacePrefix = "ap-"
+
+    /// Extracts project ID from an `ap-<projectId>` workspace name, or nil for non-project workspaces.
+    private func projectId(fromWorkspace workspace: String) -> String? {
+        guard workspace.hasPrefix(Self.workspacePrefix) else { return nil }
+        let id = String(workspace.dropFirst(Self.workspacePrefix.count))
+        return id.isEmpty ? nil : id
+    }
+
+    /// Runs layout-aware recovery for a project workspace: computes canonical layout positions
+    /// and applies them to IDE and Chrome windows via `setWindowFrames`.
+    ///
+    /// Only targets bundle IDs that have at least one window in the workspace (workspace-scoped).
+    /// Returns the set of bundle IDs that were handled so the caller can skip them in generic recovery.
+    ///
+    /// - Parameters:
+    ///   - projectId: The project identifier derived from the workspace name.
+    ///   - workspaceWindows: Windows currently in the target workspace (from AeroSpace).
+    /// - Returns: Count of windows positioned, non-fatal errors, and set of handled bundle IDs.
+    private func recoverProjectWorkspaceLayout(
+        projectId: String,
+        workspaceWindows: [ApWindow]
+    ) -> (recovered: Int, errors: [String], handledBundleIds: Set<String>) {
+        guard let detector = screenModeDetector else { return (0, [], []) }
+
+        var errors: [String] = []
+
+        // Determine which layout-eligible bundle IDs are present in the workspace
+        let workspaceBundleIds = Set(workspaceWindows.map { $0.appBundleId })
+        let layoutTargets: [(bundleId: String, frameKeyPath: KeyPath<WindowLayout, CGRect>, label: String)] = [
+            (ApVSCodeLauncher.bundleId, \.ideFrame, "IDE"),
+            (ApChromeLauncher.bundleId, \.chromeFrame, "Chrome"),
+        ].filter { workspaceBundleIds.contains($0.bundleId) }
+
+        guard !layoutTargets.isEmpty else { return (0, [], []) }
+
+        // Detect screen mode using center of screen visible frame
+        let centerPoint = CGPoint(x: screenVisibleFrame.midX, y: screenVisibleFrame.midY)
+
+        let screenMode: ScreenMode
+        switch detector.detectMode(containingPoint: centerPoint, threshold: layoutConfig.smallScreenThreshold) {
+        case .success(let mode):
+            screenMode = mode
+        case .failure(let error):
+            logEvent("recover_layout.screen_mode_failed", level: .warn, message: error.message)
+            errors.append("Recovery screen mode detection failed (\(error.message)); using wide fallback")
+            screenMode = .wide
+        }
+
+        let physicalWidth: Double
+        switch detector.physicalWidthInches(containingPoint: centerPoint) {
+        case .success(let width):
+            physicalWidth = width
+        case .failure(let error):
+            logEvent("recover_layout.physical_width_failed", level: .warn, message: error.message)
+            errors.append("Recovery physical width detection failed (\(error.message)); using 32\" fallback")
+            physicalWidth = 32.0
+        }
+
+        // Compute canonical layout (ignores saved positions — recovery converges to known-good baseline)
+        let targetLayout = WindowLayoutEngine.computeLayout(
+            screenVisibleFrame: screenVisibleFrame,
+            screenPhysicalWidthInches: physicalWidth,
+            screenMode: screenMode,
+            config: layoutConfig
+        )
+
+        // Compute cascade offset: 0.5 inches * (screen points / screen inches)
+        let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
+
+        var recovered = 0
+        var handledBundleIds: Set<String> = []
+
+        for target in layoutTargets {
+            switch windowPositioner.setWindowFrames(
+                bundleId: target.bundleId,
+                projectId: projectId,
+                primaryFrame: targetLayout[keyPath: target.frameKeyPath],
+                cascadeOffsetPoints: cascadeOffsetPoints
+            ) {
+            case .success(let result):
+                recovered += result.positioned
+                handledBundleIds.insert(target.bundleId)
+                logEvent("recover_layout.\(target.label.lowercased())_positioned", context: [
+                    "positioned": "\(result.positioned)", "matched": "\(result.matched)"
+                ])
+            case .failure(let error):
+                logEvent("recover_layout.\(target.label.lowercased())_failed", level: .warn, message: error.message)
+                errors.append("Recovery \(target.label) positioning failed: \(error.message)")
+            }
+        }
+
+        return (recovered, errors, handledBundleIds)
     }
 
     private func logEvent(

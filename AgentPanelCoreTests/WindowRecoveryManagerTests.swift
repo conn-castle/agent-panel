@@ -69,6 +69,9 @@ final class WindowRecoveryManagerTests: XCTestCase {
         var recoverCalls: [(bundleId: String, windowTitle: String, screenFrame: CGRect)] = []
         var recoverResults: [String: Result<RecoveryOutcome, ApCoreError>] = [:] // keyed by windowTitle
         var defaultRecoverResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
+        var setFrameCalls: [(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffset: CGFloat)] = []
+        var setFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:] // keyed by bundleId
+        var defaultSetFrameResult: Result<WindowPositionResult, ApCoreError> = .success(WindowPositionResult(positioned: 1, matched: 1))
 
         func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
             recoverCalls.append((bundleId, windowTitle, screenVisibleFrame))
@@ -80,11 +83,22 @@ final class WindowRecoveryManagerTests: XCTestCase {
         }
 
         func setWindowFrames(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
-            .success(WindowPositionResult(positioned: 0, matched: 0))
+            setFrameCalls.append((bundleId, projectId, primaryFrame, cascadeOffsetPoints))
+            return setFrameResults[bundleId] ?? defaultSetFrameResult
         }
 
         func isAccessibilityTrusted() -> Bool { true }
         func promptForAccessibility() -> Bool { true }
+    }
+
+    private struct StubScreenModeDetector: ScreenModeDetecting {
+        var mode: Result<ScreenMode, ApCoreError> = .success(.wide)
+        var physicalWidth: Result<Double, ApCoreError> = .success(27.0)
+        var visibleFrame: CGRect? = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+
+        func detectMode(containingPoint: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError> { mode }
+        func physicalWidthInches(containingPoint: CGPoint) -> Result<Double, ApCoreError> { physicalWidth }
+        func screenVisibleFrame(containingPoint: CGPoint) -> CGRect? { visibleFrame }
     }
 
     // MARK: - Helpers
@@ -93,13 +107,17 @@ final class WindowRecoveryManagerTests: XCTestCase {
 
     private func makeManager(
         aerospace: StubAeroSpace = StubAeroSpace(),
-        positioner: StubWindowPositioner = StubWindowPositioner()
+        positioner: StubWindowPositioner = StubWindowPositioner(),
+        screenModeDetector: ScreenModeDetecting? = nil,
+        layoutConfig: LayoutConfig = LayoutConfig()
     ) -> WindowRecoveryManager {
         WindowRecoveryManager(
             aerospace: aerospace,
             windowPositioner: positioner,
             screenVisibleFrame: screenFrame,
-            logger: NoopLogger()
+            logger: NoopLogger(),
+            screenModeDetector: screenModeDetector,
+            layoutConfig: layoutConfig
         )
     }
 
@@ -524,5 +542,200 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertTrue(aerospace.focusWindowCalls.contains(10))
         XCTAssertTrue(aerospace.focusWindowCalls.contains(20))
         XCTAssertEqual(positioner.recoverCalls.count, 2)
+    }
+
+    // MARK: - Layout-aware Recovery Tests
+
+    func testRecoverWorkspace_projectWorkspace_appliesLayoutForIDEAndChrome() {
+        let aerospace = StubAeroSpace()
+        let projectId = "myproj"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        let chromeWindow = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                      title: "AP:\(projectId) - Chrome")
+        let otherWindow = makeWindow(id: 3, bundleId: "com.other.App", workspace: workspace,
+                                     title: "Other App")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow, chromeWindow, otherWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Layout phase should have called setWindowFrames for VS Code and Chrome
+        let setBundleIds = positioner.setFrameCalls.map { $0.bundleId }
+        XCTAssertTrue(setBundleIds.contains("com.microsoft.VSCode"),
+                      "Layout phase should position VS Code windows")
+        XCTAssertTrue(setBundleIds.contains("com.google.Chrome"),
+                      "Layout phase should position Chrome windows")
+
+        // All setWindowFrames calls should use the correct projectId
+        XCTAssertTrue(positioner.setFrameCalls.allSatisfy { $0.projectId == projectId },
+                      "All layout calls should use derived projectId")
+
+        // Generic recovery should only run for non-layout windows (the "other" app)
+        let genericBundleIds = positioner.recoverCalls.map { $0.bundleId }
+        XCTAssertEqual(genericBundleIds, ["com.other.App"],
+                      "Generic recovery should skip IDE/Chrome (handled by layout)")
+
+        // Processed = all workspace windows, recovered = layout (2 default) + generic (0 unchanged)
+        XCTAssertEqual(recovery.windowsProcessed, 3)
+        XCTAssertEqual(recovery.windowsRecovered, 2, "Layout phase positioned 2 windows (default stub result)")
+    }
+
+    func testRecoverWorkspace_projectWorkspace_onlyTargetsBundleIdsInWorkspace() {
+        let aerospace = StubAeroSpace()
+        let workspace = "ap-proj"
+
+        // Only an IDE window in the workspace — no Chrome window
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:proj - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        // Layout should only call setWindowFrames for VS Code (present in workspace), not Chrome
+        let setBundleIds = positioner.setFrameCalls.map { $0.bundleId }
+        XCTAssertEqual(setBundleIds, ["com.microsoft.VSCode"],
+                      "Layout phase should only target bundle IDs present in the workspace")
+        XCTAssertFalse(setBundleIds.contains("com.google.Chrome"),
+                       "Chrome is not in workspace — should not be targeted")
+    }
+
+    func testRecoverWorkspace_projectWorkspace_noLayoutApps_skipsLayoutPhase() {
+        let aerospace = StubAeroSpace()
+        let workspace = "ap-proj"
+
+        // Only a non-IDE/Chrome app in the workspace
+        let otherWindow = makeWindow(id: 1, bundleId: "com.other.App", workspace: workspace,
+                                     title: "Other App")
+        aerospace.windowsByWorkspace[workspace] = .success([otherWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // No setWindowFrames calls — no layout-eligible apps
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty,
+                      "No IDE/Chrome in workspace — layout phase should be skipped")
+        // Generic recovery should run for the other app
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(recovery.windowsProcessed, 1)
+    }
+
+    func testRecoverWorkspace_projectWorkspace_noDetector_skipsLayoutPhase() {
+        let aerospace = StubAeroSpace()
+        let workspace = "ap-proj"
+        let window = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                title: "AP:proj - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([window])
+
+        let positioner = StubWindowPositioner()
+        // No screenModeDetector — layout phase should be skipped
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        // No setWindowFrames calls — layout phase skipped
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty,
+                      "Without detector, layout phase should be skipped")
+        // Generic recovery should still run
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+    }
+
+    func testRecoverWorkspace_nonProjectWorkspace_skipsLayoutPhase() {
+        let aerospace = StubAeroSpace()
+        let workspace = "main"
+        let window = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                title: "VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([window])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        // No setWindowFrames calls — non-project workspace
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty,
+                      "Non-project workspace should not trigger layout phase")
+        // Generic recovery runs
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+    }
+
+    func testRecoverWorkspace_detectorFailure_usesWideFallbackAndWarns() {
+        let aerospace = StubAeroSpace()
+        let workspace = "ap-proj"
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:proj - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow])
+
+        let positioner = StubWindowPositioner()
+        var detector = StubScreenModeDetector()
+        detector.mode = .failure(ApCoreError(category: .system, message: "EDID broken"))
+        detector.physicalWidth = .failure(ApCoreError(category: .system, message: "width unknown"))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Layout should still run (with fallback values)
+        XCTAssertFalse(positioner.setFrameCalls.isEmpty,
+                       "Layout phase should still run with fallback values")
+
+        // Warnings about detection failures should be surfaced
+        XCTAssertTrue(recovery.errors.contains { $0.contains("screen mode") || $0.contains("EDID") },
+                      "Detection failure should surface a warning: \(recovery.errors)")
+        XCTAssertTrue(recovery.errors.contains { $0.contains("physical width") || $0.contains("width") },
+                      "Width failure should surface a warning: \(recovery.errors)")
+    }
+
+    func testRecoverAll_doesNotUseLayoutPhase() {
+        let aerospace = StubAeroSpace()
+        let w1 = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: "ap-proj",
+                            title: "AP:proj - VS Code")
+        setupWorkspaceWindows(aerospace, windows: [w1])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        _ = manager.recoverAllWindows { _, _ in }
+
+        // recoverAllWindows should NOT use layout phase
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty,
+                      "recoverAllWindows must not use layout phase")
+        // Generic recovery should run
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
     }
 }

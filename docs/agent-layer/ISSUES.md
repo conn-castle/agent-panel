@@ -27,16 +27,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-02-15 space-switching: Project selection fails to switch macOS desktop spaces
-    Priority: High. Area: Window Management
-    Description: When selecting a project from the menu while on a different macOS desktop space, the application sometimes fails to switch to the correct space where the project windows are located.
-    Next step: Investigate how `ProjectManager` and `AeroSpace` handle space/workspace switching and ensure reliable focus transitions across macOS spaces.
-
-- Issue 2026-02-15 recovery-layout: Window recovery should use default layout positions
-    Priority: Medium. Area: Window Management
-    Description: `WindowRecoveryManager` (via `AXWindowPositioner.recoverWindow`) currently centers windows on screen during recovery. It should instead attempt to move windows to their default positions based on project configs or global defaults, rather than just centering them.
-    Next step: Update `WindowRecoveryManager` to accept layout configuration and apply it during recovery.
-
 - Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
     Priority: Low. Area: Testing
     Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.

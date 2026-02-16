@@ -120,3 +120,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: When a project has a color, the agent-panel settings.json block now includes `"workbench.colorCustomizations": {}` as an anchor. On re-injection, existing Peacock-written content inside that object is extracted and preserved. Trailing commas are added only when content follows the block (not when the block is the last element in the JSON).
     Reason: Peacock writes `workbench.colorCustomizations` via VS Code's config API, which appends the key after the last JSON property. If the last property is inside the `// >>> agent-layer` block, Peacock's colors land there and get stripped when `al sync` runs. The anchor ensures Peacock writes in-place inside the agent-panel block (safe from agent-layer).
     Tradeoffs: Settings.json blocks with color now have 3 properties instead of 2. Brace-depth parsing for extraction is basic (no string-aware escaping) but sufficient since Peacock only writes hex color values.
+
+- Decision 2026-02-15 dualsignal: Workspace focus verification uses dual-signal check
+    Decision: `ensureWorkspaceFocused` now calls `focusWorkspace` (summon-workspace) before accepting verification, and verifies with two signals: `listWorkspacesWithFocus` reports target focused AND `focusedWindow().workspace` equals the target. Previously, `listWorkspacesWithFocus` alone could return true without summoning the workspace to the current monitor.
+    Reason: AeroSpace can report a workspace as "focused" in its model while the workspace is on a different macOS desktop space. The single-signal check could skip the summon path, leaving the user on the wrong space.
+    Tradeoffs: `focusWorkspace` is always called at least once per activation (even if already on the correct workspace). This is a no-op in practice and adds negligible latency (<50ms). The `focusedWindow()` call adds one extra AeroSpace CLI invocation per poll iteration.
+
+- Decision 2026-02-15 recoverylayout: Window recovery uses computed layout, not saved positions
+    Decision: `recoverWorkspaceWindows` applies layout-aware positioning for project workspaces (`ap-<projectId>`) using `WindowLayoutEngine.computeLayout()` with current config. Saved positions from `WindowPositionStore` are deliberately ignored during recovery.
+    Reason: Recovery is a "repair to known-good baseline" operation. Saved positions can be stale, misaligned, or the cause of the problem being recovered from. Computed layout from config provides a deterministic, canonical baseline.
+    Tradeoffs: Users who had manually positioned windows and then recover will get the computed default layout, not their custom positions. This is the intended behavior — recovery is a reset, not a restore.

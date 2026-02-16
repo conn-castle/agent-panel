@@ -160,8 +160,10 @@ public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces.
     public static let workspacePrefix = "ap-"
 
-    private static let windowPollTimeout: TimeInterval = 10.0
-    private static let windowPollInterval: TimeInterval = 0.1
+    private static let defaultWindowPollTimeout: TimeInterval = 10.0
+    private static let defaultWindowPollInterval: TimeInterval = 0.1
+    private let windowPollTimeout: TimeInterval
+    private let windowPollInterval: TimeInterval
     private static let maxRecentProjects = 100
 
     // Config
@@ -264,6 +266,8 @@ public final class ProjectManager {
         self.recencyFilePath = dataPaths.recentProjectsFile
         self.configLoader = { Config.loadDefault() }
         self.fileSystem = DefaultFileSystem()
+        self.windowPollTimeout = Self.defaultWindowPollTimeout
+        self.windowPollInterval = Self.defaultWindowPollInterval
 
         loadRecency()
     }
@@ -283,7 +287,9 @@ public final class ProjectManager {
         fileSystem: FileSystem = DefaultFileSystem(),
         windowPositioner: WindowPositioning? = nil,
         windowPositionStore: WindowPositionStoring? = nil,
-        screenModeDetector: ScreenModeDetecting? = nil
+        screenModeDetector: ScreenModeDetecting? = nil,
+        windowPollTimeout: TimeInterval = defaultWindowPollTimeout,
+        windowPollInterval: TimeInterval = defaultWindowPollInterval
     ) {
         self.aerospace = aerospace
         self.ideLauncher = ideLauncher
@@ -299,11 +305,21 @@ public final class ProjectManager {
         self.recencyFilePath = recencyFilePath
         self.configLoader = configLoader
         self.fileSystem = fileSystem
+        self.windowPollTimeout = windowPollTimeout
+        self.windowPollInterval = windowPollInterval
 
         loadRecency()
     }
 
     // MARK: - Configuration
+
+    /// Returns the current layout config from the last config load, or defaults if not loaded.
+    ///
+    /// Use this when you need to read layout config without triggering a config load
+    /// (which would mutate shared state on failure).
+    public var currentLayoutConfig: LayoutConfig {
+        config?.layout ?? LayoutConfig()
+    }
 
     /// Sets config directly for testing (internal; accessible via @testable import).
     func loadTestConfig(_ config: Config) {
@@ -893,26 +909,36 @@ public final class ProjectManager {
         return String(workspace.dropFirst(Self.workspacePrefix.count))
     }
 
-    /// Polls until the target workspace is confirmed focused.
+    /// Polls until the target workspace is confirmed focused via dual-signal verification.
     ///
-    /// Matches the shell script's `ensure_workspace_focused`: repeatedly calls
-    /// `summon-workspace`/`workspace` and verifies via `list-workspaces --focused`
-    /// until the target workspace is reported, with a bounded timeout.
+    /// Always calls `focusWorkspace` (summon-workspace) before accepting verification,
+    /// ensuring the workspace is pulled to the current monitor/desktop space.
+    /// Verification requires both:
+    /// - `listWorkspacesWithFocus` reporting the target workspace as focused, and
+    /// - `focusedWindow().workspace` matching the target workspace.
     private func ensureWorkspaceFocused(name: String) async -> Bool {
-        let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
+        let deadline = Date().addingTimeInterval(windowPollTimeout)
 
         while Date() < deadline {
-            // Check if already focused
-            if case .success(let workspaces) = aerospace.listWorkspacesWithFocus(),
-               workspaces.contains(where: { $0.workspace == name && $0.isFocused }) {
+            // Always attempt focus first (summon-workspace pulls workspace to current monitor)
+            _ = aerospace.focusWorkspace(name: name)
+
+            // Dual-signal verification:
+            // Signal 1: workspace summary reports target as focused
+            guard case .success(let workspaces) = aerospace.listWorkspacesWithFocus(),
+                  workspaces.contains(where: { $0.workspace == name && $0.isFocused }) else {
+                try? await Task.sleep(nanoseconds: UInt64(windowPollInterval * 1_000_000_000))
+                continue
+            }
+
+            // Signal 2: focused window is in the target workspace
+            if case .success(let focusedWin) = aerospace.focusedWindow(),
+               focusedWin.workspace == name {
                 logEvent("focus.workspace.verified", context: ["workspace": name])
                 return true
             }
 
-            // Attempt to focus (summon-workspace with fallback to workspace)
-            _ = aerospace.focusWorkspace(name: name)
-
-            try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(windowPollInterval * 1_000_000_000))
         }
 
         return false
@@ -933,13 +959,13 @@ public final class ProjectManager {
         projectId: String,
         windowLabel: String
     ) async -> Result<ApWindow, ProjectError> {
-        let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
+        let deadline = Date().addingTimeInterval(windowPollTimeout)
 
         while Date() < deadline {
             if let window = findWindowByToken(appBundleId: appBundleId, projectId: projectId) {
                 return .success(window)
             }
-            try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(windowPollInterval * 1_000_000_000))
         }
 
         return .failure(.windowNotFound(detail: "\(windowLabel) window did not appear within timeout"))
@@ -947,7 +973,7 @@ public final class ProjectManager {
 
     /// Polls until both windows are in the target workspace.
     private func pollForWindowsInWorkspace(chromeWindowId: Int, ideWindowId: Int, workspace: String) async -> Result<Void, ProjectError> {
-        let deadline = Date().addingTimeInterval(Self.windowPollTimeout)
+        let deadline = Date().addingTimeInterval(windowPollTimeout)
 
         while Date() < deadline {
             switch aerospace.listWindowsWorkspace(workspace: workspace) {
@@ -962,7 +988,7 @@ public final class ProjectManager {
                 }
             }
 
-            try? await Task.sleep(nanoseconds: UInt64(Self.windowPollInterval * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(windowPollInterval * 1_000_000_000))
         }
 
         return .failure(.aeroSpaceError(detail: "Windows did not arrive in workspace within timeout"))

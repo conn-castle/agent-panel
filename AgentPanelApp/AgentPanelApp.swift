@@ -909,12 +909,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Creates a WindowRecoveryManager with an already-captured screen frame.
     /// The screen frame must be read on the main thread before calling this.
-    private func makeWindowRecoveryManager(screenFrame: CGRect) -> WindowRecoveryManager {
+    /// - Parameters:
+    ///   - screenFrame: Screen visible frame captured on the main thread.
+    ///   - layoutConfig: Layout config for layout-aware recovery. Pass nil to disable layout phase.
+    private func makeWindowRecoveryManager(screenFrame: CGRect, layoutConfig: LayoutConfig? = nil) -> WindowRecoveryManager {
         WindowRecoveryManager(
             windowPositioner: AXWindowPositioner(),
             screenVisibleFrame: screenFrame,
             logger: logger,
-            processChecker: AppKitRunningApplicationChecker()
+            processChecker: AppKitRunningApplicationChecker(),
+            screenModeDetector: layoutConfig != nil ? ScreenModeDetector() : nil,
+            layoutConfig: layoutConfig ?? LayoutConfig()
         )
     }
 
@@ -934,10 +939,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Read current layout config without triggering a config load (non-mutating)
+        let layoutConfig = projectManager.currentLayoutConfig
+
         let workspace = focus.workspace
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
             let result = manager.recoverWorkspaceWindows(workspace: workspace)
             DispatchQueue.main.async {
                 switch result {
