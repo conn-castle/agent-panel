@@ -176,7 +176,8 @@ final class ProjectManagerCoverageTests: XCTestCase {
         case .success(let success):
             XCTAssertEqual(success.ideWindowId, 101)
         }
-        XCTAssertEqual(aerospace.focusedWorkspaces, [workspace], "Should attempt to focus workspace while polling")
+        XCTAssertTrue(aerospace.focusedWorkspaces.contains(workspace), "Should attempt to focus workspace while polling")
+        XCTAssertTrue(aerospace.focusedWorkspaces.allSatisfy { $0 == workspace }, "All focus attempts should target the same workspace")
     }
 
     func testSelectProjectRetriesChromeLaunchWithoutTabsWhenTabLaunchFailsAndPollsForWindow() async {

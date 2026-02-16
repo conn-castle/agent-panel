@@ -207,6 +207,10 @@ public final class ProjectManager {
     /// Non-fatal warnings from the most recent config load.
     public private(set) var configWarnings: [ConfigFinding]
 
+    /// Returns the current layout config from the last config load, or defaults if not loaded.
+    /// Non-mutating — safe for recovery paths that should not trigger config reload.
+    public var currentLayoutConfig: LayoutConfig
+
     /// Captures the currently focused window for later restoration.
     public func captureCurrentFocus() -> CapturedFocus?
 
@@ -612,10 +616,14 @@ public final class WindowRecoveryManager {
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
         logger: AgentPanelLogging,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        screenModeDetector: ScreenModeDetecting? = nil,
+        layoutConfig: LayoutConfig = LayoutConfig()
     )
 
-    /// Recovers all windows in a single workspace (shrink/center oversized windows).
+    /// Recovers windows in a workspace. For project workspaces (`ap-<projectId>`),
+    /// applies workspace-scoped layout positioning for IDE/Chrome first (only targeting
+    /// apps present in the workspace), then generic shrink/center recovery for remaining windows.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
 
     /// Recovers all windows across all workspaces, reporting progress.

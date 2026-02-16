@@ -268,9 +268,10 @@ public struct AXWindowPositioner: WindowPositioning {
         // Sort PIDs ascending for deterministic order
         let sortedPids = apps.map { $0.processIdentifier }.sorted()
 
-        var allMatches: [(title: String, element: AXUIElement)] = []
+        var allMatches: [(title: String, element: AXUIElement, enumIndex: Int)] = []
         var lastEnumerationError: AXError?
         var anyEnumerationSucceeded = false
+        var nextEnumIndex = 0
 
         for pid in sortedPids {
             let appElement = AXUIElementCreateApplication(pid)
@@ -292,8 +293,9 @@ public struct AXWindowPositioner: WindowPositioning {
             for window in windows {
                 AXUIElementSetMessagingTimeout(window, Self.axTimeoutSeconds)
                 if let title = readTitle(element: window, bundleId: bundleId), title.contains(token) {
-                    allMatches.append((title: title, element: window))
+                    allMatches.append((title: title, element: window, enumIndex: nextEnumIndex))
                 }
+                nextEnumIndex += 1
             }
         }
 
@@ -306,11 +308,16 @@ public struct AXWindowPositioner: WindowPositioning {
             ))
         }
 
-        // Sort by title for stable ordering; secondary sort by hash for deterministic tie-break
+        // Sort by title for stable ordering; secondary sort by enumeration index.
+        // NOTE: Apple does not formally document the ordering of kAXWindowsAttribute.
+        // Empirically it follows a consistent order (stacking/creation) within an app session,
+        // making enumeration index more stable than the previous CFHash approach (which operated
+        // on freshly created opaque references with no stability guarantee). If users report
+        // continued window-position flipping with duplicate titles, escalate to CGWindowID-based
+        // identity (see ISSUES.md ax-tiebreak-residual).
         allMatches.sort {
             if $0.title != $1.title { return $0.title < $1.title }
-            // Stable tie-break: use AXUIElement hash
-            return CFHash($0.element) < CFHash($1.element)
+            return $0.enumIndex < $1.enumIndex
         }
 
         return .success(allMatches.map { $0.element })

@@ -26,7 +26,10 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
         aero.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
         aero.focusWindowResult = .success(())
-        aero.focusedWindowResult = .success(ideWindow)
+        // After moves, focusedWindow should report the target workspace for dual-signal verification
+        let ideInTarget = ApWindow(windowId: 101, appBundleId: "com.microsoft.VSCode",
+                                   workspace: workspace, windowTitle: "AP:\(projectId) - VS Code")
+        aero.focusedWindowResult = .success(ideInTarget)
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: workspace, isFocused: true)
         ])
@@ -119,13 +122,97 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             ApWorkspaceSummary(workspace: workspace, isFocused: false)
         ])
 
-        let manager = makeManager(aerospace: aero)
+        // Use short timeout to avoid 10s wait in test suite
+        let manager = makeManager(aerospace: aero, windowPollTimeout: 0.3, windowPollInterval: 0.05)
         loadConfig(manager, projectId: projectId)
 
         let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
         let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
 
         if case .success = result { XCTFail("Expected workspace focus failure") }
+        if case .failure(let error) = result {
+            if case .aeroSpaceError(let detail) = error {
+                XCTAssertTrue(detail.contains("could not be focused"), "Detail: \(detail)")
+            } else {
+                XCTFail("Expected aeroSpaceError, got: \(error)")
+            }
+        }
+    }
+
+    // MARK: - ensureWorkspaceFocused: always calls focusWorkspace before accepting verification
+
+    /// Even when the workspace appears focused in listWorkspacesWithFocus, activation must
+    /// still call focusWorkspace at least once (summon-workspace) before accepting success.
+    func testSelectProjectAlwaysCallsFocusWorkspaceEvenWhenAlreadyFocused() async {
+        let projectId = "proj"
+        let workspace = "ap-\(projectId)"
+        let aero = EdgeAeroSpaceStub()
+
+        let chromeWindow = ApWindow(windowId: 100, appBundleId: "com.google.Chrome",
+                                    workspace: workspace, windowTitle: "AP:\(projectId) - Chrome")
+        let ideWindow = ApWindow(windowId: 101, appBundleId: "com.microsoft.VSCode",
+                                 workspace: workspace, windowTitle: "AP:\(projectId) - VS Code")
+
+        aero.windowsByBundleId["com.google.Chrome"] = [chromeWindow]
+        aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
+        aero.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
+        aero.focusWindowResult = .success(())
+        // Workspace appears focused immediately
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+        // focusedWindow reports correct workspace
+        aero.focusedWindowResult = .success(ideWindow)
+
+        let manager = makeManager(aerospace: aero)
+        loadConfig(manager, projectId: projectId)
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
+
+        // focusWorkspace must have been called at least once (summon path)
+        XCTAssertTrue(
+            aero.focusedWorkspaces.contains(workspace),
+            "focusWorkspace must be called at least once even when workspace appears already focused"
+        )
+    }
+
+    /// When listWorkspacesWithFocus says focused but focusedWindow reports a different workspace,
+    /// ensureWorkspaceFocused must keep retrying rather than accepting the stale signal.
+    func testSelectProjectFailsWhenFocusedWindowWorkspaceMismatchesTarget() async {
+        let projectId = "proj"
+        let workspace = "ap-\(projectId)"
+        let aero = EdgeAeroSpaceStub()
+
+        let chromeWindow = ApWindow(windowId: 100, appBundleId: "com.google.Chrome",
+                                    workspace: workspace, windowTitle: "AP:\(projectId) - Chrome")
+        let ideWindow = ApWindow(windowId: 101, appBundleId: "com.microsoft.VSCode",
+                                 workspace: workspace, windowTitle: "AP:\(projectId) - VS Code")
+
+        aero.windowsByBundleId["com.google.Chrome"] = [chromeWindow]
+        aero.windowsByBundleId["com.microsoft.VSCode"] = [ideWindow]
+        aero.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
+        aero.focusWindowResult = .success(())
+        // listWorkspacesWithFocus says workspace is focused…
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+        // …but focusedWindow reports a DIFFERENT workspace (stale/wrong space)
+        let staleWindow = ApWindow(windowId: 200, appBundleId: "com.other.App",
+                                   workspace: "other-ws", windowTitle: "Other App")
+        aero.focusedWindowResult = .success(staleWindow)
+
+        // Use short timeout to avoid 10s wait in test suite
+        let manager = makeManager(aerospace: aero, windowPollTimeout: 0.3, windowPollInterval: 0.05)
+        loadConfig(manager, projectId: projectId)
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        // Should fail because dual-signal verification never passes
+        if case .success = result { XCTFail("Expected failure: focusedWindow workspace does not match target") }
         if case .failure(let error) = result {
             if case .aeroSpaceError(let detail) = error {
                 XCTAssertTrue(detail.contains("could not be focused"), "Detail: \(detail)")
@@ -607,7 +694,9 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         gitRemoteResolver: GitRemoteResolving = EdgeGitRemoteStub(),
         windowPositioner: WindowPositioning? = nil,
         windowPositionStore: WindowPositionStoring? = nil,
-        screenModeDetector: ScreenModeDetecting? = nil
+        screenModeDetector: ScreenModeDetecting? = nil,
+        windowPollTimeout: TimeInterval = 10.0,
+        windowPollInterval: TimeInterval = 0.1
     ) -> ProjectManager {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let effectiveTabsDir = chromeTabsDir ?? tmp.appendingPathComponent("edge-tabs-\(UUID().uuidString)", isDirectory: true)
@@ -624,7 +713,9 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             recencyFilePath: recencyPath,
             windowPositioner: windowPositioner,
             windowPositionStore: windowPositionStore,
-            screenModeDetector: screenModeDetector
+            screenModeDetector: screenModeDetector,
+            windowPollTimeout: windowPollTimeout,
+            windowPollInterval: windowPollInterval
         )
     }
 
