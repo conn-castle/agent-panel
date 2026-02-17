@@ -25,7 +25,10 @@ jobs:
           key: homebrew-xcbeautify-${{ runner.os }}-${{ runner.arch }}
 
       - name: Install xcbeautify
-        run: brew install xcbeautify || true
+        run: |
+          if ! brew list xcbeautify &>/dev/null; then
+            brew install xcbeautify
+          fi
 
       - name: Cache SPM packages
         uses: actions/cache@v4
@@ -34,6 +37,9 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('AgentPanel.xcodeproj/project.pbxproj') }}
           restore-keys: |
             spm-${{ runner.os }}-
+
+      - name: Release preflight
+        run: scripts/ci_preflight.sh
 
       - name: Build
         run: scripts/build.sh

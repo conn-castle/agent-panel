@@ -110,10 +110,21 @@ scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 
 Run from repo root. Notes: the `.xcresult` bundle is produced by `scripts/test.sh`.
 
+## Release Preflight
+
+Validate release-readiness (version format, Info.plist variables, entitlements, CI scripts, workflow config):
+
+```bash
+scripts/ci_preflight.sh
+```
+
+Run from repo root. Notes: runs automatically in CI on every push/PR. Also useful locally before tagging a release.
+
 ## Release (CI only)
 
 The release workflow (`.github/workflows/release.yml`) runs on tag push (`v*`). These scripts are called by CI and are not intended for local use:
 
+- `scripts/ci_preflight.sh` — validate release configuration (also runs in CI workflow)
 - `scripts/ci_setup_signing.sh` — import certs into temp keychain
 - `scripts/ci_archive.sh` — archive + export + CLI codesign
 - `scripts/ci_package.sh` — create DMG, PKG, tarball
