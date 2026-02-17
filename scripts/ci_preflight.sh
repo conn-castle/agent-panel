@@ -110,11 +110,11 @@ if [[ -f "$archive_script" ]]; then
   else
     fail "ci_archive.sh does not pass DEVELOPMENT_TEAM to xcodebuild — archive will fail with 'requires a development team'"
   fi
-  # ExportOptions.plist must include destination key for developer-id export (Xcode 14+)
-  if grep -q '<key>destination</key>' "$archive_script"; then
-    echo "PASS: ci_archive.sh ExportOptions includes destination key"
+  # ci_archive.sh must codesign with hardened runtime and entitlements
+  if grep -q 'options runtime' "$archive_script" && grep -q 'entitlements' "$archive_script"; then
+    echo "PASS: ci_archive.sh codesigns with hardened runtime and entitlements"
   else
-    fail "ci_archive.sh ExportOptions.plist missing 'destination' key — export will fail on Xcode 14+"
+    fail "ci_archive.sh missing hardened runtime or entitlements in codesign — notarization will fail"
   fi
 fi
 

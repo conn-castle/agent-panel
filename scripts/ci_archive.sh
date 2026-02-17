@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Archive the app, export it for Developer ID distribution, and codesign the CLI binary.
+# Archive the app, codesign for Developer ID distribution, and codesign the CLI binary.
+#
+# Uses direct codesign instead of xcodebuild -exportArchive to avoid
+# IDEDistribution issues on CI runners (missing intermediate CAs, etc.).
+# The archive step already signs the app with the Developer ID identity;
+# we re-sign explicitly to ensure hardened runtime, entitlements, and
+# timestamp are correct.
 #
 # Required environment variables:
 #   DEVELOPER_ID_APP_IDENTITY  — e.g. "Developer ID Application: Name (TEAMID)"
@@ -12,7 +18,6 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 archive_path="$RUNNER_TEMP/AgentPanel.xcarchive"
-export_path="$RUNNER_TEMP/export"
 staging_path="$RUNNER_TEMP/staging"
 derived_data_path="build/DerivedData"
 
@@ -36,44 +41,30 @@ xcodebuild archive \
   DEVELOPMENT_TEAM="$team_id" \
   2>&1 | xcbeautify
 
-# --- Generate ExportOptions.plist ---
-export_options="$RUNNER_TEMP/ExportOptions.plist"
-cat > "$export_options" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>developer-id</string>
-    <key>destination</key>
-    <string>export</string>
-    <key>teamID</key>
-    <string>${team_id}</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>Developer ID Application</string>
-</dict>
-</plist>
-PLIST
-
-# --- Export ---
-echo "Exporting archive..."
-echo "ExportOptions.plist contents:"
-cat "$export_options"
-xcodebuild -exportArchive \
-  -archivePath "$archive_path" \
-  -exportPath "$export_path" \
-  -exportOptionsPlist "$export_options"
-
-# --- Verify exported app ---
-app_path="$export_path/AgentPanel.app"
-if [[ ! -d "$app_path" ]]; then
-  echo "error: exported app not found at $app_path" >&2
-  ls -la "$export_path/" 2>/dev/null || true
+# --- Extract app from archive ---
+# The archive stores the app in Products/Applications/
+app_source="$archive_path/Products/Applications/AgentPanel.app"
+if [[ ! -d "$app_source" ]]; then
+  echo "error: app not found at expected archive location" >&2
+  echo "Archive Products contents:"
+  find "$archive_path/Products" -maxdepth 3 -type d 2>/dev/null || true
   exit 1
 fi
+
+# --- Stage artifacts ---
+mkdir -p "$staging_path"
+cp -R "$app_source" "$staging_path/AgentPanel.app"
+
+# --- Re-sign app with Developer ID + hardened runtime + entitlements ---
+# The archive already signed the app, but we re-sign explicitly to ensure
+# the correct identity, hardened runtime, entitlements, and secure timestamp.
+echo "Codesigning app with Developer ID (hardened runtime)..."
+codesign --force --deep --options runtime --timestamp \
+  --entitlements "$repo_root/release/AgentPanel.entitlements" \
+  --sign "$DEVELOPER_ID_APP_IDENTITY" \
+  "$staging_path/AgentPanel.app"
+codesign --verify --deep --strict "$staging_path/AgentPanel.app"
+echo "App signature verified"
 
 # --- Find and codesign CLI binary ---
 cli_candidates=(
@@ -96,16 +87,13 @@ if [[ -z "$cli_source" ]]; then
 fi
 
 echo "Found CLI binary at: $cli_source"
+cp "$cli_source" "$staging_path/ap"
+
 echo "Codesigning CLI binary with hardened runtime..."
 codesign --force --options runtime --timestamp \
   --sign "$DEVELOPER_ID_APP_IDENTITY" \
-  "$cli_source"
-codesign --verify --deep --strict "$cli_source"
-
-# --- Stage artifacts ---
-mkdir -p "$staging_path"
-cp -R "$app_path" "$staging_path/AgentPanel.app"
-cp "$cli_source" "$staging_path/ap"
+  "$staging_path/ap"
+codesign --verify --deep --strict "$staging_path/ap"
 
 echo "ci_archive: OK"
 echo "App: $staging_path/AgentPanel.app"
