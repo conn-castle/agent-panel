@@ -155,6 +155,13 @@ if [[ -f "$signing_script" ]]; then
   else
     fail "ci_setup_signing.sh may replace the keychain search list — exportArchive will fail with empty distribution methods"
   fi
+  # The .p12 only has the leaf cert. IDEDistribution needs the Apple intermediate CA
+  # to validate the chain for developer-id distribution. Without it: "Unknown Distribution Error".
+  if grep -q 'DeveloperIDG2CA.cer' "$signing_script"; then
+    echo "PASS: ci_setup_signing.sh downloads Apple Developer ID G2 intermediate certificate"
+  else
+    fail "ci_setup_signing.sh missing Apple Developer ID G2 intermediate cert download — exportArchive will fail"
+  fi
 fi
 
 echo ""
