@@ -136,6 +136,21 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread (ProjectManager thread-safety contract), uses the existing recovery mechanism, and adds no new infrastructure.
     Tradeoffs: Up to 10s of "Recovering" display if recovery is slow. If recovery never completes, user sees the original error after 5 attempts. Timer is canceled on dismiss/resetState to avoid stale callbacks.
 
+- Decision 2026-02-17 ide-frame-retry: IDE frame read retries up to 10x before failing
+    Decision: `positionWindows()` retries `getPrimaryWindowFrame()` up to 10 times at `windowPollInterval` (~100ms) when the AX title token isn't found. Retry is in ProjectManager (not AXWindowPositioner) to keep the positioner stateless.
+    Reason: VS Code updates window titles asynchronously after launch. The AX API reads the title before VS Code applies the `AP:<projectId>` setting ~5.5% of the time. A brief retry brings this close to 0%.
+    Tradeoffs: Up to ~1s additional delay in the worst case (title never appears), but normal case resolves in 1-2 retries (~200ms). Retry interval is injectable via `windowPollInterval` for fast tests.
+
+- Decision 2026-02-17 hotkey-debounce: 300ms debounce on switcher hotkey
+    Decision: `toggleSwitcher()` ignores rapid presses within 300ms of the last toggle. Debounce uses a simple timestamp comparison (not DispatchWorkItem).
+    Reason: During AeroSpace outages, each hotkey press creates a new switcher session with its own workspace retry timer, causing a cascade of ~60 warnings in 3 seconds. Users naturally mash the hotkey when the switcher is slow to appear.
+    Tradeoffs: Legitimate rapid toggle-toggle sequences are delayed by 300ms. This is imperceptible in practice since panel animation takes longer.
+
+- Decision 2026-02-17 retry-session-guard: Workspace retry timer is session-scoped
+    Decision: `scheduleWorkspaceStateRetry()` captures the session ID at creation time. Each timer tick compares it to the current session ID and self-cancels if they differ.
+    Reason: With rapid hotkey presses, a dismissed session's timer could fire after a new session started, corrupting the new session's state.
+    Tradeoffs: Negligible — one extra string comparison per tick.
+
 - Decision 2026-02-16 ghrelease-arm64: Distribution shifts to GitHub tagged arm64 releases
     Decision: AgentPanel distribution is now signed + notarized arm64 artifacts published on GitHub tagged releases. Homebrew distribution is deferred to backlog work.
     Reason: This keeps release operations focused on a single packaging path needed now, while preserving deterministic installs/upgrades through versioned release assets.

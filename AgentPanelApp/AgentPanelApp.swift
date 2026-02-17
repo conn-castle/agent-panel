@@ -53,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHealthRefreshInFlight: Bool = false
     private var pendingCriticalContext: ErrorContext?
     private var lastHealthRefreshAt: Date?
+    private var lastHotkeyToggleAt: Date?
     private var menuFocusCapture: CapturedFocus?
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager(
@@ -149,11 +150,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let results = VSCodeSettingsBlocks.ensureAll(projects: projects)
                 for (projectId, result) in results {
                     if case .failure(let error) = result {
+                        let isSSH = projects.first(where: { $0.id == projectId })?.isSSH == true
                         self?.logAppEvent(
                             event: "settings_block.write_failed",
                             level: .warn,
                             message: error.message,
-                            context: ["project_id": projectId]
+                            context: [
+                                "project_id": projectId,
+                                "type": isSSH ? "ssh" : "local"
+                            ]
                         )
                     }
                 }
@@ -371,8 +376,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Minimum interval between hotkey toggles to prevent session storms during AeroSpace outages.
+    private static let hotkeyDebounceSeconds: TimeInterval = 0.3
+
     /// Toggles the switcher panel from the global hotkey.
     private func toggleSwitcher() {
+        // Debounce: ignore rapid presses within 300ms to prevent session storms
+        // when AeroSpace is unresponsive and the user mashes the hotkey.
+        let now = Date()
+        if let last = lastHotkeyToggleAt,
+           now.timeIntervalSince(last) < Self.hotkeyDebounceSeconds {
+            logAppEvent(event: "switcher.hotkey.debounced")
+            return
+        }
+        lastHotkeyToggleAt = now
+
         // Capture both the previously active app AND focus state BEFORE we show the switcher.
         // This must happen outside the async block to capture the correct window.
         let previousApp = NSWorkspace.shared.frontmostApplication

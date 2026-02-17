@@ -222,6 +222,49 @@ final class VSCodeSettingsManagerRemoteTests: XCTestCase {
         XCTAssertTrue(content.contains("editor.fontSize"), "Decoded content should preserve existing settings")
     }
 
+    func testWriteRemoteSettingsHandlesEmptyExistingFile() {
+        // Simulate cat of a 0-byte file returning empty string
+        let runner = SequentialSSHRunner(results: [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+        ])
+        let manager = ApVSCodeSettingsManager(commandRunner: runner)
+
+        let result = manager.writeRemoteSettings(
+            remoteAuthority: "ssh-remote+user@host",
+            remotePath: "/home/user/project",
+            identifier: "empty-file-proj"
+        )
+
+        if case .failure(let error) = result {
+            XCTFail("Expected success for empty remote file, got: \(error.message)")
+        }
+
+        XCTAssertEqual(runner.calls.count, 2, "Should make SSH read + write calls")
+
+        // Verify the written content contains the block
+        let writeCommand = runner.calls[1].arguments.last ?? ""
+        let pattern = #"echo '([A-Za-z0-9+/=]+)' \| base64 -d"#
+        let regex = try! NSRegularExpression(pattern: pattern)
+        let range = NSRange(writeCommand.startIndex..<writeCommand.endIndex, in: writeCommand)
+        guard let match = regex.firstMatch(in: writeCommand, range: range),
+              match.numberOfRanges > 1,
+              let base64Range = Range(match.range(at: 1), in: writeCommand) else {
+            XCTFail("Write command should contain base64 echo pattern")
+            return
+        }
+
+        let base64String = String(writeCommand[base64Range])
+        guard let decoded = Data(base64Encoded: base64String),
+              let content = String(data: decoded, encoding: .utf8) else {
+            XCTFail("Failed to decode base64 content")
+            return
+        }
+
+        XCTAssertTrue(content.contains("// >>> agent-panel"), "Should inject block into empty file")
+        XCTAssertTrue(content.contains("AP:empty-file-proj"), "Should contain project id")
+    }
+
     // MARK: - ensureAllSettingsBlocks
 
     func testEnsureAllSettingsBlocksLocalProject() {

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import os
 
 /// Minimal window data returned by AeroSpace queries.
 struct ApWindow: Equatable {
@@ -31,6 +32,8 @@ struct ApWorkspaceSummary: Equatable, Sendable {
 
 /// AeroSpace CLI wrapper for ap.
 public struct ApAeroSpace {
+    private static let logger = Logger(subsystem: "com.agentpanel", category: "ApAeroSpace")
+
     /// AeroSpace bundle identifier for Launch Services lookups.
     public static let bundleIdentifier = "bobko.aerospace"
 
@@ -683,6 +686,7 @@ public struct ApAeroSpace {
         if let checker = processChecker,
            !checker.isApplicationRunning(bundleIdentifier: Self.bundleIdentifier),
            circuitBreaker.beginRecovery() {
+            Self.logger.info("circuit_breaker.recovery_started thread=\(Thread.isMainThread ? "main" : "background", privacy: .public)")
             if Thread.isMainThread {
                 // Main thread: fire-and-forget recovery in the background, fail fast now.
                 // start() blocks for up to ~10s (open + readiness poll) — unacceptable on main.
@@ -690,8 +694,10 @@ public struct ApAeroSpace {
                 DispatchQueue.global(qos: .userInitiated).async {
                     switch self.start() {
                     case .success:
+                        Self.logger.info("circuit_breaker.recovery_succeeded")
                         self.circuitBreaker.endRecovery(success: true)
                     case .failure:
+                        Self.logger.warning("circuit_breaker.recovery_failed")
                         self.circuitBreaker.endRecovery(success: false)
                     }
                 }
@@ -699,9 +705,11 @@ public struct ApAeroSpace {
                 // Off-main: recover synchronously and retry the command.
                 switch start() {
                 case .success:
+                    Self.logger.info("circuit_breaker.recovery_succeeded")
                     circuitBreaker.endRecovery(success: true)
                     return executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
                 case .failure:
+                    Self.logger.warning("circuit_breaker.recovery_failed")
                     circuitBreaker.endRecovery(success: false)
                 }
             }
@@ -726,7 +734,11 @@ public struct ApAeroSpace {
             circuitBreaker.recordSuccess()
         case .failure(let error):
             if error.message.hasPrefix("Command timed out") {
+                let wasOpen = !circuitBreaker.shouldAllow()
                 circuitBreaker.recordTimeout()
+                if !wasOpen {
+                    Self.logger.warning("circuit_breaker.tripped command=aerospace \(arguments.joined(separator: " "), privacy: .public) timeout=\(timeoutSeconds)s")
+                }
             }
         }
 

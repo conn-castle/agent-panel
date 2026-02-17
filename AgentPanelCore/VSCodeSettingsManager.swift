@@ -240,7 +240,8 @@ struct ApVSCodeSettingsManager {
                         message: "Failed to decode .vscode/settings.json as UTF-8 at \(settingsURL.path)."
                     ))
                 }
-                existingContent = content
+                // Treat empty files the same as missing files
+                existingContent = content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "{}\n" : content
             } catch {
                 return .failure(ApCoreError(
                     message: "Failed to read existing .vscode/settings.json at \(settingsURL.path): \(error.localizedDescription)"
@@ -336,7 +337,8 @@ struct ApVSCodeSettingsManager {
                     message: "SSH read failed with exit code \(result.exitCode): \(sshTarget) \(remotePath)\(suffix)"
                 ))
             }
-            existingContent = result.stdout
+            // Treat empty files the same as missing files
+            existingContent = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "{}\n" : result.stdout
         }
 
         // Inject block

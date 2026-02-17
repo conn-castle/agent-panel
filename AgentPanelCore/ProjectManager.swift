@@ -1036,15 +1036,45 @@ public final class ProjectManager {
 
         var warnings: [String] = []
 
-        // Read IDE frame to determine which monitor the windows are on
+        // Read IDE frame to determine which monitor the windows are on.
+        // VS Code updates its window title asynchronously after launch, so the AX title
+        // token may not be ready on the first attempt. Retry briefly to reduce failures.
         let ideFrame: CGRect
-        switch positioner.getPrimaryWindowFrame(bundleId: ApVSCodeLauncher.bundleId, projectId: projectId) {
-        case .success(let frame):
-            ideFrame = frame
-        case .failure(let error):
-            logEvent("position.ide_frame_read_failed", level: .warn, message: error.message)
-            return "Window positioning skipped: \(error.message)"
+        let maxFrameRetries = 10
+        let frameRetryInterval = windowPollInterval // ~0.1s default, injectable for tests
+        var frameAttempt = 0
+        var lastFrameError: ApCoreError?
+
+        while true {
+            frameAttempt += 1
+            switch positioner.getPrimaryWindowFrame(bundleId: ApVSCodeLauncher.bundleId, projectId: projectId) {
+            case .success(let frame):
+                if frameAttempt > 1 {
+                    logEvent("position.ide_frame_read_retried", context: [
+                        "project_id": projectId,
+                        "attempts": "\(frameAttempt)"
+                    ])
+                }
+                ideFrame = frame
+                lastFrameError = nil
+            case .failure(let error):
+                lastFrameError = error
+                // Only retry transient "window not found" errors (title not yet updated).
+                // Permanent errors (AX permission denied, app not running, etc.) fail immediately.
+                let isTransient = error.message.hasPrefix("No window found with token")
+                if isTransient && frameAttempt < maxFrameRetries {
+                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    continue
+                }
+                logEvent("position.ide_frame_read_failed", level: .warn, message: error.message, context: [
+                    "project_id": projectId,
+                    "attempts": "\(frameAttempt)"
+                ])
+                return "Window positioning skipped: \(error.message)"
+            }
+            break
         }
+        _ = lastFrameError // suppress unused warning
 
         // Detect screen mode (use center of IDE frame as reference point)
         let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)

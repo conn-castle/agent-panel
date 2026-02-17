@@ -203,6 +203,7 @@ final class SwitcherPanelController: NSObject {
     private var restoreFocusTask: Task<Void, Never>?
     private var workspaceRetryTimer: DispatchSourceTimer?
     private var workspaceRetryCount: Int = 0
+    private var workspaceRetrySessionId: String?
     private static let workspaceRetryMaxAttempts = 5
     private static let workspaceRetryIntervalSeconds: TimeInterval = 2.0
 
@@ -786,13 +787,17 @@ final class SwitcherPanelController: NSObject {
         cancelWorkspaceRetryTimer()
         workspaceRetryCount = 0
 
+        // Capture the session ID so stale timers from dismissed sessions are ignored.
+        let timerSessionId = session.sessionId
+        workspaceRetrySessionId = timerSessionId
+
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(
             deadline: .now() + Self.workspaceRetryIntervalSeconds,
             repeating: Self.workspaceRetryIntervalSeconds
         )
         timer.setEventHandler { [weak self] in
-            self?.handleWorkspaceRetryTick()
+            self?.handleWorkspaceRetryTick(expectedSessionId: timerSessionId)
         }
         timer.resume()
         workspaceRetryTimer = timer
@@ -804,7 +809,17 @@ final class SwitcherPanelController: NSObject {
     }
 
     /// Handles a single tick of the workspace retry timer.
-    private func handleWorkspaceRetryTick() {
+    ///
+    /// Guards against stale timers: if the session has changed since the timer was
+    /// scheduled, the tick is silently discarded. Does NOT call `cancelWorkspaceRetryTimer()`
+    /// because the stale timer was already canceled during dismiss, and the current
+    /// `workspaceRetryTimer` may belong to the new active session.
+    private func handleWorkspaceRetryTick(expectedSessionId: String?) {
+        // Discard ticks from timers belonging to a previous (dismissed) session
+        if expectedSessionId != session.sessionId {
+            return
+        }
+
         workspaceRetryCount += 1
 
         switch projectManager.workspaceState() {
@@ -852,6 +867,7 @@ final class SwitcherPanelController: NSObject {
     private func cancelWorkspaceRetryTimer() {
         workspaceRetryTimer?.cancel()
         workspaceRetryTimer = nil
+        workspaceRetrySessionId = nil
     }
 
     // MARK: - Filtering and Rows

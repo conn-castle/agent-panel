@@ -244,6 +244,31 @@ final class VSCodeSettingsManagerTests: XCTestCase {
         XCTAssertTrue(content.contains("AP:new-proj"))
     }
 
+    // MARK: - writeLocalSettings: handles empty existing file
+
+    func testWriteLocalSettingsHandlesEmptyExistingFile() {
+        let tempDir = makeTempDir()
+        defer { cleanup(tempDir) }
+
+        // Create an empty settings.json (0 bytes)
+        let vscodeDir = tempDir.appendingPathComponent(".vscode", isDirectory: true)
+        try! FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
+        let settingsURL = vscodeDir.appendingPathComponent("settings.json")
+        FileManager.default.createFile(atPath: settingsURL.path, contents: Data())
+
+        let manager = ApVSCodeSettingsManager()
+        let result = manager.writeLocalSettings(projectPath: tempDir.path, identifier: "empty-file-proj")
+
+        if case .failure(let error) = result {
+            XCTFail("Expected success for empty file, got: \(error.message)")
+            return
+        }
+
+        let content = try! String(contentsOf: settingsURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("// >>> agent-panel"), "Should inject block into empty file")
+        XCTAssertTrue(content.contains("AP:empty-file-proj"), "Should contain project id")
+    }
+
     // MARK: - writeLocalSettings: returns error on write failure
 
     func testWriteLocalSettingsReturnsErrorOnWriteFailure() {
