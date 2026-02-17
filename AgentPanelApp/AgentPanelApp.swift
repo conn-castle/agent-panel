@@ -141,19 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         focusCycleManager.registerHotkeys()
         self.focusCycleHotkeyManager = focusCycleManager
 
-        // Load config on the main thread (ProjectManager is not thread-safe), then
-        // ensure VS Code settings blocks in the background (may use SSH).
-        let configResult = projectManager.loadConfig()
-        let loadedConfig = try? configResult.get()
-        let projects = loadedConfig?.config.projects ?? []
-
-        // Apply auto-start at login from config (only when config loaded successfully)
-        if let loadedConfig {
-            syncLaunchAtLogin(configValue: loadedConfig.config.app.autoStartAtLogin)
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            if !projects.isEmpty {
+        // Wire settings block writes: fires on first loadConfig() and whenever the project list changes.
+        // On startup the first fire triggers ensureAll → then Doctor. On subsequent config reloads
+        // (e.g., switcher open), only ensureAll runs (Doctor is triggered separately by session end).
+        projectManager.onProjectsChanged = { [weak self] projects in
+            DispatchQueue.global(qos: .userInitiated).async {
                 let results = VSCodeSettingsBlocks.ensureAll(projects: projects)
                 for (projectId, result) in results {
                     if case .failure(let error) = result {
@@ -165,11 +157,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         )
                     }
                 }
+                // On startup, run Doctor after settings blocks are written so it doesn't
+                // report spurious warnings for blocks that are still being written.
+                if self?.lastHealthRefreshAt == nil {
+                    DispatchQueue.main.async {
+                        self?.refreshHealthInBackground(trigger: "startup", force: true)
+                    }
+                }
             }
+        }
 
-            DispatchQueue.main.async {
-                self?.refreshHealthInBackground(trigger: "startup", force: true)
-            }
+        // Load config on the main thread (ProjectManager is not thread-safe).
+        // The onProjectsChanged callback above handles settings block writes + startup Doctor.
+        let configResult = projectManager.loadConfig()
+        let loadedConfig = try? configResult.get()
+
+        // Apply auto-start at login from config (only when config loaded successfully)
+        if let loadedConfig {
+            syncLaunchAtLogin(configValue: loadedConfig.config.app.autoStartAtLogin)
+        }
+
+        // If config load failed (no projects), the callback never fired — run Doctor directly.
+        if loadedConfig == nil {
+            refreshHealthInBackground(trigger: "startup", force: true)
         }
 
         let dataStore = DataPaths.default()

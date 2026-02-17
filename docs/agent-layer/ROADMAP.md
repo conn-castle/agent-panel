@@ -90,7 +90,7 @@ Incomplete:
 - Activation error visibility fix (isActivating guard suppresses premature dismiss during async launch).
 - Comprehensive test expansion: switcher dismiss/restore lifecycle, ProjectManager config/sort/recency/activation, CLI runner tests.
 - Doctor hardening: unrecognized config keys → FAIL, VS Code/Chrome severity context-aware, focus restore on Doctor window close.
-- VS Code settings.json block injection replacing workspace files (local + SSH), proactive write on config load.
+- VS Code settings.json block injection replacing workspace files (local + SSH), reactive write on config change.
 - Coverage gate (> 90%) enforced via `scripts/test.sh` + `scripts/coverage_gate.sh` + git pre-commit hook. Hit 95% coverage.
 
 ## Phase 7 ✅ — Polish required features + harden daily use
@@ -107,15 +107,15 @@ Incomplete:
 - Finalize release readiness across packaging, CI gates, and onboarding documentation.
 
 ### Tasks
-- [ ] Decide distribution shape: Homebrew cask/app + formula/CLI (or a single package) and document it in README.
+- [ ] Decide distribution shape: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred) and document it in README.
 - [ ] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
 - [ ] Add release scripts (e.g., `scripts/archive.sh`, `scripts/notarize.sh`, and a one-command `scripts/release.sh`) for archive/export/notarize/staple.
-- [ ] Finalize README: install (Homebrew), permissions, config schema, usage (switcher + `ap`), troubleshooting.
+- [ ] Finalize README: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
 - [ ] Add CI gates (build + tests) and a documented release checklist.
 - [ ] Validate onboarding on a fresh machine using README + Doctor only (no tribal knowledge).
 
 ### Exit criteria
-- A release can be produced via scripts and installed via Homebrew; upgrades are deterministic.
+- A release can be produced via scripts and installed from GitHub tagged releases; upgrades are deterministic.
 - A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
 - CI is green and a release checklist exists.
 

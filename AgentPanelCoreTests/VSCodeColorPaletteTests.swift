@@ -66,6 +66,7 @@ final class VSCodeColorPaletteTests: XCTestCase {
         XCTAssertTrue(result.contains("// <<< agent-panel"))
         XCTAssertTrue(result.contains("\"window.title\": \"AP:my-proj"))
         XCTAssertTrue(result.contains("\"peacock.color\": \"#0000FF\""))
+        XCTAssertTrue(result.contains("\"peacock.remoteColor\": \"#0000FF\""))
         XCTAssertTrue(result.contains("\"workbench.colorCustomizations\": {}"))
     }
 
@@ -78,6 +79,7 @@ final class VSCodeColorPaletteTests: XCTestCase {
 
         XCTAssertTrue(result.contains("\"window.title\":"))
         XCTAssertFalse(result.contains("peacock.color"))
+        XCTAssertFalse(result.contains("peacock.remoteColor"))
     }
 
     func testInjectBlockWithInvalidColorOmitsPeacockColor() throws {
@@ -89,6 +91,7 @@ final class VSCodeColorPaletteTests: XCTestCase {
 
         XCTAssertTrue(result.contains("\"window.title\":"))
         XCTAssertFalse(result.contains("peacock.color"))
+        XCTAssertFalse(result.contains("peacock.remoteColor"))
     }
 
     func testInjectBlockReplacesExistingBlockIncludingColors() throws {
@@ -107,6 +110,7 @@ final class VSCodeColorPaletteTests: XCTestCase {
         ).get()
 
         XCTAssertTrue(second.contains("\"peacock.color\": \"#FF0000\""))
+        XCTAssertTrue(second.contains("\"peacock.remoteColor\": \"#FF0000\""))
         XCTAssertFalse(second.contains("#0000FF"))
         XCTAssertTrue(second.contains("\"editor.fontSize\": 14"))
     }

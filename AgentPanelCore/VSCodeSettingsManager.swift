@@ -86,6 +86,7 @@ struct ApVSCodeSettingsManager {
         // colors inside the agent-panel block (safe from agent-layer's al sync).
         if let color, let hex = VSCodeColorPalette.peacockColorHex(for: color) {
             properties.append("  \"peacock.color\": \"\(hex)\"")
+            properties.append("  \"peacock.remoteColor\": \"\(hex)\"")
             let colorValue = existingColorCustomizations ?? "{}"
             properties.append("  \"workbench.colorCustomizations\": \(colorValue)")
         }

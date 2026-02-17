@@ -28,6 +28,24 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-16 chrome-profile-selection: Enable chromeProfile selection in config
+    Priority: Medium. Area: Core/Chrome
+    Description: Implement support for selecting specific Chrome profiles via the configuration file (config.toml). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts.
+    Acceptance criteria: Chrome windows for a project open using the profile specified in the project's configuration.
+    Notes: May involve using `--profile-directory` or similar Chrome CLI flags.
+
+- Backlog 2026-02-16 chrome-auto-assoc: Auto-associate existing Chrome window in project workspace
+    Priority: Medium. Area: Core/Chrome
+    Description: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one.
+    Acceptance criteria: Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen.
+    Notes: Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
+
+- Backlog 2026-02-16 homebrew-dist: Homebrew packaging for app + CLI
+    Priority: Low. Area: Release
+    Description: Provide optional Homebrew distribution (cask/formula or unified strategy) on top of GitHub tagged release assets.
+    Acceptance criteria: A documented Homebrew install/upgrade path exists and is validated against release artifacts.
+    Notes: Deferred intentionally while release work focuses on signed + notarized arm64 GitHub tagged releases.
+
 - Backlog 2026-02-15 window-cycling-ui: UI overlay for project window cycling (Option-Tab)
     Priority: Medium. Area: App/UX
     Description: Add a UI overlay for project-scoped window cycling (Option-Tab) that shows the available windows, similar to the macOS Command-Tab switcher. This provides visual feedback and allows for easier navigation between multiple windows within a project workspace.

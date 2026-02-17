@@ -26,11 +26,6 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 <!-- ENTRIES START -->
 
-- Decision 2026-02-03 brewonly: Homebrew-only distribution
-    Decision: Both AgentPanel and AeroSpace are installed via Homebrew only; direct-download installs (zip/dmg) are not supported.
-    Reason: Deterministic installs/upgrades, scriptable onboarding and Doctor automation, and reduced distribution surface area.
-    Tradeoffs: Users without Homebrew cannot install or onboard. Any future direct-download path requires signing/notarization + updater work.
-
 - Decision 2026-02-03 guipath: GUI apps and child processes require PATH augmentation
     Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c <command>`, validated as absolute path, falls back to `/bin/zsh`). Fish shell is detected via `$SHELL` path suffix and uses `string join : $PATH` for colon-delimited output.
     Reason: macOS GUI apps launched via Finder/Dock inherit a minimal PATH missing Homebrew and user additions. Child processes (e.g., `al` calling `code`) inherit the same minimal PATH and fail. `/usr/bin/env` is not viable.
@@ -56,7 +51,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Eliminates overhead of separate workspace files per project and the `~/.local/state/agent-panel/vscode/` directory. Settings.json blocks coexist with Agent Layer's `// >>> agent-layer` markers since `al sync` preserves content outside its own markers.
     Tradeoffs: Trailing commas in JSONC are valid but may confuse strict JSON parsers. SSH remote write requires SSH access; unreachable SSH hosts prevent activation until connectivity/permissions are restored.
 
-- Decision 2026-02-10 proactive-settings: Settings.json blocks written proactively on config load
+- Decision 2026-02-10 proactive-settings: Settings.json blocks written proactively on config load (superseded by `reactsettings`)
     Decision: After loading config on startup, the app proactively calls `ApVSCodeSettingsManager.ensureAllSettingsBlocks(projects:)` in the background to write settings.json blocks for all projects (local via file system, SSH via SSH commands). Failures are logged at warn level and do not block config load. Launchers still write during activation as an idempotent safety net.
     Reason: Settings blocks must exist before VS Code opens the project (for reliable window identification), not just when AgentPanel activates it. Proactive writing early in app startup reduces "first activate" flakiness and keeps manual VS Code opens consistent.
     Tradeoffs: SSH write adds latency to background startup work (bounded by 10s timeout per SSH call, 2 calls per SSH project). Unreachable SSH hosts will log warnings but not block app startup.
@@ -130,3 +125,18 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `recoverWorkspaceWindows` applies layout-aware positioning for project workspaces (`ap-<projectId>`) using `WindowLayoutEngine.computeLayout()` with current config. Saved positions from `WindowPositionStore` are deliberately ignored during recovery.
     Reason: Recovery is a "repair to known-good baseline" operation. Saved positions can be stale, misaligned, or the cause of the problem being recovered from. Computed layout from config provides a deterministic, canonical baseline.
     Tradeoffs: Users who had manually positioned windows and then recover will get the computed default layout, not their custom positions. This is the intended behavior — recovery is a reset, not a restore.
+
+- Decision 2026-02-16 reactsettings: Settings blocks written reactively on config change via onProjectsChanged
+    Decision: Replaced the startup-only `VSCodeSettingsBlocks.ensureAll` call with a `ProjectManager.onProjectsChanged` callback that fires whenever `loadConfig()` detects the project list has changed. The App layer wires this callback to run `ensureAll` in the background. Fires on first load (nil → projects) and on subsequent reloads when the project list differs.
+    Reason: The previous approach only wrote settings blocks at app startup. Projects added to config while the app was running never got their settings.json block written, causing Doctor to warn and activation to fail with "content has no opening '{'".
+    Tradeoffs: The callback fires synchronously within `loadConfig()` (before the return), so the handler must dispatch to a background queue for SSH writes. Launchers still write during activation as an idempotent safety net.
+
+- Decision 2026-02-16 workspaceretry: Switcher auto-retries workspace state on circuit breaker recovery
+    Decision: When `refreshWorkspaceState()` fails during `show()`, the switcher displays "Recovering AeroSpace..." and schedules a main-thread `DispatchSourceTimer` (2s interval, max 5 retries). On success, the UI auto-updates with workspace state. Other call sites (close, exit) do not retry.
+    Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread (ProjectManager thread-safety contract), uses the existing recovery mechanism, and adds no new infrastructure.
+    Tradeoffs: Up to 10s of "Recovering" display if recovery is slow. If recovery never completes, user sees the original error after 5 attempts. Timer is canceled on dismiss/resetState to avoid stale callbacks.
+
+- Decision 2026-02-16 ghrelease-arm64: Distribution shifts to GitHub tagged arm64 releases
+    Decision: AgentPanel distribution is now signed + notarized arm64 artifacts published on GitHub tagged releases. Homebrew distribution is deferred to backlog work.
+    Reason: This keeps release operations focused on a single packaging path needed now, while preserving deterministic installs/upgrades through versioned release assets.
+    Tradeoffs: Intel macOS is unsupported. Users do not get package-manager install/upgrade ergonomics until Homebrew support is implemented.

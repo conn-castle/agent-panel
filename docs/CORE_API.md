@@ -185,6 +185,10 @@ public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces.
     public static let workspacePrefix: String  // "ap-"
 
+    /// Called when the project list changes after a config load.
+    /// Fires on first load (nil → projects) and on subsequent loads when the project list differs.
+    public var onProjectsChanged: (([ProjectConfig]) -> Void)?
+
     /// All projects from config, or empty if config not loaded.
     public var projects: [ProjectConfig] { get }
 

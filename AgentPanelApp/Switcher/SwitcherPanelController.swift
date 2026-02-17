@@ -201,6 +201,10 @@ final class SwitcherPanelController: NSObject {
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
     private var restoreFocusTask: Task<Void, Never>?
+    private var workspaceRetryTimer: DispatchSourceTimer?
+    private var workspaceRetryCount: Int = 0
+    private static let workspaceRetryMaxAttempts = 5
+    private static let workspaceRetryIntervalSeconds: TimeInterval = 2.0
 
     /// The captured focus state before the switcher opened.
     /// Used for restore-on-cancel via ProjectManager.
@@ -259,6 +263,7 @@ final class SwitcherPanelController: NSObject {
     deinit {
         removeKeyEventMonitor()
         restoreFocusTask?.cancel()
+        cancelWorkspaceRetryTimer()
     }
 
     // MARK: - Public Interface
@@ -333,7 +338,7 @@ final class SwitcherPanelController: NSObject {
 
         loadProjects()
         if configErrorMessage == nil {
-            refreshWorkspaceState()
+            refreshWorkspaceState(retryOnFailure: true)
         }
 
         applyFilter(query: initialQuery, preferredSelectionKey: nil, useDefaultSelection: true)
@@ -368,6 +373,7 @@ final class SwitcherPanelController: NSObject {
         isActivating = false
         pendingVisibilityCheckToken = nil
         restoreFocusTask?.cancel()
+        cancelWorkspaceRetryTimer()
         session.end(reason: reason)
 
         // Save query for short-term reopen convenience.
@@ -645,6 +651,7 @@ final class SwitcherPanelController: NSObject {
         lastFilterQuery = initialQuery
         lastStatusMessage = nil
         lastStatusLevel = nil
+        cancelWorkspaceRetryTimer()
         tableView.reloadData()
         tableView.deselectAll(nil)
         clearStatus()
@@ -719,7 +726,11 @@ final class SwitcherPanelController: NSObject {
     }
 
     /// Refreshes focused/open project workspace state for row grouping and close affordances.
-    private func refreshWorkspaceState() {
+    ///
+    /// - Parameter retryOnFailure: When true, schedules a repeating timer to retry workspace
+    ///   state queries. Used during `show()` to auto-recover when the AeroSpace circuit breaker
+    ///   is open and background recovery is in progress.
+    private func refreshWorkspaceState(retryOnFailure: Bool = false) {
         switch projectManager.workspaceState() {
         case .success(let state):
             activeProjectId = state.activeProjectId
@@ -727,10 +738,15 @@ final class SwitcherPanelController: NSObject {
         case .failure(let error):
             activeProjectId = nil
             openIds = []
-            setStatus(
-                message: "Workspace state unavailable: \(projectErrorMessage(error))",
-                level: .warning
-            )
+            if retryOnFailure {
+                setStatus(message: "Recovering AeroSpace\u{2026}", level: .info)
+                scheduleWorkspaceStateRetry()
+            } else {
+                setStatus(
+                    message: "Workspace state unavailable: \(projectErrorMessage(error))",
+                    level: .warning
+                )
+            }
             session.logEvent(
                 event: "switcher.workspace_state.failed",
                 level: .warn,
@@ -757,6 +773,85 @@ final class SwitcherPanelController: NSObject {
             let firstFail = findings.first { $0.severity == .fail }
             return firstFail?.title ?? "Config validation failed"
         }
+    }
+
+    // MARK: - Workspace State Retry
+
+    /// Schedules a repeating timer to retry workspace state queries.
+    ///
+    /// Used when the circuit breaker is open and background AeroSpace recovery is in progress.
+    /// Each tick retries `workspaceState()`; on success the UI is updated and the timer canceled.
+    /// After max attempts the original error is surfaced.
+    private func scheduleWorkspaceStateRetry() {
+        cancelWorkspaceRetryTimer()
+        workspaceRetryCount = 0
+
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(
+            deadline: .now() + Self.workspaceRetryIntervalSeconds,
+            repeating: Self.workspaceRetryIntervalSeconds
+        )
+        timer.setEventHandler { [weak self] in
+            self?.handleWorkspaceRetryTick()
+        }
+        timer.resume()
+        workspaceRetryTimer = timer
+
+        session.logEvent(
+            event: "switcher.workspace_retry.scheduled",
+            context: ["max_attempts": "\(Self.workspaceRetryMaxAttempts)"]
+        )
+    }
+
+    /// Handles a single tick of the workspace retry timer.
+    private func handleWorkspaceRetryTick() {
+        workspaceRetryCount += 1
+
+        switch projectManager.workspaceState() {
+        case .success(let state):
+            cancelWorkspaceRetryTimer()
+            activeProjectId = state.activeProjectId
+            openIds = state.openProjectIds
+            clearStatus()
+            applyFilter(
+                query: searchField.stringValue,
+                preferredSelectionKey: nil,
+                useDefaultSelection: true
+            )
+            session.logEvent(
+                event: "switcher.workspace_retry.succeeded",
+                context: ["attempt": "\(workspaceRetryCount)"]
+            )
+
+        case .failure(let error):
+            if workspaceRetryCount >= Self.workspaceRetryMaxAttempts {
+                cancelWorkspaceRetryTimer()
+                setStatus(
+                    message: "Workspace state unavailable: \(projectErrorMessage(error))",
+                    level: .warning
+                )
+                session.logEvent(
+                    event: "switcher.workspace_retry.exhausted",
+                    level: .warn,
+                    message: "\(error)",
+                    context: ["attempts": "\(workspaceRetryCount)"]
+                )
+            } else {
+                session.logEvent(
+                    event: "switcher.workspace_retry.pending",
+                    context: [
+                        "attempt": "\(workspaceRetryCount)",
+                        "remaining": "\(Self.workspaceRetryMaxAttempts - workspaceRetryCount)"
+                    ]
+                )
+            }
+        }
+    }
+
+    /// Cancels and nils the workspace retry timer.
+    private func cancelWorkspaceRetryTimer() {
+        workspaceRetryTimer?.cancel()
+        workspaceRetryTimer = nil
     }
 
     // MARK: - Filtering and Rows
@@ -956,6 +1051,7 @@ final class SwitcherPanelController: NSObject {
                     self.focusIdeWindow(windowId: activation.ideWindowId)
                 case .failure(let error):
                     self.setStatus(message: self.projectErrorMessage(error), level: .error)
+                    self.panel.makeFirstResponder(self.searchField)
                     self.session.logEvent(
                         event: "switcher.project.activation_failed",
                         level: .error,

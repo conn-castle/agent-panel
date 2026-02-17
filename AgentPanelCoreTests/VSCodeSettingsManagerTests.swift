@@ -349,6 +349,7 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:proj - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}",
           "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6",
           "workbench.colorCustomizations": {
             "statusBar.background": "#8b5cf6",
             "titleBar.activeBackground": "#8b5cf6"
@@ -372,6 +373,7 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:old-proj - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}",
           "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6",
           "workbench.colorCustomizations": {
             "statusBar.background": "#8b5cf6"
           }
@@ -449,6 +451,7 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:proj - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}",
           "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6",
           "workbench.colorCustomizations": {
             "statusBar.background": "#8b5cf6",
             "titleBar.activeBackground": "#8b5cf6"
@@ -476,6 +479,7 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:proj",
           "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6",
           "workbench.colorCustomizations": {}
           // <<< agent-panel
         }
@@ -492,6 +496,7 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:proj",
           "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6",
           "workbench.colorCustomizations": {
             "statusBar.background": "#8b5cf6",
             "titleBar.activeBackground": "#8b5cf6"
@@ -514,7 +519,8 @@ final class VSCodeSettingsManagerTests: XCTestCase {
           // >>> agent-panel
           // Managed by AgentPanel. Do not edit this block manually.
           "window.title": "AP:proj",
-          "peacock.color": "#8B5CF6"
+          "peacock.color": "#8B5CF6",
+          "peacock.remoteColor": "#8B5CF6"
           // <<< agent-panel
         }
         """

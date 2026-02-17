@@ -198,6 +198,10 @@ public final class ProjectManager {
 
     // MARK: - Public Properties
 
+    /// Called when the project list changes after a config load.
+    /// Fires on first load (nil → projects) and on subsequent loads when the project list differs.
+    public var onProjectsChanged: (([ProjectConfig]) -> Void)?
+
     /// All projects from config, or empty if config not loaded.
     public var projects: [ProjectConfig] {
         config?.projects ?? []
@@ -341,11 +345,15 @@ public final class ProjectManager {
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
     public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
+        let oldProjects = config?.projects ?? []
         switch configLoader() {
         case .success(let success):
             self.config = success.config
             self.configWarnings = success.warnings
             logEvent("config.loaded", context: ["project_count": "\(success.config.projects.count)"])
+            if success.config.projects != oldProjects {
+                onProjectsChanged?(success.config.projects)
+            }
             return .success(success)
         case .failure(let error):
             self.config = nil
