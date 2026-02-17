@@ -145,6 +145,18 @@ else
   fail "Could not read deployment target from project.yml"
 fi
 
+# 11. ci_setup_signing.sh preserves existing keychain search list
+signing_script="$REPO_ROOT/scripts/ci_setup_signing.sh"
+if [[ -f "$signing_script" ]]; then
+  # The script must NOT replace the keychain list (removing login.keychain-db breaks
+  # IDEDistribution). It must preserve existing keychains when adding the release keychain.
+  if grep -q 'list-keychains -d user -s.*\$' "$signing_script" && grep -q 'existing_keychains\|list-keychains.*-d user' "$signing_script"; then
+    echo "PASS: ci_setup_signing.sh preserves existing keychain search list"
+  else
+    fail "ci_setup_signing.sh may replace the keychain search list — exportArchive will fail with empty distribution methods"
+  fi
+fi
+
 echo ""
 if [[ $errors -gt 0 ]]; then
   echo "=== $errors preflight check(s) FAILED ==="

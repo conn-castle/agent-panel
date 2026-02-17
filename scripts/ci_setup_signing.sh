@@ -26,7 +26,14 @@ echo "Creating temporary keychain..."
 security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
 security set-keychain-settings -lut 21600 "$keychain_path"
 security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-security list-keychains -d user -s "$keychain_path"
+
+# Prepend our keychain to the existing search list (preserving login.keychain-db
+# and System.keychain). Removing them breaks IDEDistribution's certificate chain
+# validation during xcodebuild -exportArchive.
+existing_keychains=$(security list-keychains -d user | sed 's/^ *//;s/"//g')
+security list-keychains -d user -s "$keychain_path" $existing_keychains
+echo "Keychain search list:"
+security list-keychains -d user
 
 echo "Importing application certificate..."
 security import "$signing_dir/app.p12" \
