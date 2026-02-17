@@ -107,11 +107,11 @@ Incomplete:
 - Finalize release readiness across packaging, CI gates, and onboarding documentation.
 
 ### Tasks
-- [ ] Decide distribution shape: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred) and document it in README.
-- [ ] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
-- [ ] Add release scripts (e.g., `scripts/archive.sh`, `scripts/notarize.sh`, and a one-command `scripts/release.sh`) for archive/export/notarize/staple.
+- [x] Decide distribution shape: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred) and document it in README.
+- [x] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
+- [x] Add release scripts (e.g., `scripts/archive.sh`, `scripts/notarize.sh`, and a one-command `scripts/release.sh`) for archive/export/notarize/staple.
 - [ ] Finalize README: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
-- [ ] Add CI gates (build + tests) and a documented release checklist.
+- [x] Add CI gates (build + tests) and a documented release checklist.
 - [ ] Validate onboarding on a fresh machine using README + Doctor only (no tribal knowledge).
 
 ### Exit criteria
@@ -127,7 +127,7 @@ Incomplete:
 ### Tasks
 - [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
 - [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
-- [ ] Fuzzy search with ranking in the switcher.
+- [ ] Fuzzy search with ranking in the switcher, including trigram matching as well.
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
 - [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
 

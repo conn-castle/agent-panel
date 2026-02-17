@@ -27,6 +27,12 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-17 new-project-layout-defaults: First open ignores default window placement
+    Priority: High. Area: Window management
+    Description: Opening a project for the first time (no prior saved state) does not place windows according to the configured layout defaults; window positions and sizes are incorrect.
+    Next step: Reproduce with a brand-new project path and trace the first-open layout initialization path to ensure defaults are applied when no persisted layout exists.
+    Notes: Likely limited to first-open state hydration; confirm behavior differs after a project has been opened once. This seems to be a persistent issue for remote SSH projects.
+
 - Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
     Priority: Low. Area: Testing
     Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.

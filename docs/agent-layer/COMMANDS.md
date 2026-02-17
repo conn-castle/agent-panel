@@ -110,6 +110,24 @@ scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 
 Run from repo root. Notes: the `.xcresult` bundle is produced by `scripts/test.sh`.
 
+## Release (CI only)
+
+The release workflow (`.github/workflows/release.yml`) runs on tag push (`v*`). These scripts are called by CI and are not intended for local use:
+
+- `scripts/ci_setup_signing.sh` — import certs into temp keychain
+- `scripts/ci_archive.sh` — archive + export + CLI codesign
+- `scripts/ci_package.sh` — create DMG, PKG, tarball
+- `scripts/ci_notarize.sh <artifact>` — notarize + staple a single artifact
+- `scripts/ci_release_validate.sh` — validate all artifacts post-notarization
+
+To create a release:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Run from repo root. Prerequisites: GitHub `release` environment with secrets (`APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_PRIVATE_KEY_B64`, `DEVELOPER_ID_APP_P12_B64`, `DEVELOPER_ID_APP_P12_PASSWORD`, `DEVELOPER_ID_INSTALLER_P12_B64`, `DEVELOPER_ID_INSTALLER_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `DEVELOPER_ID_APP_IDENTITY`, `DEVELOPER_ID_INSTALLER_IDENTITY`) and variables (`MACOS_DEPLOYMENT_TARGET`, `CLI_INSTALL_PATH`, `RELEASE_TAG_PREFIX`).
+
 ## Git hooks
 
 Install repo-managed git hooks (pre-commit runs `scripts/test.sh`):

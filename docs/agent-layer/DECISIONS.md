@@ -155,3 +155,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: AgentPanel distribution is now signed + notarized arm64 artifacts published on GitHub tagged releases. Homebrew distribution is deferred to backlog work.
     Reason: This keeps release operations focused on a single packaging path needed now, while preserving deterministic installs/upgrades through versioned release assets.
     Tradeoffs: Intel macOS is unsupported. Users do not get package-manager install/upgrade ergonomics until Homebrew support is implemented.
+
+- Decision 2026-02-17 releaseci: Single-job release workflow with script-based signing and packaging
+    Decision: Release workflow uses a single CI job on `macos-15` with 5 scripts (`ci_setup_signing`, `ci_archive`, `ci_package`, `ci_notarize`, `ci_release_validate`). ExportOptions.plist is generated dynamically at build time (team ID extracted from `DEVELOPER_ID_APP_IDENTITY` secret). Entitlements file committed at `release/AgentPanel.entitlements`. Release config signing settings in `project.yml` (Manual style, Developer ID Application identity, hardened runtime) — Debug builds remain unsigned.
+    Reason: Single job avoids artifact transfer overhead between jobs. Scripts follow existing `scripts/` convention and are locally testable. Dynamic ExportOptions avoids committing team-specific data.
+    Tradeoffs: Long single job (~15-20 min) vs parallel jobs. CLI tarball is not notarized (tarballs cannot be stapled; users must clear quarantine manually).

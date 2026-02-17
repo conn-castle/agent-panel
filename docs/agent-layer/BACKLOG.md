@@ -28,6 +28,12 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-17 remote-indicator: Show remote icon for SSH projects in switcher
+    Priority: Low. Area: App/UX
+    Description: Display a visual indicator (e.g., a small remote/cloud icon) next to SSH remote projects in the switcher panel so they are immediately distinguishable from local projects.
+    Acceptance criteria: Projects with a `remote` field in config show a remote indicator in the switcher row; local projects do not.
+    Notes: `ProjectConfig.isSSH` already exists. Implementation is presentation-only in `SwitcherPanelController`.
+
 - Backlog 2026-02-16 chrome-profile-selection: Enable chromeProfile selection in config
     Priority: Medium. Area: Core/Chrome
     Description: Implement support for selecting specific Chrome profiles via the configuration file (config.toml). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts.
