@@ -26,9 +26,8 @@ The GitHub repository must have a `release` environment configured with the foll
 | Variable | Value |
 |----------|-------|
 | `CLI_INSTALL_PATH` | `/usr/local/bin/ap` |
-| `RELEASE_TAG_PREFIX` | `v` |
 
-Note: The macOS deployment target is set in `project.yml` (single source of truth) and must not be overridden in CI.
+Note: The macOS deployment target is set in `project.yml` (single source of truth) and must not be overridden in CI. The tag prefix `v` is hardcoded in the workflow trigger.
 
 ## Creating a Release
 
@@ -82,7 +81,7 @@ The release workflow (`.github/workflows/release.yml`) runs on `macos-15` and:
 3. Generates the Xcode project.
 4. Runs build and tests (full test suite with coverage gate).
 5. Imports signing certificates into a temporary keychain.
-6. Archives the app and exports with Developer ID signing.
+6. Archives the app and codesigns with Developer ID identity (hardened runtime + entitlements).
 7. Codesigns the CLI binary with hardened runtime.
 8. Creates distribution artifacts:
    - `AgentPanel-v<version>-macos-arm64.dmg` (app)
@@ -116,7 +115,7 @@ These scripts are called by the release workflow and are not intended for local 
 | Script | Purpose |
 |--------|---------|
 | `scripts/ci_setup_signing.sh` | Import certificates into temporary keychain |
-| `scripts/ci_archive.sh` | Archive, export, and codesign CLI |
+| `scripts/ci_archive.sh` | Archive, codesign app and CLI with Developer ID |
 | `scripts/ci_package.sh` | Create DMG, PKG, and tarball |
 | `scripts/ci_notarize.sh` | Notarize and staple a single artifact |
 | `scripts/ci_release_validate.sh` | Validate all artifact signatures and notarization |

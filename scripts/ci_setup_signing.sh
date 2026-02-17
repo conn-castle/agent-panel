@@ -35,10 +35,10 @@ security list-keychains -d user -s "$keychain_path" $existing_keychains
 echo "Keychain search list:"
 security list-keychains -d user
 
-echo "Downloading Apple intermediate certificates..."
-# IDEDistribution needs the full certificate chain to validate Developer ID
-# identities. The .p12 only contains the leaf cert + private key. The Apple
-# intermediate CAs are NOT pre-installed on CI runner keychains.
+echo "Downloading Apple Developer ID G2 intermediate certificate..."
+# The .p12 only contains the leaf cert + private key. Import the Apple
+# intermediate CA so the full certificate chain is available for validation
+# (e.g., spctl --assess, codesign --verify).
 curl -sL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer \
   -o "$signing_dir/DeveloperIDG2CA.cer"
 security import "$signing_dir/DeveloperIDG2CA.cer" -k "$keychain_path"

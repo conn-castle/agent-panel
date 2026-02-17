@@ -126,7 +126,7 @@ The release workflow (`.github/workflows/release.yml`) runs on tag push (`v*`). 
 
 - `scripts/ci_preflight.sh` — validate release configuration (also runs in CI workflow)
 - `scripts/ci_setup_signing.sh` — import certs into temp keychain
-- `scripts/ci_archive.sh` — archive + export + CLI codesign
+- `scripts/ci_archive.sh` — archive + codesign app and CLI with Developer ID
 - `scripts/ci_package.sh` — create DMG, PKG, tarball
 - `scripts/ci_notarize.sh <artifact>` — notarize + staple a single artifact
 - `scripts/ci_release_validate.sh` — validate all artifacts post-notarization
@@ -137,7 +137,7 @@ To create a release:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-Run from repo root. Prerequisites: GitHub `release` environment with secrets (`APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_PRIVATE_KEY_B64`, `DEVELOPER_ID_APP_P12_B64`, `DEVELOPER_ID_APP_P12_PASSWORD`, `DEVELOPER_ID_INSTALLER_P12_B64`, `DEVELOPER_ID_INSTALLER_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `DEVELOPER_ID_APP_IDENTITY`, `DEVELOPER_ID_INSTALLER_IDENTITY`) and variables (`CLI_INSTALL_PATH`, `RELEASE_TAG_PREFIX`).
+Run from repo root. Prerequisites: GitHub `release` environment with secrets (`APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_PRIVATE_KEY_B64`, `DEVELOPER_ID_APP_P12_B64`, `DEVELOPER_ID_APP_P12_PASSWORD`, `DEVELOPER_ID_INSTALLER_P12_B64`, `DEVELOPER_ID_INSTALLER_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `DEVELOPER_ID_APP_IDENTITY`, `DEVELOPER_ID_INSTALLER_IDENTITY`) and variables (`CLI_INSTALL_PATH`).
 
 ## Git hooks
 
