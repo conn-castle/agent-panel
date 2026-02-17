@@ -102,6 +102,42 @@ else
   fail "project.yml missing Release code signing configuration (CODE_SIGN_STYLE: Manual)"
 fi
 
+# 8. ci_archive.sh passes DEVELOPMENT_TEAM to xcodebuild archive
+archive_script="$REPO_ROOT/scripts/ci_archive.sh"
+if [[ -f "$archive_script" ]]; then
+  if grep -q 'DEVELOPMENT_TEAM=' "$archive_script"; then
+    echo "PASS: ci_archive.sh passes DEVELOPMENT_TEAM to xcodebuild"
+  else
+    fail "ci_archive.sh does not pass DEVELOPMENT_TEAM to xcodebuild — archive will fail with 'requires a development team'"
+  fi
+fi
+
+# 9. Release workflow does not override MACOSX_DEPLOYMENT_TARGET
+# The deployment target is set in project.yml (single source of truth).
+# Overriding via env var causes failures when the runner SDK is older than the target.
+if [[ -f "$workflow" ]]; then
+  if grep -q 'MACOS_DEPLOYMENT_TARGET\|MACOSX_DEPLOYMENT_TARGET' "$workflow"; then
+    fail "Release workflow overrides deployment target — remove it; project.yml is the single source of truth"
+  else
+    echo "PASS: Release workflow does not override deployment target"
+  fi
+fi
+
+# 10. project.yml deployment target is not higher than a reasonable SDK max
+deploy_target=$(grep 'macOS:' "$REPO_ROOT/project.yml" | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+if [[ -n "$deploy_target" ]]; then
+  deploy_major=$(echo "$deploy_target" | cut -d. -f1)
+  # CI runners lag behind the latest macOS; the SDK max is typically the runner's OS version.
+  # macOS 15 runners support up to SDK 15.x. Flag anything above 15 as a problem.
+  if [[ "$deploy_major" -gt 15 ]]; then
+    fail "project.yml deployment target $deploy_target exceeds CI runner SDK (macOS 15.x) — archive will fail"
+  else
+    echo "PASS: Deployment target $deploy_target is within CI runner SDK range"
+  fi
+else
+  fail "Could not read deployment target from project.yml"
+fi
+
 echo ""
 if [[ $errors -gt 0 ]]; then
   echo "=== $errors preflight check(s) FAILED ==="

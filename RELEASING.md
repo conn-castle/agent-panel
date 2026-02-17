@@ -25,9 +25,10 @@ The GitHub repository must have a `release` environment configured with the foll
 
 | Variable | Value |
 |----------|-------|
-| `MACOS_DEPLOYMENT_TARGET` | `16.0` |
 | `CLI_INSTALL_PATH` | `/usr/local/bin/ap` |
 | `RELEASE_TAG_PREFIX` | `v` |
+
+Note: The macOS deployment target is set in `project.yml` (single source of truth) and must not be overridden in CI.
 
 ## Creating a Release
 

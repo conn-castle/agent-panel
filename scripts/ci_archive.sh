@@ -5,22 +5,11 @@ set -euo pipefail
 #
 # Required environment variables:
 #   DEVELOPER_ID_APP_IDENTITY  — e.g. "Developer ID Application: Name (TEAMID)"
-#   MACOS_DEPLOYMENT_TARGET    — e.g. "16.0"
 #   VERSION                    — e.g. "0.1.0"
 #   RUNNER_TEMP
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
-
-# --- Validate required inputs ---
-if [[ -z "${MACOS_DEPLOYMENT_TARGET:-}" ]]; then
-  echo "error: MACOS_DEPLOYMENT_TARGET is not set or empty" >&2
-  exit 1
-fi
-if [[ ! "$MACOS_DEPLOYMENT_TARGET" =~ ^[0-9]+\.[0-9]+$ ]]; then
-  echo "error: MACOS_DEPLOYMENT_TARGET must be major.minor (e.g. 16.0), got: $MACOS_DEPLOYMENT_TARGET" >&2
-  exit 1
-fi
 
 archive_path="$RUNNER_TEMP/AgentPanel.xcarchive"
 export_path="$RUNNER_TEMP/export"
@@ -44,7 +33,7 @@ xcodebuild archive \
   -destination "generic/platform=macOS" \
   -archivePath "$archive_path" \
   -derivedDataPath "$derived_data_path" \
-  MACOSX_DEPLOYMENT_TARGET="$MACOS_DEPLOYMENT_TARGET" \
+  DEVELOPMENT_TEAM="$team_id" \
   2>&1 | xcbeautify
 
 # --- Generate ExportOptions.plist ---

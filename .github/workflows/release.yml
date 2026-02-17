@@ -66,7 +66,6 @@ jobs:
       - name: Archive and export
         env:
           DEVELOPER_ID_APP_IDENTITY: ${{ secrets.DEVELOPER_ID_APP_IDENTITY }}
-          MACOS_DEPLOYMENT_TARGET: ${{ vars.MACOS_DEPLOYMENT_TARGET }}
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: scripts/ci_archive.sh
 
