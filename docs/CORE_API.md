@@ -381,6 +381,7 @@ public struct Doctor {
     public init(
         runningApplicationChecker: RunningApplicationChecking,
         hotkeyStatusProvider: HotkeyStatusProviding? = nil,
+        focusCycleStatusProvider: FocusCycleStatusProviding? = nil,
         windowPositioner: WindowPositioning? = nil
     )
 
@@ -444,6 +445,16 @@ public protocol HotkeyStatusProviding {
 public enum HotkeyRegistrationStatus: Equatable, Sendable {
     case registered
     case failed(osStatus: Int32)
+}
+
+public enum FocusCycleRegistrationStatus: Equatable, Sendable {
+    case registered
+    case failedNext(osStatus: Int32)
+    case failedPrevious(osStatus: Int32)
+}
+
+public protocol FocusCycleStatusProviding {
+    func focusCycleRegistrationStatus() -> FocusCycleRegistrationStatus?
 }
 ```
 

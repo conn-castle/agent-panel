@@ -109,8 +109,8 @@ Incomplete:
 ### Tasks
 - [x] Decide distribution shape: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred) and document it in README.
 - [x] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
-- [x] Add release scripts (e.g., `scripts/archive.sh`, `scripts/notarize.sh`, and a one-command `scripts/release.sh`) for archive/export/notarize/staple.
-- [ ] Finalize README: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
+- [x] Add release scripts (`scripts/ci_archive.sh`, `scripts/ci_package.sh`, `scripts/ci_notarize.sh`, `scripts/ci_release_validate.sh`, with `scripts/ci_setup_signing.sh`) for archive/export/package/notarize/validation in the release workflow.
+- [x] Finalize README: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
 - [x] Add CI gates (build + tests) and a documented release checklist.
 - [ ] Validate onboarding on a fresh machine using README + Doctor only (no tribal knowledge).
 

@@ -194,7 +194,7 @@ Then add `--app-bundle-id` / `--pid`, and use `--format` to output only what you
 
 # Project Activation Command Sequence
 
-This section documents the exact AeroSpace commands and sequencing used by the proven activation flow (reference: `scripts/open_castle_capital_ai_fund.sh`). The Swift implementation must mirror this sequence.
+This section documents the exact AeroSpace commands and sequencing used by the proven activation flow (reference: `AgentPanelCore/ProjectManager.swift` and `AgentPanelCore/AeroSpace/ApAeroSpace.swift`). The Swift implementation must mirror this sequence.
 
 ## Overview
 
