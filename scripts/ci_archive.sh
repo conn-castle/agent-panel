@@ -46,6 +46,8 @@ cat > "$export_options" <<PLIST
 <dict>
     <key>method</key>
     <string>developer-id</string>
+    <key>destination</key>
+    <string>export</string>
     <key>teamID</key>
     <string>${team_id}</string>
     <key>signingStyle</key>
@@ -58,11 +60,12 @@ PLIST
 
 # --- Export ---
 echo "Exporting archive..."
+echo "ExportOptions.plist contents:"
+cat "$export_options"
 xcodebuild -exportArchive \
   -archivePath "$archive_path" \
   -exportPath "$export_path" \
-  -exportOptionsPlist "$export_options" \
-  2>&1 | xcbeautify
+  -exportOptionsPlist "$export_options"
 
 # --- Verify exported app ---
 app_path="$export_path/AgentPanel.app"

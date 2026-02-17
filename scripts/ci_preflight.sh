@@ -110,6 +110,12 @@ if [[ -f "$archive_script" ]]; then
   else
     fail "ci_archive.sh does not pass DEVELOPMENT_TEAM to xcodebuild — archive will fail with 'requires a development team'"
   fi
+  # ExportOptions.plist must include destination key for developer-id export (Xcode 14+)
+  if grep -q '<key>destination</key>' "$archive_script"; then
+    echo "PASS: ci_archive.sh ExportOptions includes destination key"
+  else
+    fail "ci_archive.sh ExportOptions.plist missing 'destination' key — export will fail on Xcode 14+"
+  fi
 fi
 
 # 9. Release workflow does not override MACOSX_DEPLOYMENT_TARGET
@@ -123,16 +129,17 @@ if [[ -f "$workflow" ]]; then
   fi
 fi
 
-# 10. project.yml deployment target is not higher than a reasonable SDK max
+# 10. project.yml deployment target is within CI runner SDK range
+# The macos-15 runner has Xcode with SDK max ~15.5. Deployment targets above
+# this produce warnings but still build. Flag targets above 15 (major) as errors
+# since they indicate an SDK that the runner definitely doesn't have.
 deploy_target=$(grep 'macOS:' "$REPO_ROOT/project.yml" | head -1 | sed 's/.*: *"\(.*\)"/\1/')
 if [[ -n "$deploy_target" ]]; then
   deploy_major=$(echo "$deploy_target" | cut -d. -f1)
-  # CI runners lag behind the latest macOS; the SDK max is typically the runner's OS version.
-  # macOS 15 runners support up to SDK 15.x. Flag anything above 15 as a problem.
   if [[ "$deploy_major" -gt 15 ]]; then
     fail "project.yml deployment target $deploy_target exceeds CI runner SDK (macOS 15.x) — archive will fail"
   else
-    echo "PASS: Deployment target $deploy_target is within CI runner SDK range"
+    echo "PASS: Deployment target $deploy_target (major $deploy_major) is within CI runner SDK range"
   fi
 else
   fail "Could not read deployment target from project.yml"
