@@ -211,7 +211,9 @@ final class DoctorReportRenderingTests: XCTestCase {
             macOSVersion: "macOS 15.7 (Test)",
             aerospaceApp: aerospaceApp,
             aerospaceCli: aerospaceCli,
-            errorContext: nil
+            errorContext: nil,
+            durationMs: 0,
+            sectionTimings: [:]
         )
     }
 }

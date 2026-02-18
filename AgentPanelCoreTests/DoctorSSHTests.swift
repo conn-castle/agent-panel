@@ -354,7 +354,7 @@ final class DoctorSSHTests: XCTestCase {
         })
     }
 
-    func testRunReportsAccessibilityFailWhenNotTrusted() throws {
+    func testRunReportsAccessibilityWarnWhenNotTrusted() throws {
         let toml = """
         [[project]]
         name = "Local"
@@ -372,7 +372,7 @@ final class DoctorSSHTests: XCTestCase {
         let report = doctor.run()
 
         XCTAssertTrue(report.findings.contains {
-            $0.severity == .fail && $0.title == "Accessibility permission not granted"
+            $0.severity == .warn && $0.title == "Accessibility permission not granted"
         })
     }
 

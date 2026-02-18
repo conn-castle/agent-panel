@@ -186,6 +186,26 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: SSH targets are LAN hosts (e.g., `happy-mac`). Local connections complete in milliseconds; if a host doesn't respond in 2 seconds, it's unreachable. Doctor SSH checks are WARN-level diagnostics — speed of feedback is more important than tolerating slow networks.
     Tradeoffs: Remote SSH hosts (WAN, high latency) may false-fail if connection takes >2s. If users need longer timeouts for remote hosts, this would need to become configurable. Current use case is exclusively LAN.
 
+- Decision 2026-02-18 cli-build-version: CLI version embedded via buildVersion constant
+    Decision: `AgentPanel.version` falls back to a `buildVersion` string constant in `Identity.swift` when `Bundle.main.infoDictionary` is nil (CLI tool context). CI preflight verifies `buildVersion` matches `MARKETING_VERSION` in `project.yml`.
+    Reason: CLI tools (`type: tool` in XcodeGen) have no Info.plist bundle. `Bundle.main.infoDictionary` returns nil, causing the version to fall back to `"0.0.0-dev"`. The constant provides correct version reporting without build scripts or generated files.
+    Tradeoffs: Requires updating two locations when bumping the version (project.yml + Identity.swift). CI preflight catches mismatches automatically.
+
+- Decision 2026-02-18 accessibility-warn: Accessibility check is WARN, not FAIL
+    Decision: Doctor reports missing Accessibility permission as WARN instead of FAIL. Menu bar icon shows orange (not red) when Accessibility is the only issue.
+    Reason: macOS revokes Accessibility permission when the app binary changes (e.g., after every update). This caused the menu bar to show red on every version update, alarming users into thinking the app was broken. Without Accessibility, the app still functions (project switching, Chrome tabs, etc.) — only window positioning is degraded.
+    Tradeoffs: Users may not notice the missing Accessibility as urgently with orange vs red. The "Request Accessibility" Doctor button remains available.
+
+- Decision 2026-02-18 doctor-log-findings: Doctor log entries include finding titles for remote diagnostics
+    Decision: `logDoctorSummary` now includes `fail_findings` and `warn_findings` context keys with semicolon-separated finding titles.
+    Reason: Previous logs only showed counts (e.g., `fail_count: 1`) without identifying WHAT failed. This made remote debugging impossible — multiple iterations were spent investigating Doctor hanging when the actual issue was an Accessibility permission FAIL that the logs didn't reveal.
+    Tradeoffs: Log entries are slightly larger. Finding titles are truncated-safe since they're short strings.
+
+- Decision 2026-02-18 doctor-comprehensive-logging: Doctor logs include full rendered report, timing, and binary path
+    Decision: Every Doctor log entry (`doctor.refresh.completed`, `doctor.run.completed`) now includes: full rendered report text (`rendered_report`), total duration (`duration_ms`), per-section timing breakdown (`timing_*_ms`), and finding titles. Startup log includes `binary_path`, `bundle_path`, and `macos_version`. Doctor report header shows duration and section timings.
+    Reason: Four release iterations (v0.1.0–v0.1.3) were spent investigating remote issues without sufficient log data. The user explicitly requested "everything you need to know for sure what is wrong" in a single release attempt.
+    Tradeoffs: Log entries are significantly larger (~2-4KB per Doctor run). Acceptable for a diagnostic tool that runs infrequently.
+
 - Decision 2026-02-17 direct-codesign: Use direct `codesign` instead of `xcodebuild -exportArchive`
     Decision: `ci_archive.sh` extracts the .app from the xcarchive and re-signs with `codesign --force --deep --options runtime --timestamp --entitlements` instead of using `xcodebuild -exportArchive` with ExportOptions.plist.
     Reason: `IDEDistribution` (used by `-exportArchive`) fails on GitHub Actions CI runners with "Unknown Distribution Error" / empty valid distribution methods set. Root cause: incomplete Apple intermediate certificate chain in the CI runner environment that `IDEDistribution` cannot resolve. Direct `codesign` bypasses `IDEDistribution` entirely.

@@ -38,7 +38,7 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
 /// A single Doctor finding rendered in the report.
 public struct DoctorFinding: Equatable, Sendable {
     public let severity: DoctorSeverity
-    let title: String
+    public let title: String
     let bodyLines: [String]
     let snippet: String?
     let snippetLanguage: String
@@ -77,13 +77,17 @@ public struct DoctorFinding: Equatable, Sendable {
 }
 
 /// Report metadata rendered in the Doctor header.
-struct DoctorMetadata: Equatable, Sendable {
-    let timestamp: String
-    let agentPanelVersion: String
-    let macOSVersion: String
-    let aerospaceApp: String
-    let aerospaceCli: String
-    let errorContext: ErrorContext?
+public struct DoctorMetadata: Equatable, Sendable {
+    public let timestamp: String
+    public let agentPanelVersion: String
+    public let macOSVersion: String
+    public let aerospaceApp: String
+    public let aerospaceCli: String
+    public let errorContext: ErrorContext?
+    /// Total Doctor.run() duration in milliseconds.
+    public let durationMs: Int
+    /// Per-section timing breakdown in milliseconds.
+    public let sectionTimings: [String: Int]
 }
 
 /// Action availability for Doctor UI buttons.
@@ -116,7 +120,7 @@ public struct DoctorActionAvailability: Equatable, Sendable {
 
 /// A structured Doctor report.
 public struct DoctorReport: Equatable, Sendable {
-    let metadata: DoctorMetadata
+    public let metadata: DoctorMetadata
     public let findings: [DoctorFinding]
     public let actions: DoctorActionAvailability
 
@@ -173,6 +177,12 @@ public struct DoctorReport: Equatable, Sendable {
         lines.append("aerospace CLI: \(metadata.aerospaceCli)")
         if let ctx = metadata.errorContext {
             lines.append("Triggered by: \(ctx.trigger) (\(ctx.category.rawValue)): \(ctx.message)")
+        }
+        lines.append("Duration: \(metadata.durationMs)ms")
+        if !metadata.sectionTimings.isEmpty {
+            let sortedSections = metadata.sectionTimings.sorted { $0.key < $1.key }
+            let timingParts = sortedSections.map { "\($0.key)=\($0.value)ms" }
+            lines.append("Sections: \(timingParts.joined(separator: ", "))")
         }
         lines.append("")
 
@@ -310,12 +320,20 @@ public struct Doctor {
         return formatter.string(from: dateProvider.now())
     }
 
+    /// Returns elapsed milliseconds since a given start time.
+    private static func elapsedMs(since start: UInt64) -> Int {
+        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+    }
+
     /// Runs all Doctor checks and returns a report.
     /// - Parameter context: Optional error context that triggered this run (informational, for logging).
     public func run(context: ErrorContext? = nil) -> DoctorReport {
+        let runStart = DispatchTime.now().uptimeNanoseconds
         var findings: [DoctorFinding] = []
+        var sectionTimings: [String: Int] = [:]
 
         // Check Homebrew
+        var sectionStart = runStart
         if executableResolver.resolve("brew") != nil {
             findings.append(DoctorFinding(
                 severity: .pass,
@@ -329,7 +347,10 @@ public struct Doctor {
             ))
         }
 
+        sectionTimings["homebrew"] = Self.elapsedMs(since: sectionStart)
+
         // Check AeroSpace app
+        sectionStart = DispatchTime.now().uptimeNanoseconds
         let installStatus = aerospaceHealth.installStatus()
         var aerospaceAppLabel = "NOT FOUND"
         if installStatus.isInstalled {
@@ -451,8 +472,11 @@ public struct Doctor {
             ))
         }
 
+        sectionTimings["aerospace"] = Self.elapsedMs(since: sectionStart)
+
         // Detect VS Code / Chrome installation (findings emitted after config load,
         // since severity depends on whether projects are configured).
+        sectionStart = DispatchTime.now().uptimeNanoseconds
         let vscodeURL = appDiscovery.applicationURL(bundleIdentifier: Self.vscodeBundleId)
         let chromeURL = appDiscovery.applicationURL(bundleIdentifier: Self.chromeBundleId)
 
@@ -535,7 +559,10 @@ public struct Doctor {
             }
         }
 
+        sectionTimings["config_and_projects"] = Self.elapsedMs(since: sectionStart)
+
         // Emit VS Code / Chrome findings (severity depends on whether projects are configured)
+        sectionStart = DispatchTime.now().uptimeNanoseconds
         if let vscodeURL {
             findings.append(DoctorFinding(
                 severity: .pass,
@@ -593,7 +620,10 @@ public struct Doctor {
             }
         }
 
+        sectionTimings["apps"] = Self.elapsedMs(since: sectionStart)
+
         // Check Accessibility permission for window positioning
+        sectionStart = DispatchTime.now().uptimeNanoseconds
         var accessibilityNotGranted = false
         if let positioner = windowPositioner {
             if positioner.isAccessibilityTrusted() {
@@ -604,9 +634,9 @@ public struct Doctor {
             } else {
                 accessibilityNotGranted = true
                 findings.append(DoctorFinding(
-                    severity: .fail,
+                    severity: .warn,
                     title: "Accessibility permission not granted",
-                    detail: "Required for automatic window positioning when activating projects",
+                    detail: "Required for automatic window positioning when activating projects. macOS revokes this permission when the app binary changes (e.g., after an update).",
                     fix: "Open System Settings > Privacy & Security > Accessibility > Enable AgentPanel"
                 ))
             }
@@ -652,6 +682,8 @@ public struct Doctor {
             }
         }
 
+        sectionTimings["accessibility_and_hotkeys"] = Self.elapsedMs(since: sectionStart)
+
         // Check for critical failures that onboarding can fix
         let hasCriticalAeroSpaceFailure = !installStatus.isInstalled || !cliAvailable
         if hasCriticalAeroSpaceFailure {
@@ -662,13 +694,16 @@ public struct Doctor {
             ))
         }
 
+        let totalDurationMs = Self.elapsedMs(since: runStart)
         let metadata = DoctorMetadata(
             timestamp: makeUTCTimestamp(),
             agentPanelVersion: AgentPanel.version,
             macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             aerospaceApp: aerospaceAppLabel,
             aerospaceCli: aerospaceCliLabel,
-            errorContext: context
+            errorContext: context,
+            durationMs: totalDurationMs,
+            sectionTimings: sectionTimings
         )
 
         let actions = DoctorActionAvailability(

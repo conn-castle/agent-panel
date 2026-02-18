@@ -580,7 +580,9 @@ private func makeDoctorReport(hasFailures: Bool) -> DoctorReport {
         macOSVersion: "macOS 15.7",
         aerospaceApp: "AVAILABLE",
         aerospaceCli: "AVAILABLE",
-        errorContext: nil
+        errorContext: nil,
+        durationMs: 0,
+        sectionTimings: [:]
     )
     let findings = hasFailures
         ? [DoctorFinding(severity: .fail, title: "Failure")]

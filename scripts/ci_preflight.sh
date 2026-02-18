@@ -164,6 +164,21 @@ if [[ -f "$signing_script" ]]; then
   fi
 fi
 
+# 12. Identity.swift buildVersion matches MARKETING_VERSION
+identity_swift="$REPO_ROOT/AgentPanelCore/Identity.swift"
+if [[ -f "$identity_swift" ]]; then
+  swift_version=$(grep 'static let buildVersion' "$identity_swift" | head -1 | sed 's/.*= *"\([^"]*\)".*/\1/')
+  if [[ -z "$swift_version" ]]; then
+    fail "Could not read buildVersion from Identity.swift"
+  elif [[ "$swift_version" != "$version" ]]; then
+    fail "Identity.swift buildVersion '$swift_version' does not match MARKETING_VERSION '$version' — CLI will report wrong version"
+  else
+    echo "PASS: Identity.swift buildVersion matches MARKETING_VERSION ($version)"
+  fi
+else
+  fail "Identity.swift not found at $identity_swift"
+fi
+
 echo ""
 if [[ $errors -gt 0 ]]; then
   echo "=== $errors preflight check(s) FAILED ==="

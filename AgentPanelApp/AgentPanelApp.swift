@@ -200,8 +200,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "app.started",
             context: [
                 "version": AgentPanel.version,
+                "binary_path": Bundle.main.executablePath ?? "unknown",
+                "bundle_path": Bundle.main.bundlePath,
                 "log_path": dataStore.primaryLogFile.path,
-                "config_path": dataStore.configFile.path
+                "config_path": dataStore.configFile.path,
+                "macos_version": ProcessInfo.processInfo.operatingSystemVersionString
             ]
         )
     }
@@ -527,7 +530,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = logger.log(event: event, level: level, message: message, context: context)
     }
 
-    /// Logs a summary for Doctor reports to aid diagnostics.
+    /// Logs a comprehensive summary for Doctor reports to aid remote diagnostics.
+    /// Includes finding titles, timing breakdown, and the full rendered report text.
     /// - Parameters:
     ///   - report: Doctor report to summarize.
     ///   - event: Event name to log.
@@ -558,6 +562,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             context["menu_bar_severity"] = "PENDING"
         }
+
+        // Include FAIL and WARN finding titles for remote diagnostics
+        let failTitles = report.findings
+            .filter { $0.severity == .fail && !$0.title.isEmpty }
+            .map { $0.title }
+        let warnTitles = report.findings
+            .filter { $0.severity == .warn && !$0.title.isEmpty }
+            .map { $0.title }
+        if !failTitles.isEmpty {
+            context["fail_findings"] = failTitles.joined(separator: "; ")
+        }
+        if !warnTitles.isEmpty {
+            context["warn_findings"] = warnTitles.joined(separator: "; ")
+        }
+
+        // Include timing breakdown for performance diagnostics
+        context["duration_ms"] = "\(report.metadata.durationMs)"
+        let sortedSections = report.metadata.sectionTimings.sorted { $0.key < $1.key }
+        for (section, ms) in sortedSections {
+            context["timing_\(section)_ms"] = "\(ms)"
+        }
+
+        // Include the full rendered report text so remote debugging never lacks detail
+        context["rendered_report"] = report.rendered()
 
         logAppEvent(
             event: event,

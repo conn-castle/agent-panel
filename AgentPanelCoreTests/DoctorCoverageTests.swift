@@ -349,7 +349,9 @@ final class DoctorCoverageTests: XCTestCase {
             macOSVersion: "15.0",
             aerospaceApp: "FOUND",
             aerospaceCli: "AVAILABLE",
-            errorContext: nil
+            errorContext: nil,
+            durationMs: 0,
+            sectionTimings: [:]
         )
         let report = DoctorReport(metadata: metadata, findings: [], actions: .none)
 
@@ -365,7 +367,9 @@ final class DoctorCoverageTests: XCTestCase {
             macOSVersion: "15.0",
             aerospaceApp: "FOUND",
             aerospaceCli: "AVAILABLE",
-            errorContext: nil
+            errorContext: nil,
+            durationMs: 0,
+            sectionTimings: [:]
         )
         let finding = DoctorFinding(
             severity: .pass,

@@ -6,6 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-02-18
+
+### Fixed
+
+- **Red menu bar icon after every update** -- Accessibility permission check used FAIL severity, causing the menu bar icon to turn red after every app update (macOS revokes Accessibility when the binary signature changes). Changed to WARN severity — the icon shows orange instead of red, correctly reflecting that the app works without Accessibility (only window positioning is degraded).
+- **CLI reports version 0.0.0-dev** -- The `ap` CLI binary had no Info.plist, so `Bundle.main.infoDictionary` returned nil and the version fell back to `"0.0.0-dev"`. Added a build-time `buildVersion` constant in `Identity.swift` with a CI preflight check to keep it in sync with `MARKETING_VERSION` in `project.yml`.
+- **Doctor logs don't show what failed** -- Doctor log entries only included pass/warn/fail counts, making remote debugging impossible. Added `fail_findings` and `warn_findings` context keys with actual finding titles. Added full rendered report text, per-section timing breakdown, and total duration to every Doctor log entry. Startup log now includes binary path, bundle path, and macOS version. Doctor report header now shows duration and section timings.
+
 ## [0.1.3] - 2026-02-18
 
 ### Fixed
