@@ -7,7 +7,7 @@ public enum AgentPanel {
 
     /// Build-time version constant. Must match MARKETING_VERSION in project.yml.
     /// CI preflight verifies these stay in sync.
-    static let buildVersion = "0.1.4"
+    static let buildVersion = "0.1.5"
 
     /// A human-readable version identifier for diagnostic output.
     /// Reads from the app bundle when available (e.g., running as the .app),

@@ -24,8 +24,8 @@ targets:
         PRODUCT_NAME: AgentPanel
         PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
         INFOPLIST_FILE: AgentPanelApp/Info.plist
-        MARKETING_VERSION: "0.1.4"
-        CURRENT_PROJECT_VERSION: 5
+        MARKETING_VERSION: "0.1.5"
+        CURRENT_PROJECT_VERSION: 6
         CODE_SIGN_ENTITLEMENTS: release/AgentPanel.entitlements
       configs:
         Release:

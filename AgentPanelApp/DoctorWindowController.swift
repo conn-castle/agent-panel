@@ -234,8 +234,8 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
-        textView.usesAdaptiveColorMappingForDarkAppearance = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .labelColor
         textView.textContainerInset = NSSize(width: 12, height: 12)
         textView.textContainer?.widthTracksTextView = true
         return textView

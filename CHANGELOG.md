@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-02-18
+
+### Fixed
+
+- **Doctor window text invisible in dark mode** -- `NSTextView` defaulted to black text color. With `isRichText = false`, the `usesAdaptiveColorMappingForDarkAppearance` flag had no effect. Set explicit `textColor = .labelColor` which adapts to light/dark appearance.
+
 ## [0.1.4] - 2026-02-18
 
 ### Fixed
