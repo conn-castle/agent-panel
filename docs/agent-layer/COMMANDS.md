@@ -134,7 +134,7 @@ The release workflow (`.github/workflows/release.yml`) runs on tag push (`v*`). 
 To create a release:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag vX.Y.Z && git push origin main vX.Y.Z
 ```
 
 Run from repo root. Prerequisites: GitHub `release` environment with secrets (`APPLE_API_KEY_ID`, `APPLE_API_ISSUER_ID`, `APPLE_API_PRIVATE_KEY_B64`, `DEVELOPER_ID_APP_P12_B64`, `DEVELOPER_ID_APP_P12_PASSWORD`, `DEVELOPER_ID_INSTALLER_P12_B64`, `DEVELOPER_ID_INSTALLER_P12_PASSWORD`, `KEYCHAIN_PASSWORD`, `DEVELOPER_ID_APP_IDENTITY`, `DEVELOPER_ID_INSTALLER_IDENTITY`) and variables (`CLI_INSTALL_PATH`).

@@ -4,6 +4,12 @@ All notable changes to AgentPanel are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-02-18
+
+### Fixed
+
+- **Doctor freeze in release build** -- `ExecutableResolver.runLoginShellCommand()` used synchronous `readDataToEndOfFile()` which blocks forever if the user's shell config (`.zshrc`/`.zprofile`) spawns background daemons that inherit the pipe's write-end file descriptor. Replaced with async `readabilityHandler` + EOF semaphore with bounded timeout, matching the safe pattern already used by `ApSystemCommandRunner`.
+
 ## [0.1.0] - 2026-02-17
 
 Initial public release.

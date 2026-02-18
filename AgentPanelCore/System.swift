@@ -131,20 +131,50 @@ struct ExecutableResolver {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
 
+        // Read pipe data asynchronously to avoid blocking on background processes
+        // that inherit the pipe's write-end file descriptor. Shell config files
+        // (e.g., .zshrc sourcing `eval "$(tool init)"`) may spawn daemons that keep
+        // the write end open after the shell exits, causing readDataToEndOfFile() to
+        // block forever. Using readabilityHandler + EOF semaphore with a timeout
+        // prevents this deadlock.
+        var outputData = Data()
+        let dataLock = NSLock()
+        let eofSemaphore = DispatchSemaphore(value: 0)
+        let handle = pipe.fileHandleForReading
+
+        handle.readabilityHandler = { h in
+            let data = h.availableData
+            if data.isEmpty {
+                eofSemaphore.signal()
+            } else {
+                dataLock.lock()
+                outputData.append(data)
+                dataLock.unlock()
+            }
+        }
+
         let completion = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in completion.signal() }
 
         do {
             try process.run()
         } catch {
+            handle.readabilityHandler = nil
             return nil
         }
 
         let waitResult = completion.wait(timeout: .now() + Self.loginShellTimeoutSeconds)
         if waitResult == .timedOut {
             process.terminate()
-            // Give it a moment to clean up
             _ = completion.wait(timeout: .now() + 1)
+        }
+
+        // Wait for pipe EOF with a short timeout after process exits.
+        // Background processes may keep the write end open, so don't wait forever.
+        _ = eofSemaphore.wait(timeout: .now() + 2)
+        handle.readabilityHandler = nil
+
+        guard waitResult == .success else {
             return nil
         }
 
@@ -152,8 +182,11 @@ struct ExecutableResolver {
             return nil
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else {
+        dataLock.lock()
+        let capturedData = outputData
+        dataLock.unlock()
+
+        guard let output = String(data: capturedData, encoding: .utf8) else {
             return nil
         }
 
