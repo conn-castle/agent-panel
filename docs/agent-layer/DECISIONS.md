@@ -176,6 +176,16 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: After a 5s AeroSpace CLI timeout, the additional 4s of EOF waiting stretched total latency to ~9-10s. Since the output is discarded on timeout anyway, there's no reason to wait for it. This halved worst-case latency for timeout paths.
     Tradeoffs: None meaningful — timed-out output was always discarded. Edge case: if a process writes valid output after being terminated but before pipes close, that data is now lost. This is acceptable because we never use output from timed-out commands.
 
+- Decision 2026-02-18 doctor-loading: Show Doctor window immediately with loading state
+    Decision: `runDoctor()` and `runDoctorAction()` now call `showLoading()` on the Doctor window immediately (on main thread) before dispatching `Doctor.run()` to a background thread. The window shows "Running diagnostics..." with disabled action buttons until the report arrives.
+    Reason: `Doctor.run()` can take 6-30+ seconds (SSH timeouts when hosts are unreachable). With no visual feedback, users perceive the app as hung. The loading state provides instant acknowledgement.
+    Tradeoffs: Window appears before the report is ready, showing a brief loading message. Close button remains enabled so users can dismiss during loading.
+
+- Decision 2026-02-18 ssh-timeout-reduction: Reduce SSH timeouts from 10s to 3s
+    Decision: All SSH commands (Doctor checks + settings block read/write) now use `ConnectTimeout=2` and `timeoutSeconds: 3`, down from `ConnectTimeout=5` / `timeoutSeconds: 10`.
+    Reason: SSH targets are LAN hosts (e.g., `happy-mac`). Local connections complete in milliseconds; if a host doesn't respond in 2 seconds, it's unreachable. Doctor SSH checks are WARN-level diagnostics — speed of feedback is more important than tolerating slow networks.
+    Tradeoffs: Remote SSH hosts (WAN, high latency) may false-fail if connection takes >2s. If users need longer timeouts for remote hosts, this would need to become configurable. Current use case is exclusively LAN.
+
 - Decision 2026-02-17 direct-codesign: Use direct `codesign` instead of `xcodebuild -exportArchive`
     Decision: `ci_archive.sh` extracts the .app from the xcarchive and re-signs with `codesign --force --deep --options runtime --timestamp --entitlements` instead of using `xcodebuild -exportArchive` with ExportOptions.plist.
     Reason: `IDEDistribution` (used by `-exportArchive`) fails on GitHub Actions CI runners with "Unknown Distribution Error" / empty valid distribution methods set. Root cause: incomplete Apple intermediate certificate chain in the CI runner environment that `IDEDistribution` cannot resolve. Direct `codesign` bypasses `IDEDistribution` entirely.

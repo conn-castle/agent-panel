@@ -6,6 +6,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-02-18
+
+### Fixed
+
+- **Doctor appears to hang with no feedback** -- Clicking "Run Doctor" dispatched Doctor.run() to a background thread but showed nothing until completion (20-30s when SSH hosts are unreachable). The Doctor window now opens immediately with "Running diagnostics..." loading text and disabled action buttons. The report populates when checks complete.
+- **SSH check timeouts too slow** -- Doctor and settings block SSH commands used `ConnectTimeout=5` with 10s process timeout. Reduced to `ConnectTimeout=2` with 3s process timeout. Worst-case Doctor SSH checks drop from ~20s to ~6s. Adequate for LAN hosts; unreachable hosts fail faster.
+
 ## [0.1.2] - 2026-02-18
 
 ### Fixed

@@ -312,13 +312,13 @@ struct ApVSCodeSettingsManager {
         let readResult = commandRunner.run(
             executable: "ssh",
             arguments: [
-                "-o", "ConnectTimeout=5",
+                "-o", "ConnectTimeout=2",
                 "-o", "BatchMode=yes",
                 "--",
                 sshTarget,
                 readCommand
             ],
-            timeoutSeconds: 10
+            timeoutSeconds: 3
         )
 
         let existingContent: String
@@ -362,13 +362,13 @@ struct ApVSCodeSettingsManager {
         let writeResult = commandRunner.run(
             executable: "ssh",
             arguments: [
-                "-o", "ConnectTimeout=5",
+                "-o", "ConnectTimeout=2",
                 "-o", "BatchMode=yes",
                 "--",
                 sshTarget,
                 writeCommand
             ],
-            timeoutSeconds: 10
+            timeoutSeconds: 3
         )
 
         switch writeResult {

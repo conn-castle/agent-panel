@@ -767,13 +767,13 @@ public struct Doctor {
         let result = commandRunner.run(
             executable: "ssh",
             arguments: [
-                "-o", "ConnectTimeout=5",
+                "-o", "ConnectTimeout=2",
                 "-o", "BatchMode=yes",
                 "--",
                 authority,
                 "test -d \(escapedPath)"
             ],
-            timeoutSeconds: 10
+            timeoutSeconds: 3
         )
 
         switch result {
@@ -851,13 +851,13 @@ public struct Doctor {
         let result = commandRunner.run(
             executable: "ssh",
             arguments: [
-                "-o", "ConnectTimeout=5",
+                "-o", "ConnectTimeout=2",
                 "-o", "BatchMode=yes",
                 "--",
                 sshTarget,
                 "cat \(settingsPath)"
             ],
-            timeoutSeconds: 10
+            timeoutSeconds: 3
         )
 
         // Generate the block content for the snippet using the same function.

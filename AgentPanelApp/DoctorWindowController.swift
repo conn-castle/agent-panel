@@ -51,6 +51,22 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Public Interface
 
+    /// Shows the Doctor window immediately with a loading indicator.
+    ///
+    /// Call this before dispatching `Doctor.run()` to provide instant feedback.
+    /// When the report arrives, call `showReport(_:)` to replace the loading text.
+    func showLoading() {
+        if window == nil {
+            setupWindow()
+        }
+
+        textView?.string = "Running diagnostics..."
+        setButtonsEnabled(false)
+
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
     /// Shows the Doctor report in a panel window.
     /// - Parameter report: Doctor report to display.
     func showReport(_ report: DoctorReport) {
@@ -72,11 +88,26 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         textView?.scrollToBeginningOfDocument(nil)
 
         if let buttons {
+            buttons.runDoctor.isEnabled = true
+            buttons.copyReport.isEnabled = true
+            buttons.close.isEnabled = true
             buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
             buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
             buttons.reloadConfig.isEnabled = report.actions.canReloadAeroSpaceConfig
             buttons.requestAccessibility.isEnabled = report.actions.canRequestAccessibility
         }
+    }
+
+    /// Disables or enables all action buttons.
+    private func setButtonsEnabled(_ enabled: Bool) {
+        guard let buttons else { return }
+        buttons.runDoctor.isEnabled = enabled
+        buttons.copyReport.isEnabled = enabled
+        buttons.installAeroSpace.isEnabled = enabled
+        buttons.startAeroSpace.isEnabled = enabled
+        buttons.reloadConfig.isEnabled = enabled
+        buttons.requestAccessibility.isEnabled = enabled
+        // Close is always enabled so user can dismiss during loading
     }
 
     /// Closes the Doctor window.

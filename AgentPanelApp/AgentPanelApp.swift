@@ -683,6 +683,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capture previousApp instantly (AppKit API, non-blocking) on the main thread.
         let previousApp = needsCapture ? NSWorkspace.shared.frontmostApplication : nil
 
+        // Show Doctor window immediately with loading state so the user gets instant
+        // feedback. Doctor.run() can take 20-30s (SSH timeouts) on the background thread.
+        let controller = ensureDoctorController()
+        if let previousApp, needsCapture {
+            controller.previousApp = previousApp
+        }
+        controller.showLoading()
+
         // Focus capture and Doctor run both dispatch to background to avoid blocking
         // the main thread — captureCurrentFocus() calls AeroSpace CLI which can timeout.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -690,8 +698,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let capturedFocus = needsCapture ? self.projectManager.captureCurrentFocus() : nil
             let report = self.makeDoctor().run()
             DispatchQueue.main.async {
+                if let capturedFocus {
+                    controller.capturedFocus = capturedFocus
+                }
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
-                self.showDoctorReport(report, capturedFocus: capturedFocus, previousApp: previousApp)
+                controller.showReport(report)
                 self.logDoctorSummary(report, event: "doctor.run.completed")
             }
         }
@@ -720,6 +731,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         completedEvent: String
     ) {
         logAppEvent(event: requestedEvent)
+        // Show loading state immediately — the action + re-run can take 20-30s.
+        doctorController?.showLoading()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let report = action(self.makeDoctor())
