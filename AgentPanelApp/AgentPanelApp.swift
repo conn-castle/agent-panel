@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastHealthRefreshAt: Date?
     private var lastHotkeyToggleAt: Date?
     private var menuFocusCapture: CapturedFocus?
+    /// Cached workspace state for non-blocking menu population.
+    /// Updated by background refreshes; read by `menuNeedsUpdate`.
+    private var cachedWorkspaceState: ProjectWorkspaceState?
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
@@ -107,13 +110,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .success(let result):
             if case .updated(let from, let to) = result {
                 logAppEvent(event: "aerospace_config.updated", context: ["from": "\(from)", "to": "\(to)"])
-                // Apply updated config to the running AeroSpace process
-                let aerospace = ApAeroSpace()
-                switch aerospace.reloadConfig() {
-                case .success:
-                    logAppEvent(event: "aerospace_config.reloaded")
-                case .failure(let error):
-                    logAppEvent(event: "aerospace_config.reload_failed", level: .warn, message: error.message)
+                // Apply updated config to the running AeroSpace process.
+                // Dispatched to background to avoid blocking the main thread — the
+                // reload calls ApSystemCommandRunner.run() which may trigger the
+                // one-time login shell PATH resolution on first use.
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    let aerospace = ApAeroSpace()
+                    switch aerospace.reloadConfig() {
+                    case .success:
+                        self?.logAppEvent(event: "aerospace_config.reloaded")
+                    case .failure(let error):
+                        self?.logAppEvent(event: "aerospace_config.reload_failed", level: .warn, message: error.message)
+                    }
                 }
             }
             // Cleanup stale focus scripts from the script-based approach
@@ -359,10 +367,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        // Capture both the previously active app AND focus state BEFORE the menu dismisses
-        // and before we activate. This ensures restore-on-cancel returns to the correct window.
+        // Use cached focus from menuNeedsUpdate (no blocking CLI call).
+        // The cache was refreshed when the menu opened, so it's recent enough
+        // for focus restoration on cancel.
         let previousApp = NSWorkspace.shared.frontmostApplication
-        let capturedFocus = projectManager.captureCurrentFocus()
+        let capturedFocus = menuFocusCapture
         statusItem?.menu?.cancelTracking()
         // Small delay required to let the menu dismiss before showing the switcher.
         // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
@@ -391,21 +400,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastHotkeyToggleAt = now
 
-        // Capture both the previously active app AND focus state BEFORE we show the switcher.
-        // This must happen outside the async block to capture the correct window.
+        // Capture the previously active app immediately (AppKit API, instant).
         let previousApp = NSWorkspace.shared.frontmostApplication
-        let capturedFocus = projectManager.captureCurrentFocus()
-        DispatchQueue.main.async { [weak self] in
-            guard let self else {
-                return
+
+        // Capture AeroSpace focus in background to avoid blocking the main thread.
+        // The switcher toggle is dispatched to main thread once the capture completes.
+        // Thread-safe: captureCurrentFocus() only runs a CLI command and logs,
+        // it does not mutate ProjectManager state.
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            guard let self else { return }
+            let capturedFocus = self.projectManager.captureCurrentFocus()
+            DispatchQueue.main.async {
+                self.logAppEvent(
+                    event: "switcher.hotkey.invoked",
+                    context: ["hotkey": "Cmd+Shift+Space"]
+                )
+                // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
+                // without activating the app (and therefore without switching workspaces).
+                self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
             }
-            self.logAppEvent(
-                event: "switcher.hotkey.invoked",
-                context: ["hotkey": "Cmd+Shift+Space"]
-            )
-            // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
-            // without activating the app (and therefore without switching workspaces).
-            self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
@@ -613,6 +626,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.showDoctorReport(report)
                 }
 
+                // Refresh cached workspace/focus state for non-blocking menu updates
+                self.refreshMenuStateInBackground()
+
                 // If a critical error was queued while in-flight, trigger a new refresh
                 if let pending = self.pendingCriticalContext {
                     self.pendingCriticalContext = nil
@@ -620,6 +636,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         trigger: pending.trigger,
                         errorContext: pending
                     )
+                }
+            }
+        }
+    }
+
+    /// Refreshes cached workspace state and focus in the background.
+    ///
+    /// Called after Doctor refreshes, switcher session ends, and on menu open.
+    /// The cached values are used by `menuNeedsUpdate` to avoid blocking the
+    /// main thread with AeroSpace CLI calls.
+    ///
+    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` only run
+    /// stateless CLI commands and log — they do not mutate ProjectManager state.
+    private func refreshMenuStateInBackground() {
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            guard let self else { return }
+            let focus = self.projectManager.captureCurrentFocus()
+            let state = try? self.projectManager.workspaceState().get()
+            DispatchQueue.main.async {
+                self.cachedWorkspaceState = state
+                // Also update menuFocusCapture so it stays fresh between menu opens
+                if let focus {
+                    self.menuFocusCapture = focus
                 }
             }
         }
@@ -641,10 +680,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capture focus before dispatching to background if no focus is currently held.
         // Re-runs from within the Doctor window keep the original focus (capturedFocus != nil).
         let needsCapture = doctorController?.capturedFocus == nil && doctorController?.previousApp == nil
-        let capturedFocus = needsCapture ? projectManager.captureCurrentFocus() : nil
+        // Capture previousApp instantly (AppKit API, non-blocking) on the main thread.
         let previousApp = needsCapture ? NSWorkspace.shared.frontmostApplication : nil
+
+        // Focus capture and Doctor run both dispatch to background to avoid blocking
+        // the main thread — captureCurrentFocus() calls AeroSpace CLI which can timeout.
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            let capturedFocus = needsCapture ? self.projectManager.captureCurrentFocus() : nil
             let report = self.makeDoctor().run()
             DispatchQueue.main.async {
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
@@ -1070,19 +1113,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             context: ["window_id": "\(focus.windowId)", "project_id": projectId]
         )
 
-        let result = projectManager.moveWindowToProject(windowId: focus.windowId, projectId: projectId)
-        switch result {
-        case .success:
-            logAppEvent(
-                event: "add_window_to_project.completed",
-                context: ["window_id": "\(focus.windowId)", "project_id": projectId]
-            )
-        case .failure(let error):
-            logAppEvent(
-                event: "add_window_to_project.failed",
-                level: .error,
-                message: "\(error)"
-            )
+        // Dispatch to background to avoid blocking the main thread — moveWindowToProject
+        // calls AeroSpace CLI which can timeout if AeroSpace is unresponsive.
+        // Thread-safe: moveWindowToProject() only reads immutable config state and calls CLI.
+        let windowId = focus.windowId
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.projectManager.moveWindowToProject(windowId: windowId, projectId: projectId)
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self.logAppEvent(
+                        event: "add_window_to_project.completed",
+                        context: ["window_id": "\(windowId)", "project_id": projectId]
+                    )
+                    // Refresh workspace state cache after the move
+                    self.refreshMenuStateInBackground()
+                case .failure(let error):
+                    self.logAppEvent(
+                        event: "add_window_to_project.failed",
+                        level: .error,
+                        message: "\(error)"
+                    )
+                }
+            }
         }
     }
 }
@@ -1091,25 +1145,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     /// Updates dynamic menu items each time the menu opens.
+    ///
+    /// Uses cached workspace state and focus to avoid blocking the main thread
+    /// with AeroSpace CLI calls. The cache is refreshed in the background after
+    /// Doctor runs, switcher sessions end, and each menu open.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        // Capture focus before the menu fully appears
-        menuFocusCapture = projectManager.captureCurrentFocus()
-
         guard let menuItems else { return }
 
         // Reflect Launch at Login state
         menuItems.launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
-        // Toggle "Recover Project" — enabled only in ap-* workspaces
+        // Use cached focus (updated by background refreshes, not a live CLI call)
         let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false
         menuItems.recoverAgentPanel.isEnabled = inProjectWorkspace
 
-        // Populate "Add Window to Project" submenu
+        // Populate "Add Window to Project" submenu from cached workspace state
         let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()
         submenu.removeAllItems()
 
         var hasOpenProjects = false
-        if let state = try? projectManager.workspaceState().get() {
+        if let state = cachedWorkspaceState {
             let openProjects = projectManager.projects.filter { state.openProjectIds.contains($0.id) }
             if !openProjects.isEmpty {
                 hasOpenProjects = true
@@ -1128,5 +1183,8 @@ extension AppDelegate: NSMenuDelegate {
 
         menuItems.addWindowToProject.submenu = submenu
         menuItems.addWindowToProject.isHidden = !hasOpenProjects
+
+        // Refresh cache in background for next menu open
+        refreshMenuStateInBackground()
     }
 }

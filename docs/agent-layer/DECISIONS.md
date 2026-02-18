@@ -161,6 +161,21 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Single job avoids artifact transfer overhead between jobs. Scripts follow existing `scripts/` convention and are locally testable.
     Tradeoffs: Long single job (~15-20 min) vs parallel jobs. CLI tarball is not notarized (tarballs cannot be stapled; users must clear quarantine manually).
 
+- Decision 2026-02-18 cached-env: ApSystemCommandRunner caches augmented environment globally
+    Decision: Replaced per-instance `augmentedEnvironment` with a `static let cachedEnvironment` on `ApSystemCommandRunner`. The environment is computed lazily on first `run()` call (not during `init()`). All instances share the cached value. `buildAugmentedEnvironment(resolver:)` remains a static method for direct test use.
+    Reason: Nine `ApSystemCommandRunner` instances are created on the main thread during app startup (via `ProjectManager`, `ApAeroSpace`, `WindowCycler`, etc.). Each previously spawned a login shell process (up to 7s blocking per instance), freezing the system for 5-10+ seconds total. The login shell PATH doesn't change during app lifetime, so computing it once eliminates all redundant work.
+    Tradeoffs: All instances share the same environment (no per-instance customization). In practice, all production instances used the default `ExecutableResolver()`, so this is a no-op change. Tests call `buildAugmentedEnvironment` directly with custom resolvers, bypassing the cache.
+
+- Decision 2026-02-18 menu-cache: Menu uses cached workspace state instead of live AeroSpace CLI calls
+    Decision: `menuNeedsUpdate` reads from `cachedWorkspaceState` and `menuFocusCapture` properties instead of calling `captureCurrentFocus()` and `workspaceState()` live. A background `refreshMenuStateInBackground()` updates the cache after Doctor refreshes, switcher session ends, and each menu open. `toggleSwitcher`, `openSwitcher`, `runDoctor`, and `addWindowToProject` also dispatch AeroSpace CLI calls to background queues.
+    Reason: `NSMenuDelegate.menuNeedsUpdate()` runs synchronously on the main thread. AeroSpace CLI calls have 5-second timeouts. If AeroSpace is slow or unresponsive, the menu and app freeze completely. The circuit breaker only helps after the first timeout trips it — the first menu open always blocks.
+    Tradeoffs: Menu shows slightly stale data (from last background refresh) instead of live state. In practice, the cache is refreshed frequently enough (every Doctor run, every switcher session, every menu open) that staleness is minimal.
+
+- Decision 2026-02-18 timeout-eof-skip: Skip pipe EOF waits after command timeout
+    Decision: When `ApSystemCommandRunner.run()` times out and terminates the process, skip the 2s+2s pipe EOF semaphore waits and immediately clean up handlers. EOF waits are only performed on normal (non-timeout) process exit.
+    Reason: After a 5s AeroSpace CLI timeout, the additional 4s of EOF waiting stretched total latency to ~9-10s. Since the output is discarded on timeout anyway, there's no reason to wait for it. This halved worst-case latency for timeout paths.
+    Tradeoffs: None meaningful — timed-out output was always discarded. Edge case: if a process writes valid output after being terminated but before pipes close, that data is now lost. This is acceptable because we never use output from timed-out commands.
+
 - Decision 2026-02-17 direct-codesign: Use direct `codesign` instead of `xcodebuild -exportArchive`
     Decision: `ci_archive.sh` extracts the .app from the xcarchive and re-signs with `codesign --force --deep --options runtime --timestamp --entitlements` instead of using `xcodebuild -exportArchive` with ExportOptions.plist.
     Reason: `IDEDistribution` (used by `-exportArchive`) fails on GitHub Actions CI runners with "Unknown Distribution Error" / empty valid distribution methods set. Root cause: incomplete Apple intermediate certificate chain in the CI runner environment that `IDEDistribution` cannot resolve. Direct `codesign` bypasses `IDEDistribution` entirely.

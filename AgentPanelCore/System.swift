@@ -254,15 +254,37 @@ extension CommandRunning {
 /// Child processes receive an augmented PATH that includes standard Homebrew/system
 /// paths and the user's login shell PATH. This ensures tools like `al` (which internally
 /// call `code`) can find executables even when launched from a GUI app with a minimal PATH.
+///
+/// The augmented environment is computed **once** on first use and cached globally.
+/// This avoids spawning a login shell process for every instance — critical because
+/// multiple components create their own `ApSystemCommandRunner` during app init on the
+/// main thread. Without caching, each instance blocks the main thread for up to 7 seconds
+/// while the login shell runs.
 struct ApSystemCommandRunner: CommandRunning {
     private let executableResolver: ExecutableResolver
-    private let augmentedEnvironment: [String: String]
+
+    /// Cached augmented environment — computed lazily on first access.
+    ///
+    /// The login shell PATH doesn't change during the app's lifetime. Computing it once
+    /// (on the first `run()` call) eliminates the cost of spawning a login shell for each
+    /// `ApSystemCommandRunner` instance. Uses Swift `static let` for thread-safe lazy
+    /// initialization (`dispatch_once` under the hood).
+    ///
+    /// Important: this is NOT computed during `init()`. The first `run()` call triggers
+    /// computation, which should always happen on a background thread.
+    private static let cachedEnvironment: [String: String] = {
+        buildAugmentedEnvironment(resolver: ExecutableResolver())
+    }()
 
     /// Creates a command runner with the default executable resolver.
+    ///
+    /// Init is intentionally lightweight (no process spawning). The augmented PATH
+    /// environment is computed lazily on the first `run()` call to avoid blocking
+    /// the main thread during app startup.
+    ///
     /// - Parameter executableResolver: Resolver for finding executable paths.
     init(executableResolver: ExecutableResolver = ExecutableResolver()) {
         self.executableResolver = executableResolver
-        self.augmentedEnvironment = Self.buildAugmentedEnvironment(resolver: executableResolver)
     }
 
     /// Builds an environment dictionary with an augmented PATH for child processes.
@@ -325,7 +347,7 @@ struct ApSystemCommandRunner: CommandRunning {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
-        process.environment = augmentedEnvironment
+        process.environment = Self.cachedEnvironment
         if let workingDirectory {
             process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
         }
@@ -401,19 +423,23 @@ struct ApSystemCommandRunner: CommandRunning {
             didTimeout = false
         }
 
-        // Wait for both pipes to reach EOF to ensure all data is captured.
-        // This prevents race conditions where fast processes terminate before
-        // all output is read by the readabilityHandler.
-        // Use a short fixed timeout: once the process exits, pipes should EOF
-        // almost immediately. A 2s grace period handles edge cases without
-        // doubling the caller's intended timeout.
-        let pipeEOFTimeout: DispatchTimeInterval = .seconds(2)
-        _ = stdoutEOF.wait(timeout: .now() + pipeEOFTimeout)
-        _ = stderrEOF.wait(timeout: .now() + pipeEOFTimeout)
-
-        // Clean up handlers
-        stdoutHandle.readabilityHandler = nil
-        stderrHandle.readabilityHandler = nil
+        // Clean up immediately on timeout — we don't need the output
+        if didTimeout {
+            stdoutHandle.readabilityHandler = nil
+            stderrHandle.readabilityHandler = nil
+        } else {
+            // Wait for both pipes to reach EOF to ensure all data is captured.
+            // This prevents race conditions where fast processes terminate before
+            // all output is read by the readabilityHandler.
+            // Use a short fixed timeout: once the process exits, pipes should EOF
+            // almost immediately. A 2s grace period handles edge cases without
+            // doubling the caller's intended timeout.
+            let pipeEOFTimeout: DispatchTimeInterval = .seconds(2)
+            _ = stdoutEOF.wait(timeout: .now() + pipeEOFTimeout)
+            _ = stderrEOF.wait(timeout: .now() + pipeEOFTimeout)
+            stdoutHandle.readabilityHandler = nil
+            stderrHandle.readabilityHandler = nil
+        }
 
         if didTimeout {
             let label = timeoutSecondsForMessage.map { "\($0)" } ?? "unknown"

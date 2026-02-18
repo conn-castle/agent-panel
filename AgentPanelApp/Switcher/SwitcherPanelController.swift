@@ -731,33 +731,49 @@ final class SwitcherPanelController: NSObject {
     /// - Parameter retryOnFailure: When true, schedules a repeating timer to retry workspace
     ///   state queries. Used during `show()` to auto-recover when the AeroSpace circuit breaker
     ///   is open and background recovery is in progress.
+    /// Refreshes workspace state in the background to avoid blocking the main thread.
+    ///
+    /// AeroSpace CLI calls have a 5-second timeout that would freeze the switcher panel
+    /// if called synchronously. Results are applied to the UI on the main thread.
     private func refreshWorkspaceState(retryOnFailure: Bool = false) {
-        switch projectManager.workspaceState() {
-        case .success(let state):
-            activeProjectId = state.activeProjectId
-            openIds = state.openProjectIds
-        case .failure(let error):
-            activeProjectId = nil
-            openIds = []
-            if retryOnFailure {
-                setStatus(message: "Recovering AeroSpace\u{2026}", level: .info)
-                scheduleWorkspaceStateRetry()
-            } else {
-                setStatus(
-                    message: "Workspace state unavailable: \(projectErrorMessage(error))",
-                    level: .warning
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+            guard let self else { return }
+            let result = self.projectManager.workspaceState()
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let state):
+                    self.activeProjectId = state.activeProjectId
+                    self.openIds = state.openProjectIds
+                case .failure(let error):
+                    self.activeProjectId = nil
+                    self.openIds = []
+                    if retryOnFailure {
+                        self.setStatus(message: "Recovering AeroSpace\u{2026}", level: .info)
+                        self.scheduleWorkspaceStateRetry()
+                    } else {
+                        self.setStatus(
+                            message: "Workspace state unavailable: \(self.projectErrorMessage(error))",
+                            level: .warning
+                        )
+                    }
+                    self.session.logEvent(
+                        event: "switcher.workspace_state.failed",
+                        level: .warn,
+                        message: "\(error)"
+                    )
+                    self.onProjectOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "workspaceQuery"
+                    ))
+                }
+                // Re-apply filter to reflect updated workspace state in the UI
+                self.applyFilter(
+                    query: self.searchField.stringValue,
+                    preferredSelectionKey: nil,
+                    useDefaultSelection: true
                 )
             }
-            session.logEvent(
-                event: "switcher.workspace_state.failed",
-                level: .warn,
-                message: "\(error)"
-            )
-            onProjectOperationFailed?(ErrorContext(
-                category: .command,
-                message: "\(error)",
-                trigger: "workspaceQuery"
-            ))
         }
     }
 
@@ -791,7 +807,7 @@ final class SwitcherPanelController: NSObject {
         let timerSessionId = session.sessionId
         workspaceRetrySessionId = timerSessionId
 
-        let timer = DispatchSource.makeTimerSource(queue: .main)
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
         timer.schedule(
             deadline: .now() + Self.workspaceRetryIntervalSeconds,
             repeating: Self.workspaceRetryIntervalSeconds
@@ -810,55 +826,66 @@ final class SwitcherPanelController: NSObject {
 
     /// Handles a single tick of the workspace retry timer.
     ///
+    /// Runs on a background queue (the timer fires on a global queue to avoid blocking
+    /// the main thread with AeroSpace CLI calls). All UI state updates bounce to main.
+    ///
     /// Guards against stale timers: if the session has changed since the timer was
     /// scheduled, the tick is silently discarded. Does NOT call `cancelWorkspaceRetryTimer()`
     /// because the stale timer was already canceled during dismiss, and the current
     /// `workspaceRetryTimer` may belong to the new active session.
     private func handleWorkspaceRetryTick(expectedSessionId: String?) {
-        // Discard ticks from timers belonging to a previous (dismissed) session
-        if expectedSessionId != session.sessionId {
+        // Discard ticks from timers belonging to a previous (dismissed) session.
+        // Read session ID — may be accessed from background, but sessionId is
+        // immutable once set and changes only happen on the main thread.
+        guard expectedSessionId == session.sessionId else {
             return
         }
 
-        workspaceRetryCount += 1
+        // CLI call runs on the background queue (timer fires here)
+        let result = projectManager.workspaceState()
 
-        switch projectManager.workspaceState() {
-        case .success(let state):
-            cancelWorkspaceRetryTimer()
-            activeProjectId = state.activeProjectId
-            openIds = state.openProjectIds
-            clearStatus()
-            applyFilter(
-                query: searchField.stringValue,
-                preferredSelectionKey: nil,
-                useDefaultSelection: true
-            )
-            session.logEvent(
-                event: "switcher.workspace_retry.succeeded",
-                context: ["attempt": "\(workspaceRetryCount)"]
-            )
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.workspaceRetryCount += 1
 
-        case .failure(let error):
-            if workspaceRetryCount >= Self.workspaceRetryMaxAttempts {
-                cancelWorkspaceRetryTimer()
-                setStatus(
-                    message: "Workspace state unavailable: \(projectErrorMessage(error))",
-                    level: .warning
+            switch result {
+            case .success(let state):
+                self.cancelWorkspaceRetryTimer()
+                self.activeProjectId = state.activeProjectId
+                self.openIds = state.openProjectIds
+                self.clearStatus()
+                self.applyFilter(
+                    query: self.searchField.stringValue,
+                    preferredSelectionKey: nil,
+                    useDefaultSelection: true
                 )
-                session.logEvent(
-                    event: "switcher.workspace_retry.exhausted",
-                    level: .warn,
-                    message: "\(error)",
-                    context: ["attempts": "\(workspaceRetryCount)"]
+                self.session.logEvent(
+                    event: "switcher.workspace_retry.succeeded",
+                    context: ["attempt": "\(self.workspaceRetryCount)"]
                 )
-            } else {
-                session.logEvent(
-                    event: "switcher.workspace_retry.pending",
-                    context: [
-                        "attempt": "\(workspaceRetryCount)",
-                        "remaining": "\(Self.workspaceRetryMaxAttempts - workspaceRetryCount)"
-                    ]
-                )
+
+            case .failure(let error):
+                if self.workspaceRetryCount >= Self.workspaceRetryMaxAttempts {
+                    self.cancelWorkspaceRetryTimer()
+                    self.setStatus(
+                        message: "Workspace state unavailable: \(self.projectErrorMessage(error))",
+                        level: .warning
+                    )
+                    self.session.logEvent(
+                        event: "switcher.workspace_retry.exhausted",
+                        level: .warn,
+                        message: "\(error)",
+                        context: ["attempts": "\(self.workspaceRetryCount)"]
+                    )
+                } else {
+                    self.session.logEvent(
+                        event: "switcher.workspace_retry.pending",
+                        context: [
+                            "attempt": "\(self.workspaceRetryCount)",
+                            "remaining": "\(Self.workspaceRetryMaxAttempts - self.workspaceRetryCount)"
+                        ]
+                    )
+                }
             }
         }
     }
@@ -1130,6 +1157,9 @@ final class SwitcherPanelController: NSObject {
     }
 
     /// Closes a project and keeps the palette open for additional actions.
+    ///
+    /// Dispatches `closeProject()` and `captureCurrentFocus()` to a background queue
+    /// to avoid blocking the main thread with AeroSpace CLI calls.
     private func performCloseProject(
         projectId: String,
         projectName: String,
@@ -1149,60 +1179,75 @@ final class SwitcherPanelController: NSObject {
             closedRowIndex: selectedRowAtRequestTime
         )
 
-        switch projectManager.closeProject(projectId: projectId) {
-        case .success(let closeResult):
-            if let warning = closeResult.tabCaptureWarning {
-                session.logEvent(
-                    event: "switcher.close_project.tab_capture_warning",
-                    level: .warn,
-                    message: warning,
-                    context: ["project_id": projectId]
-                )
-            }
-            session.logEvent(
-                event: "switcher.close_project.succeeded",
-                context: ["project_id": projectId]
-            )
+        // Show progress immediately
+        setStatus(message: "Closing '\(projectName)'\u{2026}", level: .info)
 
-            // closeProject already restored focus (via focus stack or workspace fallback).
-            // Refresh captured focus so:
-            // - dismiss doesn't restore stale pre-switcher focus (which may have been destroyed)
-            // - a subsequent project selection pushes the correct non-project focus entry
-            let refreshedFocus = projectManager.captureCurrentFocus()
-            if let refreshedFocus,
-               let selfBundleId = Bundle.main.bundleIdentifier,
-               refreshedFocus.appBundleId != selfBundleId {
-                capturedFocus = refreshedFocus
-                previouslyActiveApp = NSWorkspace.shared.frontmostApplication
-            } else {
-                capturedFocus = nil
-                previouslyActiveApp = nil
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let closeResult = self.projectManager.closeProject(projectId: projectId)
+
+            // After close, refresh focus on the same background thread
+            var refreshedFocus: CapturedFocus?
+            if case .success = closeResult {
+                refreshedFocus = self.projectManager.captureCurrentFocus()
             }
 
-            refreshWorkspaceState()
-            applyFilter(
-                query: searchField.stringValue,
-                preferredSelectionKey: fallbackSelectionKey,
-                useDefaultSelection: false
-            )
-            if closeResult.tabCaptureWarning != nil {
-                setStatus(message: "Closed '\(projectName)' (tab capture failed)", level: .warning)
-            } else {
-                setStatus(message: "Closed '\(projectName)'", level: .info)
+            DispatchQueue.main.async {
+                switch closeResult {
+                case .success(let result):
+                    if let warning = result.tabCaptureWarning {
+                        self.session.logEvent(
+                            event: "switcher.close_project.tab_capture_warning",
+                            level: .warn,
+                            message: warning,
+                            context: ["project_id": projectId]
+                        )
+                    }
+                    self.session.logEvent(
+                        event: "switcher.close_project.succeeded",
+                        context: ["project_id": projectId]
+                    )
+
+                    // closeProject already restored focus (via focus stack or workspace fallback).
+                    // Refresh captured focus so:
+                    // - dismiss doesn't restore stale pre-switcher focus (which may have been destroyed)
+                    // - a subsequent project selection pushes the correct non-project focus entry
+                    if let refreshedFocus,
+                       let selfBundleId = Bundle.main.bundleIdentifier,
+                       refreshedFocus.appBundleId != selfBundleId {
+                        self.capturedFocus = refreshedFocus
+                        self.previouslyActiveApp = NSWorkspace.shared.frontmostApplication
+                    } else {
+                        self.capturedFocus = nil
+                        self.previouslyActiveApp = nil
+                    }
+
+                    self.refreshWorkspaceState()
+                    self.applyFilter(
+                        query: self.searchField.stringValue,
+                        preferredSelectionKey: fallbackSelectionKey,
+                        useDefaultSelection: false
+                    )
+                    if result.tabCaptureWarning != nil {
+                        self.setStatus(message: "Closed '\(projectName)' (tab capture failed)", level: .warning)
+                    } else {
+                        self.setStatus(message: "Closed '\(projectName)'", level: .info)
+                    }
+                case .failure(let error):
+                    self.setStatus(message: self.projectErrorMessage(error), level: .error)
+                    self.session.logEvent(
+                        event: "switcher.close_project.failed",
+                        level: .error,
+                        message: "\(error)",
+                        context: ["project_id": projectId]
+                    )
+                    self.onProjectOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "closeProject"
+                    ))
+                }
             }
-        case .failure(let error):
-            setStatus(message: projectErrorMessage(error), level: .error)
-            session.logEvent(
-                event: "switcher.close_project.failed",
-                level: .error,
-                message: "\(error)",
-                context: ["project_id": projectId]
-            )
-            onProjectOperationFailed?(ErrorContext(
-                category: .command,
-                message: "\(error)",
-                trigger: "closeProject"
-            ))
         }
     }
 
@@ -1235,6 +1280,9 @@ final class SwitcherPanelController: NSObject {
     }
 
     /// Exits to the last non-project window and dismisses the panel on success.
+    ///
+    /// Dispatches `exitToNonProjectWindow()` to a background queue to avoid blocking
+    /// the main thread with AeroSpace CLI calls.
     private func handleExitToNonProject(fromShortcut: Bool) {
         guard rows.contains(where: {
             if case .backAction = $0 {
@@ -1250,31 +1298,37 @@ final class SwitcherPanelController: NSObject {
 
         session.logEvent(event: "switcher.exit_to_previous.requested")
 
-        switch projectManager.exitToNonProjectWindow() {
-        case .success:
-            session.logEvent(event: "switcher.exit_to_previous.succeeded")
-            dismiss(reason: .exitedToNonProject)
-        case .failure(let error):
-            setStatus(message: projectErrorMessage(error), level: .error)
-            session.logEvent(
-                event: "switcher.exit_to_previous.failed",
-                level: .error,
-                message: "\(error)"
-            )
-            onProjectOperationFailed?(ErrorContext(
-                category: .command,
-                message: "\(error)",
-                trigger: "exitToPrevious"
-            ))
-            NSSound.beep()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.projectManager.exitToNonProjectWindow()
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
+                    self.dismiss(reason: .exitedToNonProject)
+                case .failure(let error):
+                    self.setStatus(message: self.projectErrorMessage(error), level: .error)
+                    self.session.logEvent(
+                        event: "switcher.exit_to_previous.failed",
+                        level: .error,
+                        message: "\(error)"
+                    )
+                    self.onProjectOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "exitToPrevious"
+                    ))
+                    NSSound.beep()
 
-            // Refresh row validity in case active-project state changed.
-            refreshWorkspaceState()
-            applyFilter(
-                query: searchField.stringValue,
-                preferredSelectionKey: selectedRowKey(),
-                useDefaultSelection: false
-            )
+                    // Refresh row validity in case active-project state changed.
+                    self.refreshWorkspaceState()
+                    self.applyFilter(
+                        query: self.searchField.stringValue,
+                        preferredSelectionKey: self.selectedRowKey(),
+                        useDefaultSelection: false
+                    )
+                }
+            }
         }
     }
 
