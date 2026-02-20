@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-02-20
+
+### Fixed
+
+- **Doctor text invisible in light mode (release builds)** -- Setting `NSTextView.string` can reset the foreground color when the text storage is replaced, causing white-on-white text in light mode. Switched from `textColor` + `.string` assignment to explicit `NSAttributedString` with font and foreground color attributes set on every text update, ensuring the text is always visible regardless of appearance mode or build configuration.
+
 ## [0.1.6] - 2026-02-20
 
 ### Added

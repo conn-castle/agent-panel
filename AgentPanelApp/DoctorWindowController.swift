@@ -49,6 +49,14 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     private var buttons: DoctorButtons?
     private(set) var lastReport: DoctorReport?
 
+    /// Text attributes for Doctor report display.
+    /// Explicit attributes avoid NSTextView quirks where `textColor` is lost
+    /// when `.string` replaces the text storage (release-build timing dependent).
+    private let textAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+        .foregroundColor: NSColor.labelColor
+    ]
+
     // MARK: - Public Interface
 
     /// Shows the Doctor window immediately with a loading indicator.
@@ -60,7 +68,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
             setupWindow()
         }
 
-        textView?.string = "Running diagnostics..."
+        setTextViewString("Running diagnostics...")
         setButtonsEnabled(false)
 
         NSApp.activate(ignoringOtherApps: true)
@@ -84,7 +92,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     /// - Parameter report: Doctor report to display.
     func updateUI(with report: DoctorReport) {
         lastReport = report
-        textView?.string = report.rendered()
+        setTextViewString(report.rendered())
         textView?.scrollToBeginningOfDocument(nil)
 
         if let buttons {
@@ -227,6 +235,16 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         let button = NSButton(title: title, target: self, action: action)
         button.bezelStyle = .rounded
         return button
+    }
+
+    /// Sets the text view content using an attributed string with explicit font and color.
+    ///
+    /// Using `textStorage?.setAttributedString` instead of setting `.string` ensures
+    /// the foreground color is always applied, regardless of NSTextView's internal
+    /// typingAttributes state.
+    private func setTextViewString(_ text: String) {
+        let attributed = NSAttributedString(string: text, attributes: textAttributes)
+        textView?.textStorage?.setAttributedString(attributed)
     }
 
     private func makeTextView() -> NSTextView {
