@@ -153,6 +153,50 @@ final class WindowPositionStoreTests: XCTestCase {
         }
     }
 
+    // MARK: - Nil Chrome Frame (Partial Save)
+
+    func testSaveAndLoadWithNilChromeRoundTrip() {
+        let store = makeStore()
+        let ideOnly = SavedWindowFrames(
+            ide: SavedFrame(x: 100, y: 200, width: 900, height: 800),
+            chrome: nil
+        )
+
+        let saveResult = store.save(projectId: "partial", mode: .wide, frames: ideOnly)
+        if case .failure(let error) = saveResult {
+            XCTFail("Save failed: \(error)")
+            return
+        }
+
+        let loadResult = store.load(projectId: "partial", mode: .wide)
+        if case .success(let frames) = loadResult {
+            XCTAssertEqual(frames, ideOnly)
+            XCTAssertNil(frames?.chrome, "Chrome should be nil after round-trip")
+            XCTAssertEqual(frames!.ide.x, 100, accuracy: 0.001)
+        } else {
+            XCTFail("Expected .success(frames), got \(loadResult)")
+        }
+    }
+
+    func testSaveNilChromeThenFullFramesOverwrites() {
+        let store = makeStore()
+        let ideOnly = SavedWindowFrames(
+            ide: SavedFrame(x: 100, y: 200, width: 900, height: 800),
+            chrome: nil
+        )
+        _ = store.save(projectId: "test", mode: .wide, frames: ideOnly)
+
+        // Now save with both frames — should overwrite the partial save
+        _ = store.save(projectId: "test", mode: .wide, frames: sampleFrames)
+
+        if case .success(let frames) = store.load(projectId: "test", mode: .wide) {
+            XCTAssertEqual(frames, sampleFrames)
+            XCTAssertNotNil(frames?.chrome, "Chrome should be present after full overwrite")
+        } else {
+            XCTFail("Load after overwrite failed")
+        }
+    }
+
     // MARK: - Save Errors
 
     func testSaveToUnwritablePathFails() {

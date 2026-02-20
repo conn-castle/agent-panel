@@ -95,29 +95,18 @@ Incomplete:
 
 ## Phase 7 ✅ — Polish required features + harden daily use
 - Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
-- Window recovery and management: "Add Window to Project", "Recover Project" / "Recover All Windows" menu items.
+- Window recovery and management: "Move Current Window", "Recover Project" / "Recover All Windows" menu items.
 - Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
 - AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
 - UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
 
-## Phase 8 — Release: packaging, verification, and documentation
-
-### Goal
-- Ship a release-quality build with deterministic install/upgrade and scripted release steps.
-- Finalize release readiness across packaging, CI gates, and onboarding documentation.
-
-### Tasks
-- [x] Decide distribution shape: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred) and document it in README.
-- [x] Implement signing + notarization for `AgentPanel.app` and integrate it into scripted releases (no manual Xcode GUI steps).
-- [x] Add release scripts (`scripts/ci_archive.sh`, `scripts/ci_package.sh`, `scripts/ci_notarize.sh`, `scripts/ci_release_validate.sh`, with `scripts/ci_setup_signing.sh`) for archive/export/package/notarize/validation in the release workflow.
-- [x] Finalize README: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
-- [x] Add CI gates (build + tests) and a documented release checklist.
-- [ ] Validate onboarding on a fresh machine using README + Doctor only (no tribal knowledge).
-
-### Exit criteria
-- A release can be produced via scripts and installed from GitHub tagged releases; upgrades are deterministic.
-- A fresh macOS machine can be set up using README alone; Doctor reports no FAIL on a correctly configured system.
-- CI is green and a release checklist exists.
+## Phase 8 ✅ — Release: packaging, verification, and documentation
+- Distribution shape decided: signed + notarized arm64 assets via GitHub tagged releases (Homebrew deferred).
+- Signing + notarization integrated into scripted releases (no manual Xcode GUI steps).
+- Release scripts: `ci_archive.sh`, `ci_package.sh`, `ci_notarize.sh`, `ci_release_validate.sh`, `ci_setup_signing.sh`.
+- README finalized: install (GitHub Releases), permissions, config schema, usage (switcher + `ap`), troubleshooting.
+- CI gates (build + tests) and documented release checklist.
+- Fresh-machine onboarding validated using README + Doctor only.
 
 ## Phase 9 — Extra non-required features
 
@@ -130,11 +119,15 @@ Incomplete:
 - [ ] Fuzzy search with ranking in the switcher, including trigram matching as well.
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
 - [ ] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
+- [ ] UI overlay for project window cycling (Option-Tab): Add a UI overlay that shows available windows when cycling with Option-Tab, similar to the macOS Command-Tab switcher. Pressing and holding Option while Tabbing displays a UI panel with window icons/titles; releasing Option selects the highlighted window. Builds on existing `WindowCycler` + Carbon hotkey infrastructure.
+- [ ] Show remote icon for SSH projects in switcher: Display a visual indicator (e.g., a small remote/cloud icon) next to SSH remote projects in the switcher panel so they are immediately distinguishable from local projects. Projects with a `remote` field in config show a remote indicator in the switcher row; local projects do not. `ProjectConfig.isSSH` already exists; implementation is presentation-only in `SwitcherPanelController`.
 
 ### Exit criteria
 - `make test` and `make coverage` work correctly; CI uses `make coverage` as its gate.
 - Optional UX features are implemented without regressing required daily-driver workflows.
 - AeroSpace icon visibility can be configured without disabling functional behavior.
+- Window cycling UI overlay shows available windows during Option-Tab cycling.
+- SSH projects are visually distinguishable from local projects in the switcher.
 - Behavior and limitations are documented where needed.
 - New behavior is covered by tests.
 
@@ -149,8 +142,16 @@ Incomplete:
 - [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
 - [ ] Custom IDE support: config `[[ide]]` blocks (app path, bundle id, etc) and project `ide = "vscode" | "<custom>"`.
 - [ ] Better integration with existing AeroSpace config (non-destructive merge; avoid overwriting).
+- [ ] Chrome profile selection in config: Implement support for selecting specific Chrome profiles via config.toml (`chromeProfile` key or similar). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts. Chrome windows for a project open using the profile specified in the project's configuration. May involve using `--profile-directory` or similar Chrome CLI flags.
+- [ ] Auto-associate existing Chrome window in project workspace: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one. Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen. Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
+- [ ] Chrome visual differentiation matching VS Code project color: Apply project color to the Chrome window to visually match the associated VS Code window. Possible approaches: Chrome profile customization, theme injection, or Chrome extension. Deferred from Phase 7 — Chrome has no clean programmatic injection point for color theming (unlike VS Code's Peacock extension). May require a custom Chrome extension or Chrome profile switching.
+- [ ] Hot Corners and trackpad activation/switching: Add support for Hot Corners and trackpad gestures (e.g., specific swipes) to trigger the project switcher or quickly toggle between recent projects. Streamlines navigation for laptop users who prefer gesture-based interaction over keyboard shortcuts. User can configure a specific screen corner or trackpad gesture in the settings to invoke the AgentPanel switcher.
+- [ ] Homebrew packaging for app + CLI: Provide optional Homebrew distribution (cask/formula or unified strategy) on top of GitHub tagged release assets. A documented Homebrew install/upgrade path exists and is validated against release artifacts. Deferred intentionally while release work focuses on signed + notarized arm64 GitHub tagged releases.
 
 ### Exit criteria
 - Missing-config onboarding path allows users to add and open a project from Switcher with explicit error surfacing and no silent defaults.
 - Dedicated-space behavior is deterministic and matches the selected configuration strategy.
+- Chrome profile selection allows per-project Chrome profile configuration.
+- Chrome windows in project workspaces are auto-associated when title matching fails.
+- Homebrew install/upgrade path is documented and validated.
 - Phase 10 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
