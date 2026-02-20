@@ -42,9 +42,9 @@ MARKETING_VERSION: "0.2.0"
 Regenerate the Xcode project and verify:
 
 ```sh
-scripts/regenerate_xcodeproj.sh
-scripts/build.sh
-scripts/test.sh
+make regen
+make build
+make coverage
 ```
 
 ### 2. Update the changelog

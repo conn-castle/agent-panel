@@ -4,5 +4,5 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-echo "pre-commit: running scripts/test.sh (includes coverage gate)..."
-scripts/test.sh
+echo "pre-commit: running make coverage (includes coverage gate)..."
+make coverage

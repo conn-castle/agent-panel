@@ -42,7 +42,10 @@ jobs:
         run: scripts/ci_preflight.sh
 
       - name: Build
-        run: scripts/build.sh
+        run: make build
 
       - name: Test
-        run: scripts/test.sh
+        run: make coverage
+
+      - name: Test coverage gate integration
+        run: make test-coverage-gate

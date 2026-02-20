@@ -18,8 +18,8 @@ Canonical, repeatable **development workflow** commands for this repository (set
 ```bash
 <command>
 ```
-Run from: <repo root or path>  
-Prerequisites: <only if critical>  
+Run from: <repo root or path>
+Prerequisites: <only if critical>
 Notes: <optional constraints or tips>
 ````
 
@@ -40,10 +40,12 @@ Run from repo root (or anywhere if installed).
 Regenerate `AgentPanel.xcodeproj` from `project.yml` (XcodeGen):
 
 ```bash
-scripts/regenerate_xcodeproj.sh
+make regen
 ```
 
 Run from repo root. Prerequisites: `xcodegen` installed (for example via `brew install xcodegen`).
+
+Reference (underlying script): `scripts/regenerate_xcodeproj.sh`
 
 ## Bootstrap
 
@@ -61,46 +63,52 @@ If this fails due to first-launch state, run the printed fix commands (for examp
 Build the app + CLI (Debug), without code signing:
 
 ```bash
-scripts/build.sh
+make build
 ```
 
-Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
 
-Reference (underlying `xcodebuild`):
-
-```bash
-xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -derivedDataPath build/DerivedData -resolvePackageDependencies
-xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO
-```
+Reference (underlying script): `scripts/build.sh`. Runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
 ## Clean
 
 Clean build artifacts (DerivedData + build output). Logs are outside the repo and must be removed manually as instructed by the script:
 
 ```bash
-scripts/clean.sh
+make clean
 ```
 
 Run from repo root. Notes: The script prints the exact `rm -rf` command to delete logs under `~/.local/state/agent-panel/logs`.
 
-## Test
+Reference (underlying script): `scripts/clean.sh`
 
-Run unit tests (Debug), without code signing:
+## Test (fast, no coverage)
 
-```bash
-scripts/test.sh
-```
-
-Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`). This script runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
-This script also enforces the repo coverage gate via `scripts/coverage_gate.sh`.
-
-Reference (underlying `xcodebuild`):
+Run unit tests (Debug) without code coverage for fast local iteration:
 
 ```bash
-xcodebuild -project AgentPanel.xcodeproj -scheme AgentPanel -configuration Debug -destination 'platform=macOS' -derivedDataPath build/DerivedData -resultBundlePath build/TestResults/Test-AgentPanel.xcresult -enableCodeCoverage YES test CODE_SIGNING_ALLOWED=NO
+make test
 ```
 
-## Coverage
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
+Notes: Skips coverage instrumentation and the coverage gate. Use `make coverage` for the full quality gate.
+
+Reference (underlying script): `scripts/test.sh --no-coverage`
+
+## Test with Coverage (quality gate)
+
+Run unit tests with code coverage enabled, enforce the 90% coverage gate, and print a per-file coverage summary:
+
+```bash
+make coverage
+```
+
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
+Notes: This is the quality gate used by CI and the pre-commit hook. Prints per-file coverage sorted by % ascending (lowest first).
+
+Reference (underlying script): `scripts/test.sh` (default, with coverage)
+
+## Re-check Coverage Gate
 
 Re-check the coverage gate from an existing test result bundle:
 
@@ -108,17 +116,31 @@ Re-check the coverage gate from an existing test result bundle:
 scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 ```
 
-Run from repo root. Notes: the `.xcresult` bundle is produced by `scripts/test.sh`.
+Run from repo root. Notes: the `.xcresult` bundle is produced by `make coverage`.
+
+## Coverage Gate Integration Test
+
+Run integration tests for `coverage_gate.swift` (verifies per-file output, sorting, pass/fail logic):
+
+```bash
+make test-coverage-gate
+```
+
+Run from repo root. Notes: fast — pipes JSON fixtures to `coverage_gate.swift`, no xcodebuild.
+
+Reference (underlying script): `scripts/test_coverage_gate.sh`
 
 ## Release Preflight
 
 Validate release-readiness (version format, Info.plist variables, entitlements, CI scripts, workflow config):
 
 ```bash
-scripts/ci_preflight.sh
+make preflight
 ```
 
 Run from repo root. Notes: runs automatically in CI on every push/PR. Also useful locally before tagging a release.
+
+Reference (underlying script): `scripts/ci_preflight.sh`
 
 ## Release (CI only)
 
@@ -141,10 +163,12 @@ Run from repo root. Prerequisites: GitHub `release` environment with secrets (`A
 
 ## Git hooks
 
-Install repo-managed git hooks (pre-commit runs `scripts/test.sh`):
+Install repo-managed git hooks (pre-commit runs `make coverage`):
 
 ```bash
-scripts/install_git_hooks.sh
+make hooks
 ```
 
 Run from repo root. Notes: sets local git config `core.hooksPath` to `.githooks`.
+
+Reference (underlying script): `scripts/install_git_hooks.sh`

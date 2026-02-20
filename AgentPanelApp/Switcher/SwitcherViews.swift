@@ -126,6 +126,7 @@ final class ActionRowView: NSTableCellView {
 /// Table cell view for displaying a project row with color swatch, current badge, and close button.
 final class ProjectRowView: NSTableCellView {
     let swatchView = NSView()
+    let remoteIcon = NSImageView()
     let nameLabel = NSTextField(labelWithString: "")
     let currentPillContainer = NSView()
     let currentPillLabel = NSTextField(labelWithString: "Current")
@@ -165,6 +166,12 @@ final class ProjectRowView: NSTableCellView {
         swatchView.layer?.cornerRadius = 4
         swatchView.translatesAutoresizingMaskIntoConstraints = false
 
+        remoteIcon.image = NSImage(systemSymbolName: "network", accessibilityDescription: "Remote project")
+        remoteIcon.contentTintColor = .secondaryLabelColor
+        remoteIcon.translatesAutoresizingMaskIntoConstraints = false
+        remoteIcon.setContentHuggingPriority(.required, for: .horizontal)
+        remoteIcon.isHidden = true
+
         nameLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -200,7 +207,7 @@ final class ProjectRowView: NSTableCellView {
         spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [swatchView, nameLabel, spacer, currentPillContainer, closeButton])
+        let stack = NSStackView(views: [swatchView, remoteIcon, nameLabel, spacer, currentPillContainer, closeButton])
         stack.orientation = .horizontal
         stack.spacing = 10
         stack.alignment = .centerY
@@ -211,6 +218,8 @@ final class ProjectRowView: NSTableCellView {
         NSLayoutConstraint.activate([
             swatchView.widthAnchor.constraint(equalToConstant: 10),
             swatchView.heightAnchor.constraint(equalToConstant: 10),
+            remoteIcon.widthAnchor.constraint(equalToConstant: 14),
+            remoteIcon.heightAnchor.constraint(equalToConstant: 14),
             currentPillLabel.leadingAnchor.constraint(equalTo: currentPillContainer.leadingAnchor, constant: 8),
             currentPillLabel.trailingAnchor.constraint(equalTo: currentPillContainer.trailingAnchor, constant: -8),
             currentPillLabel.topAnchor.constraint(equalTo: currentPillContainer.topAnchor, constant: 2),
@@ -260,13 +269,20 @@ final class ProjectRowView: NSTableCellView {
         isRowSelected = selected
     }
 
+    func setRemote(_ isRemote: Bool) {
+        remoteIcon.isHidden = !isRemote
+    }
+
     func setCurrent(_ isCurrent: Bool) {
         currentPillContainer.isHidden = !isCurrent
-        setAccessibilityLabel(
-            isCurrent
-                ? "\(nameLabel.stringValue), Current"
-                : nameLabel.stringValue
-        )
+        updateAccessibilityLabel(isCurrent: isCurrent)
+    }
+
+    private func updateAccessibilityLabel(isCurrent: Bool) {
+        var label = nameLabel.stringValue
+        if !remoteIcon.isHidden { label += ", Remote" }
+        if isCurrent { label += ", Current" }
+        setAccessibilityLabel(label)
     }
 
     func setCloseEnabled(_ enabled: Bool) {
@@ -358,6 +374,7 @@ func configureProjectCell(
 ) {
     cell.nameLabel.attributedStringValue = highlightedProjectName(project.name, query: query)
     cell.swatchView.layer?.backgroundColor = nsColor(from: project.color).cgColor
+    cell.setRemote(project.isSSH)
     cell.setCurrent(isActive)
     cell.setCloseEnabled(isOpen)
     cell.setRowSelected(isSelected)

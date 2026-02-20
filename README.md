@@ -300,10 +300,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
 ```sh
 # Prerequisites: Xcode, XcodeGen, xcbeautify (brew install xcodegen xcbeautify)
-scripts/dev_bootstrap.sh        # Validate Xcode toolchain
-scripts/regenerate_xcodeproj.sh # Generate Xcode project from project.yml
-scripts/build.sh                # Build (Debug)
-scripts/test.sh                 # Test with coverage gate (90% minimum)
+scripts/dev_bootstrap.sh  # Validate Xcode toolchain (one-time)
+make regen                # Generate Xcode project from project.yml
+make build                # Build (Debug)
+make test                 # Run tests (fast, no coverage)
+make coverage             # Run tests with coverage gate (90% minimum)
 ```
 
 ## License

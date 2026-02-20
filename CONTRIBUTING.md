@@ -31,28 +31,34 @@ AgentPanel is structured as four build targets:
 ## Getting Started
 
 ```sh
-# Validate Xcode toolchain
+# Validate Xcode toolchain (one-time)
 scripts/dev_bootstrap.sh
 
 # Generate Xcode project from project.yml
-scripts/regenerate_xcodeproj.sh
+make regen
 
 # Build (Debug, no code signing)
-scripts/build.sh
+make build
+
+# Run tests (fast, no coverage)
+make test
 
 # Run tests with coverage gate (90% minimum)
-scripts/test.sh
+make coverage
 ```
 
-The Xcode project (`AgentPanel.xcodeproj`) is generated from `project.yml` using XcodeGen. If you add or rename source files, regenerate the project.
+The Xcode project (`AgentPanel.xcodeproj`) is generated from `project.yml` using XcodeGen. If you add or rename source files, regenerate the project with `make regen`.
 
 ## Testing
 
 Tests live in `AgentPanelCoreTests/` and `AgentPanelCLITests/`. Coverage is enforced at 90% minimum on `AgentPanelCore` and `AgentPanelCLICore`. The `AgentPanelAppKit` target is excluded from the coverage gate because it requires a live window server.
 
 ```sh
-# Run all tests with coverage
-scripts/test.sh
+# Run tests (fast, no coverage — for local iteration)
+make test
+
+# Run tests with coverage gate + per-file summary
+make coverage
 
 # Re-check coverage from existing results
 scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
@@ -63,14 +69,14 @@ scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 - Use `@testable import AgentPanelCore` for Core tests.
 - Tests must not launch real executables (`code`, `al`, `aerospace`). Use stub/mock implementations.
 - Thread-safe test doubles are required for concurrent code paths (use `NSLock`).
-- New test files require `scripts/regenerate_xcodeproj.sh` before Xcode discovers them.
+- New test files require `make regen` before Xcode discovers them.
 
 ## Adding New Files
 
 1. Create the file in the appropriate source directory.
 2. Add the file path to `project.yml` if it's in a new directory not already covered by the `sources` glob.
-3. Run `scripts/regenerate_xcodeproj.sh`.
-4. Verify with `scripts/build.sh`.
+3. Run `make regen`.
+4. Verify with `make build`.
 
 ## Code Style
 
@@ -80,17 +86,17 @@ scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 
 ## Git Hooks
 
-Install the pre-commit hook (runs full test suite before commit):
+Install the pre-commit hook (runs `make coverage` before commit):
 
 ```sh
-scripts/install_git_hooks.sh
+make hooks
 ```
 
 ## Pull Requests
 
 1. Fork the repository and create a feature branch.
 2. Make your changes with tests.
-3. Ensure `scripts/test.sh` passes (build + tests + coverage gate).
+3. Ensure `make coverage` passes (build + tests + coverage gate).
 4. Open a pull request against `main`.
 5. Describe what changed and why.
 

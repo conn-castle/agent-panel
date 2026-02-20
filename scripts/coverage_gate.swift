@@ -65,10 +65,22 @@ private func parseArgs(_ rawArgs: [String]) -> ParsedArgs {
     return ParsedArgs(minPercent: minPercent, targetNames: targetNames)
 }
 
+struct FileCoverage {
+    let name: String
+    let coveredLines: Int
+    let executableLines: Int
+
+    var percent: Double {
+        guard executableLines > 0 else { return 0.0 }
+        return (Double(coveredLines) / Double(executableLines)) * 100.0
+    }
+}
+
 struct TargetCoverage {
     let name: String
     let coveredLines: Int
     let executableLines: Int
+    let files: [FileCoverage]
 
     var percent: Double {
         guard executableLines > 0 else { return 0.0 }
@@ -104,7 +116,16 @@ for t in rawTargets {
     guard let name = t["name"] as? String else { continue }
     let covered = (t["coveredLines"] as? NSNumber)?.intValue ?? 0
     let executable = (t["executableLines"] as? NSNumber)?.intValue ?? 0
-    targetsByName[name] = TargetCoverage(name: name, coveredLines: covered, executableLines: executable)
+    var files: [FileCoverage] = []
+    if let rawFiles = t["files"] as? [[String: Any]] {
+        for f in rawFiles {
+            guard let fileName = f["name"] as? String else { continue }
+            let fCovered = (f["coveredLines"] as? NSNumber)?.intValue ?? 0
+            let fExecutable = (f["executableLines"] as? NSNumber)?.intValue ?? 0
+            files.append(FileCoverage(name: fileName, coveredLines: fCovered, executableLines: fExecutable))
+        }
+    }
+    targetsByName[name] = TargetCoverage(name: name, coveredLines: covered, executableLines: executable, files: files)
 }
 
 let availableTargetNames = targetsByName.keys.sorted()
@@ -141,6 +162,23 @@ for cov in selected {
 let totalPercent = (Double(totalCovered) / Double(totalExecutable)) * 100.0
 print("TOTAL (selected): \(String(format: "%.2f", totalPercent))% (\(totalCovered)/\(totalExecutable))")
 print("MIN REQUIRED: \(String(format: "%.2f", parsed.minPercent))%")
+
+// Per-file coverage summary (sorted by % ascending — lowest coverage first)
+print("")
+print("Per-file coverage:")
+for cov in selected {
+    let sortedFiles = cov.files
+        .filter { $0.executableLines > 0 }
+        .sorted { $0.percent < $1.percent }
+    if sortedFiles.isEmpty { continue }
+
+    print("  \(cov.name):")
+    let maxNameLen = sortedFiles.map(\.name.count).max() ?? 0
+    for file in sortedFiles {
+        let padded = file.name.padding(toLength: maxNameLen, withPad: " ", startingAt: 0)
+        print("    \(padded)  \(String(format: "%6.2f", file.percent))% (\(file.coveredLines)/\(file.executableLines))")
+    }
+}
 
 if totalPercent + 1e-9 < parsed.minPercent {
     die("error: coverage gate failed", exitCode: 1)
