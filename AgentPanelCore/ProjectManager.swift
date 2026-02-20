@@ -1279,16 +1279,14 @@ public final class ProjectManager {
         )
         switch store.save(projectId: projectId, mode: screenMode, frames: frames) {
         case .success:
-            let partial = chromeFrame == nil ? " (IDE-only, Chrome unavailable)" : ""
-            logEvent("capture_position.saved", context: [
-                "project_id": projectId,
-                "mode": screenMode.rawValue,
-                "partial": chromeFrame == nil ? "true" : "false"
-            ])
             if chromeFrame == nil {
-                logEvent("capture_position.partial_save_warning", level: .error,
-                         message: "Saved IDE-only layout for \(projectId) — Chrome frame was unavailable\(partial)",
-                         context: ["project_id": projectId, "mode": screenMode.rawValue])
+                logEvent("capture_position.saved", level: .error,
+                         message: "Saved IDE-only layout for \(projectId) — Chrome frame was unavailable (investigate if recurring)",
+                         context: ["project_id": projectId, "mode": screenMode.rawValue, "partial": "true"])
+            } else {
+                logEvent("capture_position.saved", context: [
+                    "project_id": projectId, "mode": screenMode.rawValue, "partial": "false"
+                ])
             }
         case .failure(let error):
             logEvent("capture_position.save_failed", level: .warn, message: error.message)
