@@ -333,7 +333,7 @@ final class ProjectManagerSortingTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["a", "b"])
     }
 
-    func testSortedProjectsFiltersAndSortsByMatchTypeThenRecency() {
+    func testSortedProjectsFiltersAndSortsByScoreThenRecency() {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let recencyFilePath = tempDir.appendingPathComponent("pm-sorted-match-\(UUID().uuidString).json")
         try? JSONEncoder().encode(["calico", "foo", "alpine", "alpha"]).write(to: recencyFilePath, options: .atomic)
@@ -341,11 +341,11 @@ final class ProjectManagerSortingTests: XCTestCase {
         let manager = makeManager(recencyFilePath: recencyFilePath)
         manager.loadTestConfig(
             Config(projects: [
-                // Match types for query \"al\":
-                // - name prefix (0)
-                // - id prefix (1)
-                // - name infix (2)
-                // - id infix (3)
+                // Fuzzy scores for query "al":
+                // - "Alpha" name prefix → ~1000 (highest tier)
+                // - "alpine" id prefix → ~1000 (highest tier)
+                // - "Bald" name substring at pos 1 → ~600 tier
+                // - "calico" id substring at pos 1 → ~600 tier
                 ProjectConfig(id: "alpha", name: "Alpha", path: "/tmp/a", color: "blue", useAgentLayer: false),
                 ProjectConfig(id: "alpine", name: "Zzz", path: "/tmp/b", color: "blue", useAgentLayer: false),
                 ProjectConfig(id: "foo", name: "Bald", path: "/tmp/c", color: "blue", useAgentLayer: false),
@@ -354,29 +354,31 @@ final class ProjectManagerSortingTests: XCTestCase {
         )
 
         let sorted = manager.sortedProjects(query: " al ")
-        XCTAssertEqual(sorted.map(\.id), ["alpha", "alpine", "foo", "calico"])
+        // Prefix matches first: alpha (name "Alpha" len 5 → 1095) > alpine (id "alpine" len 6 → 1094).
+        // Substring matches next: calico and foo both ~649, recency breaks tie: calico(0) before foo(1).
+        XCTAssertEqual(sorted.map(\.id), ["alpha", "alpine", "calico", "foo"])
     }
 
-    func testSortedProjectsWhenMatchTypeSameUsesRecencyRankBeforeConfigOrder() {
+    func testSortedProjectsWhenScoreSameUsesRecencyRankBeforeConfigOrder() {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let recencyFilePath = tempDir.appendingPathComponent("pm-sorted-recency-tie-\(UUID().uuidString).json")
-        try? JSONEncoder().encode(["alpine", "alpha"]).write(to: recencyFilePath, options: .atomic)
+        try? JSONEncoder().encode(["alice", "alfie"]).write(to: recencyFilePath, options: .atomic)
 
         let manager = makeManager(recencyFilePath: recencyFilePath)
         manager.loadTestConfig(
             Config(projects: [
-                // Both projects match name prefix for query "al" (matchType 0),
-                // so ordering should be determined by recency rank first.
-                ProjectConfig(id: "alpha", name: "Alpha", path: "/tmp/a", color: "blue", useAgentLayer: false),
-                ProjectConfig(id: "alpine", name: "Alpine", path: "/tmp/b", color: "blue", useAgentLayer: false)
+                // Both names are 5 chars and match prefix for query "al" → equal scores.
+                // Recency breaks tie: alice(0) before alfie(1).
+                ProjectConfig(id: "alfie", name: "Alfie", path: "/tmp/a", color: "blue", useAgentLayer: false),
+                ProjectConfig(id: "alice", name: "Alice", path: "/tmp/b", color: "blue", useAgentLayer: false)
             ])
         )
 
         let sorted = manager.sortedProjects(query: "al")
-        XCTAssertEqual(sorted.map(\.id), ["alpine", "alpha"])
+        XCTAssertEqual(sorted.map(\.id), ["alice", "alfie"])
     }
 
-    func testSortedProjectsWhenMatchTypeSameFallsBackToConfigOrderWhenNoRecency() {
+    func testSortedProjectsWhenScoreSameFallsBackToConfigOrderWhenNoRecency() {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let recencyFilePath = tempDir.appendingPathComponent("pm-sorted-config-tie-\(UUID().uuidString).json")
         try? JSONEncoder().encode(["unrelated"]).write(to: recencyFilePath, options: .atomic)
@@ -384,15 +386,15 @@ final class ProjectManagerSortingTests: XCTestCase {
         let manager = makeManager(recencyFilePath: recencyFilePath)
         manager.loadTestConfig(
             Config(projects: [
-                // Both projects match name prefix for query "al" (matchType 0),
-                // but neither appears in recency, so config order should be used.
-                ProjectConfig(id: "alpha", name: "Alpha", path: "/tmp/a", color: "blue", useAgentLayer: false),
-                ProjectConfig(id: "alpine", name: "Alpine", path: "/tmp/b", color: "blue", useAgentLayer: false)
+                // Both names are 5 chars and match prefix for query "al" → equal scores.
+                // Neither appears in recency, so config order is used: alfie first.
+                ProjectConfig(id: "alfie", name: "Alfie", path: "/tmp/a", color: "blue", useAgentLayer: false),
+                ProjectConfig(id: "alice", name: "Alice", path: "/tmp/b", color: "blue", useAgentLayer: false)
             ])
         )
 
         let sorted = manager.sortedProjects(query: "al")
-        XCTAssertEqual(sorted.map(\.id), ["alpha", "alpine"])
+        XCTAssertEqual(sorted.map(\.id), ["alfie", "alice"])
     }
 
     func testRestoreFocusFocusesWindowAndReturnsTrueOnSuccess() {

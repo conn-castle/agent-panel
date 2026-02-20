@@ -207,7 +207,7 @@ final class ProjectRowView: NSTableCellView {
         spacer.translatesAutoresizingMaskIntoConstraints = false
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let stack = NSStackView(views: [swatchView, remoteIcon, nameLabel, spacer, currentPillContainer, closeButton])
+        let stack = NSStackView(views: [swatchView, nameLabel, remoteIcon, spacer, currentPillContainer, closeButton])
         stack.orientation = .horizontal
         stack.spacing = 10
         stack.alignment = .centerY

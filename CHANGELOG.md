@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-02-20
+
+### Added
+
+- **Fuzzy project search** -- the switcher now uses tiered fuzzy matching instead of exact substring matching. Scoring tiers: prefix > word-boundary acronym > substring > non-consecutive fuzzy. Both project name and ID are scored, with the best match used for ranking. For example, typing "al" now matches "Agent Layer" via word-boundary acronym detection.
+- **Remote indicator in switcher** -- SSH projects show a network icon next to the project name in the switcher row, making remote projects immediately distinguishable from local ones.
+- **Makefile build system** -- `make build`, `make test`, `make coverage`, `make clean`, `make regen`, and `make preflight` as the single entrypoint for all dev operations. `make test` skips coverage for fast local iteration. `make coverage` runs the full quality gate with per-file coverage summary.
+
+### Changed
+
+- **Remote icon position** -- moved the SSH remote indicator icon to appear after the project name instead of before it.
+- **Capture window positions on project switch** -- window positions are now captured when switching between projects (not only on close/exit), so returning to a project restores the user's window arrangement.
+- **Optional Chrome frame** -- Chrome window frame capture failures no longer abort the entire save. IDE-only partial saves are written instead.
+
+### Fixed
+
+- **Partial-save log noise** -- consolidated redundant partial-save log events into a single entry.
+
 ## [0.1.5] - 2026-02-18
 
 ### Fixed

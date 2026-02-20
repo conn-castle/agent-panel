@@ -492,17 +492,17 @@ public final class ProjectManager {
             }
         }
 
-        // Filter and compute match type
-        let matched = projects.compactMap { project -> (project: ProjectConfig, matchType: Int)? in
-            let matchType = self.matchType(project: project, query: trimmedQuery)
-            guard matchType < 99 else { return nil }
-            return (project, matchType)
+        // Filter and compute fuzzy score (best of name and ID match)
+        let matched = projects.compactMap { project -> (project: ProjectConfig, score: Int)? in
+            let score = Self.projectScore(project: project, query: trimmedQuery)
+            guard score > 0 else { return nil }
+            return (project, score)
         }
 
-        // Sort by: match type, then recency, then config order
+        // Sort by: score descending, then recency, then config order
         let sorted = matched.sorted { a, b in
-            if a.matchType != b.matchType {
-                return a.matchType < b.matchType
+            if a.score != b.score {
+                return a.score > b.score
             }
             let rankA = recencyRank[a.project.id] ?? noHistoryRank
             let rankB = recencyRank[b.project.id] ?? noHistoryRank
@@ -517,15 +517,11 @@ public final class ProjectManager {
         return sorted.map { $0.project }
     }
 
-    private func matchType(project: ProjectConfig, query: String) -> Int {
-        let nameLower = project.name.lowercased()
-        let idLower = project.id.lowercased()
-
-        if nameLower.hasPrefix(query) { return 0 }  // name prefix
-        if idLower.hasPrefix(query) { return 1 }    // id prefix
-        if nameLower.contains(query) { return 2 }   // name infix
-        if idLower.contains(query) { return 3 }     // id infix
-        return 99  // no match
+    /// Returns the best fuzzy match score for a project, checking both name and ID.
+    private static func projectScore(project: ProjectConfig, query: String) -> Int {
+        let nameScore = FuzzyMatcher.score(query: query, target: project.name)
+        let idScore = FuzzyMatcher.score(query: query, target: project.id)
+        return max(nameScore, idScore)
     }
 
     // MARK: - Project Operations

@@ -115,8 +115,7 @@ Incomplete:
 
 ### Tasks
 - [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
-- [ ] Favorites/stars for projects (persisted) and UI affordances. Add the ability to open all favorited projects.
-- [ ] Fuzzy search with ranking in the switcher, including trigram matching as well.
+- [x] Improved searching. Use industry best practices for fast and reliable searching. Make sure 'al' would return 'Agent Layer' (as an example).
 - [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
 - [x] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
 - [ ] UI overlay for project window cycling (Option-Tab): Add a UI overlay that shows available windows when cycling with Option-Tab, similar to the macOS Command-Tab switcher. Pressing and holding Option while Tabbing displays a UI panel with window icons/titles; releasing Option selects the highlighted window. Builds on existing `WindowCycler` + Carbon hotkey infrastructure.
