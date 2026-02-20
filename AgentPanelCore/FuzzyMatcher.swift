@@ -36,13 +36,10 @@ public struct FuzzyMatcher {
         }
 
         // Tier 3: Consecutive substring match
-        if targetLower.contains(queryLower) {
+        if let range = targetLower.range(of: queryLower) {
             // Bonus for earlier position
-            if let range = targetLower.range(of: queryLower) {
-                let position = targetLower.distance(from: targetLower.startIndex, to: range.lowerBound)
-                return 600 + max(0, 50 - position)
-            }
-            return 600
+            let position = targetLower.distance(from: targetLower.startIndex, to: range.lowerBound)
+            return 600 + max(0, 50 - position)
         }
 
         // Tier 4: Non-consecutive fuzzy match

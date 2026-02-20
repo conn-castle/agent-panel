@@ -81,8 +81,7 @@ final class FuzzyMatcherTests: XCTestCase {
     }
 
     func testThreeWordAcronymMatch() {
-        // "rml" matches "Remote ML Server" via R + M + S... no, "rml" → R + M + L?
-        // Actually: "rms" matches "Remote ML Server" via R + M + S
+        // "rms" matches "Remote ML Server" via R + M + S word boundaries
         let score = FuzzyMatcher.score(query: "rms", target: "Remote ML Server")
         XCTAssertGreaterThanOrEqual(score, 800)
     }
