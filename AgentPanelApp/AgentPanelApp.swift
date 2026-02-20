@@ -306,7 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(recoverAgentPanelItem)
 
         let addWindowToProjectItem = NSMenuItem(
-            title: "Add Window to Project",
+            title: "Move Current Window",
             action: nil,
             keyEquivalent: ""
         )
@@ -1149,6 +1149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // No-op if window is already in the target project workspace
+        if focus.workspace == ProjectManager.workspacePrefix + projectId { return }
+
         logAppEvent(
             event: "add_window_to_project.requested",
             context: ["window_id": "\(focus.windowId)", "project_id": projectId]
@@ -1180,6 +1183,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    /// Moves the focused window out of its project workspace to the default workspace.
+    @objc private func removeWindowFromProject(_ sender: NSMenuItem) {
+        guard let focus = menuFocusCapture else {
+            logAppEvent(event: "remove_window_from_project.no_focus", level: .warn)
+            return
+        }
+
+        // No-op if window is not in a project workspace
+        guard focus.workspace.hasPrefix(ProjectManager.workspacePrefix) else { return }
+
+        logAppEvent(
+            event: "remove_window_from_project.requested",
+            context: ["window_id": "\(focus.windowId)", "workspace": focus.workspace]
+        )
+
+        let windowId = focus.windowId
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let result = self.projectManager.moveWindowFromProject(windowId: windowId)
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self.logAppEvent(
+                        event: "remove_window_from_project.completed",
+                        context: ["window_id": "\(windowId)"]
+                    )
+                    self.refreshMenuStateInBackground()
+                case .failure(let error):
+                    self.logAppEvent(
+                        event: "remove_window_from_project.failed",
+                        level: .error,
+                        message: "\(error)"
+                    )
+                }
+            }
+        }
+    }
 }
 
 // MARK: - NSMenuDelegate
@@ -1200,9 +1241,12 @@ extension AppDelegate: NSMenuDelegate {
         let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false
         menuItems.recoverAgentPanel.isEnabled = inProjectWorkspace
 
-        // Populate "Add Window to Project" submenu from cached workspace state
+        // Populate "Move Current Window" submenu from cached workspace state
         let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()
         submenu.removeAllItems()
+
+        let currentWorkspace = menuFocusCapture?.workspace
+        let inProjectWorkspaceForMove = currentWorkspace?.hasPrefix(ProjectManager.workspacePrefix) ?? false
 
         var hasOpenProjects = false
         if let state = cachedWorkspaceState {
@@ -1217,13 +1261,31 @@ extension AppDelegate: NSMenuDelegate {
                     )
                     item.target = self
                     item.representedObject = project.id
+                    if currentWorkspace == ProjectManager.workspacePrefix + project.id {
+                        item.state = .on
+                    }
                     submenu.addItem(item)
                 }
             }
         }
 
+        // Separator + "No Project" option
+        if hasOpenProjects {
+            submenu.addItem(.separator())
+        }
+        let noProjectItem = NSMenuItem(
+            title: "No Project",
+            action: #selector(removeWindowFromProject(_:)),
+            keyEquivalent: ""
+        )
+        noProjectItem.target = self
+        if !inProjectWorkspaceForMove {
+            noProjectItem.state = .on
+        }
+        submenu.addItem(noProjectItem)
+
         menuItems.addWindowToProject.submenu = submenu
-        menuItems.addWindowToProject.isHidden = !hasOpenProjects
+        menuItems.addWindowToProject.isHidden = !hasOpenProjects && !inProjectWorkspaceForMove
 
         // Refresh cache in background for next menu open
         refreshMenuStateInBackground()

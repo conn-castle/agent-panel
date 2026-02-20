@@ -154,4 +154,50 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
 
         XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "ap-my-fancy-project")
     }
+
+    // MARK: - moveWindowFromProject Tests
+
+    func testMoveWindowFromProject_success() {
+        let aerospace = MoveAeroSpaceStub()
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "1")
+        XCTAssertEqual(aerospace.moveWindowCalls[0].windowId, 99)
+        XCTAssertFalse(aerospace.moveWindowCalls[0].focusFollows)
+    }
+
+    func testMoveWindowFromProject_configNotLoaded() {
+        let pm = makeProjectManager()
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertEqual(error, .configNotLoaded)
+    }
+
+    func testMoveWindowFromProject_aeroSpaceError() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.moveResult = .failure(ApCoreError(message: "move failed"))
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertEqual(error, .aeroSpaceError(detail: "move failed"))
+    }
 }

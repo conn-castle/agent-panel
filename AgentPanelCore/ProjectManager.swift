@@ -789,6 +789,27 @@ public final class ProjectManager {
         }
     }
 
+    /// Moves a window out of its project workspace to the default workspace ("1").
+    /// - Parameter windowId: AeroSpace window ID of the window to move.
+    /// - Returns: Success or error.
+    public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError> {
+        guard config != nil else {
+            return .failure(.configNotLoaded)
+        }
+        switch aerospace.moveWindowToWorkspace(workspace: "1", windowId: windowId, focusFollows: false) {
+        case .success:
+            logEvent("move_window_from_project.completed", context: [
+                "window_id": "\(windowId)"
+            ])
+            return .success(())
+        case .failure(let error):
+            logEvent("move_window_from_project.failed", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)"
+            ])
+            return .failure(.aeroSpaceError(detail: error.message))
+        }
+    }
+
     /// Exits to the last non-project window without closing the project.
     public func exitToNonProjectWindow() -> Result<Void, ProjectError> {
         let state: ProjectWorkspaceState

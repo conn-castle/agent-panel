@@ -27,6 +27,12 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-19 layout-not-restored-on-project-switch: Layout not reliably restored when returning to open project
+    Priority: High. Area: Window management
+    Description: When switching away and back to a project that is already open, window/panel layout often fails to return to the previously saved placement.
+    Next step: Reproduce project-switch flow while logging layout save/restore events to identify where persisted state is skipped or overwritten.
+    Notes: Distinct from first-open defaults issue; this occurs on return-to-open-project behavior.
+
 - Issue 2026-02-17 new-project-layout-defaults: First open ignores default window placement
     Priority: High. Area: Window management
     Description: Opening a project for the first time (no prior saved state) does not place windows according to the configured layout defaults; window positions and sizes are incorrect.

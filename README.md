@@ -207,7 +207,7 @@ Menu actions:
 | Open Switcher... | Open the project switcher |
 | View Config File... | Reveal config in Finder (creates starter if missing) |
 | Recover Project | Reset window positions in current project workspace |
-| Add Window to Project | Move the focused window into a project workspace |
+| Move Current Window | Move the focused window to a project workspace or back to no project |
 | Recover All Windows... | Center all windows across all workspaces |
 | Run Doctor... | Open the diagnostic panel |
 | Launch at Login | Toggle auto-start at login |
