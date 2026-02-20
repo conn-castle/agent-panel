@@ -6,7 +6,7 @@ import XCTest
 /// Covers: selectProject move branches, Chrome fallback launch failure, captureCurrentFocus failure,
 /// focusWorkspace failure, fallbackToNonProjectWorkspace edge cases, resolveInitialURLs snapshot
 /// load failure and git remote, captureWindowPositions screen mode failure and save failure,
-/// positionWindows IDE/Chrome set failures, matchType id infix path, saveRecency encode/directory
+/// positionWindows IDE/Chrome set failures, fuzzy search id/name matching, saveRecency encode/directory
 /// failures.
 final class ProjectManagerEdgeCaseTests: XCTestCase {
 
@@ -565,7 +565,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         }
     }
 
-    // MARK: - matchType: id infix match
+    // MARK: - Fuzzy search: id and name matching
 
     func testSortedProjectsMatchesIdInfix() {
         let manager = makeManager(aerospace: EdgeAeroSpaceStub())
@@ -574,8 +574,8 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             ProjectConfig(id: "nomatch", name: "NoMatch", path: "/test2", color: "red", useAgentLayer: false)
         ]))
 
-        // Query "calico" matches id infix for "my-calico-project" (matchType 3)
-        // and name prefix for "Calico" (matchType 0)
+        // "calico" matches name prefix "Calico" and id substring "my-calico-project"
+        // Only one project matches; the non-matching project is filtered out
         let sorted = manager.sortedProjects(query: "calico")
         XCTAssertEqual(sorted.count, 1)
         XCTAssertEqual(sorted[0].id, "my-calico-project")

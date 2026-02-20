@@ -28,3 +28,8 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
+- Backlog 2026-02-20 favorites: Favorites/stars for projects
+    Priority: Deferred. Area: Switcher UX
+    Description: Persisted favorite/star flag per project with UI affordances (star icon, Favorites section, Cmd+D toggle). Bulk "Open All Favorites" action to activate all starred projects.
+    Acceptance criteria: Favorites persisted in state file, visible in switcher and CLI, bulk-open works with defined focus-stack contract.
+

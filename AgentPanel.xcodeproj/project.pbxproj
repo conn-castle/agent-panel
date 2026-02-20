@@ -49,6 +49,7 @@
 		543ACE1A1244E0DCA561CD2A /* ProjectManagerEdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC8F7409A9D958D816281AFE /* ProjectManagerEdgeCaseTests.swift */; };
 		5809D0E1DCD96BB407B71026 /* FocusStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCF207DCD3CAB37C2756708 /* FocusStackTests.swift */; };
 		5A38C0E2215EE3E213500018 /* WindowPositionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5948A8D791EEE0CC86D8A83 /* WindowPositionStoreTests.swift */; };
+		5BFB2B79F4BED5139EB51CC0 /* FuzzyMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = E505A3EEB86DDECDC63B735B /* FuzzyMatcher.swift */; };
 		5DF60C9BEA08A5067E00AEC5 /* AppKitIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93535C80A991222F14C5D635 /* AppKitIntegration.swift */; };
 		5E8FD6C4629B985EC54C1326 /* AeroSpaceCircuitBreakerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5441A4A3ABD5FBE0BC906CF3 /* AeroSpaceCircuitBreakerTests.swift */; };
 		5F2733E6786E0EF79EB6B6F6 /* Identity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E06D0D92D76D722E481FBCAC /* Identity.swift */; };
@@ -80,6 +81,7 @@
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
 		BB907D2FC7E1CB321CA7B0BB /* WindowLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A56F48F550ED371899EAB69 /* WindowLayoutEngineTests.swift */; };
 		BF1E222C54CDED4840AC1950 /* RecoveryProgressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2A435AAD0A46F9C41D8214 /* RecoveryProgressController.swift */; };
+		C3F2BD681D26627581FBF46C /* FuzzyMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */; };
 		CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */; };
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
@@ -250,6 +252,7 @@
 		BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHHelpers.swift; sourceTree = "<group>"; };
 		C152889C3F2C9097CB66DE13 /* WindowCycler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCycler.swift; sourceTree = "<group>"; };
 		C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdNormalizationTests.swift; sourceTree = "<group>"; };
+		C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzyMatcherTests.swift; sourceTree = "<group>"; };
 		CB049349875901281339DAE9 /* LayoutConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConfig.swift; sourceTree = "<group>"; };
 		D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanelController.swift; sourceTree = "<group>"; };
 		D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = AgentPanelCLICore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -267,6 +270,7 @@
 		E06D0D92D76D722E481FBCAC /* Identity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Identity.swift; sourceTree = "<group>"; };
 		E0FA6B487E72C63168C91525 /* WindowRecoveryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRecoveryManager.swift; sourceTree = "<group>"; };
 		E1C67D54B55EEAC375F2333C /* WindowRecoveryManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRecoveryManagerTests.swift; sourceTree = "<group>"; };
+		E505A3EEB86DDECDC63B735B /* FuzzyMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzyMatcher.swift; sourceTree = "<group>"; };
 		EC8F7409A9D958D816281AFE /* ProjectManagerEdgeCaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerEdgeCaseTests.swift; sourceTree = "<group>"; };
 		EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowLayoutEngine.swift; sourceTree = "<group>"; };
 		F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherViews.swift; sourceTree = "<group>"; };
@@ -350,6 +354,7 @@
 				8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */,
 				4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */,
 				DDCF207DCD3CAB37C2756708 /* FocusStackTests.swift */,
+				C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */,
 				1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */,
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				B65D26C4A087CBB10C76E24A /* LayoutConfigParserTests.swift */,
@@ -394,6 +399,7 @@
 				691139171C62F83E4E0CC709 /* Dependencies.swift */,
 				935CD37A022BA8B71683DE72 /* Doctor.swift */,
 				6E8DE3E79215020A2587A722 /* Errors.swift */,
+				E505A3EEB86DDECDC63B735B /* FuzzyMatcher.swift */,
 				E06D0D92D76D722E481FBCAC /* Identity.swift */,
 				9E0C3DAA0280728917003498 /* Logger.swift */,
 				3CC240A74C38218E4C33B36B /* ProjectManager.swift */,
@@ -747,6 +753,7 @@
 				65822A51B623A24EA742CF9C /* Dependencies.swift in Sources */,
 				FF90DD97E05DB53306719BAA /* Doctor.swift in Sources */,
 				4DCD2D11F2BA5709E38B9233 /* Errors.swift in Sources */,
+				5BFB2B79F4BED5139EB51CC0 /* FuzzyMatcher.swift in Sources */,
 				5F2733E6786E0EF79EB6B6F6 /* Identity.swift in Sources */,
 				9B6D6AECB2EF1C55CA244748 /* LayoutConfig.swift in Sources */,
 				476AD5F6F072D635D7418FAB /* Logger.swift in Sources */,
@@ -818,6 +825,7 @@
 				0563D807E75A5AAA485BE4DA /* ErrorContextTests.swift in Sources */,
 				2EBFE28DAE0CC309DC9075C6 /* ExecutableResolverTests.swift in Sources */,
 				5809D0E1DCD96BB407B71026 /* FocusStackTests.swift in Sources */,
+				C3F2BD681D26627581FBF46C /* FuzzyMatcherTests.swift in Sources */,
 				7BE9E07FA842E9FAA46EA5E1 /* GitRemoteResolverTests.swift in Sources */,
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
 				EEB19B9530C35E462BA6BA67 /* LayoutConfigParserTests.swift in Sources */,
