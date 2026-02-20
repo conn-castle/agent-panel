@@ -206,6 +206,11 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Four release iterations (v0.1.0–v0.1.3) were spent investigating remote issues without sufficient log data. The user explicitly requested "everything you need to know for sure what is wrong" in a single release attempt.
     Tradeoffs: Log entries are significantly larger (~2-4KB per Doctor run). Acceptable for a diagnostic tool that runs infrequently.
 
+- Decision 2026-02-20 capture-on-switch: Capture window positions during project-to-project switching
+    Decision: `selectProject()` now calls `captureWindowPositions(sourceProjectId)` at the start when `preCapturedFocus.workspace` starts with `"ap-"`. Source project ID is extracted from the workspace name using the existing `projectId(fromWorkspace:)` helper. `SavedWindowFrames.chrome` is now optional (`SavedFrame?`) — Chrome frame read failure saves IDE-only (partial save) instead of aborting. Partial-save and partial-restore paths log at ERROR level to ensure visibility.
+    Reason: `captureWindowPositions()` was only called from `closeProject()` and `exitToNonProjectWindow()`, never during the most common workflow (project-to-project switching via the switcher). This meant window positions were never persisted during normal use, causing every return to a project to use computed layout instead of the user's manual arrangement.
+    Tradeoffs: One extra `captureWindowPositions()` call per project switch (non-fatal, ~10ms). The optional Chrome frame is a bandaid for edge cases where Chrome is absent — partial saves log at ERROR so the underlying cause can be investigated.
+
 - Decision 2026-02-17 direct-codesign: Use direct `codesign` instead of `xcodebuild -exportArchive`
     Decision: `ci_archive.sh` extracts the .app from the xcarchive and re-signs with `codesign --force --deep --options runtime --timestamp --entitlements` instead of using `xcodebuild -exportArchive` with ExportOptions.plist.
     Reason: `IDEDistribution` (used by `-exportArchive`) fails on GitHub Actions CI runners with "Unknown Distribution Error" / empty valid distribution methods set. Root cause: incomplete Apple intermediate certificate chain in the CI runner environment that `IDEDistribution` cannot resolve. Direct `codesign` bypasses `IDEDistribution` entirely.

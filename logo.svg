@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="84.1 81.9 343.6 343.6" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0.43" y1="0.19" x2="0.50" y2="0.50">
+      <stop offset="0%" stop-color="rgb(26,32,62)"/>
+      <stop offset="33%" stop-color="rgb(24,28,57)"/>
+      <stop offset="100%" stop-color="rgb(19,22,45)"/>
+    </linearGradient>
+    <linearGradient id="pinkGrad" x1="1.399" y1="0.020" x2="-0.399" y2="0.980">
+      <stop offset="0%" stop-color="rgb(255,130,187)"/>
+      <stop offset="55%" stop-color="rgb(194,9,107)"/>
+      <stop offset="100%" stop-color="rgb(198,15,80)"/>
+    </linearGradient>
+    <linearGradient id="pinkStroke" x1="0.774" y1="0.249" x2="0.226" y2="0.751">
+      <stop offset="0%" stop-color="rgb(230,115,182)"/>
+      <stop offset="100%" stop-color="rgb(173,0,75)"/>
+    </linearGradient>
+    <linearGradient id="orangeGrad" x1="1.333" y1="0.400" x2="-0.333" y2="0.600">
+      <stop offset="0%" stop-color="rgb(255,179,64)"/>
+      <stop offset="68%" stop-color="rgb(162,32,35)"/>
+      <stop offset="100%" stop-color="rgb(204,75,52)"/>
+    </linearGradient>
+    <linearGradient id="orangeStroke" x1="1.087" y1="0.500" x2="-0.087" y2="0.500">
+      <stop offset="0%" stop-color="rgb(230,164,59)"/>
+      <stop offset="100%" stop-color="rgb(179,60,47)"/>
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0.018" y1="1.143" x2="0.982" y2="-0.143">
+      <stop offset="0%" stop-color="rgb(115,60,210)"/>
+      <stop offset="37%" stop-color="rgb(155,84,243)"/>
+      <stop offset="100%" stop-color="rgb(248,162,255)"/>
+    </linearGradient>
+    <linearGradient id="purpleBorder" x1="0.018" y1="1.143" x2="0.982" y2="-0.143">
+      <stop offset="0%" stop-color="rgb(153,108,217)"/>
+      <stop offset="26%" stop-color="rgb(161,89,245)"/>
+      <stop offset="100%" stop-color="rgb(255,210,255)"/>
+    </linearGradient>
+    <linearGradient id="glossPink" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.152)"/>
+      <stop offset="52%" stop-color="rgba(255,255,255,0.03)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.098)"/>
+    </linearGradient>
+    <linearGradient id="glossOrange" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.056)"/>
+      <stop offset="10%" stop-color="rgba(255,255,255,0.03)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.000)"/>
+    </linearGradient>
+    <linearGradient id="glossPurple" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.012)"/>
+      <stop offset="16%" stop-color="rgba(255,255,255,0.03)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.002)"/>
+    </linearGradient>
+    <filter id="shadow1" x="-15%" y="-10%" width="140%" height="140%">
+      <feDropShadow dx="-2.1" dy="17.7" stdDeviation="7.4" flood-color="rgb(1,25,1)" flood-opacity="0.220"/>
+    </filter>
+    <filter id="shadow2" x="-15%" y="-10%" width="140%" height="140%">
+      <feDropShadow dx="1.9" dy="17.7" stdDeviation="7.4" flood-color="rgb(1,25,1)" flood-opacity="0.071"/>
+    </filter>
+    <filter id="shadow3" x="-15%" y="-10%" width="145%" height="145%">
+      <feDropShadow dx="3.0" dy="18.3" stdDeviation="7.8" flood-color="rgb(1,25,1)" flood-opacity="0.089"/>
+    </filter>
+    <radialGradient id="bgHighlight" cx="0.799" cy="0.055" rx="0.493" ry="0.371" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="rgb(80,85,130)" stop-opacity="0.250"/>
+      <stop offset="100%" stop-color="rgb(80,85,130)" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bgDiag" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
+      <stop offset="43%" stop-color="rgba(255,255,255,0)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.111)"/>
+    </linearGradient>
+  </defs>
+  <rect x="84.1" y="81.9" width="343.6" height="343.6" fill="url(#bgGrad)"/>
+  <rect x="84.1" y="81.9" width="343.6" height="343.6" fill="url(#bgHighlight)"/>
+  <rect x="84.1" y="81.9" width="343.6" height="343.6" fill="url(#bgDiag)"/>
+  <rect x="192.4" y="133.4" width="189.6" height="168.1" rx="20.2" ry="20.2" fill="url(#pinkStroke)" filter="url(#shadow1)"/>
+  <rect x="198.4" y="139.4" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#pinkGrad)"/>
+  <rect x="198.4" y="139.4" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#glossPink)"/>
+  <rect x="162.7" y="206.0" width="189.6" height="168.1" rx="20.2" ry="20.2" fill="url(#orangeStroke)" filter="url(#shadow2)"/>
+  <rect x="168.6" y="211.9" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#orangeGrad)"/>
+  <rect x="168.6" y="211.9" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#glossOrange)"/>
+  <rect x="129.9" y="171.5" width="189.6" height="168.1" rx="20.2" ry="20.2" fill="url(#purpleBorder)" filter="url(#shadow3)"/>
+  <rect x="135.9" y="177.5" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#purpleGrad)"/>
+  <rect x="135.9" y="177.5" width="177.6" height="156.1" rx="18.2" ry="18.2" fill="url(#glossPurple)"/>
+</svg>

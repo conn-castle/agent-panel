@@ -1,11 +1,15 @@
 import Foundation
 
 /// Saved window frames for IDE and Chrome in NSScreen coordinate space.
+///
+/// `chrome` is optional: when Chrome is not running or its frame cannot be read,
+/// the IDE frame is saved alone. On restore, a nil Chrome frame falls back to
+/// computed layout.
 public struct SavedWindowFrames: Codable, Equatable, Sendable {
     public let ide: SavedFrame
-    public let chrome: SavedFrame
+    public let chrome: SavedFrame?
 
-    public init(ide: SavedFrame, chrome: SavedFrame) {
+    public init(ide: SavedFrame, chrome: SavedFrame?) {
         self.ide = ide
         self.chrome = chrome
     }

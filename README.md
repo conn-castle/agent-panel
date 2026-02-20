@@ -1,6 +1,13 @@
-# AgentPanel
+<p align="center">
+  <img src="docs/logo-readme.svg" width="128" height="128" alt="AgentPanel">
+</p>
 
-A macOS menu bar app for engineers who work across many repositories. One hotkey to switch projects, with your IDE, browser, tabs, and window layout restored automatically.
+<h1 align="center">AgentPanel</h1>
+
+<p align="center">
+A macOS menu bar app for engineers who work across many repositories.<br>
+One hotkey to switch projects, with your IDE, browser, tabs, and window layout restored automatically.
+</p>
 
 AgentPanel manages [AeroSpace](https://github.com/nikitabobko/AeroSpace) workspaces behind the scenes so each project gets its own isolated desktop context. Switch in, do your work, switch out. No manual window shuffling.
 

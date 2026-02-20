@@ -576,6 +576,12 @@ public final class ProjectManager {
             ])
         }
 
+        // Capture window positions for the source project before switching away.
+        // Only when coming from another project workspace (ap-*).
+        if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
+            captureWindowPositions(projectId: sourceProjectId)
+        }
+
         // --- Phase 1: Find or launch all windows (no moves yet) ---
 
         let chromeWindow: ApWindow
@@ -1129,11 +1135,28 @@ public final class ProjectManager {
         switch store.load(projectId: projectId, mode: screenMode) {
         case .success(let savedFrames):
             if let frames = savedFrames {
-                // Validate and clamp saved frames to current screen
+                // Validate and clamp saved IDE frame to current screen
                 let ideTarget = WindowLayoutEngine.clampToScreen(frame: frames.ide.cgRect, screenVisibleFrame: screenVisibleFrame)
-                let chromeTarget = WindowLayoutEngine.clampToScreen(frame: frames.chrome.cgRect, screenVisibleFrame: screenVisibleFrame)
+
+                // Chrome: use saved frame if available, otherwise fall back to computed
+                let chromeTarget: CGRect
+                if let savedChrome = frames.chrome {
+                    chromeTarget = WindowLayoutEngine.clampToScreen(frame: savedChrome.cgRect, screenVisibleFrame: screenVisibleFrame)
+                    logEvent("position.using_saved_frames", context: ["project_id": projectId, "mode": screenMode.rawValue])
+                } else {
+                    let computed = WindowLayoutEngine.computeLayout(
+                        screenVisibleFrame: screenVisibleFrame,
+                        screenPhysicalWidthInches: physicalWidth,
+                        screenMode: screenMode,
+                        config: config.layout
+                    )
+                    chromeTarget = computed.chromeFrame
+                    logEvent("position.using_saved_ide_computed_chrome", level: .error,
+                             message: "Saved layout has no Chrome frame — using computed Chrome (investigate if recurring)",
+                             context: ["project_id": projectId, "mode": screenMode.rawValue])
+                }
+
                 targetLayout = WindowLayout(ideFrame: ideTarget, chromeFrame: chromeTarget)
-                logEvent("position.using_saved_frames", context: ["project_id": projectId, "mode": screenMode.rawValue])
             } else {
                 targetLayout = WindowLayoutEngine.computeLayout(
                     screenVisibleFrame: screenVisibleFrame,
@@ -1224,14 +1247,18 @@ public final class ProjectManager {
             return
         }
 
-        // Read Chrome primary frame
-        let chromeFrame: CGRect
+        // Read Chrome primary frame (optional — save proceeds without it)
+        let chromeFrame: CGRect?
         switch positioner.getPrimaryWindowFrame(bundleId: ApChromeLauncher.bundleId, projectId: projectId) {
         case .success(let frame):
             chromeFrame = frame
         case .failure(let error):
-            logEvent("capture_position.chrome_read_failed", level: .warn, message: error.message)
-            return
+            // ERROR level: Chrome frame read should normally succeed. This is a bandaid
+            // that prevents data loss but should be investigated if it occurs regularly.
+            logEvent("capture_position.chrome_read_failed", level: .error,
+                     message: "Chrome frame read failed — saving IDE-only (investigate if recurring): \(error.message)",
+                     context: ["project_id": projectId])
+            chromeFrame = nil
         }
 
         // Detect screen mode
@@ -1245,14 +1272,24 @@ public final class ProjectManager {
             screenMode = .wide
         }
 
-        // Save both frames
+        // Save frames (Chrome may be nil for IDE-only save)
         let frames = SavedWindowFrames(
             ide: SavedFrame(rect: ideFrame),
-            chrome: SavedFrame(rect: chromeFrame)
+            chrome: chromeFrame.map { SavedFrame(rect: $0) }
         )
         switch store.save(projectId: projectId, mode: screenMode, frames: frames) {
         case .success:
-            logEvent("capture_position.saved", context: ["project_id": projectId, "mode": screenMode.rawValue])
+            let partial = chromeFrame == nil ? " (IDE-only, Chrome unavailable)" : ""
+            logEvent("capture_position.saved", context: [
+                "project_id": projectId,
+                "mode": screenMode.rawValue,
+                "partial": chromeFrame == nil ? "true" : "false"
+            ])
+            if chromeFrame == nil {
+                logEvent("capture_position.partial_save_warning", level: .error,
+                         message: "Saved IDE-only layout for \(projectId) — Chrome frame was unavailable\(partial)",
+                         context: ["project_id": projectId, "mode": screenMode.rawValue])
+            }
         case .failure(let error):
             logEvent("capture_position.save_failed", level: .warn, message: error.message)
         }

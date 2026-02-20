@@ -61,6 +61,7 @@
 		6C75BE6C1A65316450803073 /* DoctorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */; };
 		6CE77530863CFF774479B52E /* AgentPanelCLICore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D23DB19BA30772CEB3C309BB /* AgentPanelCLICore.framework */; };
 		6DF6C66F29C57924D15BFECE /* ScreenModeDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39682CECE0338B67A93001B /* ScreenModeDetector.swift */; };
+		6F76AC8AB0512266AA445965 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 093721093ECDB0367EC53D7A /* Assets.xcassets */; };
 		7026D536055667A8B78770E5 /* WindowRecoveryManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C67D54B55EEAC375F2333C /* WindowRecoveryManagerTests.swift */; };
 		7337E72993D5E0B5564AB239 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		7919C7784417EA01E40569C4 /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
@@ -179,6 +180,7 @@
 
 /* Begin PBXFileReference section */
 		02956062A786C0D5A65DF5DB /* AXWindowPositioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowPositioner.swift; sourceTree = "<group>"; };
+		093721093ECDB0367EC53D7A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherDismissPolicy.swift; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRemoteResolverTests.swift; sourceTree = "<group>"; };
@@ -434,6 +436,7 @@
 			isa = PBXGroup;
 			children = (
 				33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */,
+				093721093ECDB0367EC53D7A /* Assets.xcassets */,
 				2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */,
 				FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */,
 				D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */,
@@ -699,6 +702,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6F76AC8AB0512266AA445965 /* Assets.xcassets in Resources */,
 				B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
