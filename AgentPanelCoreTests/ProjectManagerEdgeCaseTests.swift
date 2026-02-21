@@ -306,7 +306,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - fallbackToNonProjectWorkspace: focus failure on candidate
 
-    func testFallbackToNonProjectWorkspaceFocusFailsFallsToEmptyWorkspace() {
+    func testFallbackToNonProjectWorkspaceFocusFailsReturnsNoPreviousWindow() {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
@@ -327,11 +327,14 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         // exit should fall through all fallback paths and fail
         let result = manager.exitToNonProjectWindow()
         if case .success = result { XCTFail("Expected noPreviousWindow failure") }
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .noPreviousWindow)
+        }
     }
 
-    // MARK: - fallbackToNonProjectWorkspace: all workspaces empty, focuses first
+    // MARK: - fallbackToNonProjectWorkspace: all non-project workspaces empty
 
-    func testFallbackToNonProjectFocusesFirstEmptyWorkspaceAsLastResort() {
+    func testFallbackToNonProjectFailsWhenAllNonProjectWorkspacesAreEmpty() {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
@@ -346,10 +349,16 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             ProjectConfig(id: "test", name: "Test", path: "/test", color: "blue", useAgentLayer: false)
         ]))
 
-        // exit should succeed by falling back to empty workspace
+        // exit should fail because no non-project workspace contains a focusable window
         let result = manager.exitToNonProjectWindow()
-        if case .failure = result { XCTFail("Expected success via empty workspace fallback") }
-        XCTAssertTrue(aero.focusedWorkspaces.contains("empty-ws"))
+        if case .success = result { XCTFail("Expected noPreviousWindow failure for empty non-project workspaces") }
+        if case .failure(let error) = result {
+            XCTAssertEqual(error, .noPreviousWindow)
+        }
+        XCTAssertFalse(
+            aero.focusedWorkspaces.contains("empty-ws"),
+            "Should not focus an empty workspace as fallback"
+        )
     }
 
     // MARK: - resolveInitialURLs: snapshot load failure falls back to cold start

@@ -67,7 +67,7 @@ Incomplete:
 - Activation/project lifecycle API designed and implemented in AgentPanelCore with success/failure states and idempotency.
 - Activation orchestration implemented with tests for success, failure, and partial-failure scenarios.
 - "Close project" implemented in core (API complete; UI wiring deferred to Phase 4).
-- "Exit to previous window" implemented — returns focus to last non-project window.
+- "Back to non-project space" implemented — returns focus to most recent non-project window.
 - Switcher wired to activation with progress and failure messaging.
 - Public API audit: CLI-only items removed; 20+ internal types made internal; CORE_API.md updated.
 
@@ -108,27 +108,11 @@ Incomplete:
 - CI gates (build + tests) and documented release checklist.
 - Fresh-machine onboarding validated using README + Doctor only.
 
-## Phase 9 — Extra non-required features
-
-### Goal
-- Deliver optional UX enhancements that improve convenience but are not required for daily-driver readiness.
-
-### Tasks
-- [ ] Significantly improve performance of the switcher. Loading and selection should be made as fast as possible.
-- [x] Improved searching. Use industry best practices for fast and reliable searching. Make sure 'al' would return 'Agent Layer' (as an example).
-- [ ] Add a setting/command to hide the AeroSpace menu bar icon while preserving AeroSpace window-management behavior (investigate headless/hidden-icon support).
-- [x] Migrate build/test/clean workflow from shell scripts to a Makefile. The Makefile becomes the single entrypoint for all dev operations (`make build`, `make test`, `make clean`, `make coverage`, etc.), calling existing shell scripts where appropriate. `make test` runs tests without code coverage for fast local iteration (~15s savings). `make coverage` runs tests with coverage enabled, enforces the coverage gate, and prints a per-file coverage summary showing covered vs uncovered files. CI uses `make coverage` as its gate. Update COMMANDS.md, README, and git hooks accordingly (`makefile`).
-- [ ] UI overlay for project window cycling (Option-Tab): Add a UI overlay that shows available windows when cycling with Option-Tab, similar to the macOS Command-Tab switcher. Pressing and holding Option while Tabbing displays a UI panel with window icons/titles; releasing Option selects the highlighted window. Builds on existing `WindowCycler` + Carbon hotkey infrastructure.
-- [x] Show remote icon for SSH projects in switcher: Display a visual indicator (e.g., a small remote/cloud icon) next to SSH remote projects in the switcher panel so they are immediately distinguishable from local projects. Projects with a `remote` field in config show a remote indicator in the switcher row; local projects do not. `ProjectConfig.isSSH` already exists; implementation is presentation-only in `SwitcherViews.swift`.
-
-### Exit criteria
-- `make test` and `make coverage` work correctly; CI uses `make coverage` as its gate.
-- Optional UX features are implemented without regressing required daily-driver workflows.
-- AeroSpace icon visibility can be configured without disabling functional behavior.
-- Window cycling UI overlay shows available windows during Option-Tab cycling.
-- SSH projects are visually distinguishable from local projects in the switcher.
-- Behavior and limitations are documented where needed.
-- New behavior is covered by tests.
+## Phase 9 ✅ — Extra non-required features
+- Improved switcher performance and search quality, including acronym-friendly matching (`al` → `Agent Layer`).
+- Migrated build/test workflow to Makefile entrypoints and aligned CI/coverage gates with `make coverage`.
+- Added Option-Tab overlay-based project window cycling with commit-on-Option-release behavior and updated documentation.
+- Added SSH remote icon indicators in switcher rows to distinguish remote vs local projects.
 
 ## Phase 10 — Future features
 

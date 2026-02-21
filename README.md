@@ -11,13 +11,17 @@ One hotkey to switch projects, with your IDE, browser, tabs, and window layout r
 
 AgentPanel manages [AeroSpace](https://github.com/nikitabobko/AeroSpace) workspaces behind the scenes so each project gets its own isolated desktop context. Switch in, do your work, switch out. No manual window shuffling.
 
+Product direction: AgentPanel is intended to be the single place you run your day-to-day workspace workflow, with AeroSpace acting as the underlying engine.
+
+For users who want an uncluttered menu bar, it can be desirable to remove or hide the AeroSpace menu bar item and keep AgentPanel as the visible control point. This is optional and currently outside AgentPanel-managed behavior.
+
 ## Features
 
 - **One-hotkey project switching** -- `Cmd+Shift+Space` opens a searchable project list sorted by recency.
 - **Deterministic activation** -- each project opens in its own workspace with VS Code, Chrome, and your saved tab state.
 - **Chrome tab persistence** -- tabs are captured on close and restored on activate. No more lost browser context.
 - **Window layout management** -- side-by-side positioning with configurable rules. Adapts to screen size automatically.
-- **Project-scoped window cycling** -- `Option+Tab` / `Option+Shift+Tab` to cycle windows within a project.
+- **Project-scoped window cycling overlay** -- hold `Option` and tap `Tab` to preview project windows, then release `Option` to commit the highlighted window.
 - **SSH remote projects** -- works with VS Code Remote-SSH for remote development workflows.
 - **Built-in diagnostics** -- `Doctor` checks your setup end-to-end and tells you exactly what to fix.
 - **CLI included** -- `ap doctor`, `ap select-project`, `ap close-project`, and more for scripting and automation.
@@ -186,8 +190,14 @@ Requires Accessibility permission (grant via System Settings > Privacy & Securit
 | Shortcut | Action |
 |----------|--------|
 | `Cmd+Shift+Space` | Open/toggle the project switcher |
-| `Option+Tab` | Cycle to next window in current workspace |
-| `Option+Shift+Tab` | Cycle to previous window in current workspace |
+| `Option+Tab` | Start/advance overlay selection forward in current workspace |
+| `Option+Shift+Tab` | Start/advance overlay selection backward in current workspace |
+
+Window cycling behavior:
+- Hold `Option` to keep the overlay open while stepping with `Tab`.
+- Release `Option` to focus the highlighted window.
+- Workspaces with 0-1 windows skip the overlay and keep immediate cycle semantics.
+- If the project switcher is open, overlay display is suppressed to avoid panel conflicts.
 
 ### Switcher
 
@@ -196,7 +206,7 @@ Requires Accessibility permission (grant via System Settings > Privacy & Securit
 | Type | Filter projects by name |
 | `Enter` | Activate selected project |
 | `Esc` | Dismiss switcher |
-| `Shift+Enter` | Return to previous non-project window |
+| `Shift+Enter` | Back to Non-Project Space (most recent non-project window) |
 | `Cmd+Delete` | Close the selected open project |
 
 ### Menu bar
@@ -231,8 +241,8 @@ ap <command> [options]
 | `ap show-config` | Display parsed configuration |
 | `ap list-projects [query]` | List projects, optionally filtered |
 | `ap select-project <id>` | Activate a project (30s timeout) |
-| `ap close-project <id>` | Close a project and return to previous window |
-| `ap return` | Return to previous non-project window |
+| `ap close-project <id>` | Close a project and return to non-project space |
+| `ap return` | Return to most recent non-project window |
 | `ap --version` | Print version |
 
 ## Doctor

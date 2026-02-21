@@ -263,7 +263,7 @@ public final class ProjectManager {
     /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
 
-    /// Closes a project by ID and restores focus to the previous non-project window.
+    /// Closes a project by ID and restores focus to non-project space.
     public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
 
     /// Moves a window to the given project's workspace.
@@ -742,13 +742,34 @@ public enum CycleDirection: Sendable {
     case previous
 }
 
+public struct WindowCycleCandidate: Equatable, Sendable {
+    public let windowId: Int
+    public let appBundleId: String
+    public let windowTitle: String
+}
+
 public struct WindowCycler {
+    public struct CycleSession: Equatable, Sendable {
+        public let candidates: [WindowCycleCandidate]
+        public let initialWindowId: Int
+        public let selectedIndex: Int
+        public var selectedCandidate: WindowCycleCandidate { get }
+    }
+
     public init(processChecker: RunningApplicationChecking? = nil)
+    public func startSession(direction: CycleDirection) -> Result<CycleSession?, ApCoreError>
+    public func advanceSelection(session: CycleSession, direction: CycleDirection) -> CycleSession
+    public func commitSelection(session: CycleSession) -> Result<Void, ApCoreError>
+    public func cancelSession(session: CycleSession) -> Result<Void, ApCoreError>
     public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
 }
 ```
 
-`cycleFocus` calls `focusedWindow()` → `listWindowsWorkspace(workspace:)` → `focusWindow(windowId:)`, wrapping at list boundaries. Returns `.success(())` when there are 0–1 windows or the focused window is not in the list.
+- `startSession` snapshots cycle candidates and preselects next/previous without focusing.
+- `advanceSelection` moves the selected index with wrapping.
+- `commitSelection` focuses the selected candidate.
+- `cancelSession` restores `initialWindowId`.
+- `cycleFocus` remains the immediate one-shot API and now delegates to session start + commit.
 
 ---
 

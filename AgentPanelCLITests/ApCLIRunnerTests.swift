@@ -478,7 +478,7 @@ final class ApCLIRunnerTests: XCTestCase {
         let exitCode = cli.run(arguments: ["return"])
 
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
-        XCTAssertEqual(output.stdout, ["Returned to previous window"])
+        XCTAssertEqual(output.stdout, ["Returned to non-project space"])
         XCTAssertEqual(output.stderr, [])
     }
 
@@ -499,7 +499,7 @@ final class ApCLIRunnerTests: XCTestCase {
 
         XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
         XCTAssertEqual(output.stdout, [])
-        XCTAssertEqual(output.stderr, ["error: No previous window to return to"])
+        XCTAssertEqual(output.stderr, ["error: No recent non-project window to return to"])
     }
 
     func testReturnCommandWindowNotFoundPrintsError() {
