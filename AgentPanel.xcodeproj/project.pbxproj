@@ -84,6 +84,7 @@
 		C3F2BD681D26627581FBF46C /* FuzzyMatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */; };
 		CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */; };
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
+		CF4FF3E736A7BB987394579B /* DoctorReportRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFA5A670A03191CCCF0B2 /* DoctorReportRenderer.swift */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
 		D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */; };
@@ -278,6 +279,7 @@
 		FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusCycleHotkeyManager.swift; sourceTree = "<group>"; };
 		FAAD4E05C79F9C6B7967EE1C /* ColorValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorValidationTests.swift; sourceTree = "<group>"; };
 		FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerLogEventNameTests.swift; sourceTree = "<group>"; };
+		FEEDFA5A670A03191CCCF0B2 /* DoctorReportRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorReportRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -443,6 +445,7 @@
 			children = (
 				33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */,
 				093721093ECDB0367EC53D7A /* Assets.xcassets */,
+				FEEDFA5A670A03191CCCF0B2 /* DoctorReportRenderer.swift */,
 				2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */,
 				FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */,
 				D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */,
@@ -721,6 +724,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */,
+				CF4FF3E736A7BB987394579B /* DoctorReportRenderer.swift in Sources */,
 				6C75BE6C1A65316450803073 /* DoctorWindowController.swift in Sources */,
 				E8364C94DE1F70EDED7450F8 /* FocusCycleHotkeyManager.swift in Sources */,
 				4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */,
@@ -939,14 +943,14 @@
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = AgentPanelApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel;
 				PRODUCT_NAME = AgentPanel;
 				SDKROOT = macosx;
@@ -1037,13 +1041,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = release/AgentPanel.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				INFOPLIST_FILE = AgentPanelApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.6;
+				MARKETING_VERSION = 0.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel;
 				PRODUCT_NAME = AgentPanel;
 				SDKROOT = macosx;
