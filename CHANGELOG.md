@@ -12,17 +12,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 - **Window cycle overlay** -- holding `Option` while cycling windows now shows an on-screen overlay with app icons and selected window title, and commits focus on `Option` release.
 - **Switcher performance primitives** -- added shared core utilities for config fingerprinting, debounce tokening, and table reload planning.
+- **Window cycle session API** -- `WindowCycler` now exposes explicit session lifecycle operations (`startSession`, `advanceSelection`, `commitSelection`, `cancelSession`) used by the overlay path.
 
 ### Changed
 
-- **Switcher filtering/reload behavior** -- added debounced filtering, config snapshot reuse, and targeted row updates to reduce full table reloads and stale-selection effects.
-- **Doctor window presentation** -- replaced plain text output with rich report rendering (colored severities), loading spinner state, and a clearer action button hierarchy.
+- **Switcher filtering/reload behavior** -- added debounced filtering, config snapshot reuse, and planner-driven table updates (`fullReload` / `visibleRowsReload` / `noReload`) to reduce full reloads and stale-selection effects.
+- **Doctor window presentation** -- replaced plain text output with rich report rendering (colored severities), spinner-based loading state, and clearer action grouping with context buttons shown only when applicable.
+- **Window cycle fallback behavior** -- overlay display is suppressed while the switcher is open and falls back to immediate cycle semantics when no overlay session is available (for example, 0-1 windows).
 - **Non-project wording consistency** -- updated CLI and switcher copy from "previous window" to "non-project space/window" to match current behavior.
 
 ### Fixed
 
 - **Enter key race in switcher search** -- pending debounced filter work is now flushed before primary actions so Enter applies to the latest query result set.
 - **Option-release commit reliability** -- added modifier-change handling plus watchdog fallback so overlay sessions commit deterministically when `Option` release events are missed.
+- **Non-project focus restoration reliability** -- close/return paths now restore the most recent known non-project window when stack entries are exhausted/stale and avoid focusing empty non-project workspaces.
 
 ## [0.1.7] - 2026-02-20
 

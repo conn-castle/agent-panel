@@ -23,7 +23,7 @@ For users who want an uncluttered menu bar, it can be desirable to remove or hid
 - **Window layout management** -- side-by-side positioning with configurable rules. Adapts to screen size automatically.
 - **Project-scoped window cycling overlay** -- hold `Option` and tap `Tab` to preview project windows, then release `Option` to commit the highlighted window.
 - **SSH remote projects** -- works with VS Code Remote-SSH for remote development workflows.
-- **Built-in diagnostics** -- `Doctor` checks your setup end-to-end and tells you exactly what to fix.
+- **Built-in diagnostics** -- `Doctor` checks your setup end-to-end, opens immediately with loading feedback, and renders a color-coded report with actionable fixes.
 - **CLI included** -- `ap doctor`, `ap select-project`, `ap close-project`, and more for scripting and automation.
 - **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed.
 - **Color coding** -- each project gets a distinct color in VS Code via the Peacock extension.
@@ -248,6 +248,8 @@ ap <command> [options]
 ## Doctor
 
 Doctor validates your entire setup and tells you exactly what to fix. Run it from the menu bar (**Run Doctor...**) or the CLI (`ap doctor`).
+
+In the app, Doctor opens immediately with a loading spinner and then renders a color-coded report (PASS/WARN/FAIL) with direct action buttons when relevant.
 
 Checks include:
 
