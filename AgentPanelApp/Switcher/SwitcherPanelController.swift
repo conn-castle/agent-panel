@@ -807,15 +807,24 @@ final class SwitcherPanelController: NSObject {
             current: currentFingerprint
         )
 
-        if !shouldReload, let cachedConfigSnapshot {
+        if !shouldReload, let cachedConfigSnapshot, cachedConfigSnapshot.errorMessage == nil {
             session.logEvent(event: "switcher.config.cache_hit")
             applyConfigSnapshot(cachedConfigSnapshot, source: "cache")
             return
         }
 
+        let cacheMissReason: String
+        if shouldReload {
+            cacheMissReason = "fingerprint_changed"
+        } else if cachedConfigSnapshot == nil {
+            cacheMissReason = "snapshot_missing"
+        } else {
+            cacheMissReason = "cached_error_snapshot"
+        }
+
         session.logEvent(
             event: "switcher.config.cache_miss",
-            context: ["reason": shouldReload ? "fingerprint_changed" : "snapshot_missing"]
+            context: ["reason": cacheMissReason]
         )
         let loadedSnapshot = loadProjects()
         cachedConfigSnapshot = loadedSnapshot
@@ -1056,8 +1065,21 @@ final class SwitcherPanelController: NSObject {
             tableView.reloadData()
         case .visibleRowsReload:
             guard !rows.isEmpty else { break }
+            let visibleRowsRange = tableView.rows(in: tableView.visibleRect)
+            guard visibleRowsRange.location != NSNotFound, visibleRowsRange.length > 0 else {
+                tableView.reloadData()
+                break
+            }
+
+            let start = max(0, visibleRowsRange.location)
+            let endExclusive = min(start + visibleRowsRange.length, rows.count)
+            guard start < endExclusive else {
+                tableView.reloadData()
+                break
+            }
+
             tableView.reloadData(
-                forRowIndexes: IndexSet(integersIn: 0..<rows.count),
+                forRowIndexes: IndexSet(integersIn: start..<endExclusive),
                 columnIndexes: IndexSet(integer: 0)
             )
         case .noReload:
@@ -1584,6 +1606,8 @@ final class SwitcherPanelController: NSObject {
     private func cancelPendingFilterWorkItem() {
         pendingFilterWorkItem?.cancel()
         pendingFilterWorkItem = nil
+        // Invalidate any outstanding debounce token so canceled callbacks are no longer latest.
+        _ = filterDebounceTokens.issueToken()
     }
 
     /// Schedules a debounced filter update for keystroke-driven query changes.

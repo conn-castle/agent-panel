@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-import UniformTypeIdentifiers
 
 import AgentPanelCore
 
