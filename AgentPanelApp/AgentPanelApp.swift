@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
         updateMenuBarHealthIndicator(severity: nil)
+        requestAccessibilityOnFirstLaunchIfNeeded()
 
         self.switcherController = makeSwitcherController()
 
@@ -224,6 +225,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 "log_path": dataStore.primaryLogFile.path,
                 "config_path": dataStore.configFile.path,
                 "macos_version": ProcessInfo.processInfo.operatingSystemVersionString
+            ]
+        )
+    }
+
+    /// Requests Accessibility once per app build on startup if not already granted.
+    ///
+    /// The prompt is shown on first launch of each installed build (`CFBundleVersion`).
+    /// If permission is already granted, this records the build and skips prompting.
+    private func requestAccessibilityOnFirstLaunchIfNeeded() {
+        let windowPositioner = AXWindowPositioner()
+        let isTrusted = windowPositioner.isAccessibilityTrusted()
+        let currentBuild = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? AgentPanel.version
+
+        let gate = AccessibilityStartupPromptGate()
+        let shouldPrompt = gate.shouldPromptOnFirstLaunchOfCurrentBuild(
+            currentBuild: currentBuild,
+            isAccessibilityTrusted: isTrusted
+        )
+
+        guard shouldPrompt else {
+            let reason = isTrusted ? "already_trusted" : "already_prompted_for_build"
+            logAppEvent(
+                event: "accessibility.startup_prompt.skipped",
+                context: ["reason": reason, "build": currentBuild]
+            )
+            return
+        }
+
+        logAppEvent(
+            event: "accessibility.startup_prompt.requested",
+            context: ["build": currentBuild]
+        )
+        let trustedAfterPrompt = windowPositioner.promptForAccessibility()
+        logAppEvent(
+            event: "accessibility.startup_prompt.completed",
+            context: [
+                "build": currentBuild,
+                "trusted_after_prompt": trustedAfterPrompt ? "true" : "false"
             ]
         )
     }

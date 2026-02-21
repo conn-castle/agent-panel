@@ -6,6 +6,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Changed
+
+- **Accessibility startup prompt UX** -- when Accessibility permission is missing, AgentPanel now requests it automatically once per installed app build at startup. Doctor still provides the manual retry button.
+
+### Fixed
+
+- **Doctor release-build text visibility hardening** -- moved Doctor attributed rendering into `AgentPanelAppKit`, switched to explicit contrast-safe palettes (light/dark), and aligned report background/text color handling so report text remains readable across release toolchains and appearance changes.
+- **CI toolchain modernization** -- CI and release workflows now run on `macos-26`, use latest action majors (`actions/checkout@v6`, `actions/cache@v5`), and enforce Xcode major version (`26+`) to keep release builds aligned with current toolchains.
+
 ## [0.1.8] - 2026-02-21
 
 ### Added

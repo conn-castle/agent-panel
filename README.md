@@ -150,6 +150,7 @@ color = "#009688"
 ### `[layout]` section
 
 Requires Accessibility permission (grant via System Settings > Privacy & Security > Accessibility).
+If permission is missing, AgentPanel requests it automatically once per installed app build on startup. You can also request it manually from Doctor.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -250,6 +251,7 @@ ap <command> [options]
 Doctor validates your entire setup and tells you exactly what to fix. Run it from the menu bar (**Run Doctor...**) or the CLI (`ap doctor`).
 
 In the app, Doctor opens immediately with a loading spinner and then renders a color-coded report (PASS/WARN/FAIL) with direct action buttons when relevant.
+If Accessibility permission is missing, AgentPanel may also show a startup prompt once per installed build; Doctor remains the manual retry path.
 
 Checks include:
 
