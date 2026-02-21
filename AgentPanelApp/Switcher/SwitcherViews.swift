@@ -52,7 +52,7 @@ final class SectionHeaderRowView: NSTableCellView {
     }
 }
 
-/// Table cell view for an action row such as "Back to Previous Window".
+/// Table cell view for an action row such as "Back to Non-Project Space".
 final class ActionRowView: NSTableCellView {
     let iconView = NSImageView()
     let titleLabel = NSTextField(labelWithString: "")
@@ -76,7 +76,7 @@ final class ActionRowView: NSTableCellView {
 
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.stringValue = "Back to Previous Window"
+        titleLabel.stringValue = "Back to Non-Project Space"
 
         shortcutLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
         shortcutLabel.textColor = .secondaryLabelColor
@@ -400,7 +400,7 @@ func sectionHeaderCell(title: String, tableView: NSTableView) -> NSTableCellView
     return cell
 }
 
-/// Creates or reuses the "Back to Previous Window" action row cell.
+/// Creates or reuses the "Back to Non-Project Space" action row cell.
 /// - Parameter tableView: Table view for cell reuse.
 /// - Returns: Configured table cell view.
 func backActionCell(tableView: NSTableView) -> NSTableCellView {
@@ -411,7 +411,7 @@ func backActionCell(tableView: NSTableView) -> NSTableCellView {
 
     let cell = ActionRowView()
     cell.identifier = identifier
-    cell.setAccessibilityLabel("Back to Previous Window")
+    cell.setAccessibilityLabel("Back to Non-Project Space")
     return cell
 }
 

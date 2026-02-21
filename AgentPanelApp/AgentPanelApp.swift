@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recoveryController: RecoveryProgressController?
     private var hotkeyManager: HotkeyManager?
     private var focusCycleHotkeyManager: FocusCycleHotkeyManager?
+    private var windowCycleOverlayCoordinator: WindowCycleOverlayCoordinator?
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
@@ -58,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cached workspace state for non-blocking menu population.
     /// Updated by background refreshes; read by `menuNeedsUpdate`.
     private var cachedWorkspaceState: ProjectWorkspaceState?
+    /// Serial queue for immediate (non-overlay) Option-Tab fallback to avoid focus races.
+    private let immediateWindowCycleQueue = DispatchQueue(
+        label: "com.agentpanel.window-cycle-immediate",
+        qos: .userInteractive
+    )
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
@@ -133,22 +139,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Register window cycling hotkeys (Option-Tab / Option-Shift-Tab)
         let windowCycler = WindowCycler(processChecker: AppKitRunningApplicationChecker())
         let focusCycleManager = FocusCycleHotkeyManager()
-        focusCycleManager.onCycleNext = { [weak self] in
-            DispatchQueue.global(qos: .userInteractive).async {
-                if case .failure(let error) = windowCycler.cycleFocus(direction: .next) {
-                    self?.logAppEvent(event: "focus_cycle.next.failed", level: .warn, message: error.message)
-                }
+        let overlayCoordinator = WindowCycleOverlayCoordinator(
+            windowCycler: windowCycler,
+            logger: logger,
+            shouldSuppressOverlay: { [weak self] in
+                self?.switcherController?.isVisible == true
             }
+        )
+        focusCycleManager.onCycleNext = { [weak self] in
+            self?.performImmediateWindowCycle(windowCycler: windowCycler, direction: .next)
         }
         focusCycleManager.onCyclePrevious = { [weak self] in
-            DispatchQueue.global(qos: .userInteractive).async {
-                if case .failure(let error) = windowCycler.cycleFocus(direction: .previous) {
-                    self?.logAppEvent(event: "focus_cycle.prev.failed", level: .warn, message: error.message)
-                }
+            self?.performImmediateWindowCycle(windowCycler: windowCycler, direction: .previous)
+        }
+        focusCycleManager.onCycleOverlayStart = { direction in
+            overlayCoordinator.start(direction: direction) { [weak self] in
+                self?.performImmediateWindowCycle(windowCycler: windowCycler, direction: direction)
             }
+        }
+        focusCycleManager.onCycleOverlayAdvance = { direction in
+            overlayCoordinator.advance(direction: direction) { [weak self] in
+                self?.performImmediateWindowCycle(windowCycler: windowCycler, direction: direction)
+            }
+        }
+        focusCycleManager.onCycleOverlayCommit = {
+            overlayCoordinator.commit()
         }
         focusCycleManager.registerHotkeys()
         self.focusCycleHotkeyManager = focusCycleManager
+        self.windowCycleOverlayCoordinator = overlayCoordinator
 
         // Wire settings block writes: fires on first loadConfig() and whenever the project list changes.
         // On startup the first fire triggers ensureAll → then Doctor. On subsequent config reloads
@@ -421,6 +440,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
                 // without activating the app (and therefore without switching workspaces).
                 self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
+            }
+        }
+    }
+
+    /// Runs a single immediate window cycle (legacy fallback path).
+    /// - Parameters:
+    ///   - windowCycler: Window cycler used to perform focus movement.
+    ///   - direction: Cycle direction to apply.
+    private func performImmediateWindowCycle(windowCycler: WindowCycler, direction: CycleDirection) {
+        immediateWindowCycleQueue.async { [weak self] in
+            if case .failure(let error) = windowCycler.cycleFocus(direction: direction) {
+                switch direction {
+                case .next:
+                    self?.logAppEvent(event: "focus_cycle.next.failed", level: .warn, message: error.message)
+                case .previous:
+                    self?.logAppEvent(event: "focus_cycle.prev.failed", level: .warn, message: error.message)
+                }
             }
         }
     }

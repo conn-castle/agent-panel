@@ -53,6 +53,26 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    func testCloseProjectUsesMostRecentNonProjectFocusWhenStackEmpty() {
+        let aero = FocusAeroSpaceStub()
+        aero.focusedWindowResult = .success(
+            ApWindow(windowId: 777, appBundleId: "com.apple.Terminal", workspace: "main", windowTitle: "Terminal")
+        )
+        aero.focusWindowSuccessIds = [777]
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 777)
+
+        switch manager.closeProject(projectId: "test") {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(777), "Should restore most recent non-project window")
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
+        }
+    }
+
     // MARK: - Exit restores focus from stack
 
     func testExitToNonProjectRestoresFocusFromStack() {
@@ -92,6 +112,32 @@ final class ProjectManagerFocusTests: XCTestCase {
             XCTFail("Expected noPreviousWindow failure")
         case .failure(let error):
             XCTAssertEqual(error, .noPreviousWindow)
+        }
+    }
+
+    // MARK: - Exit restores most recent non-project focus when stack is empty
+
+    func testExitToNonProjectUsesMostRecentNonProjectFocusWhenStackEmpty() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        aero.focusedWindowResult = .success(
+            ApWindow(windowId: 321, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+        )
+        aero.focusWindowSuccessIds = [321]
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        // Simulate previously observed non-project focus without pushing stack entries.
+        XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 321)
+
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(321), "Should restore most recent non-project window")
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
         }
     }
 
@@ -318,11 +364,23 @@ final class ProjectManagerFocusTests: XCTestCase {
             ApWorkspaceSummary(workspace: "1", isFocused: false),
             ApWorkspaceSummary(workspace: "personal", isFocused: false)
         ])
+        let fallbackWindow = ApWindow(
+            windowId: 401,
+            appBundleId: "com.apple.Terminal",
+            workspace: "1",
+            windowTitle: "Terminal"
+        )
+        aero.windowsByWorkspace["1"] = [fallbackWindow]
+        aero.focusWindowSuccessIds = [fallbackWindow.windowId]
 
         let result = manager.closeProject(projectId: "test")
 
         if case .failure = result { XCTFail("Expected close to succeed") }
         XCTAssertEqual(aero.focusedWorkspaces.last, "1", "Should fall back to first non-project workspace")
+        XCTAssertTrue(
+            aero.focusedWindowIds.contains(fallbackWindow.windowId),
+            "Workspace fallback should focus a concrete non-project window"
+        )
     }
 
     func testCloseProjectLogsExhaustedWhenOnlyProjectWorkspaces() {
@@ -354,11 +412,23 @@ final class ProjectManagerFocusTests: XCTestCase {
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
             ApWorkspaceSummary(workspace: "main", isFocused: false)
         ])
+        let fallbackWindow = ApWindow(
+            windowId: 402,
+            appBundleId: "com.apple.Safari",
+            workspace: "main",
+            windowTitle: "Safari"
+        )
+        aero.windowsByWorkspace["main"] = [fallbackWindow]
+        aero.focusWindowSuccessIds = [fallbackWindow.windowId]
 
         let result = manager.exitToNonProjectWindow()
 
         if case .failure = result { XCTFail("Expected exit to succeed via workspace fallback") }
         XCTAssertEqual(aero.focusedWorkspaces.last, "main")
+        XCTAssertTrue(
+            aero.focusedWindowIds.contains(fallbackWindow.windowId),
+            "Workspace fallback should focus a concrete non-project window"
+        )
     }
 
     func testExitFailsWhenNoNonProjectWorkspace() {

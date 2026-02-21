@@ -8,6 +8,7 @@
 //
 
 import AppKit
+import os
 
 import AgentPanelCore
 
@@ -26,6 +27,7 @@ enum SwitcherPresentationSource: String {
 private enum SwitcherTiming {
     static let visibilityCheckDelaySeconds: TimeInterval = 0.15
     static let queryReuseWindowSeconds: TimeInterval = 10.0
+    static let filterDebounceSeconds: TimeInterval = 0.03
 }
 
 /// Layout constants for the switcher panel.
@@ -165,13 +167,26 @@ private enum SwitcherListModelBuilder {
     }
 }
 
+/// Cached config data used for switcher warm-open performance.
+private struct SwitcherConfigSnapshot {
+    let projects: [ProjectConfig]
+    let warningTitle: String?
+    let errorMessage: String?
+}
+
 // MARK: - Controller
 
 /// Controls the switcher panel lifecycle and keyboard-driven UX.
 final class SwitcherPanelController: NSObject {
+    private static let signposter = OSSignposter(
+        subsystem: "com.agentpanel.AgentPanel",
+        category: "SwitcherPerformance"
+    )
+
     private let logger: AgentPanelLogging
     private let session: SwitcherSession
     private let projectManager: ProjectManager
+    private let dataPaths: DataPaths
 
     private let panel: SwitcherPanel
     private let titleLabel: NSTextField
@@ -189,9 +204,13 @@ final class SwitcherPanelController: NSObject {
     private var openIds: Set<String> = []
     private var keyEventMonitor: Any?
     private var configErrorMessage: String?
+    private var cachedConfigFingerprint: SwitcherConfigFingerprint?
+    private var cachedConfigSnapshot: SwitcherConfigSnapshot?
     private var lastFilterQuery: String = ""
     private var lastStatusMessage: String?
     private var lastStatusLevel: StatusLevel?
+    private var pendingFilterWorkItem: DispatchWorkItem?
+    private var filterDebounceTokens = DebounceTokenSource()
     private var expectsVisible: Bool = false
     private var pendingVisibilityCheckToken: UUID?
     private var previouslyActiveApp: NSRunningApplication?
@@ -201,6 +220,7 @@ final class SwitcherPanelController: NSObject {
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
     private var restoreFocusTask: Task<Void, Never>?
+    private var lastSelectedRowIndex: Int = -1
     private var workspaceRetryTimer: DispatchSourceTimer?
     private var workspaceRetryCount: Int = 0
     private var workspaceRetrySessionId: String?
@@ -226,11 +246,13 @@ final class SwitcherPanelController: NSObject {
     ///   - projectManager: Project manager for config, sorting, and focus operations.
     init(
         logger: AgentPanelLogging = AgentPanelLogger(),
-        projectManager: ProjectManager = ProjectManager()
+        projectManager: ProjectManager = ProjectManager(),
+        dataPaths: DataPaths = .default()
     ) {
         self.logger = logger
         self.session = SwitcherSession(logger: logger)
         self.projectManager = projectManager
+        self.dataPaths = dataPaths
 
         self.panel = SwitcherPanel(
             contentRect: NSRect(
@@ -263,11 +285,17 @@ final class SwitcherPanelController: NSObject {
 
     deinit {
         removeKeyEventMonitor()
+        cancelPendingFilterWorkItem()
         restoreFocusTask?.cancel()
         cancelWorkspaceRetryTimer()
     }
 
     // MARK: - Public Interface
+
+    /// Whether the switcher panel is currently visible.
+    var isVisible: Bool {
+        panel.isVisible
+    }
 
     /// Toggles the switcher panel visibility.
     ///
@@ -302,6 +330,9 @@ final class SwitcherPanelController: NSObject {
         previousApp: NSRunningApplication? = nil,
         capturedFocus: CapturedFocus? = nil
     ) {
+        let showInterval = Self.signposter.beginInterval("SwitcherShow")
+        defer { Self.signposter.endInterval("SwitcherShow", showInterval) }
+
         let showStart = CFAbsoluteTimeGetCurrent()
         let shouldReuseQuery = shouldReuseLastQuery()
         let initialQuery = shouldReuseQuery ? lastDismissedQuery : ""
@@ -334,15 +365,22 @@ final class SwitcherPanelController: NSObject {
         }
 
         // Show panel first, then load results.
+        let panelInterval = Self.signposter.beginInterval("SwitcherShowPanel")
         showPanel(selectAllQuery: shouldReuseQuery && !initialQuery.isEmpty)
         installKeyEventMonitor()
+        Self.signposter.endInterval("SwitcherShowPanel", panelInterval)
 
-        loadProjects()
+        let configInterval = Self.signposter.beginInterval("SwitcherConfigLoadOrReuse")
+        loadOrReuseProjectsForShow()
+        Self.signposter.endInterval("SwitcherConfigLoadOrReuse", configInterval)
+
         if configErrorMessage == nil {
             refreshWorkspaceState(retryOnFailure: true)
         }
 
+        let initialFilterInterval = Self.signposter.beginInterval("SwitcherInitialFilter")
         applyFilter(query: initialQuery, preferredSelectionKey: nil, useDefaultSelection: true)
+        Self.signposter.endInterval("SwitcherInitialFilter", initialFilterInterval)
 
         let totalMs = Int((CFAbsoluteTimeGetCurrent() - showStart) * 1000)
 
@@ -374,6 +412,7 @@ final class SwitcherPanelController: NSObject {
         isActivating = false
         pendingVisibilityCheckToken = nil
         restoreFocusTask?.cancel()
+        cancelPendingFilterWorkItem()
         cancelWorkspaceRetryTimer()
         session.end(reason: reason)
 
@@ -649,9 +688,11 @@ final class SwitcherPanelController: NSObject {
         activeProjectId = nil
         openIds = []
         tableView.isEnabled = true
+        lastSelectedRowIndex = -1
         lastFilterQuery = initialQuery
         lastStatusMessage = nil
         lastStatusLevel = nil
+        cancelPendingFilterWorkItem()
         cancelWorkspaceRetryTimer()
         tableView.reloadData()
         tableView.deselectAll(nil)
@@ -695,35 +736,100 @@ final class SwitcherPanelController: NSObject {
 
     // MARK: - Project Loading
 
-    /// Loads projects from config and surfaces warnings or failures.
-    private func loadProjects() {
-        switch projectManager.loadConfig() {
-        case .failure(let error):
-            allProjects = []
-            filteredProjects = []
-            configErrorMessage = configLoadErrorMessage(error)
-            setStatus(message: "Config error: \(configErrorMessage ?? "Unknown")", level: .error)
+    /// Reads current config-file fingerprint from disk metadata.
+    private func currentConfigFingerprint() -> SwitcherConfigFingerprint? {
+        let configPath = dataPaths.configFile.path
+        guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: configPath) else {
+            return nil
+        }
+        return SwitcherConfigFingerprint.from(fileAttributes: fileAttributes)
+    }
+
+    /// Applies a config snapshot to controller state and user-visible status.
+    private func applyConfigSnapshot(_ snapshot: SwitcherConfigSnapshot, source: String) {
+        allProjects = snapshot.projects
+        configErrorMessage = snapshot.errorMessage
+        filteredProjects = []
+
+        if let errorMessage = snapshot.errorMessage {
+            setStatus(message: "Config error: \(errorMessage)", level: .error)
             session.logEvent(
                 event: "switcher.config.failed",
                 level: .error,
-                message: configErrorMessage
+                message: errorMessage,
+                context: ["source": source]
             )
             onProjectOperationFailed?(ErrorContext(
                 category: .configuration,
-                message: configErrorMessage ?? "Config load failed",
-                trigger: "configLoad"
+                message: errorMessage,
+                trigger: source == "cache" ? "configCache" : "configLoad"
             ))
+            return
+        }
+
+        if let warningTitle = snapshot.warningTitle {
+            setStatus(message: "Config warning: \(warningTitle)", level: .warning)
+        } else {
+            clearStatus()
+        }
+        session.logConfigLoaded(projectCount: snapshot.projects.count)
+    }
+
+    /// Loads projects from config and returns a snapshot for cache reuse.
+    @discardableResult
+    private func loadProjects() -> SwitcherConfigSnapshot {
+        switch projectManager.loadConfig() {
+        case .failure(let error):
+            let snapshot = SwitcherConfigSnapshot(
+                projects: [],
+                warningTitle: nil,
+                errorMessage: configLoadErrorMessage(error)
+            )
+            applyConfigSnapshot(snapshot, source: "load")
+            return snapshot
 
         case .success(let success):
-            allProjects = success.config.projects
-            configErrorMessage = nil
-            if let firstWarning = success.warnings.first {
-                setStatus(message: "Config warning: \(firstWarning.title)", level: .warning)
-            } else {
-                clearStatus()
-            }
-            session.logConfigLoaded(projectCount: success.config.projects.count)
+            let snapshot = SwitcherConfigSnapshot(
+                projects: success.config.projects,
+                warningTitle: success.warnings.first?.title,
+                errorMessage: nil
+            )
+            applyConfigSnapshot(snapshot, source: "load")
+            return snapshot
         }
+    }
+
+    /// Uses cached config snapshot when possible, otherwise reloads from disk.
+    private func loadOrReuseProjectsForShow() {
+        let currentFingerprint = currentConfigFingerprint()
+        let shouldReload = SwitcherConfigReloadPolicy.shouldReload(
+            previous: cachedConfigFingerprint,
+            current: currentFingerprint
+        )
+
+        if !shouldReload, let cachedConfigSnapshot, cachedConfigSnapshot.errorMessage == nil {
+            session.logEvent(event: "switcher.config.cache_hit")
+            applyConfigSnapshot(cachedConfigSnapshot, source: "cache")
+            return
+        }
+
+        let cacheMissReason: String
+        if shouldReload {
+            cacheMissReason = "fingerprint_changed"
+        } else if cachedConfigSnapshot == nil {
+            cacheMissReason = "snapshot_missing"
+        } else {
+            cacheMissReason = "cached_error_snapshot"
+        }
+
+        session.logEvent(
+            event: "switcher.config.cache_miss",
+            context: ["reason": cacheMissReason]
+        )
+        let loadedSnapshot = loadProjects()
+        cachedConfigSnapshot = loadedSnapshot
+        // Re-read after load in case load path created a starter config file.
+        cachedConfigFingerprint = currentConfigFingerprint()
     }
 
     /// Refreshes focused/open project workspace state for row grouping and close affordances.
@@ -905,15 +1011,22 @@ final class SwitcherPanelController: NSObject {
         preferredSelectionKey: String?,
         useDefaultSelection: Bool
     ) {
+        let applyFilterInterval = Self.signposter.beginInterval("SwitcherApplyFilter")
+        defer { Self.signposter.endInterval("SwitcherApplyFilter", applyFilterInterval) }
+
         let previousQuery = lastFilterQuery
-        lastFilterQuery = query
+        let queryChanged = previousQuery != query
         let fallbackSelectionKey = preferredSelectionKey ?? selectedRowKey()
+        let previousRows = rows
+        let previousSelectedRow = tableView.selectedRow
+        lastFilterQuery = query
 
         guard configErrorMessage == nil else {
             rows = [.emptyState(message: configErrorMessage ?? "Config error")]
             filteredProjects = []
             tableView.reloadData()
             tableView.deselectAll(nil)
+            lastSelectedRowIndex = tableView.selectedRow
             updatePanelSizeForCurrentRows()
             updateFooterHints()
             session.logEvent(
@@ -929,19 +1042,58 @@ final class SwitcherPanelController: NSObject {
             return
         }
 
+        let filterBuildInterval = Self.signposter.beginInterval("SwitcherFilterBuild")
         filteredProjects = projectManager.sortedProjects(query: query)
-        rows = SwitcherListModelBuilder.buildRows(
+        let nextRows = SwitcherListModelBuilder.buildRows(
             filteredProjects: filteredProjects,
             activeProjectId: activeProjectId,
             openIds: openIds,
             query: query
         )
-        tableView.reloadData()
+        let contentChanged = queryChanged || rowContentSignatures(for: previousRows) != rowContentSignatures(for: nextRows)
+        let reloadMode = SwitcherTableReloadPlanner.plan(
+            previous: rowStructuralSignatures(for: previousRows),
+            next: rowStructuralSignatures(for: nextRows),
+            contentChanged: contentChanged
+        )
+        rows = nextRows
+        Self.signposter.endInterval("SwitcherFilterBuild", filterBuildInterval)
+
+        let tableUpdateInterval = Self.signposter.beginInterval("SwitcherFilterTableUpdate")
+        switch reloadMode {
+        case .fullReload:
+            tableView.reloadData()
+        case .visibleRowsReload:
+            guard !rows.isEmpty else { break }
+            let visibleRowsRange = tableView.rows(in: tableView.visibleRect)
+            guard visibleRowsRange.location != NSNotFound, visibleRowsRange.length > 0 else {
+                tableView.reloadData()
+                break
+            }
+
+            let start = max(0, visibleRowsRange.location)
+            let endExclusive = min(start + visibleRowsRange.length, rows.count)
+            guard start < endExclusive else {
+                tableView.reloadData()
+                break
+            }
+
+            tableView.reloadData(
+                forRowIndexes: IndexSet(integersIn: start..<endExclusive),
+                columnIndexes: IndexSet(integer: 0)
+            )
+        case .noReload:
+            break
+        }
+        Self.signposter.endInterval("SwitcherFilterTableUpdate", tableUpdateInterval)
+
         restoreSelection(
             preferredSelectionKey: fallbackSelectionKey,
             useDefaultSelection: useDefaultSelection
         )
-        refreshVisibleProjectRowSelection()
+        let newSelectedRow = tableView.selectedRow
+        updateSelectionVisuals(previousSelectedRow: previousSelectedRow, newSelectedRow: newSelectedRow)
+        lastSelectedRowIndex = newSelectedRow
         updatePanelSizeForCurrentRows()
         updateFooterHints()
 
@@ -951,7 +1103,8 @@ final class SwitcherPanelController: NSObject {
                 "query": query,
                 "previous_query": previousQuery,
                 "total_count": "\(allProjects.count)",
-                "filtered_count": "\(filteredProjects.count)"
+                "filtered_count": "\(filteredProjects.count)",
+                "reload_mode": reloadMode.rawValue
             ]
         )
 
@@ -961,6 +1114,38 @@ final class SwitcherPanelController: NSObject {
                 message: "No matches.",
                 context: ["query": query]
             )
+        }
+    }
+
+    /// Returns structural signatures for planner decisions.
+    private func rowStructuralSignatures(for rows: [SwitcherListRow]) -> [SwitcherRowSignature] {
+        rows.map { row in
+            switch row {
+            case .sectionHeader:
+                return SwitcherRowSignature(kind: .sectionHeader, selectionKey: row.selectionKey)
+            case .backAction:
+                return SwitcherRowSignature(kind: .backAction, selectionKey: row.selectionKey)
+            case .project:
+                return SwitcherRowSignature(kind: .project, selectionKey: row.selectionKey)
+            case .emptyState:
+                return SwitcherRowSignature(kind: .emptyState, selectionKey: row.selectionKey)
+            }
+        }
+    }
+
+    /// Returns row-content signatures used to detect non-structural content changes.
+    private func rowContentSignatures(for rows: [SwitcherListRow]) -> [String] {
+        rows.map { row in
+            switch row {
+            case .sectionHeader(let title):
+                return "section:\(title)"
+            case .backAction:
+                return "action:back"
+            case .project(let project, let isCurrent, let isOpen):
+                return "project:\(project.id)|current:\(isCurrent)|open:\(isOpen)"
+            case .emptyState(let message):
+                return "empty:\(message)"
+            }
         }
     }
 
@@ -1279,7 +1464,7 @@ final class SwitcherPanelController: NSObject {
         return nil
     }
 
-    /// Exits to the last non-project window and dismisses the panel on success.
+    /// Exits to non-project space and dismisses the panel on success.
     ///
     /// Dispatches `exitToNonProjectWindow()` to a background queue to avoid blocking
     /// the main thread with AeroSpace CLI calls.
@@ -1409,12 +1594,68 @@ final class SwitcherPanelController: NSObject {
             }
             return false
         }) {
-            parts.append("\u{21E7}\u{21A9} Back to Previous Window")
+            parts.append("\u{21E7}\u{21A9} Back to Non-Project Space")
         }
 
         parts.append("\u{21A9} Switch")
 
         keybindHintLabel.stringValue = parts.joined(separator: "      ")
+    }
+
+    /// Cancels pending debounced filter work.
+    private func cancelPendingFilterWorkItem() {
+        pendingFilterWorkItem?.cancel()
+        pendingFilterWorkItem = nil
+        // Invalidate any outstanding debounce token so canceled callbacks are no longer latest.
+        _ = filterDebounceTokens.issueToken()
+    }
+
+    /// Schedules a debounced filter update for keystroke-driven query changes.
+    private func scheduleDebouncedFilter(query: String) {
+        cancelPendingFilterWorkItem()
+        let preferredSelectionKey = selectedRowKey()
+        let token = filterDebounceTokens.issueToken()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.filterDebounceTokens.isLatest(token) else { return }
+            self.pendingFilterWorkItem = nil
+            self.applyFilter(
+                query: query,
+                preferredSelectionKey: preferredSelectionKey,
+                useDefaultSelection: false
+            )
+        }
+        pendingFilterWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + SwitcherTiming.filterDebounceSeconds,
+            execute: workItem
+        )
+    }
+
+    /// Applies a pending debounced filter synchronously before running a primary action.
+    ///
+    /// Without this flush, pressing Enter immediately after typing can act on stale rows
+    /// while the debounced filter callback is still pending.
+    private func flushPendingFilterForPrimaryActionIfNeeded() {
+        guard pendingFilterWorkItem != nil else {
+            return
+        }
+
+        // Invalidate any in-flight token before canceling to prevent stale callbacks
+        // from applying after the synchronous flush.
+        _ = filterDebounceTokens.issueToken()
+        cancelPendingFilterWorkItem()
+
+        applyFilter(
+            query: searchField.stringValue,
+            preferredSelectionKey: selectedRowKey(),
+            useDefaultSelection: false
+        )
+
+        session.logEvent(
+            event: "switcher.filter.flushed_for_primary_action",
+            context: ["query": searchField.stringValue]
+        )
     }
 
     // MARK: - Key Event Monitor
@@ -1429,7 +1670,7 @@ final class SwitcherPanelController: NSObject {
 
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-            // Shift+Return => Back to previous window.
+            // Shift+Return => Back to non-project space.
             if (event.keyCode == 36 || event.keyCode == 76), modifiers == [.shift] {
                 self.session.logEvent(event: "switcher.action.exit_to_previous_keybind")
                 self.handleExitToNonProject(fromShortcut: true)
@@ -1457,17 +1698,32 @@ final class SwitcherPanelController: NSObject {
 
     // MARK: - Table Row Appearance
 
-    /// Refreshes project row selected-state visuals.
-    private func refreshVisibleProjectRowSelection() {
-        for (index, rowModel) in rows.enumerated() {
-            guard case .project = rowModel else { continue }
-            guard let rowView = tableView.view(
-                atColumn: 0,
-                row: index,
-                makeIfNecessary: false
-            ) as? ProjectRowView else { continue }
-            rowView.setRowSelected(index == tableView.selectedRow)
+    /// Updates selection visuals for previously-selected and newly-selected rows.
+    private func updateSelectionVisuals(previousSelectedRow: Int, newSelectedRow: Int) {
+        if previousSelectedRow == newSelectedRow {
+            updateProjectRowSelection(at: newSelectedRow, isSelected: true)
+            return
         }
+        updateProjectRowSelection(at: previousSelectedRow, isSelected: false)
+        updateProjectRowSelection(at: newSelectedRow, isSelected: true)
+    }
+
+    /// Updates selection visual state for a single project row, if visible.
+    private func updateProjectRowSelection(at rowIndex: Int, isSelected: Bool) {
+        guard rowIndex >= 0, rowIndex < rows.count else {
+            return
+        }
+        guard case .project = rows[rowIndex] else {
+            return
+        }
+        guard let rowView = tableView.view(
+            atColumn: 0,
+            row: rowIndex,
+            makeIfNecessary: false
+        ) as? ProjectRowView else {
+            return
+        }
+        rowView.setRowSelected(isSelected)
     }
 
     // MARK: - Sizing and Positioning
@@ -1500,6 +1756,10 @@ final class SwitcherPanelController: NSObject {
             SwitcherLayout.minPanelHeight,
             min(maxHeight, SwitcherLayout.chromeHeightEstimate + rowHeights)
         )
+
+        if abs(panel.frame.height - targetHeight) < 0.5 {
+            return
+        }
 
         var frame = panel.frame
         frame.size = NSSize(width: SwitcherLayout.panelWidth, height: targetHeight)
@@ -1578,7 +1838,7 @@ final class SwitcherPanelController: NSObject {
         case .noActiveProject:
             return "No active project"
         case .noPreviousWindow:
-            return "No previous window"
+            return "No recent non-project window"
         case .windowNotFound(let detail):
             return "Window not found: \(detail)"
         case .focusUnstable(let detail):
@@ -1682,11 +1942,17 @@ extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        let selectionInterval = Self.signposter.beginInterval("SwitcherSelectionChanged")
+        defer { Self.signposter.endInterval("SwitcherSelectionChanged", selectionInterval) }
+
+        let previousSelectedRow = lastSelectedRowIndex
         let rowIndex = tableView.selectedRow
+        lastSelectedRowIndex = rowIndex
+
         guard rowIndex >= 0, rowIndex < rows.count else {
             session.logEvent(event: "switcher.selection.cleared")
             updateFooterHints()
-            refreshVisibleProjectRowSelection()
+            updateSelectionVisuals(previousSelectedRow: previousSelectedRow, newSelectedRow: rowIndex)
             return
         }
 
@@ -1713,7 +1979,7 @@ extension SwitcherPanelController: NSTableViewDataSource, NSTableViewDelegate {
         }
 
         updateFooterHints()
-        refreshVisibleProjectRowSelection()
+        updateSelectionVisuals(previousSelectedRow: previousSelectedRow, newSelectedRow: rowIndex)
     }
 }
 
@@ -1724,16 +1990,13 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
         guard let field = obj.object as? NSSearchField else {
             return
         }
-        applyFilter(
-            query: field.stringValue,
-            preferredSelectionKey: selectedRowKey(),
-            useDefaultSelection: false
-        )
+        scheduleDebouncedFilter(query: field.stringValue)
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             session.logEvent(event: "switcher.action.enter")
+            flushPendingFilterForPrimaryActionIfNeeded()
             handlePrimaryAction()
             return true
         }

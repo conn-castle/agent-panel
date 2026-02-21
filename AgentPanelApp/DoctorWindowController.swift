@@ -46,30 +46,26 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var textView: NSTextView?
+    private var scrollView: NSScrollView?
+    private var loadingContainer: NSStackView?
+    private var progressIndicator: NSProgressIndicator?
+    private var loadingLabel: NSTextField?
     private var buttons: DoctorButtons?
+    private var appearanceObservation: NSKeyValueObservation?
     private(set) var lastReport: DoctorReport?
-
-    /// Text attributes for Doctor report display.
-    /// Explicit attributes avoid NSTextView quirks where `textColor` is lost
-    /// when `.string` replaces the text storage (release-build timing dependent).
-    private let textAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-        .foregroundColor: NSColor.labelColor
-    ]
 
     // MARK: - Public Interface
 
-    /// Shows the Doctor window immediately with a loading indicator.
+    /// Shows the Doctor window immediately with a loading spinner.
     ///
     /// Call this before dispatching `Doctor.run()` to provide instant feedback.
-    /// When the report arrives, call `showReport(_:)` to replace the loading text.
+    /// When the report arrives, call `showReport(_:)` to replace the loading state.
     func showLoading() {
         if window == nil {
             setupWindow()
         }
 
-        setTextViewString("Running diagnostics...")
-        setButtonsEnabled(false)
+        setLoadingState()
 
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -92,30 +88,18 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     /// - Parameter report: Doctor report to display.
     func updateUI(with report: DoctorReport) {
         lastReport = report
-        setTextViewString(report.rendered())
+
+        // Hide loading, show report
+        loadingContainer?.isHidden = true
+        progressIndicator?.stopAnimation(nil)
+        scrollView?.isHidden = false
+
+        // Render attributed string
+        let attributed = DoctorReportRenderer.render(report)
+        textView?.textStorage?.setAttributedString(attributed)
         textView?.scrollToBeginningOfDocument(nil)
 
-        if let buttons {
-            buttons.runDoctor.isEnabled = true
-            buttons.copyReport.isEnabled = true
-            buttons.close.isEnabled = true
-            buttons.installAeroSpace.isEnabled = report.actions.canInstallAeroSpace
-            buttons.startAeroSpace.isEnabled = report.actions.canStartAeroSpace
-            buttons.reloadConfig.isEnabled = report.actions.canReloadAeroSpaceConfig
-            buttons.requestAccessibility.isEnabled = report.actions.canRequestAccessibility
-        }
-    }
-
-    /// Disables or enables all action buttons.
-    private func setButtonsEnabled(_ enabled: Bool) {
-        guard let buttons else { return }
-        buttons.runDoctor.isEnabled = enabled
-        buttons.copyReport.isEnabled = enabled
-        buttons.installAeroSpace.isEnabled = enabled
-        buttons.startAeroSpace.isEnabled = enabled
-        buttons.reloadConfig.isEnabled = enabled
-        buttons.requestAccessibility.isEnabled = enabled
-        // Close is always enabled so user can dismiss during loading
+        applyReportState(report.actions)
     }
 
     /// Closes the Doctor window.
@@ -128,15 +112,24 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     private func setupWindow() {
         let windowInstance = makeWindow()
         let textViewInstance = makeTextView()
+        let scrollViewInstance = makeScrollView(documentView: textViewInstance)
+        let loadingContainerInstance = makeLoadingContainer()
         let buttonsInstance = makeButtons()
-        let contentView = makeContentView(textView: textViewInstance, buttons: buttonsInstance)
+        let contentView = makeContentView(
+            scrollView: scrollViewInstance,
+            loadingContainer: loadingContainerInstance,
+            buttons: buttonsInstance
+        )
         windowInstance.contentView = contentView
         windowInstance.isReleasedWhenClosed = false
         windowInstance.delegate = self
 
         window = windowInstance
         textView = textViewInstance
+        scrollView = scrollViewInstance
+        loadingContainer = loadingContainerInstance
         buttons = buttonsInstance
+        observeAppearanceChanges(windowInstance)
     }
 
     // MARK: - NSWindowDelegate
@@ -145,80 +138,189 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         onClose?()
     }
 
+    private func observeAppearanceChanges(_ window: NSWindow) {
+        appearanceObservation = window.observe(\.effectiveAppearance) { [weak self] _, _ in
+            guard let self, let report = self.lastReport else { return }
+            self.textView?.textStorage?.setAttributedString(DoctorReportRenderer.render(report))
+        }
+    }
+
+    // MARK: - State Management
+
+    /// Transitions the UI to loading state: shows spinner, hides report, disables buttons.
+    private func setLoadingState() {
+        scrollView?.isHidden = true
+        loadingContainer?.isHidden = false
+        progressIndicator?.startAnimation(nil)
+
+        guard let buttons else { return }
+        buttons.runDoctor.isEnabled = false
+        buttons.copyReport.isEnabled = false
+        buttons.installAeroSpace.isHidden = true
+        buttons.startAeroSpace.isHidden = true
+        buttons.reloadConfig.isHidden = true
+        buttons.requestAccessibility.isHidden = true
+        // Close is always enabled
+    }
+
+    /// Applies button visibility/enabled state based on report action availability.
+    private func applyReportState(_ actions: DoctorActionAvailability) {
+        guard let buttons else { return }
+        buttons.runDoctor.isEnabled = true
+        buttons.copyReport.isEnabled = true
+
+        buttons.installAeroSpace.isHidden = !actions.canInstallAeroSpace
+        buttons.startAeroSpace.isHidden = !actions.canStartAeroSpace
+        buttons.reloadConfig.isHidden = !actions.canReloadAeroSpaceConfig
+        buttons.requestAccessibility.isHidden = !actions.canRequestAccessibility
+    }
+
+    // MARK: - Window Construction
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 600),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Doctor"
+        window.title = "AgentPanel Doctor"
+        window.minSize = NSSize(width: 520, height: 400)
         window.center()
         return window
     }
 
-    private func makeContentView(textView: NSTextView, buttons: DoctorButtons) -> NSView {
+    private func makeContentView(
+        scrollView: NSScrollView,
+        loadingContainer: NSStackView,
+        buttons: DoctorButtons
+    ) -> NSView {
         let container = NSStackView()
         container.orientation = .vertical
         container.spacing = 12
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = textView
-        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        // Report area: scrollView and loadingContainer share the same space.
+        // Only one is visible at a time.
+        let reportArea = NSView()
+        reportArea.translatesAutoresizingMaskIntoConstraints = false
+        reportArea.addSubview(scrollView)
+        reportArea.addSubview(loadingContainer)
 
-        let primaryRow = makeButtonRow(buttons: [
-            buttons.runDoctor,
-            buttons.copyReport,
-            buttons.installAeroSpace,
-            buttons.startAeroSpace
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: reportArea.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: reportArea.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: reportArea.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: reportArea.bottomAnchor),
+
+            loadingContainer.centerXAnchor.constraint(equalTo: reportArea.centerXAnchor),
+            loadingContainer.centerYAnchor.constraint(equalTo: reportArea.centerYAnchor),
         ])
 
-        let secondaryRow = makeButtonRow(buttons: [
-            buttons.reloadConfig,
-            buttons.requestAccessibility,
-            buttons.close
-        ])
+        reportArea.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        reportArea.setContentHuggingPriority(.defaultLow, for: .vertical)
 
-        container.addArrangedSubview(scrollView)
-        container.addArrangedSubview(primaryRow)
-        container.addArrangedSubview(secondaryRow)
+        let buttonBar = makeButtonBar(buttons: buttons)
+
+        container.addArrangedSubview(reportArea)
+        container.addArrangedSubview(buttonBar)
 
         let contentView = NSView()
         contentView.addSubview(container)
 
         NSLayoutConstraint.activate([
-            container.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
-            container.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            container.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            container.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12)
+            container.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            container.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            container.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            container.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16),
         ])
 
         return contentView
     }
 
-    private func makeButtonRow(buttons: [NSButton]) -> NSStackView {
-        let row = NSStackView(views: buttons)
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 8
-        row.distribution = .fillProportionally
-        return row
+    private func makeScrollView(documentView: NSTextView) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        return scrollView
+    }
+
+    private func makeLoadingContainer() -> NSStackView {
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.isIndeterminate = true
+        spinner.controlSize = .regular
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            spinner.widthAnchor.constraint(equalToConstant: 32),
+            spinner.heightAnchor.constraint(equalToConstant: 32),
+        ])
+        progressIndicator = spinner
+
+        let label = NSTextField(labelWithString: "Running diagnostics...")
+        label.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .secondaryLabelColor
+        label.alignment = .center
+        loadingLabel = label
+
+        let stack = NSStackView(views: [spinner, label])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isHidden = true
+
+        return stack
+    }
+
+    // MARK: - Button Bar
+
+    /// Creates the button bar with three logical groups:
+    /// primary (left) — conditional actions (center) — close (right).
+    private func makeButtonBar(buttons: DoctorButtons) -> NSStackView {
+        let bar = NSStackView()
+        bar.orientation = .horizontal
+        bar.alignment = .centerY
+        bar.spacing = 8
+        bar.distribution = .gravityAreas
+
+        // Primary group (left)
+        bar.addView(buttons.runDoctor, in: .leading)
+        bar.addView(buttons.copyReport, in: .leading)
+
+        // Conditional actions (center)
+        bar.addView(buttons.installAeroSpace, in: .center)
+        bar.addView(buttons.startAeroSpace, in: .center)
+        bar.addView(buttons.reloadConfig, in: .center)
+        bar.addView(buttons.requestAccessibility, in: .center)
+
+        // Dismissal (right)
+        bar.addView(buttons.close, in: .trailing)
+
+        return bar
     }
 
     private func makeButtons() -> DoctorButtons {
         let runDoctorButton = makeButton(title: "Run Doctor", action: #selector(handleRunDoctor))
+        runDoctorButton.keyEquivalent = "\r"
+
         let copyReportButton = makeButton(title: "Copy Report", action: #selector(handleCopyReport))
         let installAeroSpaceButton = makeButton(title: "Install AeroSpace", action: #selector(handleInstallAeroSpace))
         let startAeroSpaceButton = makeButton(title: "Start AeroSpace", action: #selector(handleStartAeroSpace))
-        let reloadConfigButton = makeButton(title: "Reload AeroSpace Config", action: #selector(handleReloadConfig))
+        let reloadConfigButton = makeButton(title: "Reload Config", action: #selector(handleReloadConfig))
         let requestAccessibilityButton = makeButton(title: "Request Accessibility", action: #selector(handleRequestAccessibility))
         let closeButton = makeButton(title: "Close", action: #selector(handleClose))
+
+        // Conditional buttons start hidden
+        installAeroSpaceButton.isHidden = true
+        startAeroSpaceButton.isHidden = true
+        reloadConfigButton.isHidden = true
+        requestAccessibilityButton.isHidden = true
 
         return DoctorButtons(
             runDoctor: runDoctorButton,
@@ -237,24 +339,17 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         return button
     }
 
-    /// Sets the text view content using an attributed string with explicit font and color.
-    ///
-    /// Using `textStorage?.setAttributedString` instead of setting `.string` ensures
-    /// the foreground color is always applied, regardless of NSTextView's internal
-    /// typingAttributes state.
-    private func setTextViewString(_ text: String) {
-        let attributed = NSAttributedString(string: text, attributes: textAttributes)
-        textView?.textStorage?.setAttributedString(attributed)
-    }
+    // MARK: - Text View
 
     private func makeTextView() -> NSTextView {
         let textView = NSTextView()
         textView.isEditable = false
         textView.isSelectable = true
-        textView.isRichText = false
+        textView.isRichText = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         textView.textColor = .labelColor
-        textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.backgroundColor = .clear
+        textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.textContainer?.widthTracksTextView = true
         return textView
     }

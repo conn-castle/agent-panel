@@ -374,7 +374,7 @@ public struct ApCLI {
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
                 case .success:
-                    output.stdout("Returned to previous window")
+                    output.stdout("Returned to non-project space")
                     return ApExitCode.ok.rawValue
                 }
             }
@@ -397,8 +397,8 @@ func usageText(for topic: ApHelpTopic) -> String {
           show-config         Show current configuration
           list-projects [q]   List projects (optionally filtered by query)
           select-project <id> Activate a project
-          close-project <id>  Close a project and return to previous window
-          return              Return to previous window without closing project
+          close-project <id>  Close a project and return to non-project space
+          return              Return to most recent non-project window without closing project
 
         Options:
           -h, --help      Show help
@@ -456,7 +456,7 @@ func usageText(for topic: ApHelpTopic) -> String {
 
         Close a project by its ID. This will:
         - Close all windows in the project's workspace
-        - Return focus to the previous non-project window
+        - Return focus to non-project space
 
         Options:
           -h, --help   Show help
@@ -466,7 +466,7 @@ func usageText(for topic: ApHelpTopic) -> String {
         Usage:
           ap return
 
-        Return to the previous non-project window without closing the current project.
+        Return to the most recent non-project window without closing the current project.
         Use this to temporarily leave a project while keeping it open.
 
         Options:
@@ -526,7 +526,7 @@ private func formatProjectError(_ error: ProjectError) -> String {
     case .noActiveProject:
         return "No active project"
     case .noPreviousWindow:
-        return "No previous window to return to"
+        return "No recent non-project window to return to"
     case .windowNotFound(let detail):
         return "Window not found: \(detail)"
     case .focusUnstable(let detail):

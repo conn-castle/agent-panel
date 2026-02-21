@@ -30,7 +30,7 @@ public enum ProjectError: Error, Equatable, Sendable {
     /// No project is currently active (for exit operation).
     case noActiveProject
 
-    /// No previous window to return to.
+    /// No recent non-project window to return to.
     case noPreviousWindow
 
     /// Expected window not found after setup.
@@ -182,6 +182,8 @@ public final class ProjectManager {
 
     // Focus stack for "exit project space" restoration (non-project windows only)
     private var focusStack = FocusStack()
+    // Most recently observed non-project focus for restoration fallback.
+    private var mostRecentNonProjectFocus: CapturedFocus?
 
     // Internal dependencies
     private let aerospace: AeroSpaceProviding
@@ -373,6 +375,9 @@ public final class ProjectManager {
             return nil
         case .success(let window):
             let captured = CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId, workspace: window.workspace)
+            if !captured.workspace.hasPrefix(Self.workspacePrefix) {
+                mostRecentNonProjectFocus = captured
+            }
             logEvent("focus.captured", context: [
                 "window_id": "\(captured.windowId)",
                 "app_bundle_id": captured.appBundleId,
@@ -565,6 +570,7 @@ public final class ProjectManager {
         // Project-to-project switches (ap-* workspace) are not recorded.
         if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
             focusStack.push(preCapturedFocus)
+            mostRecentNonProjectFocus = preCapturedFocus
         } else {
             logEvent("focus.push_skipped_project_workspace", context: [
                 "workspace": preCapturedFocus.workspace,
@@ -717,7 +723,7 @@ public final class ProjectManager {
         ))
     }
 
-    /// Closes a project by ID and restores focus to the previous non-project window.
+    /// Closes a project by ID and restores focus to non-project space.
     public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
         guard config != nil else {
             return .failure(.configNotLoaded)
@@ -743,11 +749,16 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to the previous non-project window (pop from focus stack)
+        // Restore focus to non-project space (pop from focus stack)
         if let focus = focusStack.popFirstValid(isValid: { entry in
             self.focusWindow(windowId: entry.windowId)
         }) {
             logEvent("close.focus_restored", context: [
+                "window_id": "\(focus.windowId)",
+                "workspace": focus.workspace
+            ])
+        } else if let focus = restoreMostRecentNonProjectFocus() {
+            logEvent("close.focus_restored_recent_non_project", context: [
                 "window_id": "\(focus.windowId)",
                 "workspace": focus.workspace
             ])
@@ -839,6 +850,13 @@ public final class ProjectManager {
             ])
             logEvent("exit.completed")
             return .success(())
+        } else if let focus = restoreMostRecentNonProjectFocus() {
+            logEvent("exit.focus_restored_recent_non_project", context: [
+                "window_id": "\(focus.windowId)",
+                "workspace": focus.workspace
+            ])
+            logEvent("exit.completed")
+            return .success(())
         } else if let ws = fallbackToNonProjectWorkspace() {
             logEvent("exit.focus_fallback_workspace", context: ["workspace": ws])
             logEvent("exit.completed")
@@ -849,32 +867,59 @@ public final class ProjectManager {
         }
     }
 
-    /// Falls back to focusing a non-project workspace when the focus stack is exhausted.
+    /// Falls back to focusing a non-project workspace window when the focus stack is exhausted.
     ///
-    /// Queries all workspaces and focuses the first non-project workspace that has
-    /// at least one window. This avoids landing on an empty desktop.
+    /// Queries all workspaces and attempts to focus a concrete window in the first
+    /// non-project workspace that has windows. This avoids landing on an empty desktop.
     ///
-    /// - Returns: The workspace name that was focused, or nil if no suitable workspace exists.
+    /// - Returns: The workspace name containing the focused window, or nil if no suitable window exists.
     private func fallbackToNonProjectWorkspace() -> String? {
         guard case .success(let workspaces) = aerospace.listWorkspacesWithFocus() else {
             return nil
         }
         let nonProjectWorkspaces = workspaces.filter { !$0.workspace.hasPrefix(Self.workspacePrefix) }
 
-        // Prefer a workspace that has windows (avoid empty desktops)
+        // Prefer the first non-project workspace where we can actually focus a window.
         for candidate in nonProjectWorkspaces {
-            if case .success(let windows) = aerospace.listWindowsWorkspace(workspace: candidate.workspace),
-               !windows.isEmpty {
-                if focusWorkspace(name: candidate.workspace) {
-                    return candidate.workspace
-                }
+            guard case .success(let windows) = aerospace.listWindowsWorkspace(workspace: candidate.workspace),
+                  !windows.isEmpty else { continue }
+            guard focusWorkspace(name: candidate.workspace) else { continue }
+            guard let focused = focusFirstWindow(windows) else { continue }
+            mostRecentNonProjectFocus = focused
+            return candidate.workspace
+        }
+        return nil
+    }
+
+    /// Focuses the first focusable window from a candidate list.
+    ///
+    /// - Parameter windows: Candidate windows to attempt, in priority order.
+    /// - Returns: Captured focus for the window that was focused, or nil if none can be focused.
+    private func focusFirstWindow(_ windows: [ApWindow]) -> CapturedFocus? {
+        for window in windows {
+            if focusWindow(windowId: window.windowId) {
+                return CapturedFocus(
+                    windowId: window.windowId,
+                    appBundleId: window.appBundleId,
+                    workspace: window.workspace
+                )
             }
         }
+        return nil
+    }
 
-        // All non-project workspaces are empty; focus the first one anyway as last resort
-        if let target = nonProjectWorkspaces.first {
-            return focusWorkspace(name: target.workspace) ? target.workspace : nil
+    /// Attempts to restore focus using the most recently observed non-project window.
+    ///
+    /// Returns nil when there is no remembered window or when the remembered window
+    /// can no longer be focused (stale window ID).
+    private func restoreMostRecentNonProjectFocus() -> CapturedFocus? {
+        guard let recent = mostRecentNonProjectFocus else {
+            return nil
         }
+        if focusWindow(windowId: recent.windowId) {
+            return recent
+        }
+        mostRecentNonProjectFocus = nil
         return nil
     }
 
@@ -1229,7 +1274,7 @@ public final class ProjectManager {
         guard let positioner = windowPositioner,
               let detector = screenModeDetector,
               let store = windowPositionStore,
-              config != nil else {
+              let config = config else {
             return
         }
 
@@ -1260,7 +1305,7 @@ public final class ProjectManager {
         // Detect screen mode
         let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
         let screenMode: ScreenMode
-        switch detector.detectMode(containingPoint: centerPoint, threshold: config!.layout.smallScreenThreshold) {
+        switch detector.detectMode(containingPoint: centerPoint, threshold: config.layout.smallScreenThreshold) {
         case .success(let mode):
             screenMode = mode
         case .failure(let error):

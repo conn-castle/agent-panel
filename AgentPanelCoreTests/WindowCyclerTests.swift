@@ -9,13 +9,17 @@ final class WindowCyclerTests: XCTestCase {
     private final class StubAeroSpace: AeroSpaceProviding {
         var focusedWindowResult: Result<ApWindow, ApCoreError> = .failure(ApCoreError(message: "no focus"))
         var windowsByWorkspace: [String: [ApWindow]] = [:]
+        var listWorkspaceResultOverride: Result<[ApWindow], ApCoreError>?
         var focusWindowCalls: [Int] = []
         var focusWindowResult: Result<Void, ApCoreError> = .success(())
 
         func focusedWindow() -> Result<ApWindow, ApCoreError> { focusedWindowResult }
 
         func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
-            .success(windowsByWorkspace[workspace] ?? [])
+            if let override = listWorkspaceResultOverride {
+                return override
+            }
+            return .success(windowsByWorkspace[workspace] ?? [])
         }
 
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
@@ -165,6 +169,229 @@ final class WindowCyclerTests: XCTestCase {
         let cycler = makeCycler(stub: stub)
         let result = cycler.cycleFocus(direction: .next)
 
+        if case .success = result { XCTFail("Expected failure") }
+    }
+
+    func testCycleFocusFailsWhenListWorkspaceFails() {
+        let stub = StubAeroSpace()
+        stub.focusedWindowResult = .success(makeWindow(id: 1))
+        stub.listWorkspaceResultOverride = .failure(ApCoreError(message: "workspace list failed"))
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.cycleFocus(direction: .next)
+
+        if case .success = result { XCTFail("Expected failure") }
+    }
+
+    // MARK: - Session Start
+
+    func testStartSessionSelectsNextCandidate() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2), makeWindow(id: 3)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        guard case .success(let session?) = result else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        XCTAssertEqual(session.initialWindowId, 1)
+        XCTAssertEqual(session.selectedCandidate.windowId, 2)
+        XCTAssertEqual(session.candidates.map(\.windowId), [1, 2, 3])
+    }
+
+    func testStartSessionSelectsPreviousCandidate() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2), makeWindow(id: 3)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .previous)
+
+        guard case .success(let session?) = result else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        XCTAssertEqual(session.initialWindowId, 1)
+        XCTAssertEqual(session.selectedCandidate.windowId, 3)
+    }
+
+    func testStartSessionReturnsNilForSingleWindow() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        guard case .success(let session) = result else {
+            XCTFail("Expected success")
+            return
+        }
+        XCTAssertNil(session)
+    }
+
+    func testStartSessionReturnsNilForNoWindows() {
+        let stub = StubAeroSpace()
+        stub.focusedWindowResult = .success(makeWindow(id: 1))
+        stub.windowsByWorkspace["ap-test"] = []
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        guard case .success(let session) = result else {
+            XCTFail("Expected success")
+            return
+        }
+        XCTAssertNil(session)
+    }
+
+    func testStartSessionReturnsNilWhenFocusedNotInList() {
+        let stub = StubAeroSpace()
+        stub.focusedWindowResult = .success(makeWindow(id: 99))
+        stub.windowsByWorkspace["ap-test"] = [makeWindow(id: 1), makeWindow(id: 2)]
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        guard case .success(let session) = result else {
+            XCTFail("Expected success")
+            return
+        }
+        XCTAssertNil(session)
+    }
+
+    func testStartSessionFailsWhenFocusedWindowFails() {
+        let stub = StubAeroSpace()
+        stub.focusedWindowResult = .failure(ApCoreError(message: "no focused window"))
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        if case .success = result { XCTFail("Expected failure") }
+    }
+
+    func testStartSessionFailsWhenListWorkspaceFails() {
+        let stub = StubAeroSpace()
+        stub.focusedWindowResult = .success(makeWindow(id: 1))
+        stub.listWorkspaceResultOverride = .failure(ApCoreError(message: "workspace list failed"))
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.startSession(direction: .next)
+
+        if case .success = result { XCTFail("Expected failure") }
+    }
+
+    // MARK: - Session Advance
+
+    func testAdvanceSelectionWrapsNext() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2), makeWindow(id: 3)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let initial?) = cycler.startSession(direction: .previous) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+        XCTAssertEqual(initial.selectedCandidate.windowId, 3)
+
+        let advanced = cycler.advanceSelection(session: initial, direction: .next)
+        XCTAssertEqual(advanced.selectedCandidate.windowId, 1)
+    }
+
+    func testAdvanceSelectionWrapsPrevious() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2), makeWindow(id: 3)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let initial?) = cycler.startSession(direction: .next) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+        XCTAssertEqual(initial.selectedCandidate.windowId, 2)
+
+        let advanced = cycler.advanceSelection(session: initial, direction: .previous)
+        XCTAssertEqual(advanced.selectedCandidate.windowId, 1)
+    }
+
+    // MARK: - Session Commit/Cancel
+
+    func testCommitSelectionFocusesSelectedWindow() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2), makeWindow(id: 3)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let session?) = cycler.startSession(direction: .next) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        let result = cycler.commitSelection(session: session)
+        if case .failure(let error) = result { XCTFail("Unexpected error: \(error)") }
+        XCTAssertEqual(stub.focusWindowCalls, [2])
+    }
+
+    func testCommitSelectionFailsWhenFocusFails() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+        stub.focusWindowResult = .failure(ApCoreError(message: "focus failed"))
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let session?) = cycler.startSession(direction: .next) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        let result = cycler.commitSelection(session: session)
+        if case .success = result { XCTFail("Expected failure") }
+    }
+
+    func testCancelSelectionRestoresInitialWindow() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let session?) = cycler.startSession(direction: .next) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        let result = cycler.cancelSession(session: session)
+        if case .failure(let error) = result { XCTFail("Unexpected error: \(error)") }
+        XCTAssertEqual(stub.focusWindowCalls, [1])
+    }
+
+    func testCancelSelectionFailsWhenFocusFails() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+        stub.focusWindowResult = .failure(ApCoreError(message: "focus failed"))
+
+        let cycler = makeCycler(stub: stub)
+        guard case .success(let session?) = cycler.startSession(direction: .next) else {
+            XCTFail("Expected non-nil session")
+            return
+        }
+
+        let result = cycler.cancelSession(session: session)
         if case .success = result { XCTFail("Expected failure") }
     }
 }

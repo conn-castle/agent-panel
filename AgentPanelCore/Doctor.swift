@@ -9,7 +9,7 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
     case fail = "FAIL"
 
     /// Sort order for display purposes (failures first).
-    var sortOrder: Int {
+    public var sortOrder: Int {
         switch self {
         case .fail: return 0
         case .warn: return 1
@@ -39,9 +39,9 @@ public enum DoctorSeverity: String, CaseIterable, Sendable {
 public struct DoctorFinding: Equatable, Sendable {
     public let severity: DoctorSeverity
     public let title: String
-    let bodyLines: [String]
-    let snippet: String?
-    let snippetLanguage: String
+    public let bodyLines: [String]
+    public let snippet: String?
+    public let snippetLanguage: String
 
     /// Creates a Doctor finding.
     /// - Parameters:

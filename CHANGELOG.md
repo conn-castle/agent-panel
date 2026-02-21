@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-02-21
+
+### Added
+
+- **Window cycle overlay** -- holding `Option` while cycling windows now shows an on-screen overlay with app icons and selected window title, and commits focus on `Option` release.
+- **Switcher performance primitives** -- added shared core utilities for config fingerprinting, debounce tokening, and table reload planning.
+
+### Changed
+
+- **Switcher filtering/reload behavior** -- added debounced filtering, config snapshot reuse, and targeted row updates to reduce full table reloads and stale-selection effects.
+- **Doctor window presentation** -- replaced plain text output with rich report rendering (colored severities), loading spinner state, and a clearer action button hierarchy.
+- **Non-project wording consistency** -- updated CLI and switcher copy from "previous window" to "non-project space/window" to match current behavior.
+
+### Fixed
+
+- **Enter key race in switcher search** -- pending debounced filter work is now flushed before primary actions so Enter applies to the latest query result set.
+- **Option-release commit reliability** -- added modifier-change handling plus watchdog fallback so overlay sessions commit deterministically when `Option` release events are missed.
+
 ## [0.1.7] - 2026-02-20
 
 ### Fixed
