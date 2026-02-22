@@ -66,7 +66,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Core cannot import AppKit. Protocols with Foundation/CG types allow business logic (layout engine, position store, config validation) to stay in Core and be fully unit-testable, while AX/NSScreen code stays in AppKit.
     Tradeoffs: AppKit code (~350 lines) is not coverage-gated (requires live window server). AgentPanelAppKit excluded from coverage gate.
 
-- Decision 2026-02-12 axprompt: Accessibility prompt via Doctor button only (not app launch)
+- Decision 2026-02-12 axprompt: Accessibility prompt via Doctor button only (not app launch, superseded by `axstartupbuild`)
     Decision: Do not auto-prompt for Accessibility permission on app launch. Instead, Doctor shows a "Request Accessibility" button when the check is FAIL.
     Reason: Auto-prompting on every launch is invasive UX — the system dialog is modal and disruptive, especially when the user may not need window positioning.
     Tradeoffs: Users must open Doctor to trigger the Accessibility prompt. First-time users won't be prompted until they check Doctor or try window positioning.
@@ -235,3 +235,23 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `FocusCycleHotkeyManager` listens to both `kEventHotKeyPressed` and `kEventRawKeyModifiersChanged`; overlay sessions start on first Option-Tab, advance on repeated presses, and commit on Option release. A polling watchdog (`CGEventSource.flagsState(.combinedSessionState)`) runs while overlay is active so release-to-commit still occurs if modifier-change events are missed. Option-state checks include both left and right Option keys. For 0-1 windows or when switcher is visible, behavior falls back to immediate `cycleFocus`.
     Reason: `RegisterEventHotKey` alone cannot detect Option release, and modifier-change delivery is not fully reliable in all focus states. The watchdog preserves deterministic release-to-commit UX without introducing an event tap subsystem.
     Tradeoffs: App-layer overlay behavior remains primarily manual-test coverage because there is no app XCTest target. Polling adds a small periodic check while the overlay is active and requires careful lifecycle cleanup to avoid stale timers.
+
+- Decision 2026-02-21 doctor-release-parity: Doctor rendering uses explicit palette and release workflow enforces Xcode 17+ (superseded by `ci26baseline` / `xcode26canonical`)
+    Decision: Doctor rich-text rendering moved to AgentPanelAppKit with explicit RGB palettes (light/dark) and report-background coordination, and release CI now fails when the selected Xcode major version is below 17.
+    Reason: Signed release artifacts built with older toolchains showed Doctor reports as visually blank while logs and copy actions proved report generation was correct; explicit palette/background pairing removes dynamic-color ambiguity, and the Xcode guard prevents shipping on the known-bad toolchain path.
+    Tradeoffs: Release workflow may block until CI runners provide Xcode 17+; Doctor colors are now app-defined tokens instead of dynamic system semantic colors.
+
+- Decision 2026-02-21 ci26baseline: CI/release baseline moves to macos-26 + Xcode 26+
+    Decision: Build/test and release workflows now run on `macos-26`, keep Xcode selection on `latest-stable`, and enforce `XCODE_MAJOR >= 26`. CI action majors updated to `actions/checkout@v6` and `actions/cache@v5`.
+    Reason: Multiple release-only UI regressions were caused by CI/local toolchain mismatch. Moving both CI lanes to a current baseline removes the legacy Xcode 16 path and keeps parity with modern local builds.
+    Tradeoffs: `macos-26` is a public-preview image today, so queueing/runner-image instability risk is higher than GA images until GitHub promotes it.
+
+- Decision 2026-02-21 axstartupbuild: Accessibility prompt runs on startup once per build (supersedes `axprompt`)
+    Decision: If Accessibility is not trusted, AgentPanel requests permission once per installed build (`CFBundleVersion`) during startup. The Doctor "Request Accessibility" action remains available as a manual retry path.
+    Reason: Startup prompting gives a better first-run UX for window layout features and reduces the chance users stay in a degraded state because they never open Doctor.
+    Tradeoffs: First launch of a new build can show a modal system prompt; users who dismiss still need Doctor or System Settings for a later retry.
+
+- Decision 2026-02-21 xcode26canonical: Xcode 26+ is the canonical baseline (supersedes older 17+ wording)
+    Decision: Treat `ci26baseline` as the authoritative release/CI toolchain floor (`Xcode 26+`); references to `Xcode 17+` in older entries are historical context only.
+    Reason: A single explicit baseline avoids contradictory operator guidance across workflows, release docs, and memory files.
+    Tradeoffs: Historical entries remain for auditability, so readers must treat superseded wording as non-authoritative.

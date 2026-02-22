@@ -6,6 +6,8 @@ This document covers how to create a new release. Releases are built, signed, no
 
 The GitHub repository must have a `release` environment configured with the following secrets and variables. See `human_setup.md` (not tracked in git) for the one-time setup process.
 
+The release workflow requires **Xcode 26+** and fails early when an older Xcode is selected. This keeps release artifacts aligned with the current CI/local toolchain baseline.
+
 ### Secrets (in `release` environment)
 
 | Secret | Description |
@@ -74,23 +76,25 @@ The tag push triggers the release workflow.
 
 ### 4. Monitor the workflow
 
-The release workflow (`.github/workflows/release.yml`) runs on `macos-15` and:
+The release workflow (`.github/workflows/release.yml`) runs on `macos-26` and:
 
-1. Validates the tag version matches `MARKETING_VERSION` in `project.yml`.
-2. Installs build dependencies (xcbeautify, xcodegen, create-dmg).
-3. Generates the Xcode project.
-4. Runs build and tests (full test suite with coverage gate).
-5. Imports signing certificates into a temporary keychain.
-6. Archives the app and codesigns with Developer ID identity (hardened runtime + entitlements).
-7. Codesigns the CLI binary with hardened runtime.
-8. Creates distribution artifacts:
+1. Selects the latest stable Xcode toolchain available on the runner.
+2. Validates the selected Xcode major version is `26+`.
+3. Validates the tag version matches `MARKETING_VERSION` in `project.yml`.
+4. Installs build dependencies (xcbeautify, xcodegen, create-dmg).
+5. Generates the Xcode project.
+6. Runs build and tests (full test suite with coverage gate).
+7. Imports signing certificates into a temporary keychain.
+8. Archives the app and codesigns with Developer ID identity (hardened runtime + entitlements).
+9. Codesigns the CLI binary with hardened runtime.
+10. Creates distribution artifacts:
    - `AgentPanel-v<version>-macos-arm64.dmg` (app)
    - `ap-v<version>-macos-arm64.pkg` (CLI installer, signed with Installer cert)
    - `ap-v<version>-macos-arm64.tar.gz` (CLI binary)
-9. Notarizes the DMG and PKG with Apple.
-10. Validates all artifacts (mounts DMG, verifies signatures, checks notarization).
-11. Generates `SHA256SUMS`.
-12. Creates a GitHub Release with all artifacts attached.
+11. Notarizes the DMG and PKG with Apple.
+12. Validates all artifacts (mounts DMG, verifies signatures, checks notarization).
+13. Generates `SHA256SUMS`.
+14. Creates a GitHub Release with all artifacts attached.
 
 ### 5. Verify the release
 

@@ -11,18 +11,36 @@ permissions:
 
 jobs:
   build-test:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Select Xcode toolchain
+        uses: maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd # v1.6.0
+        with:
+          xcode-version: latest-stable
+
+      - name: Validate Xcode version
+        run: |
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '/^Xcode /{split($2, v, "."); print v[1]}')"
+          if [[ -z "$XCODE_MAJOR" ]]; then
+            echo "error: unable to determine Xcode major version from xcodebuild -version" >&2
+            exit 1
+          fi
+          if [[ "$XCODE_MAJOR" -lt 26 ]]; then
+            echo "error: CI requires Xcode 26+ to match the release toolchain baseline" >&2
+            exit 1
+          fi
 
       - name: Cache Homebrew packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/Library/Caches/Homebrew
             /opt/homebrew/Cellar/xcbeautify
-          key: homebrew-xcbeautify-${{ runner.os }}-${{ runner.arch }}
+          key: homebrew-xcbeautify-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/workflows/ci.yml') }}
 
       - name: Install xcbeautify
         run: |
@@ -31,12 +49,12 @@ jobs:
           fi
 
       - name: Cache SPM packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/DerivedData/SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('AgentPanel.xcodeproj/project.pbxproj') }}
+          key: spm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('AgentPanel.xcodeproj/project.pbxproj') }}
           restore-keys: |
-            spm-${{ runner.os }}-
+            spm-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Release preflight
         run: scripts/ci_preflight.sh

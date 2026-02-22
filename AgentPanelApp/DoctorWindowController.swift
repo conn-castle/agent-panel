@@ -9,6 +9,7 @@
 
 import AppKit
 
+import AgentPanelAppKit
 import AgentPanelCore
 
 /// Controls the Doctor diagnostic window presentation.
@@ -94,9 +95,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         progressIndicator?.stopAnimation(nil)
         scrollView?.isHidden = false
 
-        // Render attributed string
-        let attributed = DoctorReportRenderer.render(report)
-        textView?.textStorage?.setAttributedString(attributed)
+        renderReportText(for: report)
         textView?.scrollToBeginningOfDocument(nil)
 
         applyReportState(report.actions)
@@ -141,8 +140,17 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     private func observeAppearanceChanges(_ window: NSWindow) {
         appearanceObservation = window.observe(\.effectiveAppearance) { [weak self] _, _ in
             guard let self, let report = self.lastReport else { return }
-            self.textView?.textStorage?.setAttributedString(DoctorReportRenderer.render(report))
+            self.renderReportText(for: report)
         }
+    }
+
+    private func renderReportText(for report: DoctorReport) {
+        let appearance = window?.effectiveAppearance ?? textView?.effectiveAppearance
+        let palette = DoctorReportRenderer.palette(for: appearance)
+        scrollView?.drawsBackground = true
+        scrollView?.backgroundColor = palette.reportBackgroundColor
+        let attributed = DoctorReportRenderer.render(report, appearance: appearance)
+        textView?.textStorage?.setAttributedString(attributed)
     }
 
     // MARK: - State Management
@@ -243,6 +251,8 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = DoctorReportRenderer.palette(for: nil).reportBackgroundColor
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.documentView = documentView
         scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -345,11 +355,14 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         let textView = NSTextView()
         textView.isEditable = false
         textView.isSelectable = true
-        textView.isRichText = true
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
         textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textColor = .labelColor
-        textView.backgroundColor = .clear
+        textView.textColor = DoctorReportRenderer.palette(for: nil).primaryTextColor
         textView.textContainerInset = NSSize(width: 16, height: 16)
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         return textView
     }
