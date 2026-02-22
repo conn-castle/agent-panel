@@ -6,6 +6,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 errors=0
 runner_label=""
+setup_xcode_ref="maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd"
 
 fail() {
   echo "FAIL: $1" >&2
@@ -102,10 +103,10 @@ else
     fail "Release workflow runner is '$runner_label' (expected macos-26)"
   fi
 
-  if grep -q 'uses: maxim-lobanov/setup-xcode@v1' "$workflow"; then
-    echo "PASS: Release workflow selects Xcode with setup-xcode"
+  if grep -q "uses: $setup_xcode_ref" "$workflow"; then
+    echo "PASS: Release workflow pins setup-xcode to immutable ref ($setup_xcode_ref)"
   else
-    fail "Release workflow missing setup-xcode step"
+    fail "Release workflow missing pinned setup-xcode ref ($setup_xcode_ref)"
   fi
 
   if grep -q 'xcode-version: latest-stable' "$workflow"; then
@@ -156,23 +157,27 @@ if [[ -f "$workflow" ]]; then
 fi
 
 # 10. project.yml deployment target is within release runner SDK major range
-deploy_target=$(grep 'macOS:' "$REPO_ROOT/project.yml" | head -1 | sed 's/.*: *"\(.*\)"/\1/')
-if [[ -n "$deploy_target" ]]; then
-  deploy_major=$(echo "$deploy_target" | cut -d. -f1)
-  if [[ "$runner_label" =~ ^macos-([0-9]+)$ ]]; then
-    runner_major="${BASH_REMATCH[1]}"
-    if [[ "$deploy_major" -gt "$runner_major" ]]; then
-      fail "project.yml deployment target $deploy_target exceeds release runner SDK major ($runner_label) — archive will fail"
-    else
-      echo "PASS: Deployment target $deploy_target (major $deploy_major) is within release runner SDK major ($runner_label)"
-    fi
-  elif [[ "$runner_label" == "macos-latest" ]]; then
-    echo "PASS: Release runner is macos-latest; deployment target $deploy_target accepted without strict major check"
-  else
-    fail "Unable to infer release runner SDK major from runs-on label '$runner_label'"
-  fi
+if [[ -z "$runner_label" ]]; then
+  echo "SKIP: Deployment target runner-major check skipped because release runner label is unavailable"
 else
-  fail "Could not read deployment target from project.yml"
+  deploy_target=$(grep 'macOS:' "$REPO_ROOT/project.yml" | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+  if [[ -n "$deploy_target" ]]; then
+    deploy_major=$(echo "$deploy_target" | cut -d. -f1)
+    if [[ "$runner_label" =~ ^macos-([0-9]+)$ ]]; then
+      runner_major="${BASH_REMATCH[1]}"
+      if [[ "$deploy_major" -gt "$runner_major" ]]; then
+        fail "project.yml deployment target $deploy_target exceeds release runner SDK major ($runner_label) — archive will fail"
+      else
+        echo "PASS: Deployment target $deploy_target (major $deploy_major) is within release runner SDK major ($runner_label)"
+      fi
+    elif [[ "$runner_label" == "macos-latest" ]]; then
+      echo "PASS: Release runner is macos-latest; deployment target $deploy_target accepted without strict major check"
+    else
+      fail "Unable to infer release runner SDK major from runs-on label '$runner_label'"
+    fi
+  else
+    fail "Could not read deployment target from project.yml"
+  fi
 fi
 
 # 11. ci_setup_signing.sh preserves existing keychain search list

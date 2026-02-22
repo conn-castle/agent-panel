@@ -95,13 +95,7 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         progressIndicator?.stopAnimation(nil)
         scrollView?.isHidden = false
 
-        // Render attributed string
-        let appearance = window?.effectiveAppearance ?? textView?.effectiveAppearance
-        let palette = DoctorReportRenderer.palette(for: appearance)
-        scrollView?.drawsBackground = true
-        scrollView?.backgroundColor = palette.reportBackgroundColor
-        let attributed = DoctorReportRenderer.render(report, appearance: appearance)
-        textView?.textStorage?.setAttributedString(attributed)
+        renderReportText(for: report)
         textView?.scrollToBeginningOfDocument(nil)
 
         applyReportState(report.actions)
@@ -146,14 +140,17 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     private func observeAppearanceChanges(_ window: NSWindow) {
         appearanceObservation = window.observe(\.effectiveAppearance) { [weak self] _, _ in
             guard let self, let report = self.lastReport else { return }
-            let appearance = self.window?.effectiveAppearance ?? self.textView?.effectiveAppearance
-            let palette = DoctorReportRenderer.palette(for: appearance)
-            self.scrollView?.drawsBackground = true
-            self.scrollView?.backgroundColor = palette.reportBackgroundColor
-            self.textView?.textStorage?.setAttributedString(
-                DoctorReportRenderer.render(report, appearance: appearance)
-            )
+            self.renderReportText(for: report)
         }
+    }
+
+    private func renderReportText(for report: DoctorReport) {
+        let appearance = window?.effectiveAppearance ?? textView?.effectiveAppearance
+        let palette = DoctorReportRenderer.palette(for: appearance)
+        scrollView?.drawsBackground = true
+        scrollView?.backgroundColor = palette.reportBackgroundColor
+        let attributed = DoctorReportRenderer.render(report, appearance: appearance)
+        textView?.textStorage?.setAttributedString(attributed)
     }
 
     // MARK: - State Management
