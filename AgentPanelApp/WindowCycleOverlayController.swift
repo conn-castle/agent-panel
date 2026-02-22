@@ -302,6 +302,7 @@ final class WindowCycleOverlayController {
 /// Visual item for one cycle candidate.
 private final class WindowCycleOverlayItemView: NSView {
     private let iconView = NSImageView()
+    private var isSelectedState = false
 
     init(icon: NSImage) {
         super.init(frame: .zero)
@@ -335,15 +336,50 @@ private final class WindowCycleOverlayItemView: NSView {
         nil
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applySelectionStyle()
+    }
+
     /// Updates selection styling.
     /// - Parameter isSelected: Whether this item is selected.
     func setSelected(_ isSelected: Bool) {
-        if isSelected {
-            layer?.backgroundColor = NSColor.black.withAlphaComponent(0.30).cgColor
-            layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-        } else {
-            layer?.backgroundColor = NSColor.clear.cgColor
-            layer?.borderColor = NSColor.clear.cgColor
+        isSelectedState = isSelected
+        applySelectionStyle()
+    }
+
+    /// Applies current selection colors using the view's effective appearance.
+    private func applySelectionStyle() {
+        guard let layer else {
+            return
         }
+        if isSelectedState {
+            layer.backgroundColor = selectedBackgroundColor().cgColor
+            layer.borderColor = selectedBorderColor().cgColor
+            return
+        }
+        layer.backgroundColor = NSColor.clear.cgColor
+        layer.borderColor = NSColor.clear.cgColor
+    }
+
+    /// Returns a selected background color tuned for light vs dark appearance.
+    private func selectedBackgroundColor() -> NSColor {
+        if isDarkAppearance {
+            return NSColor.white.withAlphaComponent(0.16)
+        }
+        return NSColor.black.withAlphaComponent(0.20)
+    }
+
+    /// Returns a selected border color tuned for light vs dark appearance.
+    private func selectedBorderColor() -> NSColor {
+        if isDarkAppearance {
+            return NSColor.white.withAlphaComponent(0.24)
+        }
+        return NSColor.black.withAlphaComponent(0.14)
+    }
+
+    /// True when effective appearance resolves to dark Aqua.
+    private var isDarkAppearance: Bool {
+        effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 }
