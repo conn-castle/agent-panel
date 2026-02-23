@@ -360,11 +360,13 @@ public enum DismissDecision: Equatable, Sendable {
 
 public struct SwitcherDismissPolicy: Sendable {
     /// Decides whether to dismiss the panel when it resigns key window status.
-    /// Suppresses dismissal during activation (Chrome window steal) or when
-    /// the panel is not visible.
+    /// Suppresses dismissal during activation, while external focus transitions
+    /// are in progress (for example, exit-to-non-project), or when the panel
+    /// is not visible.
     public static func shouldDismissOnResignKey(
         isActivating: Bool,
-        isVisible: Bool
+        isVisible: Bool,
+        isExternalFocusTransitionInProgress: Bool = false
     ) -> DismissDecision
 
     /// Decides whether to restore focus to the previously captured window

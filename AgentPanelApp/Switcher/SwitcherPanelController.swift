@@ -217,6 +217,7 @@ final class SwitcherPanelController: NSObject {
     private var suppressedActionEventTimestamp: TimeInterval?
     private var isDismissing: Bool = false
     private var isActivating: Bool = false
+    private var isExitingToNonProject: Bool = false
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
     private var restoreFocusTask: Task<Void, Never>?
@@ -410,6 +411,7 @@ final class SwitcherPanelController: NSObject {
         removeKeyEventMonitor()
         expectsVisible = false
         isActivating = false
+        isExitingToNonProject = false
         pendingVisibilityCheckToken = nil
         restoreFocusTask?.cancel()
         cancelPendingFilterWorkItem()
@@ -1480,18 +1482,26 @@ final class SwitcherPanelController: NSObject {
             }
             return
         }
+        guard !isExitingToNonProject else { return }
 
         session.logEvent(event: "switcher.exit_to_previous.requested")
+        isExitingToNonProject = true
+        searchField.isEnabled = false
+        tableView.isEnabled = false
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let result = self.projectManager.exitToNonProjectWindow()
             DispatchQueue.main.async {
+                self.searchField.isEnabled = true
+                self.tableView.isEnabled = true
                 switch result {
                 case .success:
                     self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
                     self.dismiss(reason: .exitedToNonProject)
+                    self.isExitingToNonProject = false
                 case .failure(let error):
+                    self.isExitingToNonProject = false
                     self.setStatus(message: self.projectErrorMessage(error), level: .error)
                     self.session.logEvent(
                         event: "switcher.exit_to_previous.failed",
@@ -1878,7 +1888,8 @@ extension SwitcherPanelController: NSWindowDelegate {
         guard panel.isVisible else { return }
         let decision = SwitcherDismissPolicy.shouldDismissOnResignKey(
             isActivating: isActivating,
-            isVisible: true
+            isVisible: true,
+            isExternalFocusTransitionInProgress: isExitingToNonProject
         )
         switch decision {
         case .dismiss:

@@ -38,17 +38,23 @@ public struct SwitcherDismissPolicy: Sendable {
     /// Whether to dismiss the panel when it loses key window status.
     ///
     /// Suppresses dismiss when a project activation is in progress
-    /// (Chrome/VS Code launch can steal focus from the panel).
+    /// (Chrome/VS Code launch can steal focus from the panel), or when
+    /// a focus-transition action is in progress (for example, exiting to
+    /// the previous non-project window).
     /// Also suppresses when the panel is not visible (nothing to dismiss).
     public static func shouldDismissOnResignKey(
         isActivating: Bool,
-        isVisible: Bool
+        isVisible: Bool,
+        isExternalFocusTransitionInProgress: Bool = false
     ) -> DismissDecision {
         guard isVisible else {
             return .suppress(reason: "panel_not_visible")
         }
         guard !isActivating else {
             return .suppress(reason: "activation_in_progress")
+        }
+        guard !isExternalFocusTransitionInProgress else {
+            return .suppress(reason: "external_focus_transition_in_progress")
         }
         return .dismiss
     }

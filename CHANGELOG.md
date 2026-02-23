@@ -6,6 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-02-23
+
+### Fixed
+
+- **Exit-to-non-project focus transition reliability** -- the switcher now suppresses resign-key dismissal during in-flight external focus transitions and prevents duplicate exit actions while a transition is running, which avoids dropped/incorrect focus handoff when exiting to a non-project window.
+
 ## [0.1.9] - 2026-02-21
 
 ### Changed

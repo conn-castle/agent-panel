@@ -114,19 +114,38 @@ Incomplete:
 - Added Option-Tab overlay-based project window cycling with commit-on-Option-release behavior and updated documentation.
 - Added SSH remote icon indicators in switcher rows to distinguish remote vs local projects.
 
-## Phase 10 — Future features
+## Phase 10 — Next release: self-update + recovery + onboarding/Chrome quality
 
 ### Goal
-- Track larger post-release product features that are intentionally deferred until after release.
+- Ship robust in-app updating and update signaling using a standard framework.
+- Expand recovery behavior for both focused-window and non-project contexts.
+- Deliver high-impact onboarding and Chrome workspace quality improvements.
+
+### Tasks
+- [ ] Implement full best-practices self-update using a framework for AgentPanel app updates (signed update feed, signature verification, staged install/relaunch UX, and explicit failure reporting).
+- [ ] Add update-available signaling in the app UI (menu indicator + latest version detail + update action entry point).
+- [ ] Auto recover a single window.
+- [ ] Get auto recovery for project working when not on project; recover all non-project windows.
+- [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
+- [ ] Chrome profile selection in config: Implement support for selecting specific Chrome profiles via config.toml (`chromeProfile` key or similar). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts. Chrome windows for a project open using the profile specified in the project's configuration. May involve using `--profile-directory` or similar Chrome CLI flags.
+- [ ] Auto-associate existing Chrome window in project workspace: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one. Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen. Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
+
+### Exit criteria
+- In-app self-update is implemented via framework and works from one stable release to the next with signed/notarized artifacts.
+- The app visibly flags update availability with clear current/latest version information and graceful offline behavior.
+- Single-window recovery and non-project recovery flows are available, deterministic, and validated.
+- UI add-project flow, Chrome profile selection, and Chrome auto-association are implemented and documented.
+
+## Phase 11 — Future features
+
+### Goal
+- Track larger post-release product features that are intentionally deferred beyond the next release.
 
 ### Tasks
 - [ ] Allow Switcher usage when `config.toml` is missing by providing an "Open Project..." flow that adds the selected folder to config and activates it, while preserving config ordering rules and reporting failures clearly.
 - [ ] Open project workspaces on dedicated macOS Spaces with a defined strategy (one space per workspace vs all project workspaces on a single dedicated space), and make the selected behavior reliable.
-- [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
 - [ ] Custom IDE support: config `[[ide]]` blocks (app path, bundle id, etc) and project `ide = "vscode" | "<custom>"`.
 - [ ] Better integration with existing AeroSpace config (non-destructive merge; avoid overwriting).
-- [ ] Chrome profile selection in config: Implement support for selecting specific Chrome profiles via config.toml (`chromeProfile` key or similar). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts. Chrome windows for a project open using the profile specified in the project's configuration. May involve using `--profile-directory` or similar Chrome CLI flags.
-- [ ] Auto-associate existing Chrome window in project workspace: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one. Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen. Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
 - [ ] Chrome visual differentiation matching VS Code project color: Apply project color to the Chrome window to visually match the associated VS Code window. Possible approaches: Chrome profile customization, theme injection, or Chrome extension. Deferred from Phase 7 — Chrome has no clean programmatic injection point for color theming (unlike VS Code's Peacock extension). May require a custom Chrome extension or Chrome profile switching.
 - [ ] Hot Corners and trackpad activation/switching: Add support for Hot Corners and trackpad gestures (e.g., specific swipes) to trigger the project switcher or quickly toggle between recent projects. Streamlines navigation for laptop users who prefer gesture-based interaction over keyboard shortcuts. User can configure a specific screen corner or trackpad gesture in the settings to invoke the AgentPanel switcher.
 - [ ] Homebrew packaging for app + CLI: Provide optional Homebrew distribution (cask/formula or unified strategy) on top of GitHub tagged release assets. A documented Homebrew install/upgrade path exists and is validated against release artifacts. Deferred intentionally while release work focuses on signed + notarized arm64 GitHub tagged releases.
@@ -134,7 +153,5 @@ Incomplete:
 ### Exit criteria
 - Missing-config onboarding path allows users to add and open a project from Switcher with explicit error surfacing and no silent defaults.
 - Dedicated-space behavior is deterministic and matches the selected configuration strategy.
-- Chrome profile selection allows per-project Chrome profile configuration.
-- Chrome windows in project workspaces are auto-associated when title matching fails.
 - Homebrew install/upgrade path is documented and validated.
-- Phase 10 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
+- Phase 11 is split into one or more concrete follow-on phases with scoped goals; any remaining work is tracked in BACKLOG.md.
