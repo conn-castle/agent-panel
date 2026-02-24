@@ -428,21 +428,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        // Use cached focus from menuNeedsUpdate (no blocking CLI call).
-        // The cache was refreshed when the menu opened, so it's recent enough
-        // for focus restoration on cancel.
+        // Capture the previously active app immediately (AppKit API, non-blocking).
         let previousApp = NSWorkspace.shared.frontmostApplication
-        let capturedFocus = menuFocusCapture
         statusItem?.menu?.cancelTracking()
-        // Small delay required to let the menu dismiss before showing the switcher.
-        // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
-        DispatchQueue.main.asyncAfter(deadline: .now() + MenuTiming.menuDismissDelaySeconds) { [weak self] in
-            guard let self else {
-                return
+
+        // Capture AeroSpace focus in the background to avoid blocking the menu thread.
+        // We still wait for the menu-dismiss delay before showing the switcher.
+        let showAfter = Date().addingTimeInterval(MenuTiming.menuDismissDelaySeconds)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let capturedFocus = self.projectManager.captureCurrentFocus()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let capturedFocus {
+                    self.menuFocusCapture = capturedFocus
+                }
+                let delay = max(0, showAfter.timeIntervalSinceNow)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self else { return }
+                    // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
+                    // without activating the app (and therefore without switching workspaces).
+                    self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: self.menuFocusCapture)
+                }
             }
-            // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
-            // without activating the app (and therefore without switching workspaces).
-            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
@@ -466,8 +474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Capture AeroSpace focus in background to avoid blocking the main thread.
         // The switcher toggle is dispatched to main thread once the capture completes.
-        // Thread-safe: captureCurrentFocus() only runs a CLI command and logs,
-        // it does not mutate ProjectManager state.
+        // Thread-safe: captureCurrentFocus() serializes ProjectManager state/persistence.
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }
             let capturedFocus = self.projectManager.captureCurrentFocus()
@@ -750,8 +757,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The cached values are used by `menuNeedsUpdate` to avoid blocking the
     /// main thread with AeroSpace CLI calls.
     ///
-    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` only run
-    /// stateless CLI commands and log — they do not mutate ProjectManager state.
+    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` are safe off-main
+    /// and use ProjectManager's internal serialization (focus capture may persist history).
     private func refreshMenuStateInBackground() {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }

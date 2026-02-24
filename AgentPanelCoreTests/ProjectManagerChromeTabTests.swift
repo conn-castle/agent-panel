@@ -207,6 +207,8 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-chrome-recency-\(UUID().uuidString).json")
+        let focusHistoryFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("pm-chrome-focus-\(UUID().uuidString).json")
         return ProjectManager(
             aerospace: PMAeroSpaceStub(),
             ideLauncher: PMIdeLauncherStub(),
@@ -216,7 +218,8 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
             chromeTabCapture: chromeTabCapture,
             gitRemoteResolver: gitRemoteResolver,
             logger: PMLoggerStub(),
-            recencyFilePath: recencyFilePath
+            recencyFilePath: recencyFilePath,
+            focusHistoryFilePath: focusHistoryFilePath
         )
     }
 }

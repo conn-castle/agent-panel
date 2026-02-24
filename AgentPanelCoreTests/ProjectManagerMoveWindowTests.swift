@@ -57,6 +57,8 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
     private func makeProjectManager(aerospace: MoveAeroSpaceStub = MoveAeroSpaceStub()) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-move-recency-\(UUID().uuidString).json")
+        let focusHistoryFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("pm-move-focus-\(UUID().uuidString).json")
         let chromeTabsDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-move-tabs-\(UUID().uuidString)", isDirectory: true)
         return ProjectManager(
@@ -68,7 +70,8 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
             chromeTabCapture: NoopTabCapture(),
             gitRemoteResolver: NoopGitRemoteResolver(),
             logger: NoopLogger(),
-            recencyFilePath: recencyFilePath
+            recencyFilePath: recencyFilePath,
+            focusHistoryFilePath: focusHistoryFilePath
         )
     }
 

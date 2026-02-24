@@ -710,6 +710,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let effectiveTabsDir = chromeTabsDir ?? tmp.appendingPathComponent("edge-tabs-\(UUID().uuidString)", isDirectory: true)
         let recencyPath = tmp.appendingPathComponent("edge-recency-\(UUID().uuidString).json")
+        let focusHistoryPath = tmp.appendingPathComponent("edge-focus-\(UUID().uuidString).json")
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: EdgeIdeLauncherStub(),
@@ -720,6 +721,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             gitRemoteResolver: gitRemoteResolver,
             logger: EdgeLoggerStub(),
             recencyFilePath: recencyPath,
+            focusHistoryFilePath: focusHistoryPath,
             windowPositioner: windowPositioner,
             windowPositionStore: windowPositionStore,
             screenModeDetector: screenModeDetector,
@@ -777,6 +779,17 @@ private final class EdgeAeroSpaceStub: AeroSpaceProviding {
 
     func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
         focusedWindowIds.append(windowId)
+        if case .success = focusWindowResult {
+            if case .success(let focused) = focusedWindowResult, focused.windowId == windowId {
+                return focusWindowResult
+            }
+            focusedWindowResult = .success(ApWindow(
+                windowId: windowId,
+                appBundleId: "com.stub.app",
+                workspace: "main",
+                windowTitle: "Stub"
+            ))
+        }
         return focusWindowResult
     }
 

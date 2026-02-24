@@ -109,6 +109,7 @@ final class ProjectManagerCoverageTests: XCTestCase {
     ) -> ProjectManager {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let chromeTabsDir = tmp.appendingPathComponent("pm-coverage-tabs-\(UUID().uuidString)", isDirectory: true)
+        let focusHistoryFilePath = tmp.appendingPathComponent("pm-coverage-focus-\(UUID().uuidString).json")
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: NoopIdeLauncher(),
@@ -118,7 +119,8 @@ final class ProjectManagerCoverageTests: XCTestCase {
             chromeTabCapture: NoopTabCapture(),
             gitRemoteResolver: NoopGitRemoteResolver(),
             logger: NoopLogger(),
-            recencyFilePath: recencyFilePath
+            recencyFilePath: recencyFilePath,
+            focusHistoryFilePath: focusHistoryFilePath
         )
     }
 

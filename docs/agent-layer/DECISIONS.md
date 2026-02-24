@@ -26,6 +26,11 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 <!-- ENTRIES START -->
 
+- Decision 2026-02-23 focushistory: Persist non-project focus history for cross-process restore
+    Decision: Persist focus stack + most recent non-project focus in `~/.local/state/agent-panel/state.json` via `FocusHistoryStore`, with versioned schema, 7-day prune, and serialized persistence queue.
+    Reason: Exit/close focus restoration was unreliable across app/CLI sessions and restarts; persisted history is the single source of truth for restoring the last non-project window.
+    Tradeoffs: Adds disk writes on focus updates; future state extensions must be versioned to avoid breaking older reads.
+
 - Decision 2026-02-03 guipath: GUI apps and child processes require PATH augmentation
     Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c <command>`, validated as absolute path, falls back to `/bin/zsh`). Fish shell is detected via `$SHELL` path suffix and uses `string join : $PATH` for colon-delimited output.
     Reason: macOS GUI apps launched via Finder/Dock inherit a minimal PATH missing Homebrew and user additions. Child processes (e.g., `al` calling `code`) inherit the same minimal PATH and fail. `/usr/bin/env` is not viable.
@@ -133,7 +138,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 - Decision 2026-02-16 workspaceretry: Switcher auto-retries workspace state on circuit breaker recovery
     Decision: When `refreshWorkspaceState()` fails during `show()`, the switcher displays "Recovering AeroSpace..." and schedules a main-thread `DispatchSourceTimer` (2s interval, max 5 retries). On success, the UI auto-updates with workspace state. Other call sites (close, exit) do not retry.
-    Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread (ProjectManager thread-safety contract), uses the existing recovery mechanism, and adds no new infrastructure.
+    Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread to keep UI updates predictable, uses the existing recovery mechanism, and adds no new infrastructure.
     Tradeoffs: Up to 10s of "Recovering" display if recovery is slow. If recovery never completes, user sees the original error after 5 attempts. Timer is canceled on dismiss/resetState to avoid stale callbacks.
 
 - Decision 2026-02-17 ide-frame-retry: IDE frame read retries up to 10x before failing

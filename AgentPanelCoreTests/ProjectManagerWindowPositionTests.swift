@@ -100,11 +100,19 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let projectId: String
         let ideWindowId: Int
         let chromeWindowId: Int
+        var allWindows: [ApWindow] = []
+        private var focusedWindowResult: Result<ApWindow, ApCoreError>
 
         init(projectId: String, ideWindowId: Int = 101, chromeWindowId: Int = 100) {
             self.projectId = projectId
             self.ideWindowId = ideWindowId
             self.chromeWindowId = chromeWindowId
+            self.focusedWindowResult = .success(ApWindow(
+                windowId: ideWindowId,
+                appBundleId: "com.microsoft.VSCode",
+                workspace: "ap-\(projectId)",
+                windowTitle: "AP:\(projectId) - VS Code"
+            ))
         }
 
         private var chromeWindow: ApWindow {
@@ -136,10 +144,21 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
             .success([chromeWindow, ideWindow])
         }
-        func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
+        func listAllWindows() -> Result<[ApWindow], ApCoreError> {
+            if !allWindows.isEmpty {
+                return .success(allWindows)
+            }
+            return .success([chromeWindow, ideWindow])
+        }
 
-        func focusedWindow() -> Result<ApWindow, ApCoreError> { .success(ideWindow) }
-        func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
+        func focusedWindow() -> Result<ApWindow, ApCoreError> { focusedWindowResult }
+        func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
+            let candidates = allWindows.isEmpty ? [chromeWindow, ideWindow] : allWindows
+            if let window = candidates.first(where: { $0.windowId == windowId }) {
+                focusedWindowResult = .success(window)
+            }
+            return .success(())
+        }
         func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> { .success(()) }
         func focusWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
     }
@@ -155,6 +174,7 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let chromeTabsDir = tmp.appendingPathComponent("pm-window-tabs-\(UUID().uuidString)", isDirectory: true)
         let recencyPath = tmp.appendingPathComponent("pm-window-recency-\(UUID().uuidString).json")
+        let focusHistoryPath = tmp.appendingPathComponent("pm-window-focus-\(UUID().uuidString).json")
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: NoopIdeLauncher(),
@@ -165,6 +185,7 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
             gitRemoteResolver: NoopGitRemoteResolver(),
             logger: NoopLogger(),
             recencyFilePath: recencyPath,
+            focusHistoryFilePath: focusHistoryPath,
             windowPositioner: windowPositioner,
             windowPositionStore: windowPositionStore,
             screenModeDetector: screenModeDetector
@@ -182,6 +203,9 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let store = RecordingPositionStore()
         let detector = StubScreenModeDetector()
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
 
         // Configure positioner: getPrimaryWindowFrame succeeds for IDE (used to determine monitor)
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
@@ -220,6 +244,9 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let store = RecordingPositionStore()
         let detector = StubScreenModeDetector()
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
 
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
@@ -411,6 +438,9 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let store = RecordingPositionStore()
         let detector = StubScreenModeDetector()
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
 
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
         positioner.getFrameResults["com.google.Chrome|\(projectId)"] = .success(defaultChromeFrame)
@@ -440,6 +470,9 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
     func testExitSkipsCaptureWhenNoPositioner() {
         let projectId = "iota"
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
 
         let manager = makeManager(aerospace: aerospace)
         manager.loadTestConfig(Config(

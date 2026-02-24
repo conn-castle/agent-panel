@@ -99,20 +99,29 @@ public struct ProjectCloseSuccess: Equatable, Sendable {
 /// LIFO stack of non-project focus entries for "exit project space" restoration.
 ///
 /// Only non-project windows should be pushed (the caller is responsible for filtering).
-/// Not persisted to disk — window IDs don't survive app restarts.
+/// Persisted by ProjectManager so CLI + app share focus history across restarts.
 struct FocusStack {
-    private var entries: [CapturedFocus] = []
+    private var entries: [FocusHistoryEntry] = []
     private let maxSize: Int
 
     init(maxSize: Int = 20) {
         self.maxSize = maxSize
     }
 
+    init(entries: [FocusHistoryEntry], maxSize: Int = 20) {
+        self.maxSize = maxSize
+        if entries.count > maxSize {
+            self.entries = Array(entries.suffix(maxSize))
+        } else {
+            self.entries = entries
+        }
+    }
+
     /// Pushes a focus entry onto the stack.
     ///
     /// Deduplicates: if the top entry already matches this windowId, the push is skipped.
     /// Enforces maxSize by dropping the oldest (first) entry when full.
-    mutating func push(_ focus: CapturedFocus) {
+    mutating func push(_ focus: FocusHistoryEntry) {
         // Deduplicate consecutive pushes of the same window
         if let top = entries.last, top.windowId == focus.windowId {
             return
@@ -128,7 +137,7 @@ struct FocusStack {
     ///
     /// Invalid entries (stale windows) are discarded. Returns nil if the stack
     /// is exhausted without finding a valid entry.
-    mutating func popFirstValid(isValid: (CapturedFocus) -> Bool) -> CapturedFocus? {
+    mutating func popFirstValid(isValid: (FocusHistoryEntry) -> Bool) -> FocusHistoryEntry? {
         while let entry = entries.popLast() {
             if isValid(entry) {
                 return entry
@@ -138,8 +147,22 @@ struct FocusStack {
         return nil
     }
 
+    /// Pops the most recent entry (LIFO).
+    mutating func pop() -> FocusHistoryEntry? {
+        entries.popLast()
+    }
+
+    /// Removes any entries that match the provided window ID.
+    mutating func remove(windowId: Int) {
+        entries.removeAll { $0.windowId == windowId }
+    }
+
     var isEmpty: Bool { entries.isEmpty }
     var count: Int { entries.count }
+
+    func snapshot() -> [FocusHistoryEntry] {
+        entries
+    }
 }
 
 // MARK: - ProjectManager
@@ -152,7 +175,9 @@ struct FocusStack {
 /// - Project selection, closing, and exit
 /// - Focus capture/restore for switcher UX
 ///
-/// Thread Safety: Not thread-safe. Most methods must be called from the main thread.
+/// Thread Safety: ProjectManager state is serialized internally, so callers may invoke
+/// methods from background queues without racing mutable state. Long-running AeroSpace
+/// CLI calls still execute on the caller's thread/queue (callers should dispatch off-main).
 /// Exception: `restoreFocus(_:)`, `focusWorkspace(name:)`, and `focusWindow(windowId:)` may be
 /// called from a detached task for non-blocking focus restoration (these only invoke AeroSpace CLI
 /// commands and do not mutate ProjectManager state).
@@ -165,13 +190,27 @@ public final class ProjectManager {
     private let windowPollTimeout: TimeInterval
     private let windowPollInterval: TimeInterval
     private static let maxRecentProjects = 100
+    private static let focusHistoryMaxEntries = 20
+    private static let focusHistoryMaxAge: TimeInterval = 7 * 24 * 60 * 60
 
-    // Config
+    // State (serialized via stateQueue)
     private var config: Config?
     private let configLoader: () -> Result<ConfigLoadSuccess, ConfigLoadError>
 
     /// Non-fatal warnings from the most recent config load.
-    public private(set) var configWarnings: [ConfigFinding] = []
+    public private(set) var configWarnings: [ConfigFinding] {
+        get { withState { configWarningsStorage } }
+        set { withState { configWarningsStorage = newValue } }
+    }
+    private var configWarningsStorage: [ConfigFinding] = []
+
+    /// Called when the project list changes after a config load.
+    /// Fires on first load (nil → projects) and on subsequent loads when the project list differs.
+    public var onProjectsChanged: (([ProjectConfig]) -> Void)? {
+        get { withState { onProjectsChangedStorage } }
+        set { withState { onProjectsChangedStorage = newValue } }
+    }
+    private var onProjectsChangedStorage: (([ProjectConfig]) -> Void)?
 
     // Recency tracking - simple list of project IDs, most recent first
     private var recentProjectIds: [String] = []
@@ -179,11 +218,18 @@ public final class ProjectManager {
 
     // File I/O abstraction for testability (recency + persistence).
     private let fileSystem: FileSystem
+    private let focusHistoryStore: FocusHistoryStore
 
     // Focus stack for "exit project space" restoration (non-project windows only)
-    private var focusStack = FocusStack()
+    private var focusStack = FocusStack(maxSize: ProjectManager.focusHistoryMaxEntries)
     // Most recently observed non-project focus for restoration fallback.
-    private var mostRecentNonProjectFocus: CapturedFocus?
+    private var mostRecentNonProjectFocus: FocusHistoryEntry?
+
+    // Serializes all mutable state across background + main usage.
+    private let stateQueue = DispatchQueue(label: "com.agentpanel.project_manager.state")
+    private let stateQueueKey = DispatchSpecificKey<Bool>()
+    private let persistenceQueue = DispatchQueue(label: "com.agentpanel.project_manager.persistence")
+    private let persistenceQueueKey = DispatchSpecificKey<Bool>()
 
     // Internal dependencies
     private let aerospace: AeroSpaceProviding
@@ -200,13 +246,9 @@ public final class ProjectManager {
 
     // MARK: - Public Properties
 
-    /// Called when the project list changes after a config load.
-    /// Fires on first load (nil → projects) and on subsequent loads when the project list differs.
-    public var onProjectsChanged: (([ProjectConfig]) -> Void)?
-
     /// All projects from config, or empty if config not loaded.
     public var projects: [ProjectConfig] {
-        config?.projects ?? []
+        withState { config?.projects ?? [] }
     }
 
     /// Returns the open + focused AgentPanel workspace state from a single AeroSpace query.
@@ -256,11 +298,12 @@ public final class ProjectManager {
         processChecker: RunningApplicationChecking? = nil
     ) {
         let dataPaths = DataPaths.default()
+        let fileSystem = DefaultFileSystem()
         self.aerospace = ApAeroSpace(processChecker: processChecker)
         self.ideLauncher = ApVSCodeLauncher()
         self.agentLayerIdeLauncher = ApAgentLayerVSCodeLauncher()
         self.chromeLauncher = ApChromeLauncher()
-        self.chromeTabStore = ChromeTabStore(directory: dataPaths.chromeTabsDirectory)
+        self.chromeTabStore = ChromeTabStore(directory: dataPaths.chromeTabsDirectory, fileSystem: fileSystem)
         self.chromeTabCapture = ApChromeTabController()
         self.gitRemoteResolver = GitRemoteResolver()
         self.windowPositioner = windowPositioner
@@ -271,11 +314,20 @@ public final class ProjectManager {
         self.logger = AgentPanelLogger()
         self.recencyFilePath = dataPaths.recentProjectsFile
         self.configLoader = { Config.loadDefault() }
-        self.fileSystem = DefaultFileSystem()
+        self.fileSystem = fileSystem
+        self.focusHistoryStore = FocusHistoryStore(
+            fileURL: dataPaths.stateFile,
+            fileSystem: fileSystem,
+            maxAge: Self.focusHistoryMaxAge,
+            maxEntries: Self.focusHistoryMaxEntries
+        )
         self.windowPollTimeout = Self.defaultWindowPollTimeout
         self.windowPollInterval = Self.defaultWindowPollInterval
 
+        configureStateQueue()
+        configurePersistenceQueue()
         loadRecency()
+        loadFocusHistory()
     }
 
     /// Creates a ProjectManager with injected dependencies (for testing).
@@ -289,6 +341,7 @@ public final class ProjectManager {
         gitRemoteResolver: GitRemoteResolving,
         logger: AgentPanelLogging,
         recencyFilePath: URL,
+        focusHistoryFilePath: URL,
         configLoader: @escaping () -> Result<ConfigLoadSuccess, ConfigLoadError> = { Config.loadDefault() },
         fileSystem: FileSystem = DefaultFileSystem(),
         windowPositioner: WindowPositioning? = nil,
@@ -311,10 +364,27 @@ public final class ProjectManager {
         self.recencyFilePath = recencyFilePath
         self.configLoader = configLoader
         self.fileSystem = fileSystem
+        self.focusHistoryStore = FocusHistoryStore(
+            fileURL: focusHistoryFilePath,
+            fileSystem: fileSystem,
+            maxAge: Self.focusHistoryMaxAge,
+            maxEntries: Self.focusHistoryMaxEntries
+        )
         self.windowPollTimeout = windowPollTimeout
         self.windowPollInterval = windowPollInterval
 
+        configureStateQueue()
+        configurePersistenceQueue()
         loadRecency()
+        loadFocusHistory()
+    }
+
+    private func configureStateQueue() {
+        stateQueue.setSpecific(key: stateQueueKey, value: true)
+    }
+
+    private func configurePersistenceQueue() {
+        persistenceQueue.setSpecific(key: persistenceQueueKey, value: true)
     }
 
     // MARK: - Configuration
@@ -324,12 +394,75 @@ public final class ProjectManager {
     /// Use this when you need to read layout config without triggering a config load
     /// (which would mutate shared state on failure).
     public var currentLayoutConfig: LayoutConfig {
-        config?.layout ?? LayoutConfig()
+        withState { config?.layout ?? LayoutConfig() }
     }
 
     /// Sets config directly for testing (internal; accessible via @testable import).
     func loadTestConfig(_ config: Config) {
-        self.config = config
+        withState {
+            self.config = config
+        }
+    }
+
+    private func withState<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: stateQueueKey) == true {
+            return work()
+        }
+        return stateQueue.sync { work() }
+    }
+
+    private func withPersistence<T>(_ work: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: persistenceQueueKey) == true {
+            return work()
+        }
+        return persistenceQueue.sync { work() }
+    }
+
+    private struct FocusHistorySnapshot {
+        let stackCount: Int
+        let recentWindowId: Int?
+    }
+
+    private func focusHistorySnapshot() -> FocusHistorySnapshot {
+        withState {
+            FocusHistorySnapshot(
+                stackCount: focusStack.count,
+                recentWindowId: mostRecentNonProjectFocus?.windowId
+            )
+        }
+    }
+
+    private func focusHistoryContext(
+        windowId: Int? = nil,
+        workspace: String? = nil,
+        appBundleId: String? = nil,
+        method: String? = nil,
+        reason: String? = nil,
+        snapshot: FocusHistorySnapshot? = nil
+    ) -> [String: String] {
+        var context: [String: String] = [:]
+        if let windowId {
+            context["window_id"] = "\(windowId)"
+        }
+        if let workspace {
+            context["workspace"] = workspace
+        }
+        if let appBundleId {
+            context["app_bundle_id"] = appBundleId
+        }
+        if let method {
+            context["method"] = method
+        }
+        if let reason {
+            context["reason"] = reason
+        }
+        if let snapshot {
+            context["stack_count"] = "\(snapshot.stackCount)"
+            if let recentWindowId = snapshot.recentWindowId {
+                context["recent_window_id"] = "\(recentWindowId)"
+            }
+        }
+        return context
     }
 
     /// Pushes a focus entry directly onto the focus stack (no filtering).
@@ -339,7 +472,12 @@ public final class ProjectManager {
     /// tested via integration tests that drive through `selectProject` directly.
     /// Internal; accessible via @testable import.
     func pushFocusForTest(_ focus: CapturedFocus) {
-        focusStack.push(focus)
+        let entry = FocusHistoryEntry(focus: focus, capturedAt: Date())
+        withState {
+            focusStack.push(entry)
+            mostRecentNonProjectFocus = entry
+        }
+        persistFocusHistory()
     }
 
     /// Loads configuration from the default path.
@@ -347,19 +485,24 @@ public final class ProjectManager {
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
     public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
-        let oldProjects = config?.projects ?? []
+        let oldProjects = withState { config?.projects ?? [] }
         switch configLoader() {
         case .success(let success):
-            self.config = success.config
-            self.configWarnings = success.warnings
+            withState {
+                self.config = success.config
+                self.configWarningsStorage = success.warnings
+            }
             logEvent("config.loaded", context: ["project_count": "\(success.config.projects.count)"])
             if success.config.projects != oldProjects {
-                onProjectsChanged?(success.config.projects)
+                let callback = onProjectsChanged
+                callback?(success.config.projects)
             }
             return .success(success)
         case .failure(let error):
-            self.config = nil
-            self.configWarnings = []
+            withState {
+                self.config = nil
+                self.configWarningsStorage = []
+            }
             logEvent("config.failed", level: .error, message: "\(error)")
             return .failure(error)
         }
@@ -375,9 +518,7 @@ public final class ProjectManager {
             return nil
         case .success(let window):
             let captured = CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId, workspace: window.workspace)
-            if !captured.workspace.hasPrefix(Self.workspacePrefix) {
-                mostRecentNonProjectFocus = captured
-            }
+            updateMostRecentNonProjectFocus(captured)
             logEvent("focus.captured", context: [
                 "window_id": "\(captured.windowId)",
                 "app_bundle_id": captured.appBundleId,
@@ -457,6 +598,266 @@ public final class ProjectManager {
         return false
     }
 
+    /// Synchronous variant of `focusWindowStable` for non-async callers.
+    ///
+    /// Must be called off the main thread (blocks while polling).
+    @discardableResult
+    private func focusWindowStableSync(
+        windowId: Int,
+        timeout: TimeInterval,
+        pollInterval: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            switch aerospace.focusedWindow() {
+            case .success(let focused) where focused.windowId == windowId:
+                return true
+            default:
+                _ = aerospace.focusWindow(windowId: windowId)
+            }
+
+            Thread.sleep(forTimeInterval: pollInterval)
+        }
+
+        return false
+    }
+
+    private func updateMostRecentNonProjectFocus(_ focus: CapturedFocus) {
+        guard !focus.workspace.hasPrefix(Self.workspacePrefix) else { return }
+        let entry = FocusHistoryEntry(focus: focus, capturedAt: Date())
+        withState {
+            mostRecentNonProjectFocus = entry
+        }
+        persistFocusHistory()
+    }
+
+    private func pushNonProjectFocusForExit(_ focus: CapturedFocus) {
+        guard !focus.workspace.hasPrefix(Self.workspacePrefix) else { return }
+        let entry = FocusHistoryEntry(focus: focus, capturedAt: Date())
+        let snapshot = withState {
+            focusStack.push(entry)
+            mostRecentNonProjectFocus = entry
+            return FocusHistorySnapshot(
+                stackCount: focusStack.count,
+                recentWindowId: mostRecentNonProjectFocus?.windowId
+            )
+        }
+        persistFocusHistory()
+        let context = focusHistoryContext(
+            windowId: focus.windowId,
+            workspace: focus.workspace,
+            appBundleId: focus.appBundleId,
+            snapshot: snapshot
+        )
+        logEvent("focus.history.push", context: context.isEmpty ? nil : context)
+    }
+
+    private func invalidateFocusHistory(windowId: Int, reason: String) {
+        let snapshot = withState {
+            focusStack.remove(windowId: windowId)
+            if mostRecentNonProjectFocus?.windowId == windowId {
+                mostRecentNonProjectFocus = nil
+            }
+            return FocusHistorySnapshot(
+                stackCount: focusStack.count,
+                recentWindowId: mostRecentNonProjectFocus?.windowId
+            )
+        }
+        persistFocusHistory()
+        let context = focusHistoryContext(
+            windowId: windowId,
+            reason: reason,
+            snapshot: snapshot
+        )
+        logEvent("focus.history.invalidate", context: context.isEmpty ? nil : context)
+    }
+
+    private func popNextFocusStackEntry() -> (FocusHistoryEntry, FocusHistorySnapshot)? {
+        let result = withState {
+            guard let entry = focusStack.pop() else { return nil as (FocusHistoryEntry, FocusHistorySnapshot)? }
+            let snapshot = FocusHistorySnapshot(
+                stackCount: focusStack.count,
+                recentWindowId: mostRecentNonProjectFocus?.windowId
+            )
+            return (entry, snapshot)
+        }
+        if result != nil {
+            persistFocusHistory()
+        }
+        return result
+    }
+
+    private func peekMostRecentNonProjectCandidate(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
+        guard let recent = withState({ mostRecentNonProjectFocus }) else { return nil }
+        guard let window = windowLookup[recent.windowId] else {
+            invalidateFocusHistory(windowId: recent.windowId, reason: "window_missing")
+            return nil
+        }
+        guard !window.workspace.hasPrefix(Self.workspacePrefix) else {
+            invalidateFocusHistory(windowId: recent.windowId, reason: "project_workspace")
+            return nil
+        }
+        guard window.appBundleId == recent.appBundleId else {
+            invalidateFocusHistory(windowId: recent.windowId, reason: "app_mismatch")
+            return nil
+        }
+        return CapturedFocus(
+            windowId: window.windowId,
+            appBundleId: window.appBundleId,
+            workspace: window.workspace
+        )
+    }
+
+    private func listAllWindowsById() -> [Int: ApWindow]? {
+        switch aerospace.listAllWindows() {
+        case .failure(let error):
+            logEvent("focus.window_lookup.failed", level: .warn, message: error.message)
+            return nil
+        case .success(let windows):
+            var lookup: [Int: ApWindow] = [:]
+            lookup.reserveCapacity(windows.count)
+            for window in windows {
+                lookup[window.windowId] = window
+            }
+            return lookup
+        }
+    }
+
+    private func updateMostRecentNonProjectFocus(
+        windowId: Int,
+        windowLookup: [Int: ApWindow]
+    ) {
+        guard let window = windowLookup[windowId],
+              !window.workspace.hasPrefix(Self.workspacePrefix) else { return }
+        let focus = CapturedFocus(
+            windowId: window.windowId,
+            appBundleId: window.appBundleId,
+            workspace: window.workspace
+        )
+        updateMostRecentNonProjectFocus(focus)
+    }
+
+    private func restoreNonProjectFocus(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
+        if let focus = restoreNonProjectFocusFromStack(windowLookup: windowLookup) {
+            return focus
+        }
+        if let focus = restoreMostRecentNonProjectFocus(windowLookup: windowLookup) {
+            return focus
+        }
+        let snapshot = focusHistorySnapshot()
+        let context = focusHistoryContext(reason: "exhausted", snapshot: snapshot)
+        logEvent("focus.history.exhausted", level: .warn, context: context.isEmpty ? nil : context)
+        return nil
+    }
+
+    private func restoreNonProjectFocusFromStack(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
+        while let (candidate, snapshot) = popNextFocusStackEntry() {
+            guard let window = windowLookup[candidate.windowId] else {
+                invalidateFocusHistory(windowId: candidate.windowId, reason: "window_missing")
+                continue
+            }
+            if window.workspace.hasPrefix(Self.workspacePrefix) {
+                invalidateFocusHistory(windowId: candidate.windowId, reason: "project_workspace")
+                continue
+            }
+            if window.appBundleId != candidate.appBundleId {
+                invalidateFocusHistory(windowId: candidate.windowId, reason: "app_mismatch")
+                continue
+            }
+            let resolved = CapturedFocus(
+                windowId: window.windowId,
+                appBundleId: window.appBundleId,
+                workspace: window.workspace
+            )
+            let attemptContext = focusHistoryContext(
+                windowId: resolved.windowId,
+                workspace: resolved.workspace,
+                appBundleId: resolved.appBundleId,
+                method: "stack",
+                snapshot: snapshot
+            )
+            logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+
+            if focusWindowStableSync(
+                windowId: resolved.windowId,
+                timeout: windowPollTimeout,
+                pollInterval: windowPollInterval
+            ) {
+                updateMostRecentNonProjectFocus(resolved)
+                let successSnapshot = focusHistorySnapshot()
+                let successContext = focusHistoryContext(
+                    windowId: resolved.windowId,
+                    workspace: resolved.workspace,
+                    appBundleId: resolved.appBundleId,
+                    method: "stack",
+                    snapshot: successSnapshot
+                )
+                logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
+                return resolved
+            }
+
+            let failureSnapshot = focusHistorySnapshot()
+            let failureContext = focusHistoryContext(
+                windowId: resolved.windowId,
+                workspace: resolved.workspace,
+                appBundleId: resolved.appBundleId,
+                method: "stack",
+                reason: "focus_failed",
+                snapshot: failureSnapshot
+            )
+            logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
+            invalidateFocusHistory(windowId: resolved.windowId, reason: "focus_failed")
+        }
+        return nil
+    }
+
+    private func restoreMostRecentNonProjectFocus(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
+        guard let candidate = peekMostRecentNonProjectCandidate(windowLookup: windowLookup) else {
+            return nil
+        }
+        let attemptSnapshot = focusHistorySnapshot()
+        let attemptContext = focusHistoryContext(
+            windowId: candidate.windowId,
+            workspace: candidate.workspace,
+            appBundleId: candidate.appBundleId,
+            method: "recent",
+            snapshot: attemptSnapshot
+        )
+        logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+
+        if focusWindowStableSync(
+            windowId: candidate.windowId,
+            timeout: windowPollTimeout,
+            pollInterval: windowPollInterval
+        ) {
+            updateMostRecentNonProjectFocus(candidate)
+            let successSnapshot = focusHistorySnapshot()
+            let successContext = focusHistoryContext(
+                windowId: candidate.windowId,
+                workspace: candidate.workspace,
+                appBundleId: candidate.appBundleId,
+                method: "recent",
+                snapshot: successSnapshot
+            )
+            logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
+            return candidate
+        }
+
+        let failureSnapshot = focusHistorySnapshot()
+        let failureContext = focusHistoryContext(
+            windowId: candidate.windowId,
+            workspace: candidate.workspace,
+            appBundleId: candidate.appBundleId,
+            method: "recent",
+            reason: "focus_failed",
+            snapshot: failureSnapshot
+        )
+        logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
+        invalidateFocusHistory(windowId: candidate.windowId, reason: "focus_failed")
+        return nil
+    }
+
     // MARK: - Project Sorting
 
     /// Returns projects sorted and filtered for display.
@@ -466,10 +867,11 @@ public final class ProjectManager {
     public func sortedProjects(query: String) -> [ProjectConfig] {
         let projects = self.projects
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let recencySnapshot = withState { recentProjectIds }
 
         // Build recency map: projectId -> rank (0 = most recent)
         var recencyRank: [String: Int] = [:]
-        for (index, projectId) in recentProjectIds.enumerated() {
+        for (index, projectId) in recencySnapshot.enumerated() {
             if recencyRank[projectId] == nil {
                 recencyRank[projectId] = index
             }
@@ -481,7 +883,7 @@ public final class ProjectManager {
             configOrder[project.id] = index
         }
 
-        let noHistoryRank = recentProjectIds.count
+        let noHistoryRank = recencySnapshot.count
 
         if trimmedQuery.isEmpty {
             // No filter, just sort by recency then config order
@@ -554,11 +956,12 @@ public final class ProjectManager {
     ///     focus when exiting the project later.
     /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError> {
-        guard config != nil else {
+        let configSnapshot = withState { config }
+        guard let configSnapshot else {
             return .failure(.configNotLoaded)
         }
 
-        guard let project = projects.first(where: { $0.id == projectId }) else {
+        guard let project = configSnapshot.projects.first(where: { $0.id == projectId }) else {
             logEvent("select.project_not_found", level: .warn, context: ["project_id": projectId])
             return .failure(.projectNotFound(projectId: projectId))
         }
@@ -569,8 +972,7 @@ public final class ProjectManager {
         // Only push if the user is coming from outside project space.
         // Project-to-project switches (ap-* workspace) are not recorded.
         if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
-            focusStack.push(preCapturedFocus)
-            mostRecentNonProjectFocus = preCapturedFocus
+            pushNonProjectFocusForExit(preCapturedFocus)
         } else {
             logEvent("focus.push_skipped_project_workspace", context: [
                 "workspace": preCapturedFocus.workspace,
@@ -692,6 +1094,10 @@ public final class ProjectManager {
             break
         }
 
+        // Ensure moved project windows are removed from non-project focus history.
+        invalidateFocusHistory(windowId: chromeWindowId, reason: "moved_to_project")
+        invalidateFocusHistory(windowId: ideWindowId, reason: "moved_to_project")
+
         if !(await ensureWorkspaceFocused(name: targetWorkspace)) {
             let detail = "Workspace \(targetWorkspace) could not be focused within timeout"
             logEvent("select.workspace_focus_failed", level: .error, message: detail)
@@ -725,11 +1131,12 @@ public final class ProjectManager {
 
     /// Closes a project by ID and restores focus to non-project space.
     public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
-        guard config != nil else {
+        let configSnapshot = withState { config }
+        guard let configSnapshot else {
             return .failure(.configNotLoaded)
         }
 
-        guard projects.contains(where: { $0.id == projectId }) else {
+        guard configSnapshot.projects.contains(where: { $0.id == projectId }) else {
             return .failure(.projectNotFound(projectId: projectId))
         }
 
@@ -749,16 +1156,14 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to non-project space (pop from focus stack)
-        if let focus = focusStack.popFirstValid(isValid: { entry in
-            self.focusWindow(windowId: entry.windowId)
-        }) {
+        // Restore focus to non-project space (validated via current window lookup)
+        var restoredFocus: CapturedFocus?
+        if let windowLookup = listAllWindowsById() {
+            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
+        }
+
+        if let focus = restoredFocus {
             logEvent("close.focus_restored", context: [
-                "window_id": "\(focus.windowId)",
-                "workspace": focus.workspace
-            ])
-        } else if let focus = restoreMostRecentNonProjectFocus() {
-            logEvent("close.focus_restored_recent_non_project", context: [
                 "window_id": "\(focus.windowId)",
                 "workspace": focus.workspace
             ])
@@ -778,15 +1183,17 @@ public final class ProjectManager {
     ///   - projectId: Target project ID (workspace will be `ap-<projectId>`).
     /// - Returns: Success or error.
     public func moveWindowToProject(windowId: Int, projectId: String) -> Result<Void, ProjectError> {
-        guard config != nil else {
+        let configSnapshot = withState { config }
+        guard let configSnapshot else {
             return .failure(.configNotLoaded)
         }
-        guard projects.contains(where: { $0.id == projectId }) else {
+        guard configSnapshot.projects.contains(where: { $0.id == projectId }) else {
             return .failure(.projectNotFound(projectId: projectId))
         }
         let targetWorkspace = Self.workspacePrefix + projectId
         switch aerospace.moveWindowToWorkspace(workspace: targetWorkspace, windowId: windowId, focusFollows: false) {
         case .success:
+            invalidateFocusHistory(windowId: windowId, reason: "moved_to_project")
             logEvent("move_window.completed", context: [
                 "window_id": "\(windowId)",
                 "project_id": projectId,
@@ -806,11 +1213,15 @@ public final class ProjectManager {
     /// - Parameter windowId: AeroSpace window ID of the window to move.
     /// - Returns: Success or error.
     public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError> {
-        guard config != nil else {
+        let configSnapshot = withState { config }
+        guard configSnapshot != nil else {
             return .failure(.configNotLoaded)
         }
         switch aerospace.moveWindowToWorkspace(workspace: "1", windowId: windowId, focusFollows: false) {
         case .success:
+            if let windowLookup = listAllWindowsById() {
+                updateMostRecentNonProjectFocus(windowId: windowId, windowLookup: windowLookup)
+            }
             logEvent("move_window_from_project.completed", context: [
                 "window_id": "\(windowId)"
             ])
@@ -841,17 +1252,13 @@ public final class ProjectManager {
         // Capture window positions before exiting (non-fatal)
         captureWindowPositions(projectId: activeProjectId)
 
-        if let focus = focusStack.popFirstValid(isValid: { entry in
-            self.focusWindow(windowId: entry.windowId)
-        }) {
+        var restoredFocus: CapturedFocus?
+        if let windowLookup = listAllWindowsById() {
+            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
+        }
+
+        if let focus = restoredFocus {
             logEvent("exit.focus_restored", context: [
-                "window_id": "\(focus.windowId)",
-                "workspace": focus.workspace
-            ])
-            logEvent("exit.completed")
-            return .success(())
-        } else if let focus = restoreMostRecentNonProjectFocus() {
-            logEvent("exit.focus_restored_recent_non_project", context: [
                 "window_id": "\(focus.windowId)",
                 "workspace": focus.workspace
             ])
@@ -885,7 +1292,7 @@ public final class ProjectManager {
                   !windows.isEmpty else { continue }
             guard focusWorkspace(name: candidate.workspace) else { continue }
             guard let focused = focusFirstWindow(windows) else { continue }
-            mostRecentNonProjectFocus = focused
+            updateMostRecentNonProjectFocus(focused)
             return candidate.workspace
         }
         return nil
@@ -905,21 +1312,6 @@ public final class ProjectManager {
                 )
             }
         }
-        return nil
-    }
-
-    /// Attempts to restore focus using the most recently observed non-project window.
-    ///
-    /// Returns nil when there is no remembered window or when the remembered window
-    /// can no longer be focused (stale window ID).
-    private func restoreMostRecentNonProjectFocus() -> CapturedFocus? {
-        guard let recent = mostRecentNonProjectFocus else {
-            return nil
-        }
-        if focusWindow(windowId: recent.windowId) {
-            return recent
-        }
-        mostRecentNonProjectFocus = nil
         return nil
     }
 
@@ -1098,7 +1490,7 @@ public final class ProjectManager {
         guard let positioner = windowPositioner,
               let detector = screenModeDetector,
               let store = windowPositionStore,
-              let config = config else {
+              let config = withState({ config }) else {
             return nil
         }
 
@@ -1274,7 +1666,7 @@ public final class ProjectManager {
         guard let positioner = windowPositioner,
               let detector = screenModeDetector,
               let store = windowPositionStore,
-              let config = config else {
+              let config = withState({ config }) else {
             return
         }
 
@@ -1346,7 +1738,7 @@ public final class ProjectManager {
     ///   - projectId: Project identifier.
     /// - Returns: Ordered list of URLs to open, or empty if none.
     private func resolveInitialURLs(project: ProjectConfig, projectId: String) -> [String] {
-        guard let config else { return [] }
+        guard let config = withState({ config }) else { return [] }
 
         // Load saved tab snapshot
         let snapshot: ChromeTabSnapshot?
@@ -1386,7 +1778,7 @@ public final class ProjectManager {
     ///
     /// - Returns: Warning message if capture failed, nil on success.
     private func performTabCapture(projectId: String) -> String? {
-        guard config != nil else { return nil }
+        guard withState({ config != nil }) else { return nil }
 
         let windowTitle = "\(ApIdeToken.prefix)\(projectId)"
 
@@ -1424,32 +1816,113 @@ public final class ProjectManager {
         }
     }
 
+    // MARK: - Focus History Persistence
+
+    private func loadFocusHistory() {
+        let loadResult = withPersistence {
+            focusHistoryStore.load(now: Date())
+        }
+        switch loadResult {
+        case .success(nil):
+            withState {
+                focusStack = FocusStack(maxSize: Self.focusHistoryMaxEntries)
+                mostRecentNonProjectFocus = nil
+            }
+        case .success(let outcome?):
+            withState {
+                focusStack = FocusStack(entries: outcome.state.stack, maxSize: Self.focusHistoryMaxEntries)
+                mostRecentNonProjectFocus = outcome.state.mostRecent
+            }
+            if outcome.prunedCount > 0 || outcome.droppedMostRecent {
+                var context: [String: String] = [
+                    "stack_pruned": "\(outcome.prunedCount)"
+                ]
+                if outcome.droppedMostRecent {
+                    context["most_recent_dropped"] = "true"
+                }
+                logEvent("focus.history.pruned", context: context)
+                persistFocusHistory()
+            }
+        case .failure(let error):
+            logEvent(
+                "focus.history.load_failed",
+                level: .warn,
+                message: error.message,
+                context: ["detail": error.detail ?? ""]
+            )
+            withState {
+                focusStack = FocusStack(maxSize: Self.focusHistoryMaxEntries)
+                mostRecentNonProjectFocus = nil
+            }
+        }
+    }
+
+    private func focusHistoryStateSnapshot() -> FocusHistoryState {
+        withState {
+            FocusHistoryState(
+                version: FocusHistoryStore.currentVersion,
+                stack: focusStack.snapshot(),
+                mostRecent: mostRecentNonProjectFocus
+            )
+        }
+    }
+
+    private func persistFocusHistory() {
+        let snapshot = focusHistoryStateSnapshot()
+        let saveResult = withPersistence {
+            focusHistoryStore.save(state: snapshot)
+        }
+        switch saveResult {
+        case .success:
+            break
+        case .failure(let error):
+            logEvent(
+                "focus.history.save_failed",
+                level: .warn,
+                message: error.message,
+                context: ["detail": error.detail ?? ""]
+            )
+        }
+    }
+
     // MARK: - Recency Tracking
 
     private func recordActivation(projectId: String) {
         // Remove existing entry if present
-        recentProjectIds.removeAll { $0 == projectId }
-        // Add to front
-        recentProjectIds.insert(projectId, at: 0)
-        // Trim to max
-        if recentProjectIds.count > Self.maxRecentProjects {
-            recentProjectIds = Array(recentProjectIds.prefix(Self.maxRecentProjects))
+        withState {
+            recentProjectIds.removeAll { $0 == projectId }
+            // Add to front
+            recentProjectIds.insert(projectId, at: 0)
+            // Trim to max
+            if recentProjectIds.count > Self.maxRecentProjects {
+                recentProjectIds = Array(recentProjectIds.prefix(Self.maxRecentProjects))
+            }
         }
         saveRecency()
     }
 
     private func loadRecency() {
-        guard fileSystem.fileExists(at: recencyFilePath) else {
-            recentProjectIds = []
-            return
+        let loadResult: Result<[String]?, Error> = withPersistence {
+            guard fileSystem.fileExists(at: recencyFilePath) else {
+                return .success(nil)
+            }
+
+            do {
+                let data = try fileSystem.readFile(at: recencyFilePath)
+                let ids = try JSONDecoder().decode([String].self, from: data)
+                return .success(ids)
+            } catch {
+                return .failure(error)
+            }
         }
 
-        do {
-            let data = try fileSystem.readFile(at: recencyFilePath)
-            let ids = try JSONDecoder().decode([String].self, from: data)
-            recentProjectIds = ids
-        } catch {
-            recentProjectIds = []
+        switch loadResult {
+        case .success(nil):
+            withState { recentProjectIds = [] }
+        case .success(let ids?):
+            withState { recentProjectIds = ids }
+        case .failure(let error):
+            withState { recentProjectIds = [] }
             logEvent(
                 "recency.load_failed",
                 level: .warn,
@@ -1462,7 +1935,8 @@ public final class ProjectManager {
     private func saveRecency() {
         let data: Data
         do {
-            data = try JSONEncoder().encode(recentProjectIds)
+            let snapshot = withState { recentProjectIds }
+            data = try JSONEncoder().encode(snapshot)
         } catch {
             logEvent(
                 "recency.encode_failed",
@@ -1473,11 +1947,17 @@ public final class ProjectManager {
             return
         }
 
-        // Ensure directory exists
         let directory = recencyFilePath.deletingLastPathComponent()
-        do {
-            try fileSystem.createDirectory(at: directory)
-        } catch {
+        let directoryResult: Result<Void, Error> = withPersistence {
+            do {
+                try fileSystem.createDirectory(at: directory)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+
+        if case .failure(let error) = directoryResult {
             logEvent(
                 "recency.directory_create_failed",
                 level: .warn,
@@ -1487,9 +1967,16 @@ public final class ProjectManager {
             return
         }
 
-        do {
-            try fileSystem.writeFile(at: recencyFilePath, data: data)
-        } catch {
+        let writeResult: Result<Void, Error> = withPersistence {
+            do {
+                try fileSystem.writeFile(at: recencyFilePath, data: data)
+                return .success(())
+            } catch {
+                return .failure(error)
+            }
+        }
+
+        if case .failure(let error) = writeResult {
             logEvent(
                 "recency.write_failed",
                 level: .warn,

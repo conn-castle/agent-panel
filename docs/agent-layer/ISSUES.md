@@ -27,6 +27,11 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-02-23 offscreen-window-auto-recovery-threshold: Auto-recover project windows that are materially offscreen
+    Priority: Medium. Area: Window recovery
+    Description: Project windows can remain partially offscreen; when more than 10% of a window is outside visible display bounds, placement should be auto-recovered.
+    Next step: Add a canonical offscreen-coverage calculation and trigger project window recovery when offscreen area exceeds the 10% threshold, with regression tests across single- and multi-display layouts.
+
 - Issue 2026-02-23 switcher-dismiss-latency-focus-safety: Switcher dismissal feels delayed after project selection
     Priority: Medium. Area: Switcher UX & focus orchestration
     Description: After selecting a project, the switcher often remains visible longer than expected, making transition feel sluggish.
@@ -57,12 +62,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: `AgentPanelApp.swift` (~1.3k LOC, highest recent churn) owns lifecycle, menu composition, health orchestration, recovery actions, and menu delegate behavior in one hotspot.
     Next step: Extract focused coordinators (for example health refresh, recovery actions, and menu state) and keep AppDelegate as a composition/wiring layer.
 
-- Issue 2026-02-22 projectmanager-thread-safety: ProjectManager is invoked from background queues despite non-thread-safe contract
-    Priority: High. Area: Concurrency
-    Description: `ProjectManager` documents main-thread-only usage, but `captureCurrentFocus`, `closeProject`, and `exitToNonProjectWindow` are called from global queues in app/switcher paths, risking races in mutable focus/config state.
-    Next step: Enforce a single concurrency boundary for ProjectManager (MainActor or serial executor) and route mutating operations through that boundary.
-    Notes: Likely contributor to `non-project-space-return-flaky` behavior.
-
 - Issue 2026-02-22 launch-at-login-rollback: Launch-at-login rollback failures are silently ignored
     Priority: Medium. Area: Startup & config
     Description: `toggleLaunchAtLogin()` uses `try?` during rollback after config write failure, so rollback errors are swallowed and runtime `SMAppService` state can diverge from config.
@@ -83,17 +82,7 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: Recent runs show `project_manager.position.ide_frame_read_failed` after 10 retries with `No window found with token 'AP:<project>'`, followed by `switcher.project.layout_warning`; activation continues but layout is skipped.
     Next step: Capture AX window titles/IDs on retry exhaustion and implement a guarded fallback for IDE frame selection when token matching fails after retries.
 
-- Issue 2026-02-22 non-project-space-return-flaky: Back-to-non-project-space action frequently fails
-    Priority: Medium. Area: Navigation
-    Description: Returning from a project space to a non-project space is unreliable and often does not complete correctly, causing inconsistent workspace state.
-    Next step: Reproduce with a deterministic test case and trace the navigation/state transition path to isolate the failure point.
-
 - Issue 2026-02-21 ci-preflight-brittle: Release preflight checks rely on literal workflow text patterns
     Priority: Low. Area: CI
     Description: `scripts/ci_preflight.sh` validates key release workflow policy (runner label and Xcode floor) with exact string matching and grep patterns. Equivalent semantic workflow refactors can fail preflight even when behavior is correct.
     Next step: Refactor preflight checks to parse and validate normalized policy values (runner + Xcode minimum) rather than exact text fragments.
-
-- Issue 2026-02-14 app-test-gap: No test target for AgentPanelApp (app-layer integration)
-    Priority: Low. Area: Testing
-    Description: `project.yml` only has test targets for `AgentPanelCore` and `AgentPanelCLICore`. The app delegate (auto-start at login, auto-doctor, menu wiring, focus capture) is not regression-protected by automated tests. Business logic is tested in Core, but app-layer integration (SMAppService calls, menu state, error-context auto-show) is manual-only.
-    Next step: Evaluate whether an `AgentPanelAppTests` target is feasible (AppKit requires a running app host). If not, document critical app-layer paths as manual test checklist.
