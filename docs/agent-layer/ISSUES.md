@@ -52,20 +52,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: `AgentPanelApp.swift` (~1.3k LOC, highest recent churn) owns lifecycle, menu composition, health orchestration, recovery actions, and menu delegate behavior in one hotspot.
     Next step: Extract focused coordinators (for example health refresh, recovery actions, and menu state) and keep AppDelegate as a composition/wiring layer.
 
-- Issue 2026-02-22 launch-at-login-rollback: Launch-at-login rollback failures are silently ignored
-    Priority: Medium. Area: Startup & config
-    Description: `toggleLaunchAtLogin()` uses `try?` during rollback after config write failure, so rollback errors are swallowed and runtime `SMAppService` state can diverge from config.
-    Next step: Replace silent rollback with explicit error handling/logging, then reconcile and surface mismatch between service status and config state.
-
 - Issue 2026-02-22 switcher-controller-hotspot: SwitcherPanelController is an oversized high-churn hotspot
     Priority: Medium. Area: Switcher architecture
     Description: `SwitcherPanelController.swift` concentrates lifecycle, workspace retry, filtering/model updates, operation dispatch, and status presentation in ~2k LOC, increasing coupling and regression risk.
     Next step: Extract cohesive units (for example workspace retry coordination and switcher operations orchestration) while keeping the panel controller presentation-focused.
-
-- Issue 2026-02-22 log-jsonl-corruption: Structured log file occasionally contains malformed non-JSON lines
-    Priority: High. Area: Logging
-    Description: Runtime logs produced at least one malformed fragment (`-02-22T00:07:13.863Z"}`) that is not valid JSON, which breaks JSONL parsers and weakens diagnostics.
-    Next step: Serialize app log writes/rotation with a single-writer lock strategy and add a stress test that validates every emitted line decodes as `LogEntry`.
 
 - Issue 2026-02-22 layout-token-miss: IDE token lookup intermittently fails and skips window positioning
     Priority: Medium. Area: Window positioning

@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         qos: .userInteractive
     )
     private let logger: AgentPanelLogging = AgentPanelLogger()
+    private let launchAtLoginToggler = LaunchAtLoginToggler()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
         screenModeDetector: ScreenModeDetector(),
@@ -1000,56 +1001,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Toggles the Launch at Login menu item.
     @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
-        let isCurrentlyEnabled = service.status == .enabled
-        let newValue = !isCurrentlyEnabled
-
-        if newValue {
-            do {
-                try service.register()
-                logAppEvent(event: "launch_at_login.toggled_on")
-            } catch {
-                logAppEvent(
-                    event: "launch_at_login.toggle_register_failed",
-                    level: .error,
-                    message: "Failed to enable launch at login: \(error.localizedDescription)"
-                )
-                return
-            }
-        } else {
-            do {
-                try service.unregister()
-                logAppEvent(event: "launch_at_login.toggled_off")
-            } catch {
-                logAppEvent(
-                    event: "launch_at_login.toggle_unregister_failed",
-                    level: .error,
-                    message: "Failed to disable launch at login: \(error.localizedDescription)"
-                )
-                return
-            }
-        }
-
-        // Write back to config.toml
         let configURL = DataPaths.default().configFile
-        do {
-            try ConfigWriteBack.setAutoStartAtLogin(newValue, in: configURL)
-            logAppEvent(event: "launch_at_login.config_written", context: ["value": "\(newValue)"])
-            menuItems?.launchAtLogin.title = "Launch at Login"
-        } catch {
-            logAppEvent(
-                event: "launch_at_login.config_write_failed",
-                level: .error,
-                message: "Config save failed: \(error.localizedDescription)"
-            )
-            // Rollback SMAppService toggle since config write failed
-            if newValue {
-                try? service.unregister()
-            } else {
-                try? service.register()
-            }
-            menuItems?.launchAtLogin.title = "Launch at Login"
+        let entries = launchAtLoginToggler.toggle(configURL: configURL)
+        for entry in entries {
+            _ = logger.log(payload: entry)
         }
+        menuItems?.launchAtLogin.title = "Launch at Login"
     }
 
     // MARK: - App Lifecycle State Management

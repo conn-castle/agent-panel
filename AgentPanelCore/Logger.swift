@@ -17,11 +17,46 @@ public protocol AgentPanelLogging {
     ) -> Result<Void, LogWriteError>
 }
 
+extension AgentPanelLogging {
+    /// Writes a structured log payload with a fresh timestamp.
+    /// - Parameter payload: Pre-built log payload fields.
+    /// - Returns: Success or a log write error.
+    public func log(payload: LogEventPayload) -> Result<Void, LogWriteError> {
+        log(event: payload.event, level: payload.level, message: payload.message, context: payload.context)
+    }
+}
+
 /// Log severity levels for AgentPanel.
 public enum LogLevel: String, Codable, Sendable {
     case info
     case warn
     case error
+}
+
+/// Structured log payload used by callers before timestamping.
+public struct LogEventPayload: Equatable, Sendable {
+    public let event: String
+    public let level: LogLevel
+    public let message: String?
+    public let context: [String: String]?
+
+    /// Creates a structured log payload.
+    /// - Parameters:
+    ///   - event: Event name to categorize the entry.
+    ///   - level: Severity level for the entry.
+    ///   - message: Optional human-readable message.
+    ///   - context: Optional structured context values.
+    public init(
+        event: String,
+        level: LogLevel = .info,
+        message: String? = nil,
+        context: [String: String]? = nil
+    ) {
+        self.event = event
+        self.level = level
+        self.message = message
+        self.context = context
+    }
 }
 
 /// Structured log entry encoded as a single JSON line.
@@ -59,6 +94,7 @@ public enum LogWriteError: Error, Equatable, Sendable {
     case invalidEvent
     case encodingFailed(String)
     case createDirectoryFailed(String)
+    case lockFailed(String)
     case fileSizeFailed(String)
     case rotationFailed(String)
     case writeFailed(String)
@@ -72,6 +108,8 @@ public enum LogWriteError: Error, Equatable, Sendable {
             return "Failed to encode log entry: \(detail)"
         case .createDirectoryFailed(let detail):
             return "Failed to create log directory: \(detail)"
+        case .lockFailed(let detail):
+            return "Failed to acquire log write lock: \(detail)"
         case .fileSizeFailed(let detail):
             return "Failed to read log file size: \(detail)"
         case .rotationFailed(let detail):
@@ -86,6 +124,8 @@ public enum LogWriteError: Error, Equatable, Sendable {
 public struct AgentPanelLogger {
     private static let defaultMaxLogSizeBytes: UInt64 = 10 * 1024 * 1024
     private static let defaultMaxArchives: Int = 5
+    /// Process-wide single-writer lock for log rotation and append operations.
+    private static let writeLock = NSLock()
 
     private let dataStore: DataPaths
     private let fileSystem: FileSystem
@@ -175,27 +215,36 @@ public struct AgentPanelLogger {
             return .failure(.encodingFailed(String(describing: error)))
         }
 
-        do {
-            try fileSystem.createDirectory(at: dataStore.logsDirectory)
-        } catch {
-            return .failure(.createDirectoryFailed(String(describing: error)))
-        }
+        AgentPanelLogger.writeLock.lock()
+        defer { AgentPanelLogger.writeLock.unlock() }
 
         do {
-            try rotateIfNeeded(appendingBytes: UInt64(encodedLine.count))
-        } catch let error as LogWriteError {
-            return .failure(error)
-        } catch {
-            return .failure(.rotationFailed(String(describing: error)))
-        }
+            return try fileSystem.withExclusiveFileLock(at: dataStore.logLockFile) {
+                do {
+                    try fileSystem.createDirectory(at: dataStore.logsDirectory)
+                } catch {
+                    return .failure(.createDirectoryFailed(String(describing: error)))
+                }
 
-        do {
-            try fileSystem.appendFile(at: dataStore.primaryLogFile, data: encodedLine)
-        } catch {
-            return .failure(.writeFailed(String(describing: error)))
-        }
+                do {
+                    try rotateIfNeeded(appendingBytes: UInt64(encodedLine.count))
+                } catch let error as LogWriteError {
+                    return .failure(error)
+                } catch {
+                    return .failure(.rotationFailed(String(describing: error)))
+                }
 
-        return .success(())
+                do {
+                    try fileSystem.appendFile(at: dataStore.primaryLogFile, data: encodedLine)
+                } catch {
+                    return .failure(.writeFailed(String(describing: error)))
+                }
+
+                return .success(())
+            }
+        } catch {
+            return .failure(.lockFailed(String(describing: error)))
+        }
     }
 
     /// Builds a UTC ISO-8601 timestamp string.
