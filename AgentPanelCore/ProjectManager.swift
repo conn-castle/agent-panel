@@ -192,6 +192,8 @@ public final class ProjectManager {
     private static let maxRecentProjects = 100
     private static let focusHistoryMaxEntries = 20
     private static let focusHistoryMaxAge: TimeInterval = 7 * 24 * 60 * 60
+    private static let focusRestoreMaxRetryAttempts = 2
+    private static let focusRestoreRetryMaxAge: TimeInterval = 10 * 60
 
     // State (serialized via stateQueue)
     private var config: Config?
@@ -224,6 +226,8 @@ public final class ProjectManager {
     private var focusStack = FocusStack(maxSize: ProjectManager.focusHistoryMaxEntries)
     // Most recently observed non-project focus for restoration fallback.
     private var mostRecentNonProjectFocus: FocusHistoryEntry?
+    // Retry bookkeeping for focus candidates that fail to stabilize.
+    private var focusRestoreRetryAttemptsByWindowId: [Int: Int] = [:]
 
     // Serializes all mutable state across background + main usage.
     private let stateQueue = DispatchQueue(label: "com.agentpanel.project_manager.state")
@@ -476,6 +480,7 @@ public final class ProjectManager {
         withState {
             focusStack.push(entry)
             mostRecentNonProjectFocus = entry
+            focusRestoreRetryAttemptsByWindowId[focus.windowId] = 0
         }
         persistFocusHistory()
     }
@@ -632,6 +637,7 @@ public final class ProjectManager {
         let entry = FocusHistoryEntry(focus: focus, capturedAt: Date())
         withState {
             mostRecentNonProjectFocus = entry
+            focusRestoreRetryAttemptsByWindowId[focus.windowId] = 0
         }
         persistFocusHistory()
     }
@@ -642,6 +648,7 @@ public final class ProjectManager {
         let snapshot = withState {
             focusStack.push(entry)
             mostRecentNonProjectFocus = entry
+            focusRestoreRetryAttemptsByWindowId[focus.windowId] = 0
             return FocusHistorySnapshot(
                 stackCount: focusStack.count,
                 recentWindowId: mostRecentNonProjectFocus?.windowId
@@ -663,6 +670,7 @@ public final class ProjectManager {
             if mostRecentNonProjectFocus?.windowId == windowId {
                 mostRecentNonProjectFocus = nil
             }
+            focusRestoreRetryAttemptsByWindowId.removeValue(forKey: windowId)
             return FocusHistorySnapshot(
                 stackCount: focusStack.count,
                 recentWindowId: mostRecentNonProjectFocus?.windowId
@@ -692,27 +700,6 @@ public final class ProjectManager {
         return result
     }
 
-    private func peekMostRecentNonProjectCandidate(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
-        guard let recent = withState({ mostRecentNonProjectFocus }) else { return nil }
-        guard let window = windowLookup[recent.windowId] else {
-            invalidateFocusHistory(windowId: recent.windowId, reason: "window_missing")
-            return nil
-        }
-        guard !window.workspace.hasPrefix(Self.workspacePrefix) else {
-            invalidateFocusHistory(windowId: recent.windowId, reason: "project_workspace")
-            return nil
-        }
-        guard window.appBundleId == recent.appBundleId else {
-            invalidateFocusHistory(windowId: recent.windowId, reason: "app_mismatch")
-            return nil
-        }
-        return CapturedFocus(
-            windowId: window.windowId,
-            appBundleId: window.appBundleId,
-            workspace: window.workspace
-        )
-    }
-
     private func listAllWindowsById() -> [Int: ApWindow]? {
         switch aerospace.listAllWindows() {
         case .failure(let error):
@@ -735,6 +722,8 @@ public final class ProjectManager {
     ) {
         guard let window = windowLookup[windowId],
               !destinationWorkspace.hasPrefix(Self.workspacePrefix) else { return }
+        // `windowLookup` reflects pre-move workspace membership. After a successful move,
+        // we intentionally trust `destinationWorkspace` as the authoritative workspace.
         let focus = CapturedFocus(
             windowId: window.windowId,
             appBundleId: window.appBundleId,
@@ -743,7 +732,25 @@ public final class ProjectManager {
         updateMostRecentNonProjectFocus(focus)
     }
 
-    private func preserveFocusHistoryForRetry(_ focus: CapturedFocus, capturedAt: Date) {
+    private func isFocusRestoreCandidateStale(capturedAt: Date) -> Bool {
+        Date().timeIntervalSince(capturedAt) > Self.focusRestoreRetryMaxAge
+    }
+
+    private func preserveFocusHistoryForRetry(_ focus: CapturedFocus, capturedAt: Date, method: String) {
+        if isFocusRestoreCandidateStale(capturedAt: capturedAt) {
+            invalidateFocusHistory(windowId: focus.windowId, reason: "retry_stale")
+            return
+        }
+        let retryAttempt = withState {
+            let nextAttempt = (focusRestoreRetryAttemptsByWindowId[focus.windowId] ?? 0) + 1
+            focusRestoreRetryAttemptsByWindowId[focus.windowId] = nextAttempt
+            return nextAttempt
+        }
+        guard retryAttempt <= Self.focusRestoreMaxRetryAttempts else {
+            invalidateFocusHistory(windowId: focus.windowId, reason: "retry_limit")
+            return
+        }
+
         let entry = FocusHistoryEntry(focus: focus, capturedAt: capturedAt)
         let snapshot = withState {
             focusStack.push(entry)
@@ -758,243 +765,162 @@ public final class ProjectManager {
             windowId: focus.windowId,
             workspace: focus.workspace,
             appBundleId: focus.appBundleId,
+            method: method,
             reason: "focus_unstable",
             snapshot: snapshot
         )
-        logEvent("focus.history.restore_preserved", level: .warn, context: context.isEmpty ? nil : context)
+        var enrichedContext = context
+        enrichedContext["retry_attempt"] = "\(retryAttempt)"
+        enrichedContext["retry_limit"] = "\(Self.focusRestoreMaxRetryAttempts)"
+        logEvent("focus.history.restore_preserved", level: .warn, context: enrichedContext.isEmpty ? nil : enrichedContext)
     }
 
-    private func restoreNonProjectFocus(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
-        if let focus = restoreNonProjectFocusFromStack(windowLookup: windowLookup) {
-            return focus
-        }
-        if let focus = restoreMostRecentNonProjectFocus(windowLookup: windowLookup) {
-            return focus
-        }
-        let snapshot = focusHistorySnapshot()
-        let context = focusHistoryContext(reason: "exhausted", snapshot: snapshot)
-        logEvent("focus.history.exhausted", level: .warn, context: context.isEmpty ? nil : context)
-        return nil
+    private struct FocusRestoreCandidate {
+        let focus: CapturedFocus
+        let capturedAt: Date
     }
 
-    private func restoreNonProjectFocusWithoutWindowLookup() -> CapturedFocus? {
-        if let focus = restoreNonProjectFocusFromStackWithoutWindowLookup() {
-            return focus
-        }
-        if let focus = restoreMostRecentNonProjectFocusWithoutWindowLookup() {
-            return focus
-        }
-        let snapshot = focusHistorySnapshot()
-        let context = focusHistoryContext(reason: "exhausted", snapshot: snapshot)
-        logEvent("focus.history.exhausted", level: .warn, context: context.isEmpty ? nil : context)
-        return nil
-    }
-
-    private func restoreNonProjectFocusFromStack(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
-        while let (candidate, snapshot) = popNextFocusStackEntry() {
+    private func resolveNonProjectFocusCandidate(
+        _ candidate: FocusHistoryEntry,
+        windowLookup: [Int: ApWindow]?
+    ) -> FocusRestoreCandidate? {
+        if let windowLookup {
             guard let window = windowLookup[candidate.windowId] else {
                 invalidateFocusHistory(windowId: candidate.windowId, reason: "window_missing")
-                continue
+                return nil
             }
-            if window.workspace.hasPrefix(Self.workspacePrefix) {
+            guard !window.workspace.hasPrefix(Self.workspacePrefix) else {
                 invalidateFocusHistory(windowId: candidate.windowId, reason: "project_workspace")
-                continue
+                return nil
             }
-            if window.appBundleId != candidate.appBundleId {
+            guard window.appBundleId == candidate.appBundleId else {
                 invalidateFocusHistory(windowId: candidate.windowId, reason: "app_mismatch")
-                continue
+                return nil
             }
-            let resolved = CapturedFocus(
-                windowId: window.windowId,
-                appBundleId: window.appBundleId,
-                workspace: window.workspace
+            return FocusRestoreCandidate(
+                focus: CapturedFocus(
+                    windowId: window.windowId,
+                    appBundleId: window.appBundleId,
+                    workspace: window.workspace
+                ),
+                capturedAt: candidate.capturedAt
             )
-            let attemptContext = focusHistoryContext(
-                windowId: resolved.windowId,
-                workspace: resolved.workspace,
-                appBundleId: resolved.appBundleId,
-                method: "stack",
-                snapshot: snapshot
-            )
-            logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+        }
 
-            if focusWindowStableSync(
-                windowId: resolved.windowId,
-                timeout: windowPollTimeout,
-                pollInterval: windowPollInterval
-            ) {
-                updateMostRecentNonProjectFocus(resolved)
-                let successSnapshot = focusHistorySnapshot()
-                let successContext = focusHistoryContext(
-                    windowId: resolved.windowId,
-                    workspace: resolved.workspace,
-                    appBundleId: resolved.appBundleId,
-                    method: "stack",
-                    snapshot: successSnapshot
-                )
-                logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
-                return resolved
-            }
-
-            let failureSnapshot = focusHistorySnapshot()
-            let failureContext = focusHistoryContext(
-                windowId: resolved.windowId,
-                workspace: resolved.workspace,
-                appBundleId: resolved.appBundleId,
-                method: "stack",
-                reason: "focus_failed",
-                snapshot: failureSnapshot
-            )
-            logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-            preserveFocusHistoryForRetry(resolved, capturedAt: candidate.capturedAt)
+        guard !candidate.workspace.hasPrefix(Self.workspacePrefix) else {
+            invalidateFocusHistory(windowId: candidate.windowId, reason: "project_workspace")
             return nil
         }
+        return FocusRestoreCandidate(focus: candidate.focus, capturedAt: candidate.capturedAt)
+    }
+
+    private func attemptRestoreFocusCandidate(
+        _ candidate: FocusRestoreCandidate,
+        method: String,
+        snapshot: FocusHistorySnapshot,
+        attemptedWindowIds: inout Set<Int>
+    ) -> CapturedFocus? {
+        let resolved = candidate.focus
+        if attemptedWindowIds.contains(resolved.windowId) {
+            return nil
+        }
+        attemptedWindowIds.insert(resolved.windowId)
+
+        let attemptContext = focusHistoryContext(
+            windowId: resolved.windowId,
+            workspace: resolved.workspace,
+            appBundleId: resolved.appBundleId,
+            method: method,
+            snapshot: snapshot
+        )
+        logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+
+        if focusWindowStableSync(
+            windowId: resolved.windowId,
+            timeout: windowPollTimeout,
+            pollInterval: windowPollInterval
+        ) {
+            updateMostRecentNonProjectFocus(resolved)
+            let successSnapshot = focusHistorySnapshot()
+            let successContext = focusHistoryContext(
+                windowId: resolved.windowId,
+                workspace: resolved.workspace,
+                appBundleId: resolved.appBundleId,
+                method: method,
+                snapshot: successSnapshot
+            )
+            logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
+            return resolved
+        }
+
+        let failureSnapshot = focusHistorySnapshot()
+        let failureContext = focusHistoryContext(
+            windowId: resolved.windowId,
+            workspace: resolved.workspace,
+            appBundleId: resolved.appBundleId,
+            method: method,
+            reason: "focus_failed",
+            snapshot: failureSnapshot
+        )
+        logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
+        preserveFocusHistoryForRetry(resolved, capturedAt: candidate.capturedAt, method: method)
         return nil
     }
 
-    private func restoreNonProjectFocusFromStackWithoutWindowLookup() -> CapturedFocus? {
+    private func restoreNonProjectFocus(windowLookup: [Int: ApWindow]?) -> CapturedFocus? {
+        var attemptedWindowIds: Set<Int> = []
+        if let focus = restoreNonProjectFocusFromStack(
+            windowLookup: windowLookup,
+            attemptedWindowIds: &attemptedWindowIds
+        ) {
+            return focus
+        }
+        if let focus = restoreMostRecentNonProjectFocus(
+            windowLookup: windowLookup,
+            attemptedWindowIds: &attemptedWindowIds
+        ) {
+            return focus
+        }
+        let snapshot = focusHistorySnapshot()
+        let context = focusHistoryContext(reason: "exhausted", snapshot: snapshot)
+        logEvent("focus.history.exhausted", level: .warn, context: context.isEmpty ? nil : context)
+        return nil
+    }
+
+    private func restoreNonProjectFocusFromStack(
+        windowLookup: [Int: ApWindow]?,
+        attemptedWindowIds: inout Set<Int>
+    ) -> CapturedFocus? {
+        let method = windowLookup == nil ? "stack-no-lookup" : "stack"
         while let (candidate, snapshot) = popNextFocusStackEntry() {
-            if candidate.workspace.hasPrefix(Self.workspacePrefix) {
-                invalidateFocusHistory(windowId: candidate.windowId, reason: "project_workspace")
+            guard let resolved = resolveNonProjectFocusCandidate(candidate, windowLookup: windowLookup) else {
                 continue
             }
-            let resolved = candidate.focus
-            let attemptContext = focusHistoryContext(
-                windowId: resolved.windowId,
-                workspace: resolved.workspace,
-                appBundleId: resolved.appBundleId,
-                method: "stack-no-lookup",
-                snapshot: snapshot
+            return attemptRestoreFocusCandidate(
+                resolved,
+                method: method,
+                snapshot: snapshot,
+                attemptedWindowIds: &attemptedWindowIds
             )
-            logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
-
-            if focusWindowStableSync(
-                windowId: resolved.windowId,
-                timeout: windowPollTimeout,
-                pollInterval: windowPollInterval
-            ) {
-                updateMostRecentNonProjectFocus(resolved)
-                let successSnapshot = focusHistorySnapshot()
-                let successContext = focusHistoryContext(
-                    windowId: resolved.windowId,
-                    workspace: resolved.workspace,
-                    appBundleId: resolved.appBundleId,
-                    method: "stack-no-lookup",
-                    snapshot: successSnapshot
-                )
-                logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
-                return resolved
-            }
-
-            let failureSnapshot = focusHistorySnapshot()
-            let failureContext = focusHistoryContext(
-                windowId: resolved.windowId,
-                workspace: resolved.workspace,
-                appBundleId: resolved.appBundleId,
-                method: "stack-no-lookup",
-                reason: "focus_failed",
-                snapshot: failureSnapshot
-            )
-            logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-            preserveFocusHistoryForRetry(resolved, capturedAt: candidate.capturedAt)
-            return nil
         }
         return nil
     }
 
-    private func restoreMostRecentNonProjectFocus(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
-        guard let candidate = peekMostRecentNonProjectCandidate(windowLookup: windowLookup) else {
+    private func restoreMostRecentNonProjectFocus(
+        windowLookup: [Int: ApWindow]?,
+        attemptedWindowIds: inout Set<Int>
+    ) -> CapturedFocus? {
+        guard let candidateEntry = withState({ mostRecentNonProjectFocus }),
+              let resolved = resolveNonProjectFocusCandidate(candidateEntry, windowLookup: windowLookup) else {
             return nil
         }
         let attemptSnapshot = focusHistorySnapshot()
-        let attemptContext = focusHistoryContext(
-            windowId: candidate.windowId,
-            workspace: candidate.workspace,
-            appBundleId: candidate.appBundleId,
-            method: "recent",
-            snapshot: attemptSnapshot
+        return attemptRestoreFocusCandidate(
+            resolved,
+            method: windowLookup == nil ? "recent-no-lookup" : "recent",
+            snapshot: attemptSnapshot,
+            attemptedWindowIds: &attemptedWindowIds
         )
-        logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
-
-        if focusWindowStableSync(
-            windowId: candidate.windowId,
-            timeout: windowPollTimeout,
-            pollInterval: windowPollInterval
-        ) {
-            updateMostRecentNonProjectFocus(candidate)
-            let successSnapshot = focusHistorySnapshot()
-            let successContext = focusHistoryContext(
-                windowId: candidate.windowId,
-                workspace: candidate.workspace,
-                appBundleId: candidate.appBundleId,
-                method: "recent",
-                snapshot: successSnapshot
-            )
-            logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
-            return candidate
-        }
-
-        let failureSnapshot = focusHistorySnapshot()
-        let failureContext = focusHistoryContext(
-            windowId: candidate.windowId,
-            workspace: candidate.workspace,
-            appBundleId: candidate.appBundleId,
-            method: "recent",
-            reason: "focus_failed",
-            snapshot: failureSnapshot
-        )
-        logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-        return nil
-    }
-
-    private func restoreMostRecentNonProjectFocusWithoutWindowLookup() -> CapturedFocus? {
-        guard let candidateEntry = withState({ mostRecentNonProjectFocus }) else {
-            return nil
-        }
-        if candidateEntry.workspace.hasPrefix(Self.workspacePrefix) {
-            invalidateFocusHistory(windowId: candidateEntry.windowId, reason: "project_workspace")
-            return nil
-        }
-        let candidate = candidateEntry.focus
-        let attemptSnapshot = focusHistorySnapshot()
-        let attemptContext = focusHistoryContext(
-            windowId: candidate.windowId,
-            workspace: candidate.workspace,
-            appBundleId: candidate.appBundleId,
-            method: "recent-no-lookup",
-            snapshot: attemptSnapshot
-        )
-        logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
-
-        if focusWindowStableSync(
-            windowId: candidate.windowId,
-            timeout: windowPollTimeout,
-            pollInterval: windowPollInterval
-        ) {
-            updateMostRecentNonProjectFocus(candidate)
-            let successSnapshot = focusHistorySnapshot()
-            let successContext = focusHistoryContext(
-                windowId: candidate.windowId,
-                workspace: candidate.workspace,
-                appBundleId: candidate.appBundleId,
-                method: "recent-no-lookup",
-                snapshot: successSnapshot
-            )
-            logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
-            return candidate
-        }
-
-        let failureSnapshot = focusHistorySnapshot()
-        let failureContext = focusHistoryContext(
-            windowId: candidate.windowId,
-            workspace: candidate.workspace,
-            appBundleId: candidate.appBundleId,
-            method: "recent-no-lookup",
-            reason: "focus_failed",
-            snapshot: failureSnapshot
-        )
-        logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-        return nil
     }
 
     // MARK: - Project Sorting
@@ -1295,11 +1221,8 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to non-project space (validated via current window lookup)
-        var restoredFocus: CapturedFocus?
-        if let windowLookup = listAllWindowsById() {
-            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
-        }
+        // Restore focus to non-project space; if global lookup fails, restore uses persisted history directly.
+        let restoredFocus = restoreNonProjectFocus(windowLookup: listAllWindowsById())
 
         if let focus = restoredFocus {
             logEvent("close.focus_restored", context: [
@@ -1365,26 +1288,17 @@ public final class ProjectManager {
         let windowLookup = listAllWindowsById()
 
         // Select destination using canonical non-project workspace strategy.
-        // Fast path: derive workspaces-with-windows from a single listAllWindows call.
-        // Fallback: if listAllWindows fails, use per-workspace listings and exclude failures.
+        // Fast path: derive workspaces-with-windows from a single listAllWindows call,
+        // then validate the chosen destination via per-workspace listing.
+        // Fallback: if either global lookup or destination validation fails, use
+        // per-workspace listings and exclude failures.
         let destination: String
         if case .success(let workspaces) = aerospace.getWorkspaces() {
             if let windowLookup {
-                var workspacesWithWindows: Set<String> = []
-                for window in windowLookup.values {
-                    workspacesWithWindows.insert(window.workspace)
-                }
-                let hasNonProjectWorkspaceWithWindows = workspaces.contains {
-                    !$0.hasPrefix(Self.workspacePrefix) && workspacesWithWindows.contains($0)
-                }
-                if hasNonProjectWorkspaceWithWindows {
-                    destination = WorkspaceRouting.preferredNonProjectWorkspace(
-                        from: workspaces,
-                        hasWindows: { workspacesWithWindows.contains($0) }
-                    )
-                } else {
-                    destination = preferredNonProjectWorkspaceByListing(workspaces)
-                }
+                destination = preferredNonProjectWorkspaceFromLookup(
+                    workspaces: workspaces,
+                    windowLookup: windowLookup
+                )
             } else {
                 destination = preferredNonProjectWorkspaceByListing(workspaces)
             }
@@ -1413,6 +1327,32 @@ public final class ProjectManager {
             ])
             return .failure(.aeroSpaceError(detail: error.message))
         }
+    }
+
+    private func preferredNonProjectWorkspaceFromLookup(
+        workspaces: [String],
+        windowLookup: [Int: ApWindow]
+    ) -> String {
+        var workspacesWithWindows: Set<String> = []
+        for window in windowLookup.values {
+            workspacesWithWindows.insert(window.workspace)
+        }
+        let hasNonProjectWorkspaceWithWindows = workspaces.contains {
+            !$0.hasPrefix(Self.workspacePrefix) && workspacesWithWindows.contains($0)
+        }
+        guard hasNonProjectWorkspaceWithWindows else {
+            return preferredNonProjectWorkspaceByListing(workspaces)
+        }
+
+        let candidate = WorkspaceRouting.preferredNonProjectWorkspace(
+            from: workspaces,
+            hasWindows: { workspacesWithWindows.contains($0) }
+        )
+        guard case .success(let candidateWindows) = aerospace.listWindowsWorkspace(workspace: candidate),
+              !candidateWindows.isEmpty else {
+            return preferredNonProjectWorkspaceByListing(workspaces)
+        }
+        return candidate
     }
 
     private func preferredNonProjectWorkspaceByListing(_ workspaces: [String]) -> String {
@@ -1450,12 +1390,7 @@ public final class ProjectManager {
         // Capture window positions before exiting (non-fatal)
         captureWindowPositions(projectId: activeProjectId)
 
-        var restoredFocus: CapturedFocus?
-        if let windowLookup = listAllWindowsById() {
-            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
-        } else {
-            restoredFocus = restoreNonProjectFocusWithoutWindowLookup()
-        }
+        let restoredFocus = restoreNonProjectFocus(windowLookup: listAllWindowsById())
 
         if let focus = restoredFocus {
             logEvent("exit.focus_restored", context: [
@@ -2025,11 +1960,13 @@ public final class ProjectManager {
             withState {
                 focusStack = FocusStack(maxSize: Self.focusHistoryMaxEntries)
                 mostRecentNonProjectFocus = nil
+                focusRestoreRetryAttemptsByWindowId = [:]
             }
         case .success(let outcome?):
             withState {
                 focusStack = FocusStack(entries: outcome.state.stack, maxSize: Self.focusHistoryMaxEntries)
                 mostRecentNonProjectFocus = outcome.state.mostRecent
+                focusRestoreRetryAttemptsByWindowId = [:]
             }
             if outcome.prunedCount > 0 || outcome.droppedMostRecent {
                 var context: [String: String] = [
@@ -2051,6 +1988,7 @@ public final class ProjectManager {
             withState {
                 focusStack = FocusStack(maxSize: Self.focusHistoryMaxEntries)
                 mostRecentNonProjectFocus = nil
+                focusRestoreRetryAttemptsByWindowId = [:]
             }
         }
     }

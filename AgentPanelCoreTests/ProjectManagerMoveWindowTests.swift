@@ -263,6 +263,33 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
                        "Should skip workspace with failed listing and use healthy candidate")
     }
 
+    func testMoveWindowFromProject_fastPathCandidateWithFailedListingFallsBackToHealthyWorkspace() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.workspaces = ["broken-ws", "healthy-ws"]
+        aerospace.failingWorkspaces = ["broken-ws"]
+        aerospace.windowsByWorkspace["broken-ws"] = [
+            ApWindow(windowId: 61, appBundleId: "com.test.app", workspace: "broken-ws", windowTitle: "Broken")
+        ]
+        aerospace.windowsByWorkspace["healthy-ws"] = [
+            ApWindow(windowId: 62, appBundleId: "com.test.app", workspace: "healthy-ws", windowTitle: "Healthy")
+        ]
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(
+            aerospace.moveWindowCalls[0].workspace,
+            "healthy-ws",
+            "Fast-path candidate should be validated; failed listing must fall back to healthy workspace"
+        )
+    }
+
     func testMoveWindowFromProject_listAllWindowsFailureFallsBackToPerWorkspaceSelection() {
         let aerospace = MoveAeroSpaceStub()
         aerospace.workspaces = ["broken-ws", "healthy-ws"]

@@ -55,6 +55,26 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    func testCloseProjectRestoresFromHistoryWhenWindowLookupFails() {
+        let aero = FocusAeroSpaceStub()
+        aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
+        aero.focusWindowSuccessIds = [99]
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+
+        switch manager.closeProject(projectId: "test") {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99), "Should restore from persisted history without window lookup")
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
+        }
+    }
+
     func testCloseProjectUsesMostRecentNonProjectFocusWhenStackEmpty() {
         let aero = FocusAeroSpaceStub()
         aero.focusedWindowResult = .success(
@@ -124,6 +144,32 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    func testExitToNonProjectUsesMostRecentFocusWithoutLookupWhenStackEmpty() {
+        let aero = FocusAeroSpaceStub()
+        aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        aero.focusedWindowResult = .success(
+            ApWindow(windowId: 321, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+        )
+        aero.focusWindowSuccessIds = [321]
+        registerWindow(aero: aero, windowId: 321, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 321)
+        aero.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
+
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(321))
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
+        }
+    }
+
     func testExitToNonProjectPreservesStackCandidateWhenFocusUnstable() {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
@@ -152,6 +198,78 @@ final class ProjectManagerFocusTests: XCTestCase {
         case .failure(let error):
             XCTFail("Expected success after retry but got: \(error)")
         }
+    }
+
+    func testExitToNonProjectDoesNotRetryMostRecentInSameInvocationAfterStackFailure() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(
+            aerospace: aero,
+            windowPollTimeout: 0.05,
+            windowPollInterval: 0.01
+        )
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+        aero.focusWindowSuccessIds = []
+
+        let firstResult = manager.exitToNonProjectWindow()
+        if case .success = firstResult {
+            XCTFail("Expected noPreviousWindow when focus cannot stabilize")
+        }
+        let secondResult = manager.exitToNonProjectWindow()
+        if case .success = secondResult {
+            XCTFail("Expected noPreviousWindow when focus cannot stabilize")
+        }
+
+        aero.focusWindowSuccessIds = [99]
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99), "Candidate should remain retriable after two failed invocations")
+        case .failure(let error):
+            XCTFail("Expected success after bounded retries but got: \(error)")
+        }
+    }
+
+    func testExitToNonProjectRetryLimitEventuallyInvalidatesUnstableCandidate() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(
+            aerospace: aero,
+            windowPollTimeout: 0.05,
+            windowPollInterval: 0.01
+        )
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+        aero.focusWindowSuccessIds = []
+
+        for _ in 0..<3 {
+            let failure = manager.exitToNonProjectWindow()
+            guard case .failure(let error) = failure else {
+                XCTFail("Expected noPreviousWindow while focus remains unstable")
+                return
+            }
+            XCTAssertEqual(error, .noPreviousWindow)
+        }
+
+        aero.focusWindowSuccessIds = [99]
+        let result = manager.exitToNonProjectWindow()
+        guard case .failure(let error) = result else {
+            XCTFail("Expected retry limit to invalidate unstable candidate")
+            return
+        }
+        XCTAssertEqual(error, .noPreviousWindow)
     }
 
     // MARK: - Exit fails when stack empty
@@ -196,6 +314,39 @@ final class ProjectManagerFocusTests: XCTestCase {
         switch manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(321), "Should restore most recent non-project window")
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
+        }
+    }
+
+    func testExitToNonProjectRestoresOlderThanRetryAgeCandidateWhenStillValid() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        aero.focusWindowSuccessIds = [99]
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let oldCaptureDate = Date().addingTimeInterval(-11 * 60)
+        let oldEntry = FocusHistoryEntry(
+            windowId: 99,
+            appBundleId: "com.apple.Safari",
+            workspace: "main",
+            capturedAt: oldCaptureDate
+        )
+        let manager = makeFocusManager(
+            aerospace: aero,
+            preloadedFocusHistoryState: FocusHistoryState(
+                version: FocusHistoryStore.currentVersion,
+                stack: [oldEntry],
+                mostRecent: oldEntry
+            )
+        )
+        loadTestConfig(manager: manager)
+
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
             XCTFail("Expected success but got: \(error)")
         }
@@ -775,7 +926,10 @@ final class ProjectManagerFocusTests: XCTestCase {
     private func makeFocusManager(
         aerospace: FocusAeroSpaceStub = FocusAeroSpaceStub(),
         ideLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
-        chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub()
+        chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub(),
+        preloadedFocusHistoryState: FocusHistoryState? = nil,
+        windowPollTimeout: TimeInterval = 10.0,
+        windowPollInterval: TimeInterval = 0.1
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-recency-\(UUID().uuidString).json")
@@ -783,6 +937,19 @@ final class ProjectManagerFocusTests: XCTestCase {
             .appendingPathComponent("pm-focus-history-\(UUID().uuidString).json")
         let chromeTabsDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-tabs-\(UUID().uuidString)", isDirectory: true)
+        if let preloadedFocusHistoryState {
+            let store = FocusHistoryStore(
+                fileURL: focusHistoryFilePath,
+                maxAge: 7 * 24 * 60 * 60,
+                maxEntries: 20
+            )
+            switch store.save(state: preloadedFocusHistoryState) {
+            case .success:
+                break
+            case .failure(let error):
+                XCTFail("Failed to preload focus history state: \(error)")
+            }
+        }
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: ideLauncher,
@@ -793,7 +960,9 @@ final class ProjectManagerFocusTests: XCTestCase {
             gitRemoteResolver: FocusGitRemoteStub(),
             logger: FocusLoggerStub(),
             recencyFilePath: recencyFilePath,
-            focusHistoryFilePath: focusHistoryFilePath
+            focusHistoryFilePath: focusHistoryFilePath,
+            windowPollTimeout: windowPollTimeout,
+            windowPollInterval: windowPollInterval
         )
     }
 
@@ -801,7 +970,10 @@ final class ProjectManagerFocusTests: XCTestCase {
         aerospace: FocusAeroSpaceStub = FocusAeroSpaceStub(),
         ideLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
         agentLayerIdeLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
-        chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub()
+        chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub(),
+        preloadedFocusHistoryState: FocusHistoryState? = nil,
+        windowPollTimeout: TimeInterval = 10.0,
+        windowPollInterval: TimeInterval = 0.1
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-recency-\(UUID().uuidString).json")
@@ -809,6 +981,19 @@ final class ProjectManagerFocusTests: XCTestCase {
             .appendingPathComponent("pm-focus-history-\(UUID().uuidString).json")
         let chromeTabsDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-tabs-\(UUID().uuidString)", isDirectory: true)
+        if let preloadedFocusHistoryState {
+            let store = FocusHistoryStore(
+                fileURL: focusHistoryFilePath,
+                maxAge: 7 * 24 * 60 * 60,
+                maxEntries: 20
+            )
+            switch store.save(state: preloadedFocusHistoryState) {
+            case .success:
+                break
+            case .failure(let error):
+                XCTFail("Failed to preload focus history state: \(error)")
+            }
+        }
         return ProjectManager(
             aerospace: aerospace,
             ideLauncher: ideLauncher,
@@ -819,7 +1004,9 @@ final class ProjectManagerFocusTests: XCTestCase {
             gitRemoteResolver: FocusGitRemoteStub(),
             logger: FocusLoggerStub(),
             recencyFilePath: recencyFilePath,
-            focusHistoryFilePath: focusHistoryFilePath
+            focusHistoryFilePath: focusHistoryFilePath,
+            windowPollTimeout: windowPollTimeout,
+            windowPollInterval: windowPollInterval
         )
     }
 
