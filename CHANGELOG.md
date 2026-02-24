@@ -6,6 +6,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-02-24
+
+### Added
+
+- **Persisted non-project focus history** -- AgentPanel now persists non-project focus history in `state.json` and reuses it across app/CLI sessions, improving return/exit restoration determinism after restarts.
+- **Launch-at-login toggler coverage** -- app wiring now includes explicit launch-at-login toggler behavior and regression coverage for login-item state transitions.
+
+### Changed
+
+- **Workspace routing policy centralization** -- workspace and non-project destination routing now flow through a shared policy module to keep restore decisions deterministic and consistent across switcher actions.
+
+### Fixed
+
+- **Non-project restore edge cases** -- focus handoff now prefers canonical persisted history when transient stack entries are stale or unavailable, reducing incorrect return targets.
+- **Logger path hardening** -- logger/data-path handling now uses stricter path validation and safer defaults to prevent path-shape regressions in diagnostics and persistence flows.
+
 ## [0.1.10] - 2026-02-23
 
 ### Fixed
