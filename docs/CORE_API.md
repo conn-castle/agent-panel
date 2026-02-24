@@ -272,7 +272,7 @@ public final class ProjectManager {
         projectId: String
     ) -> Result<Void, ProjectError>
 
-    /// Moves a window out of its project workspace to the default workspace ("1").
+    /// Moves a window out of its project workspace to the preferred non-project workspace.
     public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError>
 
     /// Exits to the last non-project window without closing the project.

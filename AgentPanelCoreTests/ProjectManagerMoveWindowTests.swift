@@ -32,15 +32,23 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
     private final class MoveAeroSpaceStub: AeroSpaceProviding {
         var moveResult: Result<Void, ApCoreError> = .success(())
         var moveWindowCalls: [(workspace: String, windowId: Int, focusFollows: Bool)] = []
+        var workspaces: [String] = []
+        var windowsByWorkspace: [String: [ApWindow]] = [:]
+        var failingWorkspaces: Set<String> = []
 
-        func getWorkspaces() -> Result<[String], ApCoreError> { .success([]) }
+        func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(true) }
         func listWorkspacesFocused() -> Result<[String], ApCoreError> { .success([]) }
         func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> { .success([]) }
         func createWorkspace(_ name: String) -> Result<Void, ApCoreError> { .success(()) }
         func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
         func listWindowsForApp(bundleId: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
-        func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> { .success([]) }
+        func listWindowsWorkspace(workspace: String) -> Result<[ApWindow], ApCoreError> {
+            if failingWorkspaces.contains(workspace) {
+                return .failure(ApCoreError(message: "listing failed for \(workspace)"))
+            }
+            return .success(windowsByWorkspace[workspace] ?? [])
+        }
         func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
         func focusedWindow() -> Result<ApWindow, ApCoreError> { .failure(ApCoreError(message: "no focus")) }
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
@@ -160,8 +168,9 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
 
     // MARK: - moveWindowFromProject Tests
 
-    func testMoveWindowFromProject_success() {
+    func testMoveWindowFromProject_noWorkspaces_fallsBackToDefault() {
         let aerospace = MoveAeroSpaceStub()
+        // No workspaces configured — should fall back to WorkspaceRouting.fallbackWorkspace
         let pm = makeProjectManager(aerospace: aerospace)
         pm.loadTestConfig(makeTestConfig())
 
@@ -172,9 +181,90 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
             return
         }
         XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "1")
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace)
         XCTAssertEqual(aerospace.moveWindowCalls[0].windowId, 99)
         XCTAssertFalse(aerospace.moveWindowCalls[0].focusFollows)
+    }
+
+    func testMoveWindowFromProject_prefersNonProjectWorkspaceWithWindows() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.workspaces = ["ap-myproject", "main", "empty-ws"]
+        aerospace.windowsByWorkspace["main"] = [
+            ApWindow(windowId: 50, appBundleId: "com.test.app", workspace: "main", windowTitle: "Existing Window")
+        ]
+        // "empty-ws" has no windows
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "main",
+                       "Should target non-project workspace with windows")
+    }
+
+    func testMoveWindowFromProject_onlyProjectWorkspaces_fallsBackToDefault() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.workspaces = ["ap-proj1", "ap-proj2"]
+        aerospace.windowsByWorkspace["ap-proj1"] = [
+            ApWindow(windowId: 50, appBundleId: "com.test.app", workspace: "ap-proj1", windowTitle: "W")
+        ]
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
+                       "Should fall back to default when only project workspaces exist")
+    }
+
+    func testMoveWindowFromProject_failedListingExcludesWorkspaceFromCandidates() {
+        let aerospace = MoveAeroSpaceStub()
+        // "broken-ws" is listed but its window listing fails; "healthy-ws" succeeds
+        aerospace.workspaces = ["broken-ws", "healthy-ws"]
+        aerospace.failingWorkspaces = ["broken-ws"]
+        aerospace.windowsByWorkspace["healthy-ws"] = [
+            ApWindow(windowId: 50, appBundleId: "com.test.app", workspace: "healthy-ws", windowTitle: "W")
+        ]
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "healthy-ws",
+                       "Should skip workspace with failed listing and use healthy candidate")
+    }
+
+    func testMoveWindowFromProject_allNonProjectListingsFail_fallsBackToDefault() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.workspaces = ["broken-ws"]
+        aerospace.failingWorkspaces = ["broken-ws"]
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
+                       "Should fall back to default when all non-project workspace listings fail")
     }
 
     func testMoveWindowFromProject_configNotLoaded() {

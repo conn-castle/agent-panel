@@ -42,20 +42,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: During accessibility permission request flow, the macOS system dialog appears and Doctor re-activates almost immediately, covering the prompt and interrupting grant flow.
     Next step: Reproduce with an automated UI/integration test and gate Doctor auto-focus while any system permission prompt is active.
 
-- Issue 2026-02-22 workspace-prefix-duplication: Workspace prefix is duplicated across modules
-    Priority: Medium. Area: Core conventions
-    Description: `ProjectManager` and `WindowRecoveryManager` both define the `\"ap-\"` workspace prefix locally, creating two sources of truth for project-workspace detection.
-    Next step: Centralize workspace prefix ownership in one canonical Core constant and update all consumers to reference it.
-
 - Issue 2026-02-22 ap-aerospace-hotspot: ApAeroSpace mixes transport, policy, parsing, and lifecycle concerns
     Priority: Medium. Area: AeroSpace integration
     Description: `ApAeroSpace.swift` (~1k LOC, high churn) combines app lifecycle, command execution, circuit-breaker/recovery policy, parsing, and compatibility heuristics in one infrastructure hotspot.
     Next step: Decompose ApAeroSpace into focused units (command transport/retry policy, parsing, high-level operations) while preserving current behavior.
-
-- Issue 2026-02-22 non-project-workspace-default: Move/recovery flows hardcode non-project workspace "1"
-    Priority: Medium. Area: Workspace orchestration
-    Description: `moveWindowFromProject` and `recoverAllWindows` always target workspace `"1"` while other non-project flows dynamically discover candidates, creating inconsistent "back to no project" behavior.
-    Next step: Define one canonical non-project destination strategy and apply it across move/recovery/restore flows, with explicit docs if workspace `"1"` remains intentional.
 
 - Issue 2026-02-22 appdelegate-hotspot: App delegate file concentrates too many responsibilities
     Priority: Medium. Area: App architecture

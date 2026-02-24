@@ -260,3 +260,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Treat `ci26baseline` as the authoritative release/CI toolchain floor (`Xcode 26+`); references to `Xcode 17+` in older entries are historical context only.
     Reason: A single explicit baseline avoids contradictory operator guidance across workflows, release docs, and memory files.
     Tradeoffs: Historical entries remain for auditability, so readers must treat superseded wording as non-authoritative.
+
+- Decision 2026-02-23 workspacerouting: Canonical WorkspaceRouting utility owns workspace naming and non-project destination strategy
+    Decision: `WorkspaceRouting` enum in Core owns the `"ap-"` project prefix, project-ID extraction, and a `preferredNonProjectWorkspace(from:hasWindows:)` strategy that prefers a non-project workspace with windows, then any non-project workspace, then `"1"` as fallback. `ProjectManager` and `WindowRecoveryManager` delegate to it instead of defining their own constants and logic.
+    Reason: Workspace prefix was duplicated across two modules; move/recovery flows hardcoded workspace `"1"` while other flows used dynamic discovery, creating inconsistent behavior.
+    Tradeoffs: `moveWindowFromProject` now makes additional AeroSpace CLI calls (workspace listing + per-workspace window listing) to discover the destination. In practice this is 1-3 extra calls for typical setups.

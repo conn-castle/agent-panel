@@ -182,8 +182,8 @@ struct FocusStack {
 /// called from a detached task for non-blocking focus restoration (these only invoke AeroSpace CLI
 /// commands and do not mutate ProjectManager state).
 public final class ProjectManager {
-    /// Prefix for all AgentPanel workspaces.
-    public static let workspacePrefix = "ap-"
+    /// Prefix for all AgentPanel workspaces (delegates to ``WorkspaceRouting/projectPrefix``).
+    public static let workspacePrefix = WorkspaceRouting.projectPrefix
 
     private static let defaultWindowPollTimeout: TimeInterval = 10.0
     private static let defaultWindowPollInterval: TimeInterval = 0.1
@@ -1209,7 +1209,12 @@ public final class ProjectManager {
         }
     }
 
-    /// Moves a window out of its project workspace to the default workspace ("1").
+    /// Moves a window out of its project workspace to the preferred non-project workspace.
+    ///
+    /// Destination is selected via ``WorkspaceRouting/preferredNonProjectWorkspace(from:hasWindows:)``
+    /// which prefers a non-project workspace that already has windows, falling back to
+    /// ``WorkspaceRouting/fallbackWorkspace`` when no candidate exists.
+    ///
     /// - Parameter windowId: AeroSpace window ID of the window to move.
     /// - Returns: Success or error.
     public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError> {
@@ -1217,18 +1222,44 @@ public final class ProjectManager {
         guard configSnapshot != nil else {
             return .failure(.configNotLoaded)
         }
-        switch aerospace.moveWindowToWorkspace(workspace: "1", windowId: windowId, focusFollows: false) {
+
+        // Select destination using canonical non-project workspace strategy.
+        // Only workspaces whose window listing succeeded are considered candidates;
+        // workspaces with listing failures are excluded to avoid routing to unhealthy targets.
+        let destination: String
+        if case .success(let workspaces) = aerospace.getWorkspaces() {
+            var queriedWorkspaces: [String] = []
+            var workspacesWithWindows: Set<String> = []
+            for ws in workspaces {
+                if case .success(let windows) = aerospace.listWindowsWorkspace(workspace: ws) {
+                    queriedWorkspaces.append(ws)
+                    if !windows.isEmpty {
+                        workspacesWithWindows.insert(ws)
+                    }
+                }
+            }
+            destination = WorkspaceRouting.preferredNonProjectWorkspace(
+                from: queriedWorkspaces,
+                hasWindows: { workspacesWithWindows.contains($0) }
+            )
+        } else {
+            destination = WorkspaceRouting.fallbackWorkspace
+        }
+
+        switch aerospace.moveWindowToWorkspace(workspace: destination, windowId: windowId, focusFollows: false) {
         case .success:
             if let windowLookup = listAllWindowsById() {
                 updateMostRecentNonProjectFocus(windowId: windowId, windowLookup: windowLookup)
             }
             logEvent("move_window_from_project.completed", context: [
-                "window_id": "\(windowId)"
+                "window_id": "\(windowId)",
+                "destination": destination
             ])
             return .success(())
         case .failure(let error):
             logEvent("move_window_from_project.failed", level: .error, message: error.message, context: [
-                "window_id": "\(windowId)"
+                "window_id": "\(windowId)",
+                "destination": destination
             ])
             return .failure(.aeroSpaceError(detail: error.message))
         }
@@ -1368,13 +1399,11 @@ public final class ProjectManager {
     // MARK: - Private Helpers
 
     /// Returns an AgentPanel project ID from a workspace name.
+    /// Delegates to ``WorkspaceRouting/projectId(fromWorkspace:)``.
     /// - Parameter workspace: Raw AeroSpace workspace name.
-    /// - Returns: Project ID when workspace uses the `ap-` prefix, otherwise nil.
+    /// - Returns: Project ID when workspace uses the project prefix, otherwise nil.
     private static func projectId(fromWorkspace workspace: String) -> String? {
-        guard workspace.hasPrefix(Self.workspacePrefix) else {
-            return nil
-        }
-        return String(workspace.dropFirst(Self.workspacePrefix.count))
+        WorkspaceRouting.projectId(fromWorkspace: workspace)
     }
 
     /// Polls until the target workspace is confirmed focused via dual-signal verification.
