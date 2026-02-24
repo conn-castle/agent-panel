@@ -65,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         qos: .userInteractive
     )
     private let logger: AgentPanelLogging = AgentPanelLogger()
+    private let launchAtLoginToggler = LaunchAtLoginToggler()
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
         screenModeDetector: ScreenModeDetector(),
@@ -428,21 +429,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "switcher.menu.invoked",
             context: ["menu_item": "Open Switcher..."]
         )
-        // Use cached focus from menuNeedsUpdate (no blocking CLI call).
-        // The cache was refreshed when the menu opened, so it's recent enough
-        // for focus restoration on cancel.
+        // Capture the previously active app immediately (AppKit API, non-blocking).
         let previousApp = NSWorkspace.shared.frontmostApplication
-        let capturedFocus = menuFocusCapture
         statusItem?.menu?.cancelTracking()
-        // Small delay required to let the menu dismiss before showing the switcher.
-        // Without this, AppKit may have visual conflicts between the closing menu and opening panel.
-        DispatchQueue.main.asyncAfter(deadline: .now() + MenuTiming.menuDismissDelaySeconds) { [weak self] in
-            guard let self else {
-                return
+
+        // Capture AeroSpace focus in the background to avoid blocking the menu thread.
+        // We still wait for the menu-dismiss delay before showing the switcher.
+        let showAfter = Date().addingTimeInterval(MenuTiming.menuDismissDelaySeconds)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let capturedFocus = self.projectManager.captureCurrentFocus()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let capturedFocus {
+                    self.menuFocusCapture = capturedFocus
+                }
+                let delay = max(0, showAfter.timeIntervalSinceNow)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let self else { return }
+                    // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
+                    // without activating the app (and therefore without switching workspaces).
+                    self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: self.menuFocusCapture)
+                }
             }
-            // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
-            // without activating the app (and therefore without switching workspaces).
-            self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: capturedFocus)
         }
     }
 
@@ -466,8 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Capture AeroSpace focus in background to avoid blocking the main thread.
         // The switcher toggle is dispatched to main thread once the capture completes.
-        // Thread-safe: captureCurrentFocus() only runs a CLI command and logs,
-        // it does not mutate ProjectManager state.
+        // Thread-safe: captureCurrentFocus() serializes ProjectManager state/persistence.
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }
             let capturedFocus = self.projectManager.captureCurrentFocus()
@@ -750,8 +758,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The cached values are used by `menuNeedsUpdate` to avoid blocking the
     /// main thread with AeroSpace CLI calls.
     ///
-    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` only run
-    /// stateless CLI commands and log — they do not mutate ProjectManager state.
+    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` are safe off-main
+    /// and use ProjectManager's internal serialization (focus capture may persist history).
     private func refreshMenuStateInBackground() {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }
@@ -993,56 +1001,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Toggles the Launch at Login menu item.
     @objc private func toggleLaunchAtLogin() {
-        let service = SMAppService.mainApp
-        let isCurrentlyEnabled = service.status == .enabled
-        let newValue = !isCurrentlyEnabled
-
-        if newValue {
-            do {
-                try service.register()
-                logAppEvent(event: "launch_at_login.toggled_on")
-            } catch {
-                logAppEvent(
-                    event: "launch_at_login.toggle_register_failed",
-                    level: .error,
-                    message: "Failed to enable launch at login: \(error.localizedDescription)"
-                )
-                return
-            }
-        } else {
-            do {
-                try service.unregister()
-                logAppEvent(event: "launch_at_login.toggled_off")
-            } catch {
-                logAppEvent(
-                    event: "launch_at_login.toggle_unregister_failed",
-                    level: .error,
-                    message: "Failed to disable launch at login: \(error.localizedDescription)"
-                )
-                return
-            }
-        }
-
-        // Write back to config.toml
         let configURL = DataPaths.default().configFile
-        do {
-            try ConfigWriteBack.setAutoStartAtLogin(newValue, in: configURL)
-            logAppEvent(event: "launch_at_login.config_written", context: ["value": "\(newValue)"])
-            menuItems?.launchAtLogin.title = "Launch at Login"
-        } catch {
-            logAppEvent(
-                event: "launch_at_login.config_write_failed",
-                level: .error,
-                message: "Config save failed: \(error.localizedDescription)"
-            )
-            // Rollback SMAppService toggle since config write failed
-            if newValue {
-                try? service.unregister()
-            } else {
-                try? service.register()
-            }
-            menuItems?.launchAtLogin.title = "Launch at Login"
+        let entries = launchAtLoginToggler.toggle(configURL: configURL)
+        for entry in entries {
+            _ = logger.log(payload: entry)
         }
+        menuItems?.launchAtLogin.title = "Launch at Login"
     }
 
     // MARK: - App Lifecycle State Management

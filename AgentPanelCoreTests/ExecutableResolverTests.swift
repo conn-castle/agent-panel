@@ -132,11 +132,4 @@ private struct MockFileSystem: FileSystem {
     func appendFile(at url: URL, data: Data) throws {}
 
     func writeFile(at url: URL, data: Data) throws {}
-
-    func syncFile(at url: URL) throws {}
-
-    @discardableResult
-    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
-        nil
-    }
 }

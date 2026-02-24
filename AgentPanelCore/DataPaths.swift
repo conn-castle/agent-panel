@@ -69,6 +69,11 @@ public struct DataPaths: Sendable {
         logsDirectory.appendingPathComponent("agent-panel.log", isDirectory: false)
     }
 
+    /// Returns `~/.local/state/agent-panel/logs/agent-panel.log.lock`.
+    var logLockFile: URL {
+        logsDirectory.appendingPathComponent("agent-panel.log.lock", isDirectory: false)
+    }
+
     // MARK: - VS Code paths
 
     /// Returns `~/.vscode/extensions/`.

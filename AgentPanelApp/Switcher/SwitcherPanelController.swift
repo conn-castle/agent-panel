@@ -2031,3 +2031,42 @@ extension SwitcherPanelController: NSSearchFieldDelegate, NSControlTextEditingDe
         return false
     }
 }
+
+#if DEBUG
+// Test-only hooks for app-layer integration tests.
+extension SwitcherPanelController {
+    func testing_handleExitToNonProject(fromShortcut: Bool = false) {
+        handleExitToNonProject(fromShortcut: fromShortcut)
+    }
+
+    func testing_performCloseProject(
+        projectId: String,
+        projectName: String,
+        source: String,
+        selectedRowAtRequestTime: Int
+    ) {
+        performCloseProject(
+            projectId: projectId,
+            projectName: projectName,
+            source: source,
+            selectedRowAtRequestTime: selectedRowAtRequestTime
+        )
+    }
+
+    func testing_handleProjectSelection(_ project: ProjectConfig) {
+        handleProjectSelection(project)
+    }
+
+    func testing_setCapturedFocus(_ focus: CapturedFocus?) {
+        capturedFocus = focus
+    }
+
+    var testing_capturedFocus: CapturedFocus? {
+        capturedFocus
+    }
+
+    func testing_enableBackActionRow() {
+        rows = [.backAction]
+    }
+}
+#endif

@@ -60,6 +60,8 @@ final class ProjectManagerWorkspaceStateTests: XCTestCase {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let recencyFilePath = tempDir
             .appendingPathComponent("pm-workspace-state-\(UUID().uuidString).json")
+        let focusHistoryFilePath = tempDir
+            .appendingPathComponent("pm-workspace-focus-\(UUID().uuidString).json")
         let chromeTabsDir = tempDir.appendingPathComponent("chrome-tabs-\(UUID().uuidString)", isDirectory: true)
         return ProjectManager(
             aerospace: aerospace,
@@ -70,7 +72,8 @@ final class ProjectManagerWorkspaceStateTests: XCTestCase {
             chromeTabCapture: WorkspaceStateTabCaptureStub(),
             gitRemoteResolver: WorkspaceStateGitRemoteStub(),
             logger: WorkspaceStateLoggerStub(),
-            recencyFilePath: recencyFilePath
+            recencyFilePath: recencyFilePath,
+            focusHistoryFilePath: focusHistoryFilePath
         )
     }
 }
@@ -427,6 +430,7 @@ final class ProjectManagerSortingTests: XCTestCase {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let effectiveRecencyFilePath = recencyFilePath
             ?? tempDir.appendingPathComponent("pm-sorting-recency-\(UUID().uuidString).json")
+        let focusHistoryFilePath = tempDir.appendingPathComponent("pm-sorting-focus-\(UUID().uuidString).json")
         let chromeTabsDir = tempDir.appendingPathComponent("pm-sorting-tabs-\(UUID().uuidString)", isDirectory: true)
 
         return ProjectManager(
@@ -439,6 +443,7 @@ final class ProjectManagerSortingTests: XCTestCase {
             gitRemoteResolver: WorkspaceStateGitRemoteStub(),
             logger: WorkspaceStateLoggerStub(),
             recencyFilePath: effectiveRecencyFilePath,
+            focusHistoryFilePath: focusHistoryFilePath,
             configLoader: configLoader
         )
     }
@@ -538,6 +543,7 @@ final class ProjectManagerOnProjectsChangedTests: XCTestCase {
     ) -> ProjectManager {
         let tempDir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let recencyPath = tempDir.appendingPathComponent("pm-callback-recency-\(UUID().uuidString).json")
+        let focusHistoryPath = tempDir.appendingPathComponent("pm-callback-focus-\(UUID().uuidString).json")
         let chromeTabsDir = tempDir.appendingPathComponent("pm-callback-tabs-\(UUID().uuidString)", isDirectory: true)
 
         return ProjectManager(
@@ -550,6 +556,7 @@ final class ProjectManagerOnProjectsChangedTests: XCTestCase {
             gitRemoteResolver: WorkspaceStateGitRemoteStub(),
             logger: WorkspaceStateLoggerStub(),
             recencyFilePath: recencyPath,
+            focusHistoryFilePath: focusHistoryPath,
             configLoader: configLoader
         )
     }

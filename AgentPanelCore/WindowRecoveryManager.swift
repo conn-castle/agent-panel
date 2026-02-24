@@ -141,8 +141,12 @@ public final class WindowRecoveryManager {
         return .success(result)
     }
 
-    /// Recovers all windows across all workspaces by moving each to workspace "1"
-    /// and ensuring it fits on screen.
+    /// Recovers all windows across all workspaces by moving each to the preferred
+    /// non-project workspace and ensuring it fits on screen.
+    ///
+    /// Destination is selected via ``WorkspaceRouting/preferredNonProjectWorkspace(from:hasWindows:)``
+    /// which prefers a non-project workspace that already has windows, falling back to
+    /// ``WorkspaceRouting/fallbackWorkspace`` when no candidate exists.
     ///
     /// Iterates workspaces directly (instead of using `listAllWindows()`) to surface
     /// per-workspace failures as non-fatal errors rather than silently skipping them.
@@ -172,23 +176,37 @@ public final class WindowRecoveryManager {
 
         var allWindows: [ApWindow] = []
         var errors: [String] = []
+        var queriedWorkspaces: [String] = []
+        var workspacesWithWindows: Set<String> = []
 
         for workspace in workspaces {
             switch aerospace.listWindowsWorkspace(workspace: workspace) {
             case .success(let windows):
                 allWindows.append(contentsOf: windows)
+                queriedWorkspaces.append(workspace)
+                if !windows.isEmpty {
+                    workspacesWithWindows.insert(workspace)
+                }
             case .failure(let error):
                 errors.append("Failed to list workspace \(workspace): \(error.message)")
                 logEvent("recover_all.workspace_list_failed", level: .warn, message: error.message, context: ["workspace": workspace])
             }
         }
 
+        // Select destination using canonical non-project workspace strategy.
+        // Only workspaces whose listing succeeded are candidates; failed-listing
+        // workspaces are excluded to avoid routing to unhealthy targets.
+        let destination = WorkspaceRouting.preferredNonProjectWorkspace(
+            from: queriedWorkspaces,
+            hasWindows: { workspacesWithWindows.contains($0) }
+        )
+
         var processed = 0
         var recovered = 0
 
         for (index, window) in allWindows.enumerated() {
-            // Move window to workspace "1" (focusFollows ensures it becomes frontmost)
-            switch aerospace.moveWindowToWorkspace(workspace: "1", windowId: window.windowId, focusFollows: true) {
+            // Move window to destination (focusFollows ensures it becomes frontmost)
+            switch aerospace.moveWindowToWorkspace(workspace: destination, windowId: window.windowId, focusFollows: true) {
             case .success:
                 break
             case .failure(let error):
@@ -214,7 +232,7 @@ public final class WindowRecoveryManager {
             progress(index + 1, allWindows.count)
         }
 
-        // Restore original window focus (all windows are now on workspace "1",
+        // Restore original window focus (all windows are now on the destination workspace,
         // so restoring the workspace is unnecessary — focusWindow handles it).
         if let originalFocus {
             _ = aerospace.focusWindow(windowId: originalFocus.windowId)
@@ -296,13 +314,10 @@ public final class WindowRecoveryManager {
 
     // MARK: - Layout-Aware Recovery
 
-    private static let workspacePrefix = "ap-"
-
     /// Extracts project ID from an `ap-<projectId>` workspace name, or nil for non-project workspaces.
+    /// Delegates to ``WorkspaceRouting/projectId(fromWorkspace:)``.
     private func projectId(fromWorkspace workspace: String) -> String? {
-        guard workspace.hasPrefix(Self.workspacePrefix) else { return nil }
-        let id = String(workspace.dropFirst(Self.workspacePrefix.count))
-        return id.isEmpty ? nil : id
+        WorkspaceRouting.projectId(fromWorkspace: workspace)
     }
 
     /// Runs layout-aware recovery for a project workspace: computes canonical layout positions

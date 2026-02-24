@@ -19,13 +19,14 @@ targets:
     dependencies:
       - target: AgentPanelCore
       - target: AgentPanelAppKit
+      - package: TOMLDecoder
     settings:
       base:
         PRODUCT_NAME: AgentPanel
         PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
         INFOPLIST_FILE: AgentPanelApp/Info.plist
-        MARKETING_VERSION: "0.1.10"
-        CURRENT_PROJECT_VERSION: 9
+        MARKETING_VERSION: "0.1.11"
+        CURRENT_PROJECT_VERSION: 10
         CODE_SIGN_ENTITLEMENTS: release/AgentPanel.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
@@ -77,6 +78,7 @@ targets:
       - target: AgentPanelCLICore
       - target: AgentPanelCore
       - target: AgentPanelAppKit
+      - package: TOMLDecoder
     settings:
       base:
         PRODUCT_NAME: ap
@@ -94,6 +96,20 @@ targets:
     dependencies:
       - target: AgentPanelCore
       - target: AgentPanelAppKit
+      - package: TOMLDecoder
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  AgentPanelAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AgentPanelAppTests
+    dependencies:
+      - target: AgentPanel
+      - target: AgentPanelCore
+      - target: AgentPanelAppKit
+      - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -104,6 +120,8 @@ targets:
       - path: AgentPanelCLITests
     dependencies:
       - target: AgentPanelCLICore
+      - target: AgentPanelCore
+      - package: TOMLDecoder
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -118,4 +136,5 @@ schemes:
     test:
       targets:
         - AgentPanelCoreTests
+        - AgentPanelAppTests
         - AgentPanelCLITests

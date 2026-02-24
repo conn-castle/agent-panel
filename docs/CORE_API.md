@@ -272,7 +272,7 @@ public final class ProjectManager {
         projectId: String
     ) -> Result<Void, ProjectError>
 
-    /// Moves a window out of its project workspace to the default workspace ("1").
+    /// Moves a window out of its project workspace to the preferred non-project workspace.
     public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError>
 
     /// Exits to the last non-project window without closing the project.
@@ -702,8 +702,26 @@ public protocol AgentPanelLogging {
     ) -> Result<Void, LogWriteError>
 }
 
+extension AgentPanelLogging {
+    public func log(payload: LogEventPayload) -> Result<Void, LogWriteError>
+}
+
 public enum LogLevel: String, Codable, Sendable {
     case info, warn, error
+}
+
+public struct LogEventPayload: Equatable, Sendable {
+    public let event: String
+    public let level: LogLevel
+    public let message: String?
+    public let context: [String: String]?
+
+    public init(
+        event: String,
+        level: LogLevel = .info,
+        message: String? = nil,
+        context: [String: String]? = nil
+    )
 }
 
 public struct AgentPanelLogger {
@@ -724,6 +742,7 @@ public enum LogWriteError: Error, Equatable, Sendable {
     case invalidEvent
     case encodingFailed(String)
     case createDirectoryFailed(String)
+    case lockFailed(String)
     case fileSizeFailed(String)
     case rotationFailed(String)
     case writeFailed(String)

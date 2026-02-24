@@ -257,13 +257,226 @@ final class LoggerTests: XCTestCase {
         }
     }
 
+    func testLockFailureReturnsLockFailed() {
+        let fileSystem = ConfigurableFileSystem()
+        fileSystem.fileLockError = NSError(domain: "test", code: 5)
+
+        let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
+        let logger = AgentPanelLogger(
+            dataStore: dataStore,
+            fileSystem: fileSystem,
+            maxLogSizeBytes: 1024,
+            maxArchives: 2
+        )
+
+        let entry = LogEntry(timestamp: "2024-01-01T00:00:00.000Z", level: .info, event: "evt")
+        switch logger.log(entry: entry) {
+        case .success:
+            XCTFail("Expected failure")
+        case .failure(.lockFailed):
+            break
+        case .failure(let error):
+            XCTFail("Expected lockFailed, got: \(error)")
+        }
+    }
+
     func testLogWriteErrorMessageCoverage() {
         XCTAssertEqual(LogWriteError.invalidEvent.message, "Log event is empty.")
         XCTAssertTrue(LogWriteError.encodingFailed("x").message.contains("encode"))
         XCTAssertTrue(LogWriteError.createDirectoryFailed("x").message.contains("directory"))
+        XCTAssertTrue(LogWriteError.lockFailed("x").message.contains("lock"))
         XCTAssertTrue(LogWriteError.fileSizeFailed("x").message.contains("size"))
         XCTAssertTrue(LogWriteError.rotationFailed("x").message.contains("rotate"))
         XCTAssertTrue(LogWriteError.writeFailed("x").message.contains("write"))
+    }
+
+    func testConcurrentWritesRemainValidJsonLinesWithInterleavingFileSystem() throws {
+        let fileSystem = InterleavingAppendFileSystem(interleaveDelaySeconds: 0.05)
+        let dataStore = DataPaths(homeDirectory: URL(fileURLWithPath: "/Users/testuser", isDirectory: true))
+        let logger = AgentPanelLogger(
+            dataStore: dataStore,
+            fileSystem: fileSystem,
+            maxLogSizeBytes: 1024 * 1024,
+            maxArchives: 2
+        )
+
+        let queue = DispatchQueue(label: "com.agentpanel.tests.logger.concurrent", attributes: .concurrent)
+        let startGate = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        let resultLock = NSLock()
+        var results: [Result<Void, LogWriteError>] = []
+
+        for index in 0..<2 {
+            group.enter()
+            queue.async {
+                startGate.wait()
+                let result = logger.log(
+                    event: "concurrent.event.\(index)",
+                    level: .info,
+                    message: String(repeating: "payload-", count: 40),
+                    context: ["writer": "\(index)"]
+                )
+                resultLock.lock()
+                results.append(result)
+                resultLock.unlock()
+                group.leave()
+            }
+        }
+
+        startGate.signal()
+        startGate.signal()
+        XCTAssertEqual(group.wait(timeout: .now() + 3), .success)
+
+        XCTAssertEqual(results.count, 2)
+        for result in results {
+            if case .failure(let error) = result {
+                XCTFail("Unexpected log failure: \(error)")
+            }
+        }
+
+        let data = try fileSystem.readFile(at: dataStore.primaryLogFile)
+        let text = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        XCTAssertEqual(lines.count, 2)
+
+        for line in lines {
+            do {
+                _ = try JSONDecoder().decode(LogEntry.self, from: Data(line.utf8))
+            } catch {
+                XCTFail("Corrupted JSONL line: \(line)\nError: \(error)")
+            }
+        }
+    }
+
+    func testConcurrentWritesAcrossProcessesRemainValidJsonLines() throws {
+        let tmpHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("agentpanel-logger-multiprocess-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmpHome) }
+        try FileManager.default.createDirectory(at: tmpHome, withIntermediateDirectories: true)
+
+        let projectPath = tmpHome
+            .appendingPathComponent("repos", isDirectory: true)
+            .appendingPathComponent("sample", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectPath, withIntermediateDirectories: true)
+
+        let configDir = tmpHome
+            .appendingPathComponent(".config", isDirectory: true)
+            .appendingPathComponent("agent-panel", isDirectory: true)
+        try FileManager.default.createDirectory(at: configDir, withIntermediateDirectories: true)
+
+        let configPath = configDir.appendingPathComponent("config.toml", isDirectory: false)
+        let config = """
+        [[project]]
+        name = "Sample"
+        path = "\(projectPath.path)"
+        color = "blue"
+        """
+        try config.write(to: configPath, atomically: true, encoding: .utf8)
+
+        let cliURL = try resolveCLIBinaryURLOrSkip()
+
+        // Warm up to ensure the shared log file exists before high-contention appends.
+        let warmupStatus = try runCLIListProjects(cliURL: cliURL, homeDirectory: tmpHome)
+        XCTAssertEqual(warmupStatus, 0)
+
+        let workerCount = 6
+        let runsPerWorker = 20
+        let failureLock = NSLock()
+        var failures: [String] = []
+
+        DispatchQueue.concurrentPerform(iterations: workerCount) { worker in
+            for run in 0..<runsPerWorker {
+                do {
+                    let status = try runCLIListProjects(cliURL: cliURL, homeDirectory: tmpHome)
+                    if status != 0 {
+                        failureLock.lock()
+                        failures.append("worker=\(worker) run=\(run) status=\(status)")
+                        failureLock.unlock()
+                    }
+                } catch {
+                    failureLock.lock()
+                    failures.append("worker=\(worker) run=\(run) error=\(error)")
+                    failureLock.unlock()
+                }
+            }
+        }
+        XCTAssertTrue(failures.isEmpty, "CLI subprocess failures: \(failures.joined(separator: "; "))")
+
+        let dataStore = DataPaths(homeDirectory: tmpHome)
+        let minimumExpectedLineCount = workerCount * runsPerWorker
+
+        let fileData = try Data(contentsOf: dataStore.primaryLogFile)
+        let text = try XCTUnwrap(String(data: fileData, encoding: .utf8))
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true)
+        XCTAssertGreaterThanOrEqual(lines.count, minimumExpectedLineCount)
+
+        for line in lines {
+            do {
+                _ = try JSONDecoder().decode(LogEntry.self, from: Data(line.utf8))
+            } catch {
+                XCTFail("Corrupted JSONL line: \(line)\nError: \(error)")
+            }
+        }
+    }
+
+    private func runCLIListProjects(cliURL: URL, homeDirectory: URL) throws -> Int32 {
+        let process = Process()
+        process.executableURL = cliURL
+        process.arguments = ["list-projects"]
+        process.currentDirectoryURL = homeDirectory
+        var environment = ProcessInfo.processInfo.environment
+        environment["HOME"] = homeDirectory.path
+        environment["CFFIXED_USER_HOME"] = homeDirectory.path
+        process.environment = environment
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    private func resolveCLIBinaryURLOrSkip() throws -> URL {
+        let fileManager = FileManager.default
+        var candidates: [URL] = []
+
+        if let builtProductsDirectory = ProcessInfo.processInfo.environment["BUILT_PRODUCTS_DIR"] {
+            candidates.append(
+                URL(fileURLWithPath: builtProductsDirectory, isDirectory: true)
+                    .appendingPathComponent("ap", isDirectory: false)
+            )
+        }
+
+        let bundleProductsDirectory = Bundle(for: LoggerTests.self).bundleURL.deletingLastPathComponent()
+        candidates.append(bundleProductsDirectory.appendingPathComponent("ap", isDirectory: false))
+
+        // Fallback for repo-local `make test` / `make coverage` runs.
+        let repositoryRoot = URL(fileURLWithPath: #filePath, isDirectory: false)
+            .deletingLastPathComponent() // AgentPanelCoreTests
+            .deletingLastPathComponent() // repo root
+        let repoDerivedDataCLI = repositoryRoot
+            .appendingPathComponent("build", isDirectory: true)
+            .appendingPathComponent("DerivedData", isDirectory: true)
+            .appendingPathComponent("Build", isDirectory: true)
+            .appendingPathComponent("Products", isDirectory: true)
+            .appendingPathComponent("Debug", isDirectory: true)
+            .appendingPathComponent("ap", isDirectory: false)
+        candidates.append(repoDerivedDataCLI)
+
+        var checkedPaths: [String] = []
+        for candidate in candidates {
+            guard !checkedPaths.contains(candidate.path) else {
+                continue
+            }
+            checkedPaths.append(candidate.path)
+
+            if fileManager.isExecutableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        throw XCTSkip(
+            "Skipping multiprocess logger test: CLI binary 'ap' not found in build products. Checked: \(checkedPaths.joined(separator: ", "))"
+        )
     }
 }
 
@@ -333,15 +546,6 @@ private final class InMemoryFileSystem: FileSystem {
     func writeFile(at url: URL, data: Data) throws {
         files[url.path] = data
     }
-
-    func syncFile(at url: URL) throws {}
-
-    @discardableResult
-    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
-        files[originalURL.path] = files[newItemURL.path]
-        files.removeValue(forKey: newItemURL.path)
-        return originalURL
-    }
 }
 
 private final class ConfigurableFileSystem: FileSystem {
@@ -356,6 +560,7 @@ private final class ConfigurableFileSystem: FileSystem {
     var removeItemError: Error?
     var moveItemError: Error?
     var appendFileError: Error?
+    var fileLockError: Error?
 
     func fileExists(at url: URL) -> Bool { base.fileExists(at: url) }
     func directoryExists(at url: URL) -> Bool { base.directoryExists(at: url) }
@@ -387,11 +592,142 @@ private final class ConfigurableFileSystem: FileSystem {
         try base.appendFile(at: url, data: data)
     }
 
-    func writeFile(at url: URL, data: Data) throws { try base.writeFile(at: url, data: data) }
-    func syncFile(at url: URL) throws { try base.syncFile(at: url) }
+    func withExclusiveFileLock<T>(at url: URL, body: () throws -> T) throws -> T {
+        _ = url
+        if let fileLockError { throw fileLockError }
+        return try body()
+    }
 
-    @discardableResult
-    func replaceItemAt(_ originalURL: URL, withItemAt newItemURL: URL) throws -> URL? {
-        try base.replaceItemAt(originalURL, withItemAt: newItemURL)
+    func writeFile(at url: URL, data: Data) throws { try base.writeFile(at: url, data: data) }
+}
+
+/// File system test double that deterministically interleaves concurrent append operations.
+///
+/// When two callers append to the same file concurrently, the second caller writes its full payload
+/// while the first caller is paused between writing its first and second halves. This reproduces
+/// byte-level write interleaving that can corrupt JSONL when the logger is not single-writer.
+private final class InterleavingAppendFileSystem: FileSystem {
+    enum InterleavingError: Error {
+        case missing(String)
+    }
+
+    private let interleaveDelaySeconds: TimeInterval
+    private let lock = NSLock()
+    private var directories: Set<String> = []
+    private var files: [String: Data] = [:]
+    private var appendInProgress: Bool = false
+
+    init(interleaveDelaySeconds: TimeInterval) {
+        self.interleaveDelaySeconds = interleaveDelaySeconds
+    }
+
+    func fileExists(at url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return files[url.path] != nil
+    }
+
+    func directoryExists(at url: URL) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return directories.contains(url.path)
+    }
+
+    func isExecutableFile(at url: URL) -> Bool {
+        false
+    }
+
+    func readFile(at url: URL) throws -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let data = files[url.path] else {
+            throw InterleavingError.missing(url.path)
+        }
+        return data
+    }
+
+    func createDirectory(at url: URL) throws {
+        lock.lock()
+        directories.insert(url.path)
+        lock.unlock()
+    }
+
+    func fileSize(at url: URL) throws -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let data = files[url.path] else {
+            throw InterleavingError.missing(url.path)
+        }
+        return UInt64(data.count)
+    }
+
+    func removeItem(at url: URL) throws {
+        lock.lock()
+        files.removeValue(forKey: url.path)
+        directories.remove(url.path)
+        lock.unlock()
+    }
+
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {
+        lock.lock()
+        guard let data = files[sourceURL.path] else {
+            lock.unlock()
+            throw InterleavingError.missing(sourceURL.path)
+        }
+        files[destinationURL.path] = data
+        files.removeValue(forKey: sourceURL.path)
+        lock.unlock()
+    }
+
+    func appendFile(at url: URL, data: Data) throws {
+        let shouldInterleave: Bool
+        lock.lock()
+        shouldInterleave = appendInProgress
+        if !appendInProgress {
+            appendInProgress = true
+        }
+        lock.unlock()
+
+        if shouldInterleave {
+            appendChunk(data, to: url)
+            return
+        }
+
+        defer {
+            lock.lock()
+            appendInProgress = false
+            lock.unlock()
+        }
+
+        let splitIndex = max(1, data.count / 2)
+        let firstHalf = Data(data.prefix(splitIndex))
+        let secondHalf = Data(data.suffix(data.count - splitIndex))
+
+        appendChunk(firstHalf, to: url)
+        Thread.sleep(forTimeInterval: interleaveDelaySeconds)
+        appendChunk(secondHalf, to: url)
+    }
+
+    func withExclusiveFileLock<T>(at url: URL, body: () throws -> T) throws -> T {
+        _ = url
+        return try body()
+    }
+
+    func writeFile(at url: URL, data: Data) throws {
+        lock.lock()
+        files[url.path] = data
+        lock.unlock()
+    }
+
+    private func appendChunk(_ chunk: Data, to url: URL) {
+        lock.lock()
+        if let existing = files[url.path] {
+            var merged = existing
+            merged.append(chunk)
+            files[url.path] = merged
+        } else {
+            files[url.path] = chunk
+        }
+        lock.unlock()
     }
 }

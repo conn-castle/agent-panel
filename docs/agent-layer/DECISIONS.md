@@ -26,6 +26,11 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 <!-- ENTRIES START -->
 
+- Decision 2026-02-23 focushistory: Persist non-project focus history for cross-process restore
+    Decision: Persist focus stack + most recent non-project focus in `~/.local/state/agent-panel/state.json` via `FocusHistoryStore`, with versioned schema, 7-day prune, and serialized persistence queue.
+    Reason: Exit/close focus restoration was unreliable across app/CLI sessions and restarts; persisted history is the single source of truth for restoring the last non-project window.
+    Tradeoffs: Adds disk writes on focus updates; future state extensions must be versioned to avoid breaking older reads.
+
 - Decision 2026-02-03 guipath: GUI apps and child processes require PATH augmentation
     Decision: Use `ExecutableResolver` for finding executables and `ApSystemCommandRunner` for propagating an augmented PATH to child processes. Both merge standard search paths with the user's login shell PATH (via `$SHELL -l -c <command>`, validated as absolute path, falls back to `/bin/zsh`). Fish shell is detected via `$SHELL` path suffix and uses `string join : $PATH` for colon-delimited output.
     Reason: macOS GUI apps launched via Finder/Dock inherit a minimal PATH missing Homebrew and user additions. Child processes (e.g., `al` calling `code`) inherit the same minimal PATH and fail. `/usr/bin/env` is not viable.
@@ -133,7 +138,7 @@ A rolling log of important, non-obvious decisions that materially affect future 
 
 - Decision 2026-02-16 workspaceretry: Switcher auto-retries workspace state on circuit breaker recovery
     Decision: When `refreshWorkspaceState()` fails during `show()`, the switcher displays "Recovering AeroSpace..." and schedules a main-thread `DispatchSourceTimer` (2s interval, max 5 retries). On success, the UI auto-updates with workspace state. Other call sites (close, exit) do not retry.
-    Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread (ProjectManager thread-safety contract), uses the existing recovery mechanism, and adds no new infrastructure.
+    Reason: Main-thread callers get immediate circuit breaker error + fire-and-forget async recovery. The switcher had no way to learn when recovery completed, forcing the user to dismiss and reopen. Timer-based retry stays on main thread to keep UI updates predictable, uses the existing recovery mechanism, and adds no new infrastructure.
     Tradeoffs: Up to 10s of "Recovering" display if recovery is slow. If recovery never completes, user sees the original error after 5 attempts. Timer is canceled on dismiss/resetState to avoid stale callbacks.
 
 - Decision 2026-02-17 ide-frame-retry: IDE frame read retries up to 10x before failing
@@ -255,3 +260,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Treat `ci26baseline` as the authoritative release/CI toolchain floor (`Xcode 26+`); references to `Xcode 17+` in older entries are historical context only.
     Reason: A single explicit baseline avoids contradictory operator guidance across workflows, release docs, and memory files.
     Tradeoffs: Historical entries remain for auditability, so readers must treat superseded wording as non-authoritative.
+
+- Decision 2026-02-23 workspacerouting: Canonical WorkspaceRouting utility owns workspace naming and non-project destination strategy
+    Decision: `WorkspaceRouting` enum in Core owns the `"ap-"` project prefix, project-ID extraction, and a `preferredNonProjectWorkspace(from:hasWindows:)` strategy that prefers a non-project workspace with windows, then any non-project workspace, then `"1"` as fallback. `ProjectManager` and `WindowRecoveryManager` delegate to it instead of defining their own constants and logic.
+    Reason: Workspace prefix was duplicated across two modules; move/recovery flows hardcoded workspace `"1"` while other flows used dynamic discovery, creating inconsistent behavior.
+    Tradeoffs: `moveWindowFromProject` now makes additional AeroSpace CLI calls (workspace listing + per-workspace window listing) to discover the destination. In practice this is 1-3 extra calls for typical setups.
+
+- Decision 2026-02-24 focus-restore-bounds: Focus restore retries are bounded and single-attempt per invocation
+    Decision: `ProjectManager` now uses one optional-lookup restore flow for stack/recent candidates, skips retrying the same window twice within one exit/close invocation, and bounds retry-preserved entries per window (max 2 attempts, max preserved-retry age 10 minutes). `moveWindowFromProject` fast-path destination selection is also validated with a per-workspace listing before use.
+    Reason: The prior implementation duplicated restore logic across lookup/non-lookup paths, could double-block one invocation by retrying the same candidate via the recent path, and allowed unbounded preserve/retry loops for stale candidates.
+    Tradeoffs: Persisted focus candidates that exceed retry/age bounds are invalidated earlier, so restoration may fall back to workspace routing more often in prolonged unstable-focus scenarios.

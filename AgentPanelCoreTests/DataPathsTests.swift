@@ -11,6 +11,7 @@ final class DataPathsTests: XCTestCase {
 
         XCTAssertEqual(store.logsDirectory.path, "/Users/testuser/.local/state/agent-panel/logs")
         XCTAssertEqual(store.primaryLogFile.path, "/Users/testuser/.local/state/agent-panel/logs/agent-panel.log")
+        XCTAssertEqual(store.logLockFile.path, "/Users/testuser/.local/state/agent-panel/logs/agent-panel.log.lock")
 
         XCTAssertEqual(store.stateFile.path, "/Users/testuser/.local/state/agent-panel/state.json")
         XCTAssertEqual(store.recentProjectsFile.path, "/Users/testuser/.local/state/agent-panel/recent-projects.json")

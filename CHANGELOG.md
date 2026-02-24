@@ -6,6 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-02-24
+
+### Added
+
+- **Persisted non-project focus history** -- AgentPanel now persists non-project focus history in `state.json` and reuses it across app/CLI sessions, improving return/exit restoration determinism after restarts.
+- **Launch-at-login toggler coverage** -- app wiring now includes explicit launch-at-login toggler behavior and regression coverage for login-item state transitions.
+
+### Changed
+
+- **Workspace routing policy centralization** -- workspace and non-project destination routing now flow through a shared policy module to keep restore decisions deterministic and consistent across switcher actions.
+
+### Fixed
+
+- **Non-project restore edge cases** -- focus handoff now prefers canonical persisted history when transient stack entries are stale or unavailable, reducing incorrect return targets.
+- **No-lookup restore fallback** -- when global AeroSpace window listing fails, exit-to-non-project now still attempts persisted stack/recent restoration instead of skipping directly to workspace fallback.
+- **History preservation on transient focus instability** -- failed focus-stability verification no longer eagerly discards stack candidates; entries are preserved for retry to avoid destructive history loss during temporary AeroSpace instability.
+- **Move-window destination routing efficiency** -- moving windows out of project workspaces now uses a single global window lookup fast path and only falls back to per-workspace probes when needed.
+- **Logger path hardening** -- logger/data-path handling now uses stricter path validation and safer defaults to prevent path-shape regressions in diagnostics and persistence flows.
+
 ## [0.1.10] - 2026-02-23
 
 ### Fixed

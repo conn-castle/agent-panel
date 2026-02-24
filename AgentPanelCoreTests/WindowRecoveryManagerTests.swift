@@ -365,7 +365,7 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertTrue(progressCalls.isEmpty)
     }
 
-    func testRecoverAll_movesEachWindowToWorkspace1() {
+    func testRecoverAll_movesEachWindowToPreferredNonProjectWorkspace() {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 10, workspace: "ap-foo", title: "Foo")
         let w2 = makeWindow(id: 20, workspace: "2", title: "Bar")
@@ -375,10 +375,28 @@ final class WindowRecoveryManagerTests: XCTestCase {
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
+        // Workspace "2" is the preferred non-project workspace (has windows)
         XCTAssertEqual(aerospace.moveWindowCalls.count, 2)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "1")
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "2",
+                       "Should target preferred non-project workspace, not hardcoded '1'")
         XCTAssertTrue(aerospace.moveWindowCalls[0].focusFollows)
-        XCTAssertEqual(aerospace.moveWindowCalls[1].workspace, "1")
+        XCTAssertEqual(aerospace.moveWindowCalls[1].workspace, "2")
+    }
+
+    func testRecoverAll_onlyProjectWorkspaces_fallsBackToDefault() {
+        let aerospace = StubAeroSpace()
+        let w1 = makeWindow(id: 10, workspace: "ap-foo", title: "Foo")
+        let w2 = makeWindow(id: 20, workspace: "ap-bar", title: "Bar")
+        setupWorkspaceWindows(aerospace, windows: [w1, w2])
+
+        let manager = makeManager(aerospace: aerospace)
+        _ = manager.recoverAllWindows { _, _ in }
+
+        // Only project workspaces exist — should fall back to WorkspaceRouting.fallbackWorkspace
+        XCTAssertEqual(aerospace.moveWindowCalls.count, 2)
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
+                       "Should fall back to default when only project workspaces exist")
+        XCTAssertEqual(aerospace.moveWindowCalls[1].workspace, WorkspaceRouting.fallbackWorkspace)
     }
 
     func testRecoverAll_reportsProgressForEachWindow() {
@@ -416,10 +434,10 @@ final class WindowRecoveryManagerTests: XCTestCase {
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
-        // Should restore focus to original window (now on workspace "1")
+        // Should restore focus to original window (now on destination workspace)
         XCTAssertEqual(aerospace.focusWindowCalls.last, 42)
-        // Should NOT call focusWorkspace — all windows are on "1", restoring
-        // the original workspace would briefly switch to an empty workspace
+        // Should NOT call focusWorkspace — all windows are on the destination,
+        // restoring the original workspace would briefly switch to an empty workspace
         XCTAssertTrue(aerospace.focusWorkspaceCalls.isEmpty)
     }
 
@@ -505,6 +523,44 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(recovery.windowsProcessed, 1)
         // But also surface the workspace failure
         XCTAssertTrue(recovery.errors.contains { $0.contains("ws-broken") })
+    }
+
+    func testRecoverAll_failedListingExcludesWorkspaceFromDestinationCandidates() {
+        let aerospace = StubAeroSpace()
+        // "broken-ws" is non-project but listing fails; "healthy-ws" is non-project and healthy
+        aerospace.workspaces = ["broken-ws", "healthy-ws"]
+        aerospace.windowsByWorkspace["broken-ws"] = .failure(ApCoreError(message: "workspace gone"))
+        aerospace.windowsByWorkspace["healthy-ws"] = .success([makeWindow(id: 1, workspace: "healthy-ws", title: "OK")])
+
+        let manager = makeManager(aerospace: aerospace)
+        _ = manager.recoverAllWindows { _, _ in }
+
+        // Destination should be "healthy-ws" (not "broken-ws" which failed listing)
+        XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "healthy-ws",
+                       "Should skip workspace with failed listing and use healthy candidate")
+    }
+
+    func testRecoverAll_allNonProjectListingsFail_fallsBackToDefault() {
+        let aerospace = StubAeroSpace()
+        let projectWindow = makeWindow(id: 7, workspace: "ap-proj", title: "Project Window")
+        // Non-project workspace exists but listing fails.
+        aerospace.workspaces = ["broken-ws", "ap-proj"]
+        aerospace.windowsByWorkspace["broken-ws"] = .failure(ApCoreError(message: "workspace gone"))
+        aerospace.windowsByWorkspace["ap-proj"] = .success([projectWindow])
+
+        let manager = makeManager(aerospace: aerospace)
+        let result = manager.recoverAllWindows { _, _ in }
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(recovery.windowsProcessed, 1)
+        XCTAssertTrue(recovery.errors.contains { $0.contains("broken-ws") })
+        XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
+                       "Should fall back to default when all non-project workspace listings fail")
     }
 
     func testRecoverAll_notFoundSurfacedAsError() {

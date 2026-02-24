@@ -5,16 +5,21 @@ final class FocusStackTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func focus(windowId: Int, workspace: String = "main") -> CapturedFocus {
-        CapturedFocus(windowId: windowId, appBundleId: "com.test.app", workspace: workspace)
+    private func entry(windowId: Int, workspace: String = "main") -> FocusHistoryEntry {
+        FocusHistoryEntry(
+            windowId: windowId,
+            appBundleId: "com.test.app",
+            workspace: workspace,
+            capturedAt: Date()
+        )
     }
 
     // MARK: - Push and Pop
 
     func testPushAndPopReturnsLastEntry() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))
-        stack.push(focus(windowId: 2))
+        stack.push(entry(windowId: 1))
+        stack.push(entry(windowId: 2))
 
         let result = stack.popFirstValid { _ in true }
         XCTAssertEqual(result?.windowId, 2)
@@ -26,9 +31,9 @@ final class FocusStackTests: XCTestCase {
 
     func testPopSkipsStaleThenReturnsValid() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))  // valid
-        stack.push(focus(windowId: 2))  // valid
-        stack.push(focus(windowId: 3))  // stale
+        stack.push(entry(windowId: 1))  // valid
+        stack.push(entry(windowId: 2))  // valid
+        stack.push(entry(windowId: 3))  // stale
 
         // windowId 3 is stale, 2 is valid
         let result = stack.popFirstValid { entry in entry.windowId != 3 }
@@ -47,9 +52,9 @@ final class FocusStackTests: XCTestCase {
 
     func testPopReturnsNilWhenAllStale() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))
-        stack.push(focus(windowId: 2))
-        stack.push(focus(windowId: 3))
+        stack.push(entry(windowId: 1))
+        stack.push(entry(windowId: 2))
+        stack.push(entry(windowId: 3))
 
         let result = stack.popFirstValid { _ in false }
         XCTAssertNil(result)
@@ -60,17 +65,17 @@ final class FocusStackTests: XCTestCase {
 
     func testPushDeduplicatesConsecutive() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))
-        stack.push(focus(windowId: 1))
+        stack.push(entry(windowId: 1))
+        stack.push(entry(windowId: 1))
 
         XCTAssertEqual(stack.count, 1)
     }
 
     func testPushAllowsNonConsecutiveDuplicates() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))
-        stack.push(focus(windowId: 2))
-        stack.push(focus(windowId: 1))
+        stack.push(entry(windowId: 1))
+        stack.push(entry(windowId: 2))
+        stack.push(entry(windowId: 1))
 
         XCTAssertEqual(stack.count, 3)
     }
@@ -80,7 +85,7 @@ final class FocusStackTests: XCTestCase {
     func testMaxSizeEnforced() {
         var stack = FocusStack(maxSize: 5)
         for i in 1...10 {
-            stack.push(focus(windowId: i))
+            stack.push(entry(windowId: i))
         }
 
         XCTAssertEqual(stack.count, 5)
@@ -96,7 +101,12 @@ final class FocusStackTests: XCTestCase {
 
     func testCapturedFocusIncludesWorkspace() {
         var stack = FocusStack()
-        let entry = CapturedFocus(windowId: 42, appBundleId: "com.apple.Safari", workspace: "personal")
+        let entry = FocusHistoryEntry(
+            windowId: 42,
+            appBundleId: "com.apple.Safari",
+            workspace: "personal",
+            capturedAt: Date()
+        )
         stack.push(entry)
 
         let popped = stack.popFirstValid { _ in true }
@@ -115,7 +125,7 @@ final class FocusStackTests: XCTestCase {
 
     func testIsEmptyAfterPush() {
         var stack = FocusStack()
-        stack.push(focus(windowId: 1))
+        stack.push(entry(windowId: 1))
         XCTAssertFalse(stack.isEmpty)
         XCTAssertEqual(stack.count, 1)
     }
