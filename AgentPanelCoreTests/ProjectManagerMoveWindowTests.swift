@@ -35,6 +35,7 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
         var workspaces: [String] = []
         var windowsByWorkspace: [String: [ApWindow]] = [:]
         var failingWorkspaces: Set<String> = []
+        var listAllWindowsResultOverride: Result<[ApWindow], ApCoreError>?
 
         func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(true) }
@@ -49,7 +50,20 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
             }
             return .success(windowsByWorkspace[workspace] ?? [])
         }
-        func listAllWindows() -> Result<[ApWindow], ApCoreError> { .success([]) }
+        func listAllWindows() -> Result<[ApWindow], ApCoreError> {
+            if let result = listAllWindowsResultOverride {
+                return result
+            }
+            var windows: [ApWindow] = []
+            var seenWindowIds: Set<Int> = []
+            for list in windowsByWorkspace.values {
+                for window in list where !seenWindowIds.contains(window.windowId) {
+                    seenWindowIds.insert(window.windowId)
+                    windows.append(window)
+                }
+            }
+            return .success(windows)
+        }
         func focusedWindow() -> Result<ApWindow, ApCoreError> { .failure(ApCoreError(message: "no focus")) }
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> { .success(()) }
         func focusWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
@@ -247,6 +261,31 @@ final class ProjectManagerMoveWindowTests: XCTestCase {
         }
         XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "healthy-ws",
                        "Should skip workspace with failed listing and use healthy candidate")
+    }
+
+    func testMoveWindowFromProject_listAllWindowsFailureFallsBackToPerWorkspaceSelection() {
+        let aerospace = MoveAeroSpaceStub()
+        aerospace.workspaces = ["broken-ws", "healthy-ws"]
+        aerospace.failingWorkspaces = ["broken-ws"]
+        aerospace.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows unavailable"))
+        aerospace.windowsByWorkspace["healthy-ws"] = [
+            ApWindow(windowId: 50, appBundleId: "com.test.app", workspace: "healthy-ws", windowTitle: "W")
+        ]
+
+        let pm = makeProjectManager(aerospace: aerospace)
+        pm.loadTestConfig(makeTestConfig())
+
+        let result = pm.moveWindowFromProject(windowId: 99)
+
+        guard case .success = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+        XCTAssertEqual(
+            aerospace.moveWindowCalls[0].workspace,
+            "healthy-ws",
+            "Should fall back to per-workspace selection when listAllWindows fails"
+        )
     }
 
     func testMoveWindowFromProject_allNonProjectListingsFail_fallsBackToDefault() {

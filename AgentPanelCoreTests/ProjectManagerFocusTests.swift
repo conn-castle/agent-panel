@@ -101,6 +101,59 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    func testExitToNonProjectRestoresFromHistoryWhenWindowLookupFails() {
+        let aero = FocusAeroSpaceStub()
+        aero.focusWindowSuccessIds = [99]
+        aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99))
+        case .failure(let error):
+            XCTFail("Expected success but got: \(error)")
+        }
+    }
+
+    func testExitToNonProjectPreservesStackCandidateWhenFocusUnstable() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+
+        // First attempt fails to stabilize and should preserve the entry for retry.
+        aero.focusWindowSuccessIds = []
+        let firstResult = manager.exitToNonProjectWindow()
+        if case .success = firstResult {
+            XCTFail("Expected noPreviousWindow when focus cannot stabilize")
+        }
+
+        // Second attempt succeeds and should still restore from history.
+        aero.focusWindowSuccessIds = [99]
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99))
+        case .failure(let error):
+            XCTFail("Expected success after retry but got: \(error)")
+        }
+    }
+
     // MARK: - Exit fails when stack empty
 
     func testExitToNonProjectFailsWhenStackEmpty() {
@@ -856,6 +909,7 @@ private final class FocusAeroSpaceStub: AeroSpaceProviding {
     var focusWindowSuccessIds: Set<Int> = []
     var workspacesWithFocusResult: Result<[ApWorkspaceSummary], ApCoreError> = .success([])
     var focusedWindowIds: [Int] = []
+    var listAllWindowsResultOverride: Result<[ApWindow], ApCoreError>?
 
     /// Windows returned by `listWindowsForApp(bundleId:)`, keyed by bundle ID.
     var windowsByBundleId: [String: [ApWindow]] = [:]
@@ -876,6 +930,9 @@ private final class FocusAeroSpaceStub: AeroSpaceProviding {
         .success(windowsByWorkspace[workspace] ?? [])
     }
     func listAllWindows() -> Result<[ApWindow], ApCoreError> {
+        if let override = listAllWindowsResultOverride {
+            return override
+        }
         var windows: [ApWindow] = []
         var seenIds: Set<Int> = []
 

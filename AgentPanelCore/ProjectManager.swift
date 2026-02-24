@@ -485,17 +485,21 @@ public final class ProjectManager {
     /// Call this before using other methods. Returns the config on success.
     @discardableResult
     public func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
-        let oldProjects = withState { config?.projects ?? [] }
         switch configLoader() {
         case .success(let success):
-            withState {
+            let callbackPayload: (([ProjectConfig]) -> Void, [ProjectConfig])? = withState {
+                let oldProjects = self.config?.projects ?? []
                 self.config = success.config
                 self.configWarningsStorage = success.warnings
+                guard success.config.projects != oldProjects,
+                      let callback = self.onProjectsChangedStorage else {
+                    return nil
+                }
+                return (callback, success.config.projects)
             }
             logEvent("config.loaded", context: ["project_count": "\(success.config.projects.count)"])
-            if success.config.projects != oldProjects {
-                let callback = onProjectsChanged
-                callback?(success.config.projects)
+            if let (callback, projects) = callbackPayload {
+                callback(projects)
             }
             return .success(success)
         case .failure(let error):
@@ -726,16 +730,38 @@ public final class ProjectManager {
 
     private func updateMostRecentNonProjectFocus(
         windowId: Int,
+        destinationWorkspace: String,
         windowLookup: [Int: ApWindow]
     ) {
         guard let window = windowLookup[windowId],
-              !window.workspace.hasPrefix(Self.workspacePrefix) else { return }
+              !destinationWorkspace.hasPrefix(Self.workspacePrefix) else { return }
         let focus = CapturedFocus(
             windowId: window.windowId,
             appBundleId: window.appBundleId,
-            workspace: window.workspace
+            workspace: destinationWorkspace
         )
         updateMostRecentNonProjectFocus(focus)
+    }
+
+    private func preserveFocusHistoryForRetry(_ focus: CapturedFocus, capturedAt: Date) {
+        let entry = FocusHistoryEntry(focus: focus, capturedAt: capturedAt)
+        let snapshot = withState {
+            focusStack.push(entry)
+            mostRecentNonProjectFocus = entry
+            return FocusHistorySnapshot(
+                stackCount: focusStack.count,
+                recentWindowId: mostRecentNonProjectFocus?.windowId
+            )
+        }
+        persistFocusHistory()
+        let context = focusHistoryContext(
+            windowId: focus.windowId,
+            workspace: focus.workspace,
+            appBundleId: focus.appBundleId,
+            reason: "focus_unstable",
+            snapshot: snapshot
+        )
+        logEvent("focus.history.restore_preserved", level: .warn, context: context.isEmpty ? nil : context)
     }
 
     private func restoreNonProjectFocus(windowLookup: [Int: ApWindow]) -> CapturedFocus? {
@@ -743,6 +769,19 @@ public final class ProjectManager {
             return focus
         }
         if let focus = restoreMostRecentNonProjectFocus(windowLookup: windowLookup) {
+            return focus
+        }
+        let snapshot = focusHistorySnapshot()
+        let context = focusHistoryContext(reason: "exhausted", snapshot: snapshot)
+        logEvent("focus.history.exhausted", level: .warn, context: context.isEmpty ? nil : context)
+        return nil
+    }
+
+    private func restoreNonProjectFocusWithoutWindowLookup() -> CapturedFocus? {
+        if let focus = restoreNonProjectFocusFromStackWithoutWindowLookup() {
+            return focus
+        }
+        if let focus = restoreMostRecentNonProjectFocusWithoutWindowLookup() {
             return focus
         }
         let snapshot = focusHistorySnapshot()
@@ -807,7 +846,58 @@ public final class ProjectManager {
                 snapshot: failureSnapshot
             )
             logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-            invalidateFocusHistory(windowId: resolved.windowId, reason: "focus_failed")
+            preserveFocusHistoryForRetry(resolved, capturedAt: candidate.capturedAt)
+            return nil
+        }
+        return nil
+    }
+
+    private func restoreNonProjectFocusFromStackWithoutWindowLookup() -> CapturedFocus? {
+        while let (candidate, snapshot) = popNextFocusStackEntry() {
+            if candidate.workspace.hasPrefix(Self.workspacePrefix) {
+                invalidateFocusHistory(windowId: candidate.windowId, reason: "project_workspace")
+                continue
+            }
+            let resolved = candidate.focus
+            let attemptContext = focusHistoryContext(
+                windowId: resolved.windowId,
+                workspace: resolved.workspace,
+                appBundleId: resolved.appBundleId,
+                method: "stack-no-lookup",
+                snapshot: snapshot
+            )
+            logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+
+            if focusWindowStableSync(
+                windowId: resolved.windowId,
+                timeout: windowPollTimeout,
+                pollInterval: windowPollInterval
+            ) {
+                updateMostRecentNonProjectFocus(resolved)
+                let successSnapshot = focusHistorySnapshot()
+                let successContext = focusHistoryContext(
+                    windowId: resolved.windowId,
+                    workspace: resolved.workspace,
+                    appBundleId: resolved.appBundleId,
+                    method: "stack-no-lookup",
+                    snapshot: successSnapshot
+                )
+                logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
+                return resolved
+            }
+
+            let failureSnapshot = focusHistorySnapshot()
+            let failureContext = focusHistoryContext(
+                windowId: resolved.windowId,
+                workspace: resolved.workspace,
+                appBundleId: resolved.appBundleId,
+                method: "stack-no-lookup",
+                reason: "focus_failed",
+                snapshot: failureSnapshot
+            )
+            logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
+            preserveFocusHistoryForRetry(resolved, capturedAt: candidate.capturedAt)
+            return nil
         }
         return nil
     }
@@ -854,7 +944,56 @@ public final class ProjectManager {
             snapshot: failureSnapshot
         )
         logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
-        invalidateFocusHistory(windowId: candidate.windowId, reason: "focus_failed")
+        return nil
+    }
+
+    private func restoreMostRecentNonProjectFocusWithoutWindowLookup() -> CapturedFocus? {
+        guard let candidateEntry = withState({ mostRecentNonProjectFocus }) else {
+            return nil
+        }
+        if candidateEntry.workspace.hasPrefix(Self.workspacePrefix) {
+            invalidateFocusHistory(windowId: candidateEntry.windowId, reason: "project_workspace")
+            return nil
+        }
+        let candidate = candidateEntry.focus
+        let attemptSnapshot = focusHistorySnapshot()
+        let attemptContext = focusHistoryContext(
+            windowId: candidate.windowId,
+            workspace: candidate.workspace,
+            appBundleId: candidate.appBundleId,
+            method: "recent-no-lookup",
+            snapshot: attemptSnapshot
+        )
+        logEvent("focus.history.restore_attempt", context: attemptContext.isEmpty ? nil : attemptContext)
+
+        if focusWindowStableSync(
+            windowId: candidate.windowId,
+            timeout: windowPollTimeout,
+            pollInterval: windowPollInterval
+        ) {
+            updateMostRecentNonProjectFocus(candidate)
+            let successSnapshot = focusHistorySnapshot()
+            let successContext = focusHistoryContext(
+                windowId: candidate.windowId,
+                workspace: candidate.workspace,
+                appBundleId: candidate.appBundleId,
+                method: "recent-no-lookup",
+                snapshot: successSnapshot
+            )
+            logEvent("focus.history.restore_success", context: successContext.isEmpty ? nil : successContext)
+            return candidate
+        }
+
+        let failureSnapshot = focusHistorySnapshot()
+        let failureContext = focusHistoryContext(
+            windowId: candidate.windowId,
+            workspace: candidate.workspace,
+            appBundleId: candidate.appBundleId,
+            method: "recent-no-lookup",
+            reason: "focus_failed",
+            snapshot: failureSnapshot
+        )
+        logEvent("focus.history.restore_failed", level: .warn, message: "Focus did not stabilize", context: failureContext)
         return nil
     }
 
@@ -1223,33 +1362,44 @@ public final class ProjectManager {
             return .failure(.configNotLoaded)
         }
 
+        let windowLookup = listAllWindowsById()
+
         // Select destination using canonical non-project workspace strategy.
-        // Only workspaces whose window listing succeeded are considered candidates;
-        // workspaces with listing failures are excluded to avoid routing to unhealthy targets.
+        // Fast path: derive workspaces-with-windows from a single listAllWindows call.
+        // Fallback: if listAllWindows fails, use per-workspace listings and exclude failures.
         let destination: String
         if case .success(let workspaces) = aerospace.getWorkspaces() {
-            var queriedWorkspaces: [String] = []
-            var workspacesWithWindows: Set<String> = []
-            for ws in workspaces {
-                if case .success(let windows) = aerospace.listWindowsWorkspace(workspace: ws) {
-                    queriedWorkspaces.append(ws)
-                    if !windows.isEmpty {
-                        workspacesWithWindows.insert(ws)
-                    }
+            if let windowLookup {
+                var workspacesWithWindows: Set<String> = []
+                for window in windowLookup.values {
+                    workspacesWithWindows.insert(window.workspace)
                 }
+                let hasNonProjectWorkspaceWithWindows = workspaces.contains {
+                    !$0.hasPrefix(Self.workspacePrefix) && workspacesWithWindows.contains($0)
+                }
+                if hasNonProjectWorkspaceWithWindows {
+                    destination = WorkspaceRouting.preferredNonProjectWorkspace(
+                        from: workspaces,
+                        hasWindows: { workspacesWithWindows.contains($0) }
+                    )
+                } else {
+                    destination = preferredNonProjectWorkspaceByListing(workspaces)
+                }
+            } else {
+                destination = preferredNonProjectWorkspaceByListing(workspaces)
             }
-            destination = WorkspaceRouting.preferredNonProjectWorkspace(
-                from: queriedWorkspaces,
-                hasWindows: { workspacesWithWindows.contains($0) }
-            )
         } else {
             destination = WorkspaceRouting.fallbackWorkspace
         }
 
         switch aerospace.moveWindowToWorkspace(workspace: destination, windowId: windowId, focusFollows: false) {
         case .success:
-            if let windowLookup = listAllWindowsById() {
-                updateMostRecentNonProjectFocus(windowId: windowId, windowLookup: windowLookup)
+            if let windowLookup {
+                updateMostRecentNonProjectFocus(
+                    windowId: windowId,
+                    destinationWorkspace: destination,
+                    windowLookup: windowLookup
+                )
             }
             logEvent("move_window_from_project.completed", context: [
                 "window_id": "\(windowId)",
@@ -1263,6 +1413,23 @@ public final class ProjectManager {
             ])
             return .failure(.aeroSpaceError(detail: error.message))
         }
+    }
+
+    private func preferredNonProjectWorkspaceByListing(_ workspaces: [String]) -> String {
+        var queriedWorkspaces: [String] = []
+        var workspacesWithWindows: Set<String> = []
+        for ws in workspaces {
+            if case .success(let windows) = aerospace.listWindowsWorkspace(workspace: ws) {
+                queriedWorkspaces.append(ws)
+                if !windows.isEmpty {
+                    workspacesWithWindows.insert(ws)
+                }
+            }
+        }
+        return WorkspaceRouting.preferredNonProjectWorkspace(
+            from: queriedWorkspaces,
+            hasWindows: { workspacesWithWindows.contains($0) }
+        )
     }
 
     /// Exits to the last non-project window without closing the project.
@@ -1286,6 +1453,8 @@ public final class ProjectManager {
         var restoredFocus: CapturedFocus?
         if let windowLookup = listAllWindowsById() {
             restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
+        } else {
+            restoredFocus = restoreNonProjectFocusWithoutWindowLookup()
         }
 
         if let focus = restoredFocus {
