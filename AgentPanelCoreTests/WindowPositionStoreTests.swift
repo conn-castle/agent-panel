@@ -213,6 +213,96 @@ final class WindowPositionStoreTests: XCTestCase {
         }
     }
 
+    func testLoadReadFailureReturnsFailure() {
+        let fileSystem = ConfigurableWindowPositionFileSystem()
+        fileSystem.fileExistsValue = true
+        fileSystem.readError = NSError(domain: "WindowPositionStoreTests", code: 10, userInfo: [
+            NSLocalizedDescriptionKey: "read failed"
+        ])
+        let store = WindowPositionStore(
+            filePath: URL(fileURLWithPath: "/tmp/layouts.json"),
+            fileSystem: fileSystem
+        )
+
+        let result = store.load(projectId: "test", mode: .wide)
+
+        switch result {
+        case .success:
+            XCTFail("Expected read failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertEqual(error.message, "Failed to read window layouts file")
+            XCTAssertEqual(error.detail, "read failed")
+        }
+    }
+
+    func testSaveExistingFileReadFailureReturnsFailure() {
+        let fileSystem = ConfigurableWindowPositionFileSystem()
+        fileSystem.fileExistsValue = true
+        fileSystem.readError = NSError(domain: "WindowPositionStoreTests", code: 11, userInfo: [
+            NSLocalizedDescriptionKey: "read existing failed"
+        ])
+        let store = WindowPositionStore(
+            filePath: URL(fileURLWithPath: "/tmp/layouts.json"),
+            fileSystem: fileSystem
+        )
+
+        let result = store.save(projectId: "test", mode: .wide, frames: sampleFrames)
+
+        switch result {
+        case .success:
+            XCTFail("Expected read-existing failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertEqual(error.message, "Failed to read window layouts file")
+            XCTAssertEqual(error.detail, "read existing failed")
+        }
+    }
+
+    func testSaveFailsWhenEncodingNonFiniteFrame() {
+        let fileSystem = ConfigurableWindowPositionFileSystem()
+        let store = WindowPositionStore(
+            filePath: URL(fileURLWithPath: "/tmp/layouts.json"),
+            fileSystem: fileSystem
+        )
+        let nonFiniteFrames = SavedWindowFrames(
+            ide: SavedFrame(x: .nan, y: 0, width: 800, height: 600),
+            chrome: nil
+        )
+
+        let result = store.save(projectId: "test", mode: .wide, frames: nonFiniteFrames)
+
+        switch result {
+        case .success:
+            XCTFail("Expected encode failure for NaN frame values")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertEqual(error.message, "Failed to encode window layouts file")
+        }
+    }
+
+    func testSaveWriteFailureReturnsFailure() {
+        let fileSystem = ConfigurableWindowPositionFileSystem()
+        fileSystem.writeError = NSError(domain: "WindowPositionStoreTests", code: 12, userInfo: [
+            NSLocalizedDescriptionKey: "write failed"
+        ])
+        let store = WindowPositionStore(
+            filePath: URL(fileURLWithPath: "/tmp/layouts.json"),
+            fileSystem: fileSystem
+        )
+
+        let result = store.save(projectId: "test", mode: .wide, frames: sampleFrames)
+
+        switch result {
+        case .success:
+            XCTFail("Expected write failure")
+        case .failure(let error):
+            XCTAssertEqual(error.category, .fileSystem)
+            XCTAssertEqual(error.message, "Failed to write window layouts file")
+            XCTAssertEqual(error.detail, "write failed")
+        }
+    }
+
     // MARK: - SavedFrame Conversion
 
     func testSavedFrameCGRectRoundTrip() {
@@ -251,4 +341,41 @@ private struct StubUnwritableFileSystem: FileSystem {
     func moveItem(at sourceURL: URL, to destinationURL: URL) throws { throw NSError(domain: "Test", code: 1) }
     func appendFile(at url: URL, data: Data) throws { throw NSError(domain: "Test", code: 1) }
     func writeFile(at url: URL, data: Data) throws { throw NSError(domain: "Test", code: 1) }
+}
+
+private final class ConfigurableWindowPositionFileSystem: FileSystem {
+    var fileExistsValue = false
+    var readData: Data?
+    var readError: Error?
+    var createDirectoryError: Error?
+    var writeError: Error?
+
+    func fileExists(at url: URL) -> Bool { fileExistsValue }
+    func directoryExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+
+    func readFile(at url: URL) throws -> Data {
+        if let readError {
+            throw readError
+        }
+        return readData ?? Data()
+    }
+
+    func createDirectory(at url: URL) throws {
+        if let createDirectoryError {
+            throw createDirectoryError
+        }
+    }
+
+    func fileSize(at url: URL) throws -> UInt64 { UInt64(readData?.count ?? 0) }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+
+    func writeFile(at url: URL, data: Data) throws {
+        if let writeError {
+            throw writeError
+        }
+        readData = data
+    }
 }

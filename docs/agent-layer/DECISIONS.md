@@ -270,3 +270,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `ProjectManager` now uses one optional-lookup restore flow for stack/recent candidates, skips retrying the same window twice within one exit/close invocation, and bounds retry-preserved entries per window (max 2 attempts, max preserved-retry age 10 minutes). `moveWindowFromProject` fast-path destination selection is also validated with a per-workspace listing before use.
     Reason: The prior implementation duplicated restore logic across lookup/non-lookup paths, could double-block one invocation by retrying the same candidate via the recent path, and allowed unbounded preserve/retry loops for stale candidates.
     Tradeoffs: Persisted focus candidates that exceed retry/age bounds are invalidated earlier, so restoration may fall back to workspace routing more often in prolonged unstable-focus scenarios.
+
+- Decision 2026-02-24 focus-stable-recheck: Focus stabilization re-checks immediately after re-assert
+    Decision: `focusWindowStable` and `focusWindowStableSync` now re-check `focusedWindow` immediately after each `focusWindow` re-assert and clamp sleep intervals to remaining timeout budget.
+    Reason: Short timeout windows in CI could expire between re-assert and the next poll iteration, causing false `noPreviousWindow` failures even when focus had already stabilized.
+    Tradeoffs: Adds one extra `focusedWindow` call per poll loop iteration and slightly more branching in focus loops, but removes timeout-boundary flakiness and keeps behavior deterministic.

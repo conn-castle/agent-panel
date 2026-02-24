@@ -236,6 +236,32 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    func testExitToNonProjectRestoresFocusWhenReassertSucceedsNearTimeoutBoundary() {
+        let aero = FocusAeroSpaceStub()
+        aero.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
+        ])
+        registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
+
+        let manager = makeFocusManager(
+            aerospace: aero,
+            windowPollTimeout: 0.01,
+            windowPollInterval: 1.0
+        )
+        loadTestConfig(manager: manager)
+
+        let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
+        manager.pushFocusForTest(focus)
+        aero.focusWindowSuccessIds = [99]
+
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99))
+        case .failure(let error):
+            XCTFail("Expected success when focus stabilizes immediately after re-assert, got: \(error)")
+        }
+    }
+
     func testExitToNonProjectRetryLimitEventuallyInvalidatesUnstableCandidate() {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([

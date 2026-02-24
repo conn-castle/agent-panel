@@ -340,6 +340,25 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(output.stderr, ["error: Project not found: a"])
     }
 
+    func testSelectProjectConfigLoadFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.parseFailed(detail: "bad toml"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Failed to parse config: bad toml"])
+    }
+
     func testSelectProjectConfigNotLoadedPrintsError() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -359,6 +378,33 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
         XCTAssertEqual(output.stdout, [])
         XCTAssertEqual(output.stderr, ["error: Config not loaded"])
+    }
+
+    func testSelectProjectSuccessPrintsLayoutWarning() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.captureCurrentFocusResult = CapturedFocus(windowId: 1, appBundleId: "app", workspace: "main")
+        manager.selectProjectResult = .success(
+            ProjectActivationSuccess(
+                ideWindowId: 42,
+                tabRestoreWarning: nil,
+                layoutWarning: "layout not applied"
+            )
+        )
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["select-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Selected project: a"])
+        XCTAssertEqual(output.stderr, ["warning: layout not applied"])
     }
 
     func testSelectProjectIdeLaunchFailedPrintsError() {
@@ -462,6 +508,25 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(output.stderr, ["error: No active project"])
     }
 
+    func testCloseProjectConfigLoadFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.fileNotFound(path: "/tmp/missing.toml"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Config file not found: /tmp/missing.toml"])
+    }
+
     func testReturnCommandSuccessPrintsMessage() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -540,6 +605,25 @@ final class ApCLIRunnerTests: XCTestCase {
         XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
         XCTAssertEqual(output.stdout, [])
         XCTAssertEqual(output.stderr, ["error: Focus unstable: did not stabilize"])
+    }
+
+    func testReturnCommandConfigLoadFailurePrintsErrorAndReturnsFailureExit() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .failure(.readFailed(path: "/tmp/config.toml", detail: "permission denied"))
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.failure.rawValue)
+        XCTAssertEqual(output.stdout, [])
+        XCTAssertEqual(output.stderr, ["error: Failed to read config at /tmp/config.toml: permission denied"])
     }
 
     func testUsageTextHasUniqueContentPerHelpTopic() {

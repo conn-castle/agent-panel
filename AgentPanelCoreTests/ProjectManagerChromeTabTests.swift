@@ -118,6 +118,32 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         }
     }
 
+    func testCloseProjectWarnsWhenSnapshotSaveFails() {
+        let tabCapture = PMTabCaptureStub()
+        tabCapture.captureResult = .success(["https://one.com", "https://two.com"])
+
+        let chromeTabsDir = tempDir("close-save-fail")
+        let failingStore = ChromeTabStore(
+            directory: chromeTabsDir,
+            fileSystem: PMSnapshotWriteFailingFileSystem()
+        )
+        let manager = makeManager(
+            chromeTabsDir: chromeTabsDir,
+            chromeTabCapture: tabCapture,
+            chromeTabStore: failingStore
+        )
+
+        let config = Config(projects: [testProject()])
+        manager.loadTestConfig(config)
+
+        switch manager.closeProject(projectId: "test") {
+        case .success(let result):
+            XCTAssertEqual(result.tabCaptureWarning, "Tab save failed: Failed to write tab snapshot for test")
+        case .failure(let error):
+            XCTFail("Expected non-fatal tab save warning, got: \(error)")
+        }
+    }
+
     // MARK: - Close with empty capture deletes stale snapshot
 
     func testCloseProjectEmptyCaptureDeletesSnapshot() {
@@ -203,7 +229,8 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
     private func makeManager(
         chromeTabsDir: URL,
         chromeTabCapture: PMTabCaptureStub = PMTabCaptureStub(),
-        gitRemoteResolver: PMGitRemoteStub = PMGitRemoteStub()
+        gitRemoteResolver: PMGitRemoteStub = PMGitRemoteStub(),
+        chromeTabStore: ChromeTabStore? = nil
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-chrome-recency-\(UUID().uuidString).json")
@@ -214,7 +241,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
             ideLauncher: PMIdeLauncherStub(),
             agentLayerIdeLauncher: PMIdeLauncherStub(),
             chromeLauncher: PMChromeLauncherStub(),
-            chromeTabStore: ChromeTabStore(directory: chromeTabsDir),
+            chromeTabStore: chromeTabStore ?? ChromeTabStore(directory: chromeTabsDir),
             chromeTabCapture: chromeTabCapture,
             gitRemoteResolver: gitRemoteResolver,
             logger: PMLoggerStub(),
@@ -278,5 +305,20 @@ private struct PMLoggerStub: AgentPanelLogging {
         context: [String: String]?
     ) -> Result<Void, LogWriteError> {
         .success(())
+    }
+}
+
+private struct PMSnapshotWriteFailingFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { Data() }
+    func createDirectory(at url: URL) throws {}
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "PMSnapshotWriteFailingFileSystem", code: 1, userInfo: nil)
     }
 }

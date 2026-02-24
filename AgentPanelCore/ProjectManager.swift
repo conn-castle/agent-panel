@@ -592,19 +592,30 @@ public final class ProjectManager {
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
 
-        while Date() < deadline {
-            switch aerospace.focusedWindow() {
-            case .success(let focused) where focused.windowId == windowId:
+        while true {
+            if isFocusedWindow(windowId: windowId) {
                 return true
-            default:
-                // Re-assert focus (macOS can steal it briefly during Space/app switches)
-                _ = aerospace.focusWindow(windowId: windowId)
             }
 
-            try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
-        }
+            // Re-assert focus (macOS can steal it briefly during Space/app switches)
+            _ = aerospace.focusWindow(windowId: windowId)
 
-        return false
+            // Re-check immediately so short timeouts don't miss a successful re-assert.
+            if isFocusedWindow(windowId: windowId) {
+                return true
+            }
+
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { return false }
+
+            let sleepInterval = min(pollInterval, remaining)
+            if sleepInterval <= 0 {
+                await Task.yield()
+                continue
+            }
+
+            try? await Task.sleep(nanoseconds: UInt64(sleepInterval * 1_000_000_000))
+        }
     }
 
     /// Synchronous variant of `focusWindowStable` for non-async callers.
@@ -618,18 +629,32 @@ public final class ProjectManager {
     ) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
 
-        while Date() < deadline {
-            switch aerospace.focusedWindow() {
-            case .success(let focused) where focused.windowId == windowId:
+        while true {
+            if isFocusedWindow(windowId: windowId) {
                 return true
-            default:
-                _ = aerospace.focusWindow(windowId: windowId)
             }
 
-            Thread.sleep(forTimeInterval: pollInterval)
-        }
+            _ = aerospace.focusWindow(windowId: windowId)
 
-        return false
+            // Re-check immediately so short timeouts don't miss a successful re-assert.
+            if isFocusedWindow(windowId: windowId) {
+                return true
+            }
+
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { return false }
+
+            Thread.sleep(forTimeInterval: min(pollInterval, remaining))
+        }
+    }
+
+    private func isFocusedWindow(windowId: Int) -> Bool {
+        switch aerospace.focusedWindow() {
+        case .success(let focused):
+            return focused.windowId == windowId
+        case .failure:
+            return false
+        }
     }
 
     private func updateMostRecentNonProjectFocus(_ focus: CapturedFocus) {
