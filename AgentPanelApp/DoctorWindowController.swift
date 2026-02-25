@@ -1,46 +1,24 @@
-//
-//  DoctorWindowController.swift
-//  AgentPanel
-//
-//  UI controller for the Doctor diagnostic window.
-//  Manages window creation, report display, and button actions
-//  for the system health check panel.
-//
-
 import AppKit
 
 import AgentPanelAppKit
 import AgentPanelCore
 
 /// Controls the Doctor diagnostic window presentation.
-///
-/// Separates Doctor window UI concerns from the main AppDelegate.
-/// Uses callback-based interface for actions to maintain clear separation.
 final class DoctorWindowController: NSObject, NSWindowDelegate {
     // MARK: - Action Callbacks
 
-    /// Called when user requests to run Doctor.
     var onRunDoctor: (() -> Void)?
-    /// Called when user requests to copy the report.
     var onCopyReport: (() -> Void)?
-    /// Called when user requests to install AeroSpace.
     var onInstallAeroSpace: (() -> Void)?
-    /// Called when user requests to start AeroSpace.
     var onStartAeroSpace: (() -> Void)?
-    /// Called when user requests to reload AeroSpace config.
     var onReloadConfig: (() -> Void)?
-    /// Called when user requests Accessibility permission.
     var onRequestAccessibility: (() -> Void)?
-    /// Called when user closes the window.
     var onClose: (() -> Void)?
 
     // MARK: - Focus Restoration
 
-    /// AeroSpace window focus captured before the Doctor window was first shown.
-    /// Only set on the first open; preserved across re-runs within the same Doctor session.
     var capturedFocus: CapturedFocus?
 
-    /// Fallback: the frontmost app before the Doctor window was first shown.
     var previousApp: NSRunningApplication?
 
     // MARK: - UI State
@@ -57,10 +35,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Public Interface
 
-    /// Shows the Doctor window immediately with a loading spinner.
-    ///
-    /// Call this before dispatching `Doctor.run()` to provide instant feedback.
-    /// When the report arrives, call `showReport(_:)` to replace the loading state.
     func showLoading() {
         if window == nil {
             setupWindow()
@@ -72,8 +46,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    /// Shows the Doctor report in a panel window.
-    /// - Parameter report: Doctor report to display.
     func showReport(_ report: DoctorReport) {
         if window == nil {
             setupWindow()
@@ -85,12 +57,9 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    /// Updates the UI with a new report.
-    /// - Parameter report: Doctor report to display.
     func updateUI(with report: DoctorReport) {
         lastReport = report
 
-        // Hide loading, show report
         loadingContainer?.isHidden = true
         progressIndicator?.stopAnimation(nil)
         scrollView?.isHidden = false
@@ -101,7 +70,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         applyReportState(report.actions)
     }
 
-    /// Closes the Doctor window.
     func close() {
         window?.close()
     }
@@ -155,7 +123,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - State Management
 
-    /// Transitions the UI to loading state: shows spinner, hides report, disables buttons.
     private func setLoadingState() {
         scrollView?.isHidden = true
         loadingContainer?.isHidden = false
@@ -168,7 +135,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         buttons.startAeroSpace.isHidden = true
         buttons.reloadConfig.isHidden = true
         buttons.requestAccessibility.isHidden = true
-        // Close is always enabled
     }
 
     /// Applies button visibility/enabled state based on report action availability.
@@ -208,8 +174,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         container.spacing = 12
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        // Report area: scrollView and loadingContainer share the same space.
-        // Only one is visible at a time.
         let reportArea = NSView()
         reportArea.translatesAutoresizingMaskIntoConstraints = false
         reportArea.addSubview(scrollView)
@@ -290,8 +254,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Button Bar
 
-    /// Creates the button bar with three logical groups:
-    /// primary (left) — conditional actions (center) — close (right).
     private func makeButtonBar(buttons: DoctorButtons) -> NSStackView {
         let bar = NSStackView()
         bar.orientation = .horizontal
@@ -299,17 +261,14 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         bar.spacing = 8
         bar.distribution = .gravityAreas
 
-        // Primary group (left)
         bar.addView(buttons.runDoctor, in: .leading)
         bar.addView(buttons.copyReport, in: .leading)
 
-        // Conditional actions (center)
         bar.addView(buttons.installAeroSpace, in: .center)
         bar.addView(buttons.startAeroSpace, in: .center)
         bar.addView(buttons.reloadConfig, in: .center)
         bar.addView(buttons.requestAccessibility, in: .center)
 
-        // Dismissal (right)
         bar.addView(buttons.close, in: .trailing)
 
         return bar
@@ -326,7 +285,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
         let requestAccessibilityButton = makeButton(title: "Request Accessibility", action: #selector(handleRequestAccessibility))
         let closeButton = makeButton(title: "Close", action: #selector(handleClose))
 
-        // Conditional buttons start hidden
         installAeroSpaceButton.isHidden = true
         startAeroSpaceButton.isHidden = true
         reloadConfigButton.isHidden = true
@@ -394,7 +352,6 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
     }
 
     @objc private func handleClose() {
-        // Close the window, which triggers windowWillClose → onClose callback.
         window?.close()
     }
 }

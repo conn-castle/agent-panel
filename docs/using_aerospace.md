@@ -314,10 +314,14 @@ aerospace summon-workspace <workspace>
 aerospace workspace <workspace>
 ```
 
-Verify by polling `list-workspaces --focused` until the target workspace is reported:
+Verify with dual-signal polling (both must be true):
 
 ```sh
-aerospace list-workspaces --focused --format "%{workspace}"
+# Signal 1: workspace summary marks target as focused
+aerospace list-workspaces --all --format "%{workspace}||%{workspace-is-focused}"
+
+# Signal 2: focused window reports target workspace
+aerospace list-windows --focused --format <format>
 ```
 
 ## Step 5: Focus IDE window
@@ -338,11 +342,11 @@ aerospace list-windows --focused --format <format>
 aerospace focus --window-id <ide-window-id>
 ```
 
-The shell script uses a 10-second timeout with 100ms polling interval. If focus cannot be verified within the timeout, activation fails loudly.
+The Swift activation flow uses a 10-second timeout with 100ms polling interval. If focus cannot be verified within the timeout, activation fails loudly.
 
 ### Focus trace (diagnostic only)
 
-If focus verification fails, the shell script runs a diagnostic trace: 40 samples at 50ms intervals, logging both the AeroSpace focused window and the macOS frontmost app (via `osascript`). This is diagnostic output only — it does not affect the activation result.
+Current Swift implementation does not run the older sampled shell trace. On focus verification timeout, activation returns failure immediately.
 
 [1]: https://nikitabobko.github.io/AeroSpace/commands "AeroSpace Commands"
 [2]: https://nikitabobko.github.io/AeroSpace/guide "AeroSpace Guide"

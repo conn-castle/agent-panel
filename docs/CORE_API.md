@@ -407,17 +407,33 @@ public struct Doctor {
     public func requestAccessibility() -> DoctorReport
 }
 
+public struct DoctorMetadata: Equatable, Sendable {
+    public let timestamp: String
+    public let agentPanelVersion: String
+    public let macOSVersion: String
+    public let aerospaceApp: String
+    public let aerospaceCli: String
+    public let errorContext: ErrorContext?
+    public let durationMs: Int
+    public let sectionTimings: [String: Int]
+}
+
 public struct DoctorReport: Equatable, Sendable {
+    public let metadata: DoctorMetadata
     public let findings: [DoctorFinding]
     public let actions: DoctorActionAvailability
 
     public var overallSeverity: DoctorSeverity { get }
     public var hasFailures: Bool { get }
-    public func rendered() -> String
+    public func rendered(colorize: Bool = false) -> String
 }
 
 public struct DoctorFinding: Equatable, Sendable {
     public let severity: DoctorSeverity
+    public let title: String
+    public let bodyLines: [String]
+    public let snippet: String?
+    public let snippetLanguage: String
 }
 
 public enum DoctorSeverity: String, CaseIterable, Sendable {

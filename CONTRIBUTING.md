@@ -12,14 +12,15 @@ Thanks for your interest in contributing. This guide covers everything you need 
 
 ## Architecture
 
-AgentPanel is structured as four build targets:
+AgentPanel is structured as five non-test build targets:
 
 | Target | Type | Role |
 |--------|------|------|
-| `AgentPanelApp` | Application | Menu bar UI, switcher panel, onboarding, hotkey registration |
+| `AgentPanel` | Application | Menu bar UI, switcher panel, onboarding, hotkey registration |
 | `AgentPanelCore` | Static framework | All business logic: config parsing, Doctor checks, project activation, layout engine, window management |
 | `AgentPanelAppKit` | Static framework | System-level implementations (Accessibility APIs, NSScreen, CGDisplay) behind Core-defined protocols |
-| `AgentPanelCLI` + `AgentPanelCLICore` | Tool + static framework | `ap` CLI entrypoint and command handling |
+| `AgentPanelCLICore` | Static framework | Shared CLI command parsing and execution logic |
+| `AgentPanelCLI` | Tool | `ap` CLI entrypoint |
 
 **Key design principles:**
 

@@ -18,194 +18,6 @@ struct ApVSCodeSettingsManager {
         self.commandRunner = commandRunner
     }
 
-    // MARK: - Block injection (pure function)
-
-    /// Start marker for the agent-panel settings block.
-    static let startMarker = "// >>> agent-panel"
-    /// End marker for the agent-panel settings block.
-    static let endMarker = "// <<< agent-panel"
-
-    /// Injects or replaces the agent-panel block at the top of a JSONC settings file.
-    ///
-    /// The block is inserted right after the opening `{`. If an existing agent-panel
-    /// block is found, it is replaced. When a color is configured, the block includes
-    /// a `workbench.colorCustomizations` anchor so Peacock writes its colors in-place
-    /// (inside the agent-panel block, safe from agent-layer's `al sync`). Existing
-    /// Peacock-written color customizations are preserved across re-injections.
-    /// Trailing commas are added only when content follows the block.
-    ///
-    /// - Parameters:
-    ///   - content: Existing file content (JSONC).
-    ///   - identifier: Project identifier for the `AP:<id>` window title.
-    ///   - color: Optional project color string (named or hex) for VS Code color customizations.
-    /// - Returns: Updated file content with the agent-panel block injected, or an error
-    ///   if the content has no opening `{`.
-    static func injectBlock(into content: String, identifier: String, color: String? = nil) -> Result<String, ApCoreError> {
-        let hasStart = content.contains(startMarker)
-        let hasEnd = content.contains(endMarker)
-        if hasStart != hasEnd {
-            return .failure(ApCoreError(
-                category: .validation,
-                message: """
-                Cannot inject settings block: unbalanced agent-panel markers in settings.json.
-                Expected both markers:
-                \(startMarker)
-                \(endMarker)
-                Fix the file manually, then retry.
-                """
-            ))
-        }
-
-        // Extract existing colorCustomizations before removing the block
-        let existingColorCustomizations = Self.extractColorCustomizations(from: content)
-
-        // Remove existing block if present
-        let cleaned = removeExistingBlock(from: content)
-
-        // Find the first `{`
-        guard let braceIndex = cleaned.firstIndex(of: "{") else {
-            return .failure(ApCoreError(message: "Cannot inject settings block: content has no opening '{'."))
-        }
-
-        // Determine whether content follows the block (for trailing-comma decisions)
-        let afterBrace = cleaned.index(after: braceIndex)
-        let before = String(cleaned[cleaned.startIndex..<afterBrace])
-        let after = String(cleaned[afterBrace...])
-        let trimmedAfter = after.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasContentAfter = trimmedAfter != "}"
-
-        let windowTitle = "\(ApIdeToken.prefix)\(identifier) - ${dirty}${activeEditorShort}${separator}${rootName}${separator}${appName}"
-
-        // Build property lines without trailing commas
-        var properties: [String] = [
-            "  \"window.title\": \"\(windowTitle)\""
-        ]
-
-        // Add Peacock color and colorCustomizations anchor when a valid color is provided.
-        // The colorCustomizations key acts as an in-place anchor so Peacock writes its
-        // colors inside the agent-panel block (safe from agent-layer's al sync).
-        if let color, let hex = VSCodeColorPalette.peacockColorHex(for: color) {
-            properties.append("  \"peacock.color\": \"\(hex)\"")
-            properties.append("  \"peacock.remoteColor\": \"\(hex)\"")
-            let colorValue = existingColorCustomizations ?? "{}"
-            properties.append("  \"workbench.colorCustomizations\": \(colorValue)")
-        }
-
-        // Add commas: all non-last properties always get one;
-        // the last property gets one only if there is content after the block.
-        for i in 0..<properties.count {
-            let isLast = (i == properties.count - 1)
-            if !isLast || hasContentAfter {
-                properties[i] = appendCommaToLastLine(of: properties[i])
-            }
-        }
-
-        var blockLines = [
-            "  \(startMarker)",
-            "  // Managed by AgentPanel. Do not edit this block manually.",
-        ]
-        blockLines.append(contentsOf: properties)
-        blockLines.append("  \(endMarker)")
-
-        let block = blockLines.joined(separator: "\n")
-
-        if !hasContentAfter {
-            // Block is the only content
-            return .success("\(before)\n\(block)\n}")
-        } else {
-            // Content follows the block
-            return .success("\(before)\n\(block)\n\(after.drop(while: { $0 == "\n" || $0 == "\r" }))")
-        }
-    }
-
-    /// Finds the line indices of the agent-panel block markers within an array of lines.
-    ///
-    /// - Parameter lines: Lines of the settings file.
-    /// - Returns: A tuple of `(startMarker, endMarker)` line indices, or `nil` if markers
-    ///   are missing or in the wrong order.
-    private static func findBlockMarkers(in lines: [String]) -> (startMarker: Int, endMarker: Int)? {
-        guard let startIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == startMarker }),
-              let endIndex = lines[lines.index(after: startIndex)...].firstIndex(where: {
-                  $0.trimmingCharacters(in: .whitespaces) == endMarker
-              }),
-              endIndex > startIndex else {
-            return nil
-        }
-        return (startIndex, endIndex)
-    }
-
-    /// Removes an existing agent-panel block (markers + content between them) from the content.
-    ///
-    /// If the start marker exists but the end marker is missing (unbalanced markers),
-    /// returns the content unchanged to prevent data loss.
-    private static func removeExistingBlock(from content: String) -> String {
-        let hasStart = content.contains(startMarker)
-        let hasEnd = content.contains(endMarker)
-        guard hasStart && hasEnd else { return content }
-
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard let markers = findBlockMarkers(in: lines) else { return content }
-
-        let before = Array(lines[..<markers.startMarker])
-        let after = Array(lines[lines.index(after: markers.endMarker)...])
-        return (before + after).joined(separator: "\n")
-    }
-
-    /// Extracts the `workbench.colorCustomizations` JSON object value from an existing
-    /// agent-panel block, preserving Peacock-written color customizations across re-injections.
-    ///
-    /// - Parameter content: Full JSONC settings file content.
-    /// - Returns: The raw JSON object text (e.g., `{}` or multi-line `{ ... }`), or `nil`
-    ///   if no `workbench.colorCustomizations` key exists within the block.
-    static func extractColorCustomizations(from content: String) -> String? {
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard let markers = findBlockMarkers(in: lines),
-              markers.endMarker > markers.startMarker + 1 else {
-            return nil
-        }
-
-        let blockLines = Array(lines[(markers.startMarker + 1)..<markers.endMarker])
-
-        let blockText = blockLines.joined(separator: "\n")
-        let key = "\"workbench.colorCustomizations\""
-        guard let keyRange = blockText.range(of: key) else { return nil }
-
-        // Find the colon after the key, then the opening brace of the JSON object value
-        let afterKey = blockText[keyRange.upperBound...]
-        guard let colonIndex = afterKey.firstIndex(of: ":") else { return nil }
-        let afterColon = blockText[blockText.index(after: colonIndex)...]
-        guard let openBrace = afterColon.firstIndex(of: "{") else { return nil }
-
-        // Match braces to find the corresponding closing }
-        var depth = 0
-        for index in blockText[openBrace...].indices {
-            let char = blockText[index]
-            if char == "{" { depth += 1 }
-            if char == "}" {
-                depth -= 1
-                if depth == 0 {
-                    return String(blockText[openBrace...index])
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Appends a comma after the last line of a potentially multi-line property string.
-    ///
-    /// For single-line properties this simply appends `,`. For multi-line values
-    /// (e.g., `workbench.colorCustomizations` with Peacock content) the comma is
-    /// placed after the closing `}` on the final line.
-    private static func appendCommaToLastLine(of text: String) -> String {
-        if let lastNewline = text.lastIndex(of: "\n") {
-            let prefix = text[text.startIndex...lastNewline]
-            let lastLine = text[text.index(after: lastNewline)...]
-            return "\(prefix)\(lastLine),"
-        }
-        return "\(text),"
-    }
-
     // MARK: - Local settings.json write
 
     /// Writes the agent-panel block into the project's `.vscode/settings.json`.
@@ -230,7 +42,7 @@ struct ApVSCodeSettingsManager {
         let vscodeDir = projectURL.appendingPathComponent(".vscode", isDirectory: true)
         let settingsURL = vscodeDir.appendingPathComponent("settings.json", isDirectory: false)
 
-        // Read existing content or default to empty object (file missing only)
+        // Read existing content or default to empty object (file missing only).
         let existingContent: String
         if fileSystem.fileExists(at: settingsURL) {
             do {
@@ -240,7 +52,7 @@ struct ApVSCodeSettingsManager {
                         message: "Failed to decode .vscode/settings.json as UTF-8 at \(settingsURL.path)."
                     ))
                 }
-                // Treat empty files the same as missing files
+                // Treat empty files the same as missing files.
                 existingContent = content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "{}\n" : content
             } catch {
                 return .failure(ApCoreError(
@@ -302,7 +114,7 @@ struct ApVSCodeSettingsManager {
         let escapedProjectPath = ApSSHHelpers.shellEscape(remotePath)
         let settingsPath = "\(escapedProjectPath)/.vscode/settings.json"
 
-        // Read existing remote settings.json (or default to empty if file missing)
+        // Read existing remote settings.json (or default to empty if file missing).
         // Uses `test -f` to distinguish "file missing" from "permission denied" or other errors.
         // Also asserts the remote project directory exists to avoid creating incorrect paths.
         let readCommand = [
@@ -337,11 +149,11 @@ struct ApVSCodeSettingsManager {
                     message: "SSH read failed with exit code \(result.exitCode): \(sshTarget) \(remotePath)\(suffix)"
                 ))
             }
-            // Treat empty files the same as missing files
+            // Treat empty files the same as missing files.
             existingContent = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "{}\n" : result.stdout
         }
 
-        // Inject block
+        // Inject block.
         let updatedContent: String
         switch Self.injectBlock(into: existingContent, identifier: identifier, color: color) {
         case .failure(let error):
@@ -350,7 +162,7 @@ struct ApVSCodeSettingsManager {
             updatedContent = content
         }
 
-        // Base64-encode and write
+        // Base64-encode and write.
         guard let data = updatedContent.data(using: .utf8) else {
             return .failure(ApCoreError(message: "Failed to encode settings.json as UTF-8"))
         }
@@ -452,8 +264,3 @@ public enum VSCodeSettingsBlocks {
         return manager.ensureAllSettingsBlocks(projects: projects)
     }
 }
-
-// MARK: - Notes
-
-// SSH authority parsing and shell escaping live in `ApSSHHelpers` to keep a single
-// source of truth across config validation, Doctor checks, and remote writes.

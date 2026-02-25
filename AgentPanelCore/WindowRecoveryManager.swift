@@ -16,13 +16,9 @@ public struct RecoveryResult: Equatable, Sendable {
     }
 }
 
-/// Handles window recovery operations: shrink oversized windows and center them on screen.
-///
-/// For project workspaces (`ap-<projectId>`), an optional layout-aware recovery phase
-/// repositions IDE and Chrome windows using computed canonical layout before generic recovery.
-///
-/// Thread Safety: Not thread-safe. Call from a single queue (typically a background queue
-/// dispatched from the App layer). AeroSpace CLI calls and AX operations may block.
+/// Handles window recovery operations: resize oversized windows and center them on screen.
+/// For project workspaces (`ap-<projectId>`), an optional layout phase applies canonical IDE/Chrome layout first.
+/// Not thread-safe; call from one queue.
 public final class WindowRecoveryManager {
     private let aerospace: AeroSpaceProviding
     private let windowPositioner: WindowPositioning
@@ -73,23 +69,11 @@ public final class WindowRecoveryManager {
     }
 
     /// Recovers all windows in the given workspace.
-    ///
-    /// For project workspaces (`ap-<projectId>`), runs a layout-aware phase first that
-    /// repositions IDE and Chrome windows to computed canonical positions. Then runs
-    /// generic per-window recovery (shrink/center) for all windows.
-    ///
-    /// Focuses each window via AeroSpace before recovery to disambiguate duplicate titles.
-    /// Re-focuses the originally focused window at the end.
-    ///
-    /// - Parameter workspace: AeroSpace workspace name to recover.
-    /// - Returns: Recovery result with counts and any errors.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_workspace.started", context: ["workspace": workspace])
 
-        // Capture focused window for restoration
         let originalFocus = try? aerospace.focusedWindow().get()
 
-        // List all windows in the workspace
         let windows: [ApWindow]
         switch aerospace.listWindowsWorkspace(workspace: workspace) {
         case .success(let result):
@@ -99,7 +83,6 @@ public final class WindowRecoveryManager {
             return .failure(error)
         }
 
-        // Layout-aware phase for project workspaces
         var layoutRecovered = 0
         var layoutErrors: [String] = []
         var layoutHandledWindowIds: Set<Int> = []
@@ -111,13 +94,9 @@ public final class WindowRecoveryManager {
             layoutHandledWindowIds = layoutResult.handledWindowIds
         }
 
-        // Generic per-window recovery (shrink/center), skipping windows already handled by layout phase.
-        // Uses window-level IDs (not bundle IDs) so that non-token windows of the same bundle
-        // (e.g., extra VS Code windows without AP:<projectId>) still get generic recovery.
         let genericWindows = windows.filter { !layoutHandledWindowIds.contains($0.windowId) }
         let genericResult = recoverWindows(genericWindows)
 
-        // Merge counts: processed = all workspace windows, recovered = layout + generic (no overlap)
         let totalRecovered = layoutRecovered + genericResult.windowsRecovered
         let totalErrors = layoutErrors + genericResult.errors
         let result = RecoveryResult(
@@ -126,7 +105,6 @@ public final class WindowRecoveryManager {
             errors: totalErrors
         )
 
-        // Restore focus to original window
         if let originalFocus {
             _ = aerospace.focusWindow(windowId: originalFocus.windowId)
         }
@@ -141,30 +119,15 @@ public final class WindowRecoveryManager {
         return .success(result)
     }
 
-    /// Recovers all windows across all workspaces by moving each to the preferred
-    /// non-project workspace and ensuring it fits on screen.
-    ///
-    /// Destination is selected via ``WorkspaceRouting/preferredNonProjectWorkspace(from:hasWindows:)``
-    /// which prefers a non-project workspace that already has windows, falling back to
-    /// ``WorkspaceRouting/fallbackWorkspace`` when no candidate exists.
-    ///
-    /// Iterates workspaces directly (instead of using `listAllWindows()`) to surface
-    /// per-workspace failures as non-fatal errors rather than silently skipping them.
-    /// Focuses each window via AeroSpace before recovery to disambiguate duplicate titles.
-    /// Reports progress via callback after each window.
-    /// Restores focus to the originally focused window at the end.
-    ///
-    /// - Parameter progress: Called with `(currentIndex, totalCount)` after each window.
-    /// - Returns: Recovery result with counts and any errors.
+    /// Recovers all windows across all workspaces.
+    /// Moves each window to the preferred non-project workspace and runs generic recovery.
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
     ) -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_all.started")
 
-        // Capture originally focused window for restoration
         let originalFocus = try? aerospace.focusedWindow().get()
 
-        // Get all workspaces, then iterate each to collect windows (surfaces per-workspace errors)
         let workspaces: [String]
         switch aerospace.getWorkspaces() {
         case .success(let result):
@@ -193,9 +156,6 @@ public final class WindowRecoveryManager {
             }
         }
 
-        // Select destination using canonical non-project workspace strategy.
-        // Only workspaces whose listing succeeded are candidates; failed-listing
-        // workspaces are excluded to avoid routing to unhealthy targets.
         let destination = WorkspaceRouting.preferredNonProjectWorkspace(
             from: queriedWorkspaces,
             hasWindows: { workspacesWithWindows.contains($0) }
@@ -205,7 +165,6 @@ public final class WindowRecoveryManager {
         var recovered = 0
 
         for (index, window) in allWindows.enumerated() {
-            // Move window to destination (focusFollows ensures it becomes frontmost)
             switch aerospace.moveWindowToWorkspace(workspace: destination, windowId: window.windowId, focusFollows: true) {
             case .success:
                 break
@@ -216,7 +175,6 @@ public final class WindowRecoveryManager {
                 continue
             }
 
-            // Recover the window (shrink/center if needed)
             let outcome = recoverSingleWindow(window)
             switch outcome {
             case .recovered: recovered += 1
@@ -232,8 +190,6 @@ public final class WindowRecoveryManager {
             progress(index + 1, allWindows.count)
         }
 
-        // Restore original window focus (all windows are now on the destination workspace,
-        // so restoring the workspace is unnecessary — focusWindow handles it).
         if let originalFocus {
             _ = aerospace.focusWindow(windowId: originalFocus.windowId)
         }
@@ -255,7 +211,6 @@ public final class WindowRecoveryManager {
 
     // MARK: - Private Helpers
 
-    /// Internal result of recovering a single window, used to simplify control flow.
     private enum SingleRecoveryResult {
         case recovered
         case unchanged
@@ -263,10 +218,7 @@ public final class WindowRecoveryManager {
         case error(String)
     }
 
-    /// Focuses a window via AeroSpace, then runs AX recovery.
     private func recoverSingleWindow(_ window: ApWindow) -> SingleRecoveryResult {
-        // Focus the window so AX can find it unambiguously (handles duplicate titles).
-        // If focus fails, skip recovery — proceeding could target the wrong window.
         if case .failure(let error) = aerospace.focusWindow(windowId: window.windowId) {
             return .error("Focus failed for window \(window.windowId) (\(window.windowTitle)): \(error.message)")
         }
@@ -284,8 +236,7 @@ public final class WindowRecoveryManager {
         }
     }
 
-    /// Recovers a list of windows in-place (no workspace moves).
-    /// Focuses each window via AeroSpace before recovery to disambiguate duplicate titles.
+    /// Recovers a list of windows in-place.
     private func recoverWindows(_ windows: [ApWindow]) -> RecoveryResult {
         var processed = 0
         var recovered = 0
@@ -314,24 +265,12 @@ public final class WindowRecoveryManager {
 
     // MARK: - Layout-Aware Recovery
 
-    /// Extracts project ID from an `ap-<projectId>` workspace name, or nil for non-project workspaces.
-    /// Delegates to ``WorkspaceRouting/projectId(fromWorkspace:)``.
+    /// Extracts project ID from an `ap-<projectId>` workspace name.
     private func projectId(fromWorkspace workspace: String) -> String? {
         WorkspaceRouting.projectId(fromWorkspace: workspace)
     }
 
-    /// Runs layout-aware recovery for a project workspace: computes canonical layout positions
-    /// and applies them to IDE and Chrome windows via `setWindowFrames`.
-    ///
-    /// Only targets bundle IDs that have at least one window in the workspace (workspace-scoped).
-    /// Returns the set of window IDs (AeroSpace) that were handled so the caller can skip them
-    /// in generic recovery. Uses token matching (`AP:<projectId>`) to identify handled windows,
-    /// ensuring non-token windows of the same bundle still get generic recovery.
-    ///
-    /// - Parameters:
-    ///   - projectId: The project identifier derived from the workspace name.
-    ///   - workspaceWindows: Windows currently in the target workspace (from AeroSpace).
-    /// - Returns: Count of windows positioned, non-fatal errors, and set of handled window IDs.
+    /// Runs layout-aware recovery for a project workspace.
     private func recoverProjectWorkspaceLayout(
         projectId: String,
         workspaceWindows: [ApWindow]
@@ -340,7 +279,6 @@ public final class WindowRecoveryManager {
 
         var errors: [String] = []
 
-        // Determine which layout-eligible bundle IDs are present in the workspace
         let workspaceBundleIds = Set(workspaceWindows.map { $0.appBundleId })
         let layoutTargets: [(bundleId: String, frameKeyPath: KeyPath<WindowLayout, CGRect>, label: String)] = [
             (ApVSCodeLauncher.bundleId, \.ideFrame, "IDE"),
@@ -349,7 +287,6 @@ public final class WindowRecoveryManager {
 
         guard !layoutTargets.isEmpty else { return (0, [], []) }
 
-        // Detect screen mode using center of screen visible frame
         let centerPoint = CGPoint(x: screenVisibleFrame.midX, y: screenVisibleFrame.midY)
 
         let screenMode: ScreenMode
@@ -372,7 +309,6 @@ public final class WindowRecoveryManager {
             physicalWidth = 32.0
         }
 
-        // Compute canonical layout (ignores saved positions — recovery converges to known-good baseline)
         let targetLayout = WindowLayoutEngine.computeLayout(
             screenVisibleFrame: screenVisibleFrame,
             screenPhysicalWidthInches: physicalWidth,
@@ -380,7 +316,6 @@ public final class WindowRecoveryManager {
             config: layoutConfig
         )
 
-        // Compute cascade offset: 0.5 inches * (screen points / screen inches)
         let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
 
         let token = "\(ApIdeToken.prefix)\(projectId)"
@@ -388,8 +323,6 @@ public final class WindowRecoveryManager {
         var handledWindowIds: Set<Int> = []
 
         for target in layoutTargets {
-            // Identify workspace windows that match this target's bundle AND have the project token.
-            // These are the windows setWindowFrames will position via AX.
             let tokenMatchingWindows = workspaceWindows.filter {
                 $0.appBundleId == target.bundleId && $0.windowTitle.contains(token)
             }
@@ -401,9 +334,6 @@ public final class WindowRecoveryManager {
                 cascadeOffsetPoints: cascadeOffsetPoints
             ) {
             case .success(let result):
-                // Cap recovered count at workspace-scoped matches (setWindowFrames may also
-                // position same-token windows outside this workspace via AX, but we only
-                // account for the ones in our workspace).
                 recovered += min(result.positioned, tokenMatchingWindows.count)
                 for w in tokenMatchingWindows {
                     handledWindowIds.insert(w.windowId)

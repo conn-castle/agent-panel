@@ -161,8 +161,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: This keeps release operations focused on a single packaging path needed now, while preserving deterministic installs/upgrades through versioned release assets.
     Tradeoffs: Intel macOS is unsupported. Users do not get package-manager install/upgrade ergonomics until Homebrew support is implemented.
 
-- Decision 2026-02-17 releaseci: Single-job release workflow with script-based signing and packaging
-    Decision: Release workflow uses a single CI job on `macos-15` with 5 scripts (`ci_setup_signing`, `ci_archive`, `ci_package`, `ci_notarize`, `ci_release_validate`) + `ci_preflight` (runs in CI on every push). Entitlements file committed at `release/AgentPanel.entitlements`. Release config signing settings in `project.yml` (Manual style, Developer ID Application identity, hardened runtime) — Debug builds remain unsigned.
+- Decision 2026-02-17 releaseci: Single-job release workflow with script-based signing and packaging (historical; superseded by `ci26baseline` / `xcode26canonical`)
+    Decision: At the time, release workflow used a single CI job on `macos-15` with 5 scripts (`ci_setup_signing`, `ci_archive`, `ci_package`, `ci_notarize`, `ci_release_validate`) + `ci_preflight` (runs in CI on every push). Entitlements file committed at `release/AgentPanel.entitlements`. Release config signing settings in `project.yml` (Manual style, Developer ID Application identity, hardened runtime) — Debug builds remain unsigned. Current baseline is tracked in `ci26baseline` and `xcode26canonical`.
     Reason: Single job avoids artifact transfer overhead between jobs. Scripts follow existing `scripts/` convention and are locally testable.
     Tradeoffs: Long single job (~15-20 min) vs parallel jobs. CLI tarball is not notarized (tarballs cannot be stapled; users must clear quarantine manually).
 
