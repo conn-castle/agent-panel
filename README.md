@@ -209,6 +209,7 @@ Window cycling behavior:
 | `Esc` | Dismiss switcher |
 | `Shift+Enter` | Back to Non-Project Space (most recent non-project window) |
 | `Cmd+Delete` | Close the selected open project |
+| `Cmd+R` | Recover focused workspace windows ("Recover Project") |
 
 ### Menu bar
 
@@ -224,8 +225,9 @@ Menu actions:
 |------|-------------|
 | Open Switcher... | Open the project switcher |
 | View Config File... | Reveal config in Finder (creates starter if missing) |
-| Recover Project | Reset window positions in current project workspace |
 | Move Current Window | Move the focused window to a project workspace or back to no project |
+| Recover Current Window | Recover only the focused window back on screen |
+| Recover Project | Reset window positions in the focused workspace (project layout in project spaces; generic recovery in non-project spaces) |
 | Recover All Windows... | Center all windows across all workspaces |
 | Run Doctor... | Open the diagnostic panel |
 | Launch at Login | Toggle auto-start at login |

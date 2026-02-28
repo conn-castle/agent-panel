@@ -139,6 +139,102 @@ final class WindowRecoveryManagerTests: XCTestCase {
         }
     }
 
+    // MARK: - recoverCurrentWindow Tests
+
+    func testRecoverCurrentWindow_recovered_focusesWindowAndRestoresOriginalFocus() {
+        let aerospace = StubAeroSpace()
+        let originalFocus = makeWindow(id: 42, workspace: "2", title: "Original Focus")
+        aerospace.focusedWindowResult = .success(originalFocus)
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Target Window"] = .success(.recovered)
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .success(let outcome) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(outcome, .recovered)
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(positioner.recoverCalls[0].bundleId, "com.test.target")
+        XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Target Window")
+        XCTAssertEqual(aerospace.focusWindowCalls, [7, 42], "Should focus target window, then restore original focus")
+    }
+
+    func testRecoverCurrentWindow_workspaceListFailure_returnsError() {
+        let aerospace = StubAeroSpace()
+        aerospace.windowsByWorkspace["ap-test"] = .failure(ApCoreError(message: "workspace gone"))
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("workspace gone"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when workspace listing fails")
+    }
+
+    func testRecoverCurrentWindow_windowNotFound_returnsError() {
+        let aerospace = StubAeroSpace()
+        aerospace.windowsByWorkspace["ap-test"] = .success([makeWindow(id: 1, workspace: "ap-test", title: "Other Window")])
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("not found"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when target window is missing")
+    }
+
+    func testRecoverCurrentWindow_focusFailure_returnsError() {
+        let aerospace = StubAeroSpace()
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+        aerospace.focusWindowResult = .failure(ApCoreError(message: "focus denied"))
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("focus denied"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when focusing target window fails")
+    }
+
+    func testRecoverCurrentWindow_positionerNotFound_returnsError() {
+        let aerospace = StubAeroSpace()
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Target Window"] = .success(.notFound)
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("not found"))
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+    }
+
     // MARK: - recoverWorkspaceWindows Tests
 
     func testRecoverWorkspace_emptyWorkspace_succeeds() {
@@ -740,6 +836,33 @@ final class WindowRecoveryManagerTests: XCTestCase {
                       "Non-project workspace should not trigger layout phase")
         // Generic recovery runs
         XCTAssertEqual(positioner.recoverCalls.count, 1)
+    }
+
+    func testRecoverWorkspace_nonProjectWorkspace_onlyRecoversRequestedWorkspaceWindows() {
+        let aerospace = StubAeroSpace()
+        let workspace = "main"
+        let currentDesktopWindow = makeWindow(id: 1, bundleId: "com.test.Main", workspace: workspace,
+                                              title: "Current Desktop Window")
+        let otherDesktopWindow = makeWindow(id: 2, bundleId: "com.test.Other", workspace: "2",
+                                            title: "Other Desktop Window")
+        aerospace.windowsByWorkspace[workspace] = .success([currentDesktopWindow])
+        aerospace.windowsByWorkspace["2"] = .success([otherDesktopWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Current Desktop Window"] = .success(.recovered)
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(recovery.windowsProcessed, 1)
+        XCTAssertEqual(recovery.windowsRecovered, 1)
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Current Desktop Window")
     }
 
     func testRecoverWorkspace_detectorFailure_usesWideFallbackAndWarns() {

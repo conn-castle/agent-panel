@@ -34,8 +34,9 @@ struct AgentPanelApp: App {
 private struct MenuItems {
     let hotkeyWarning: NSMenuItem
     let openSwitcher: NSMenuItem
-    let recoverAgentPanel: NSMenuItem
     let addWindowToProject: NSMenuItem
+    let recoverCurrentWindow: NSMenuItem
+    let recoverAgentPanel: NSMenuItem
     let recoverAllWindows: NSMenuItem
     let launchAtLogin: NSMenuItem
 }
@@ -355,15 +356,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         // Recovery and window management items
-        let recoverAgentPanelItem = NSMenuItem(
-            title: "Recover Project",
-            action: #selector(recoverAgentPanel),
-            keyEquivalent: ""
-        )
-        recoverAgentPanelItem.target = self
-        recoverAgentPanelItem.isEnabled = false // Toggled in menuNeedsUpdate
-        menu.addItem(recoverAgentPanelItem)
-
         let addWindowToProjectItem = NSMenuItem(
             title: "Move Current Window",
             action: nil,
@@ -372,6 +364,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addWindowToProjectItem.submenu = NSMenu()
         addWindowToProjectItem.isHidden = true // Toggled in menuNeedsUpdate
         menu.addItem(addWindowToProjectItem)
+
+        let recoverCurrentWindowItem = NSMenuItem(
+            title: "Recover Current Window",
+            action: #selector(recoverCurrentWindow),
+            keyEquivalent: ""
+        )
+        recoverCurrentWindowItem.target = self
+        recoverCurrentWindowItem.isEnabled = false // Toggled in menuNeedsUpdate
+        menu.addItem(recoverCurrentWindowItem)
+
+        let recoverAgentPanelItem = NSMenuItem(
+            title: "Recover Project",
+            action: #selector(recoverAgentPanel),
+            keyEquivalent: ""
+        )
+        recoverAgentPanelItem.target = self
+        recoverAgentPanelItem.isEnabled = false // Toggled in menuNeedsUpdate
+        menu.addItem(recoverAgentPanelItem)
 
         let recoverAllWindowsItem = NSMenuItem(
             title: "Recover All Windows...",
@@ -414,8 +424,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuItems = MenuItems(
             hotkeyWarning: hotkeyWarningItem,
             openSwitcher: openSwitcherItem,
-            recoverAgentPanel: recoverAgentPanelItem,
             addWindowToProject: addWindowToProjectItem,
+            recoverCurrentWindow: recoverCurrentWindowItem,
+            recoverAgentPanel: recoverAgentPanelItem,
             recoverAllWindows: recoverAllWindowsItem,
             launchAtLogin: launchAtLoginItem
         )
@@ -513,6 +524,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
         controller.onProjectOperationFailed = { [weak self] context in
             self?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
+        }
+        controller.onRecoverProjectRequested = { [weak self] focus, completion in
+            guard let self else {
+                completion(.failure(ApCoreError(category: .command, message: "Recover Project unavailable.")))
+                return
+            }
+
+            guard let screenFrame = NSScreen.main?.visibleFrame else {
+                self.logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+                let error = ApCoreError(category: .system, message: "No primary screen available")
+                self.logAppEvent(event: "switcher.recover_project.failed", level: .error, message: error.message)
+                completion(.failure(error))
+                return
+            }
+
+            self.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
+                guard let self else {
+                    completion(result)
+                    return
+                }
+                switch result {
+                case .success(let recovery):
+                    let workspaceType = WorkspaceRouting.isProjectWorkspace(focus.workspace) ? "project" : "non_project"
+                    self.logAppEvent(
+                        event: "switcher.recover_project.completed",
+                        context: [
+                            "workspace": focus.workspace,
+                            "workspace_type": workspaceType,
+                            "processed": "\(recovery.windowsProcessed)",
+                            "recovered": "\(recovery.windowsRecovered)"
+                        ]
+                    )
+                case .failure(let error):
+                    self.logAppEvent(event: "switcher.recover_project.failed", level: .error, message: error.message)
+                }
+                completion(result)
+            }
         }
         controller.onSessionEnded = { [weak self] in
             self?.refreshHealthInBackground(trigger: "switcher_session_ended")
@@ -1074,13 +1122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Recovers all windows in the current project workspace.
-    @objc private func recoverAgentPanel() {
-        logAppEvent(event: "recover_agent_panel.requested")
+    /// Recovers only the currently focused window.
+    @objc private func recoverCurrentWindow() {
+        logAppEvent(event: "recover_current_window.requested")
         statusItem?.menu?.cancelTracking()
 
-        guard let focus = menuFocusCapture, focus.workspace.hasPrefix(ProjectManager.workspacePrefix) else {
-            logAppEvent(event: "recover_agent_panel.skipped", level: .warn, message: "Not in a project workspace")
+        guard let focus = menuFocusCapture else {
+            logAppEvent(event: "recover_current_window.skipped", level: .warn, message: "No focused window available")
             return
         }
 
@@ -1090,31 +1138,111 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Read current layout config without triggering a config load (non-mutating)
-        let layoutConfig = projectManager.currentLayoutConfig
-
+        let windowId = focus.windowId
         let workspace = focus.workspace
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
-            let result = manager.recoverWorkspaceWindows(workspace: workspace)
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+            let result = manager.recoverCurrentWindow(windowId: windowId, workspace: workspace)
             DispatchQueue.main.async {
                 switch result {
-                case .success(let recovery):
+                case .success(let outcome):
+                    let outcomeLabel: String
+                    switch outcome {
+                    case .recovered:
+                        outcomeLabel = "recovered"
+                    case .unchanged:
+                        outcomeLabel = "unchanged"
+                    case .notFound:
+                        outcomeLabel = "not_found"
+                    }
                     self.logAppEvent(
-                        event: "recover_agent_panel.completed",
+                        event: "recover_current_window.completed",
                         context: [
-                            "processed": "\(recovery.windowsProcessed)",
-                            "recovered": "\(recovery.windowsRecovered)"
+                            "window_id": "\(windowId)",
+                            "workspace": workspace,
+                            "outcome": outcomeLabel
                         ]
                     )
                 case .failure(let error):
                     self.logAppEvent(
-                        event: "recover_agent_panel.failed",
+                        event: "recover_current_window.failed",
                         level: .error,
                         message: error.message
                     )
                 }
+            }
+        }
+    }
+
+    /// Recovers all windows in the focused workspace.
+    ///
+    /// Project workspaces receive layout-aware recovery (IDE/Chrome canonical frames).
+    /// Non-project workspaces run generic window recovery for the current desktop.
+    @objc private func recoverAgentPanel() {
+        logAppEvent(event: "recover_agent_panel.requested")
+        statusItem?.menu?.cancelTracking()
+
+        guard let focus = menuFocusCapture else {
+            logAppEvent(event: "recover_agent_panel.skipped", level: .warn, message: "No focused workspace available")
+            return
+        }
+
+        // Capture screen frame on main thread (AppKit API)
+        guard let screenFrame = NSScreen.main?.visibleFrame else {
+            logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
+            return
+        }
+
+        recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let recovery):
+                let workspaceType = WorkspaceRouting.isProjectWorkspace(focus.workspace) ? "project" : "non_project"
+                self.logAppEvent(
+                    event: "recover_agent_panel.completed",
+                    context: [
+                        "workspace": focus.workspace,
+                        "workspace_type": workspaceType,
+                        "processed": "\(recovery.windowsProcessed)",
+                        "recovered": "\(recovery.windowsRecovered)"
+                    ]
+                )
+            case .failure(let error):
+                self.logAppEvent(
+                    event: "recover_agent_panel.failed",
+                    level: .error,
+                    message: error.message
+                )
+            }
+        }
+    }
+
+    /// Recovers all windows in a specific workspace focus context.
+    /// - Parameters:
+    ///   - focus: Captured focus that determines target workspace.
+    ///   - screenFrame: Visible frame captured on the main thread.
+    ///   - completion: Completion callback invoked on the main thread.
+    private func recoverWorkspaceWindows(
+        focus: CapturedFocus,
+        screenFrame: CGRect,
+        completion: @escaping (Result<RecoveryResult, ApCoreError>) -> Void
+    ) {
+        // Read current layout config without triggering a config load (non-mutating)
+        let layoutConfig = projectManager.currentLayoutConfig
+        let workspace = focus.workspace
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async {
+                    completion(.failure(ApCoreError(category: .command, message: "Recovery manager unavailable.")))
+                }
+                return
+            }
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
+            let result = manager.recoverWorkspaceWindows(workspace: workspace)
+            DispatchQueue.main.async {
+                completion(result)
             }
         }
     }
@@ -1277,8 +1405,8 @@ extension AppDelegate: NSMenuDelegate {
         menuItems.launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
         // Use cached focus (updated by background refreshes, not a live CLI call)
-        let inProjectWorkspace = menuFocusCapture.map { $0.workspace.hasPrefix(ProjectManager.workspacePrefix) } ?? false
-        menuItems.recoverAgentPanel.isEnabled = inProjectWorkspace
+        menuItems.recoverCurrentWindow.isEnabled = menuFocusCapture != nil
+        menuItems.recoverAgentPanel.isEnabled = menuFocusCapture != nil
 
         // Populate "Move Current Window" submenu from cached workspace state
         let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()

@@ -662,6 +662,11 @@ public final class WindowRecoveryManager {
     /// apps present in the workspace), then generic shrink/center recovery for remaining windows.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
 
+    /// Recovers a single focused window in the given workspace.
+    /// Returns `.failure` when the workspace listing fails, the window is missing,
+    /// or AX recovery cannot locate/recover the window.
+    public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError>
+
     /// Recovers all windows across all workspaces, reporting progress.
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void

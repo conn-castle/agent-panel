@@ -119,6 +119,93 @@ public final class WindowRecoveryManager {
         return .success(result)
     }
 
+    /// Recovers the currently focused window in the given workspace.
+    ///
+    /// The target is resolved by window id from a workspace snapshot to avoid title-only ambiguity.
+    /// Returns `.failure` if the workspace cannot be listed, the target window is missing, or
+    /// focus/AX recovery fails.
+    public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError> {
+        logEvent("recover_current_window.started", context: [
+            "window_id": "\(windowId)",
+            "workspace": workspace
+        ])
+
+        let originalFocus = try? aerospace.focusedWindow().get()
+        defer {
+            if let originalFocus {
+                _ = aerospace.focusWindow(windowId: originalFocus.windowId)
+            }
+        }
+
+        let windows: [ApWindow]
+        switch aerospace.listWindowsWorkspace(workspace: workspace) {
+        case .success(let result):
+            windows = result
+        case .failure(let error):
+            logEvent("recover_current_window.list_failed", level: .error, message: error.message, context: [
+                "workspace": workspace
+            ])
+            return .failure(error)
+        }
+
+        guard let targetWindow = windows.first(where: { $0.windowId == windowId }) else {
+            let error = ApCoreError(
+                category: .window,
+                message: "Window \(windowId) not found in workspace '\(workspace)'."
+            )
+            logEvent("recover_current_window.not_found", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace
+            ])
+            return .failure(error)
+        }
+
+        if case .failure(let error) = aerospace.focusWindow(windowId: windowId) {
+            logEvent("recover_current_window.focus_failed", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace
+            ])
+            return .failure(error)
+        }
+
+        switch windowPositioner.recoverWindow(
+            bundleId: targetWindow.appBundleId,
+            windowTitle: targetWindow.windowTitle,
+            screenVisibleFrame: screenVisibleFrame
+        ) {
+        case .success(.recovered):
+            logEvent("recover_current_window.completed", context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace,
+                "outcome": "recovered"
+            ])
+            return .success(.recovered)
+        case .success(.unchanged):
+            logEvent("recover_current_window.completed", context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace,
+                "outcome": "unchanged"
+            ])
+            return .success(.unchanged)
+        case .success(.notFound):
+            let error = ApCoreError(
+                category: .window,
+                message: "Window not found for recovery: \(windowId) (\(targetWindow.windowTitle))."
+            )
+            logEvent("recover_current_window.not_found", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace
+            ])
+            return .failure(error)
+        case .failure(let error):
+            logEvent("recover_current_window.failed", level: .error, message: error.message, context: [
+                "window_id": "\(windowId)",
+                "workspace": workspace
+            ])
+            return .failure(error)
+        }
+    }
+
     /// Recovers all windows across all workspaces.
     /// Moves each window to the preferred non-project workspace and runs generic recovery.
     public func recoverAllWindows(

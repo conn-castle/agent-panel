@@ -147,6 +147,68 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertTrue(aerospace.focusedWindowIds.contains(ideWindow.windowId))
     }
 
+    func testRecoverProjectShortcutInvokesRecoverCallbackWithCapturedFocus() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        let focus = CapturedFocus(windowId: 77, appBundleId: "com.apple.Terminal", workspace: "ap-test")
+        controller.testing_setCapturedFocus(focus)
+
+        var callbackFocus: CapturedFocus?
+        controller.onRecoverProjectRequested = { capturedFocus, completion in
+            callbackFocus = capturedFocus
+            completion(.success(RecoveryResult(windowsProcessed: 2, windowsRecovered: 1, errors: [])))
+        }
+
+        controller.testing_handleRecoverProjectFromShortcut()
+
+        XCTAssertEqual(callbackFocus, focus)
+    }
+
+    func testFooterHintsIncludeRecoverProjectWhenShortcutIsAvailable() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test"))
+        controller.onRecoverProjectRequested = { _, completion in
+            completion(.success(RecoveryResult(windowsProcessed: 0, windowsRecovered: 0, errors: [])))
+        }
+
+        controller.testing_updateFooterHints()
+
+        XCTAssertTrue(controller.testing_footerHints.contains("⌘R Recover Project"))
+    }
+
+    func testRecoverProjectShortcutIsSingleFlight() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test"))
+
+        var invocationCount = 0
+        var pendingCompletion: ((Result<RecoveryResult, ApCoreError>) -> Void)?
+        controller.onRecoverProjectRequested = { _, completion in
+            invocationCount += 1
+            pendingCompletion = completion
+        }
+
+        controller.testing_handleRecoverProjectFromShortcut()
+        controller.testing_handleRecoverProjectFromShortcut()
+
+        XCTAssertEqual(invocationCount, 1, "Recover Project should not run concurrently from repeated keybind presses")
+
+        pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
+    }
+
     private func makeProjectManager(
         aerospace: TestAeroSpaceStub,
         logger: RecordingLogger,

@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added
+
+- **Recover current window menu action** -- added a dedicated `Recover Current Window` menu item and reordered the recovery block so `Move Current Window` appears first.
+- **Switcher recover-project shortcut** -- added `Cmd+R` in the switcher to trigger Recover Project for the focused workspace, with footer hint text updated to advertise the shortcut.
+
 ## [0.1.11] - 2026-02-24
 
 ### Added
