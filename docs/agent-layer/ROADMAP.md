@@ -120,8 +120,10 @@ Incomplete:
 - Ship robust in-app updating and update signaling using a standard framework.
 - Expand recovery behavior for both focused-window and non-project contexts.
 - Deliver high-impact onboarding and Chrome workspace quality improvements.
+- Support side-by-side dev/release app installs with distinct macOS app identities.
 
 ### Tasks
+- [x] Split dev vs release app identity: add `AgentPanelDev` target/scheme with `PRODUCT_NAME=AgentPanel Dev` and `PRODUCT_BUNDLE_IDENTIFIER=com.agentpanel.AgentPanel.dev`, add `make build-dev`, and keep shared `~/.config/agent-panel` + `~/.local/state/agent-panel` paths.
 - [ ] Implement full best-practices self-update using a framework for AgentPanel app updates (signed update feed, signature verification, staged install/relaunch UX, and explicit failure reporting).
 - [ ] Add update-available signaling in the app UI (menu indicator + latest version detail + update action entry point).
 - [x] Auto recover a single window.
@@ -136,6 +138,7 @@ Incomplete:
 - The app visibly flags update availability with clear current/latest version information and graceful offline behavior.
 - Single-window recovery and non-project recovery flows are available, deterministic, and validated.
 - UI add-project flow, Chrome profile selection, and Chrome auto-association are implemented and documented.
+- Dev and release app variants can be built and installed side-by-side with distinct bundle IDs and separate Accessibility/Automation permission entries.
 
 ## Phase 11 — Future features
 

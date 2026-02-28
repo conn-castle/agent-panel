@@ -12,11 +12,12 @@ Thanks for your interest in contributing. This guide covers everything you need 
 
 ## Architecture
 
-AgentPanel is structured as five non-test build targets:
+AgentPanel is structured as six non-test build targets:
 
 | Target | Type | Role |
 |--------|------|------|
 | `AgentPanel` | Application | Menu bar UI, switcher panel, onboarding, hotkey registration |
+| `AgentPanelDev` | Application | Development app identity variant (`AgentPanel Dev`) for side-by-side local installs |
 | `AgentPanelCore` | Static framework | All business logic: config parsing, Doctor checks, project activation, layout engine, window management |
 | `AgentPanelAppKit` | Static framework | System-level implementations (Accessibility APIs, NSScreen, CGDisplay) behind Core-defined protocols |
 | `AgentPanelCLICore` | Static framework | Shared CLI command parsing and execution logic |
@@ -41,6 +42,9 @@ make regen
 # Build (Debug, no code signing)
 make build
 
+# Build development app variant (Debug, no code signing)
+make build-dev
+
 # Run tests (fast, no coverage)
 make test
 
@@ -49,6 +53,19 @@ make coverage
 ```
 
 The Xcode project (`AgentPanel.xcodeproj`) is generated from `project.yml` using XcodeGen. If you add or rename source files, regenerate the project with `make regen`.
+
+## Dev and Release App Variants
+
+- `AgentPanel` (release identity): `PRODUCT_NAME=AgentPanel`, bundle ID `com.agentpanel.AgentPanel`
+- `AgentPanelDev` (dev identity): `PRODUCT_NAME=AgentPanel Dev`, bundle ID `com.agentpanel.AgentPanel.dev`
+- Build commands:
+  - `make build` for release identity debug builds.
+  - `make build-dev` for dev identity debug builds.
+- macOS permissions:
+  - Accessibility and Automation entries appear separately for `AgentPanel` and `AgentPanel Dev`.
+  - `UserDefaults.standard` and login-item registration are bundle-ID scoped, so each app identity has separate preference/login-item state.
+- Shared data paths (by design):
+  - Both variants use `~/.config/agent-panel/` and `~/.local/state/agent-panel/` for config and state.
 
 ## Testing
 

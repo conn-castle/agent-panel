@@ -28,11 +28,6 @@ Unscheduled user-visible features and tasks (distinct from issues; not refactors
 
 <!-- ENTRIES START -->
 
-- Backlog 2026-02-27 dev-release-app-separation: Distinct dev app identity from release app
-    Priority: Medium. Area: Dev workflow
-    Description: Define a development app name/identity (including non-colliding bundle identity where needed) so dev and released apps can be installed side-by-side without accessibility collisions.
-    Acceptance criteria: Dev and release builds install simultaneously, register as distinct apps in macOS accessibility/automation contexts, and setup docs describe the workflow.
-
 - Backlog 2026-02-20 favorites: Favorites/stars for projects
     Priority: Deferred. Area: Switcher UX
     Description: Persisted favorite/star flag per project with UI affordances (star icon, Favorites section, Cmd+D toggle). Bulk "Open All Favorites" action to activate all starred projects.

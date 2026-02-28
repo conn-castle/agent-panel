@@ -275,3 +275,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `focusWindowStable` and `focusWindowStableSync` now re-check `focusedWindow` immediately after each `focusWindow` re-assert and clamp sleep intervals to remaining timeout budget.
     Reason: Short timeout windows in CI could expire between re-assert and the next poll iteration, causing false `noPreviousWindow` failures even when focus had already stabilized.
     Tradeoffs: Adds one extra `focusedWindow` call per poll loop iteration and slightly more branching in focus loops, but removes timeout-boundary flakiness and keeps behavior deterministic.
+
+- Decision 2026-02-28 dev-app-identity: Dev app uses distinct bundle identity while sharing config/state paths
+    Decision: Add a separate `AgentPanelDev` app target/scheme with `PRODUCT_BUNDLE_IDENTIFIER=com.agentpanel.AgentPanel.dev` and `PRODUCT_NAME=AgentPanel Dev`, while keeping existing `AgentPanel` release identity unchanged and continuing to use shared `~/.config/agent-panel` and `~/.local/state/agent-panel` paths.
+    Reason: macOS Accessibility/Automation permissions are keyed by app identity, so dev and release need distinct bundle IDs for side-by-side installation without collisions; config/state should remain single-source-of-truth across both variants.
+    Tradeoffs: Dev and release share persisted state/logs and can influence each other’s history; login-item and UserDefaults behavior is identity-scoped and may differ between variants by design.

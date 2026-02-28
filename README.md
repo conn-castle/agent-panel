@@ -319,9 +319,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 scripts/dev_bootstrap.sh  # Validate Xcode toolchain (one-time)
 make regen                # Generate Xcode project from project.yml
 make build                # Build (Debug)
+make build-dev            # Build dev app variant (Debug, side-by-side identity)
 make test                 # Run tests (fast, no coverage)
 make coverage             # Run tests with coverage gate (90% minimum)
 ```
+
+### Dev vs release app identity
+
+- `make build` produces `AgentPanel.app` (`com.agentpanel.AgentPanel`) and matches release naming.
+- `make build-dev` produces `AgentPanel Dev.app` (`com.agentpanel.AgentPanel.dev`) for local development.
+- You can install and run both at the same time; macOS treats them as distinct apps for Accessibility and Automation permissions.
+- Both app variants intentionally share the same config/state locations (`~/.config/agent-panel/`, `~/.local/state/agent-panel/`).
 
 ## License
 

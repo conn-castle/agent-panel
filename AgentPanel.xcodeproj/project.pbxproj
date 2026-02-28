@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		010E7BDDB64C676DFAE7203A /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
 		01A4337E85FF3BD89B789098 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 1DD44D941F769ACBCEB6C63F /* TOMLDecoder */; };
 		01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFEA52B096500A617A9783 /* LoggerTests.swift */; };
 		03BEE37A5A3CA803A17B9B9B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = BDB5BEA283FCCF7063B76969 /* TOMLDecoder */; };
+		054FB3CEFA90F1AC223E30D2 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		0563D807E75A5AAA485BE4DA /* ErrorContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */; };
 		08382A3C82BA6B765B7A4DEC /* ProjectManagerChromeTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792EA59F2896815CA8062275 /* ProjectManagerChromeTabTests.swift */; };
 		085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */; };
@@ -18,9 +20,11 @@
 		0CC7C30ED18250F29ED6809B /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		0DDF42CE7E81D0B7064840F2 /* ProjectManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC240A74C38218E4C33B36B /* ProjectManager.swift */; };
 		0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */; };
+		11D9E5C68EB936547EEE46A8 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
 		121FBB18A26A1929CE57866D /* ExecutableResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0C26CE558C4DC981E911CE /* ExecutableResolver.swift */; };
 		12346D4F33A1FB23A5C18AC4 /* DoctorReportRenderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B53D0797497C36287AF2F37F /* DoctorReportRenderingTests.swift */; };
 		12C912FD7B0796498A203261 /* ProjectManagerFocusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98F56A9B2D3B18E280767106 /* ProjectManagerFocusTests.swift */; };
+		12D9A863911EAAD6B902CB94 /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
 		1325732BFCF73BD99A935A17 /* ProjectManagerMoveWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5E1DA1E1A8E9396ADBA7AC4 /* ProjectManagerMoveWindowTests.swift */; };
 		17A33C82BE771A134F5317EC /* AgentLayerLauncherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B42F36263EBFB132E20DC2CD /* AgentLayerLauncherTests.swift */; };
 		17B6FAA1880E10BD892D7BFF /* DependenciesFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBD5854AEFB3E53BB74EE92 /* DependenciesFileSystem.swift */; };
@@ -30,6 +34,7 @@
 		19B20766AE66049832E7D5CB /* SwitcherPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79524DCF6FC04E226C676288 /* SwitcherPerformanceTests.swift */; };
 		19BF83289F336CE2D78500F8 /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
 		1B92327A065B207386696BC9 /* VSCodeSettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87105C429D6C63689C3F96B4 /* VSCodeSettingsManager.swift */; };
+		1BD54363B39DC020E2065B1B /* SwitcherViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24303F28EF85E8A9BFB7CF5 /* SwitcherViews.swift */; };
 		1C6CBACBED263A63C510AA30 /* SwitcherDismissPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */; };
 		1DA3092146E7E22C7F00842C /* VSCodeColorPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A490F533EB3BC03A15DC4B /* VSCodeColorPalette.swift */; };
 		1F6C1865590F67A36D702863 /* DataPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D261C7BC2CD2E5EFC7706D /* DataPaths.swift */; };
@@ -53,8 +58,10 @@
 		4413AB018182B882C2480E55 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
 		44E82521FC75B543BA678A3B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 0E60CCC0BD2692263397D122 /* TOMLDecoder */; };
 		45E7B566EEE1CAC53054EEF4 /* CommandTimeoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B484ECEF18DB46341AE0352A /* CommandTimeoutTests.swift */; };
+		469A76B3FDBB168BE932C864 /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		476AD5F6F072D635D7418FAB /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E0C3DAA0280728917003498 /* Logger.swift */; };
 		483837094975998B931C20D2 /* ProjectManagerLogEventNameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBB2B968F40735098AB31A9 /* ProjectManagerLogEventNameTests.swift */; };
+		49D9AD837CA9BE6FBC082E32 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */; };
 		4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */; };
 		4D56806E02C971D273BD392D /* ConfigLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B69B44C89E2445E21F50CF /* ConfigLoaderTests.swift */; };
 		4DCD2D11F2BA5709E38B9233 /* Errors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E8DE3E79215020A2587A722 /* Errors.swift */; };
@@ -86,19 +93,27 @@
 		6F76AC8AB0512266AA445965 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 093721093ECDB0367EC53D7A /* Assets.xcassets */; };
 		6F98C1CD2C5AA479DACF816F /* ConfigParserProjectSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC0C4903DB483512BC9E797 /* ConfigParserProjectSection.swift */; };
 		7026D536055667A8B78770E5 /* WindowRecoveryManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C67D54B55EEAC375F2333C /* WindowRecoveryManagerTests.swift */; };
+		711031A3282F296A9A2752A2 /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
 		7337E72993D5E0B5564AB239 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
+		76D2EEC5E45735F445A9216C /* RecoveryProgressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD2A435AAD0A46F9C41D8214 /* RecoveryProgressController.swift */; };
 		77BE7D11F4059FCE61AD9922 /* WindowCycleOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E889482DE8B9E43D5F2B3E7 /* WindowCycleOverlayController.swift */; };
 		7919C7784417EA01E40569C4 /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
+		7920197793C0EAD7C45B992A /* SwitcherPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21615802A92C43F906F41D5 /* SwitcherPanelController.swift */; };
+		7AC871CAF17BFCF0761734ED /* IdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55E0E83BB796ECA8AB8F3744 /* IdentityTests.swift */; };
 		7BE9E07FA842E9FAA46EA5E1 /* GitRemoteResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */; };
 		7FD3930962ACAD6D46827DF1 /* VSCodeSSHWorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABEBED25D4A01500C091AE4 /* VSCodeSSHWorkspaceTests.swift */; };
 		84F15E4EC8265DEF9D88582C /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
 		8650D8563DA8147231A188C4 /* AXWindowPositionerFrameIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A978B49EC0F0E21EC10896 /* AXWindowPositionerFrameIO.swift */; };
 		88E2327FF7D81CD7C4B9FFB5 /* ConfigParserHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEAF4885D9ECE13D7D08100 /* ConfigParserHelpers.swift */; };
 		89352ED066D4230A089016ED /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 32AABCDA8E094E52F9B718B4 /* TOMLDecoder */; };
+		8962B464CBE20D3D3AC848DB /* WindowCycleOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E889482DE8B9E43D5F2B3E7 /* WindowCycleOverlayController.swift */; };
+		8E0CC4EB285463C6F72EF24B /* DoctorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */; };
 		91154669AF8FB7CF054D2961 /* WindowCycleOverlayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FB9A1AB3DB9720C1092952 /* WindowCycleOverlayCoordinator.swift */; };
 		911B77A51564FA54F939ABA7 /* AccessibilityStartupPromptGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B09A95D6863DC3EDC40EE478 /* AccessibilityStartupPromptGateTests.swift */; };
+		91A03C839F024FDA3408D3FE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 093721093ECDB0367EC53D7A /* Assets.xcassets */; };
 		93C6BB7452E4EE2A60C0A3DA /* ConfigParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC772C2D446A9C1E174686C1 /* ConfigParser.swift */; };
 		958F7DB122093EFA8973A0B9 /* AeroSpaceFallbackDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6AE029AF7CE52DD71AD452 /* AeroSpaceFallbackDecisionTests.swift */; };
+		9627AFBE527E4FD4AF16F65E /* LaunchAtLoginToggler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD4F815CAF90030F8A02042 /* LaunchAtLoginToggler.swift */; };
 		98EF82697836A9BD9ED5E732 /* ApCLI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D35ABD3022669F375FDB52F /* ApCLI.swift */; };
 		9A65D206EB28E8E6C9DDEE52 /* SSHHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */; };
 		9B6D6AECB2EF1C55CA244748 /* LayoutConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB049349875901281339DAE9 /* LayoutConfig.swift */; };
@@ -107,9 +122,11 @@
 		A44D8A06EE6BCC913FC8933C /* ChromeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 930B37D5D8A0F77FABC52946 /* ChromeTabs.swift */; };
 		A7641C8A8322AA751664EF90 /* WindowCyclerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7632C3BFC71ED54D57C69705 /* WindowCyclerTests.swift */; };
 		AB2458FE5903330BEECDED5B /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
+		AD41D5332E851EE5A3C60BCC /* FocusCycleHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */; };
 		B0781F6486F0076A267B4D46 /* VSCodeSettingsManagerBlockInjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CA463F780D6235C08ECDE4 /* VSCodeSettingsManagerBlockInjection.swift */; };
 		B28936C2D4FA7AE9CA34DF4A /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = DA4BB8B60939EF907169EAD7 /* TOMLDecoder */; };
 		B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */ = {isa = PBXBuildFile; fileRef = 46AF81704601064B7C7BC6A0 /* aerospace-safe.toml */; };
+		B413E7776C3336367BD21995 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 171F87EF9463BF5CC4137C23 /* TOMLDecoder */; };
 		BB907D2FC7E1CB321CA7B0BB /* WindowLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A56F48F550ED371899EAB69 /* WindowLayoutEngineTests.swift */; };
 		BD781E71EA399B6780705D76 /* ApCLIArgumentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A83F8247E59F28EC76530D33 /* ApCLIArgumentParser.swift */; };
 		BD82D0634AF17D74957D1687 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = AB044C34092747E5175D98FA /* TOMLDecoder */; };
@@ -119,6 +136,7 @@
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
+		D1970DF3172822E69803BF77 /* SwitcherRowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870A0DB78D9AF375FF72E326 /* SwitcherRowViews.swift */; };
 		D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */; };
 		D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9708BB20B7C2071A1EE21D7 /* main.swift */; };
 		D862975B9DCDDF7FF0493E2F /* AXWindowPositioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02956062A786C0D5A65DF5DB /* AXWindowPositioner.swift */; };
@@ -129,6 +147,7 @@
 		E5E94C3AAA17D4A1AB80665D /* AeroSpaceFallbackBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9DD5D6EFEEEE1BAF5BA17E /* AeroSpaceFallbackBehaviorTests.swift */; };
 		E6AB4DCAB965EE715A11593A /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		E8364C94DE1F70EDED7450F8 /* FocusCycleHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */; };
+		E97EEAA15D219F64183E539E /* WindowCycleOverlayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FB9A1AB3DB9720C1092952 /* WindowCycleOverlayCoordinator.swift */; };
 		EA1A08BA539674D9E5EDA3E4 /* SystemCommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 718A87C6BFC69D8D075A86CA /* SystemCommandRunner.swift */; };
 		EA5C8088B2D6A33E84F41F67 /* ConfigLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7903C7F91FDE20E500E410E4 /* ConfigLoader.swift */; };
 		EBC46BB6BEBE814ED9BCEBA6 /* SwitcherPerformance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BDCEECE736D775B2F6A0A03 /* SwitcherPerformance.swift */; };
@@ -147,6 +166,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		072FB2E8E4E293D31AADDD71 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2F8381DF7F34050D2FD2C718;
+			remoteInfo = AgentPanelAppKit;
+		};
 		10FD68FD651A7897413FDA0B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
@@ -245,6 +271,13 @@
 			remoteGlobalIDString = A7CB1C420487F73AFA87FE79;
 			remoteInfo = AgentPanelCore;
 		};
+		FC433D188D5A4E3CFE6E3932 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CEFD7A53191D3874EAB41EC5 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A7CB1C420487F73AFA87FE79;
+			remoteInfo = AgentPanelCore;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
@@ -276,6 +309,7 @@
 		51E5F87E9B834D2CF33BA70D /* FocusHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusHistoryStore.swift; sourceTree = "<group>"; };
 		5346229EF143B5582F2DCABD /* ScreenMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenMode.swift; sourceTree = "<group>"; };
 		5441A4A3ABD5FBE0BC906CF3 /* AeroSpaceCircuitBreakerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCircuitBreakerTests.swift; sourceTree = "<group>"; };
+		55E0E83BB796ECA8AB8F3744 /* IdentityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityTests.swift; sourceTree = "<group>"; };
 		5B15ECCB069CA875EE2198D9 /* AppKitRunningApplicationCheckerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppKitRunningApplicationCheckerTests.swift; sourceTree = "<group>"; };
 		607CC4068E16F99022AA2F75 /* DoctorReportRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorReportRenderer.swift; sourceTree = "<group>"; };
 		66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentPanelCLITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -324,6 +358,7 @@
 		A846E0437C8F257A5EBE57CD /* VSCodeColorPaletteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeColorPaletteTests.swift; sourceTree = "<group>"; };
 		A8AFEA52B096500A617A9783 /* LoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerTests.swift; sourceTree = "<group>"; };
 		AD2A435AAD0A46F9C41D8214 /* RecoveryProgressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryProgressController.swift; sourceTree = "<group>"; };
+		AF8F6514B66103106A7B9537 /* AgentPanelDev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentPanelDev.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B09A95D6863DC3EDC40EE478 /* AccessibilityStartupPromptGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityStartupPromptGateTests.swift; sourceTree = "<group>"; };
 		B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Onboarding.swift; sourceTree = "<group>"; };
 		B42F36263EBFB132E20DC2CD /* AgentLayerLauncherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentLayerLauncherTests.swift; sourceTree = "<group>"; };
@@ -428,6 +463,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C6BE71816432FFE4C9FFBAD5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				054FB3CEFA90F1AC223E30D2 /* AgentPanelCore.framework in Frameworks */,
+				469A76B3FDBB168BE932C864 /* AgentPanelAppKit.framework in Frameworks */,
+				B413E7776C3336367BD21995 /* TOMLDecoder in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F865F9B8F75B17D4AB8AB5CE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -472,6 +517,7 @@
 				DDCF207DCD3CAB37C2756708 /* FocusStackTests.swift */,
 				C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */,
 				1F6B247F0E6D844C6B09CBFF /* GitRemoteResolverTests.swift */,
+				55E0E83BB796ECA8AB8F3744 /* IdentityTests.swift */,
 				C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */,
 				B65D26C4A087CBB10C76E24A /* LayoutConfigParserTests.swift */,
 				A8AFEA52B096500A617A9783 /* LoggerTests.swift */,
@@ -568,6 +614,7 @@
 				66A9847848A3E479A33C2786 /* AgentPanelCLITests.xctest */,
 				B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */,
 				422A67E2D8FA409FACB7DBDF /* AgentPanelCoreTests.xctest */,
+				AF8F6514B66103106A7B9537 /* AgentPanelDev.app */,
 				8375E9AD9F43075DD43C36F4 /* ap */,
 			);
 			name = Products;
@@ -684,6 +731,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		019B0712644073433E875AAD /* AgentPanelDev */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 68234610B476EE77C8A2B7D0 /* Build configuration list for PBXNativeTarget "AgentPanelDev" */;
+			buildPhases = (
+				1CEC36FE467322F4B319BE01 /* Sources */,
+				73A91CD3C0E5031ECD7ED7AD /* Resources */,
+				C6BE71816432FFE4C9FFBAD5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C493CC5E901F868EE002DBD4 /* PBXTargetDependency */,
+				1F42F42BE031B5633F45D250 /* PBXTargetDependency */,
+			);
+			name = AgentPanelDev;
+			packageProductDependencies = (
+				171F87EF9463BF5CC4137C23 /* TOMLDecoder */,
+			);
+			productName = AgentPanelDev;
+			productReference = AF8F6514B66103106A7B9537 /* AgentPanelDev.app */;
+			productType = "com.apple.product-type.application";
+		};
 		083BB4873594ECCE445001A0 /* AgentPanelAppTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1E3D8339606ADE8A4B645774 /* Build configuration list for PBXNativeTarget "AgentPanelAppTests" */;
@@ -881,6 +950,7 @@
 				6F9088D4B2D2EDD17FC37383 /* AgentPanelCLITests */,
 				A7CB1C420487F73AFA87FE79 /* AgentPanelCore */,
 				7BC55D66EEC761B0E70D878C /* AgentPanelCoreTests */,
+				019B0712644073433E875AAD /* AgentPanelDev */,
 			);
 		};
 /* End PBXProject section */
@@ -892,6 +962,15 @@
 			files = (
 				6F76AC8AB0512266AA445965 /* Assets.xcassets in Resources */,
 				B3ABC91B62E259753B52F2CC /* aerospace-safe.toml in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		73A91CD3C0E5031ECD7ED7AD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91A03C839F024FDA3408D3FE /* Assets.xcassets in Resources */,
+				711031A3282F296A9A2752A2 /* aerospace-safe.toml in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -915,6 +994,26 @@
 				085A4D8384A9E683EC9A96DF /* SwitcherViews.swift in Sources */,
 				77BE7D11F4059FCE61AD9922 /* WindowCycleOverlayController.swift in Sources */,
 				91154669AF8FB7CF054D2961 /* WindowCycleOverlayCoordinator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CEC36FE467322F4B319BE01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12D9A863911EAAD6B902CB94 /* AgentPanelApp.swift in Sources */,
+				8E0CC4EB285463C6F72EF24B /* DoctorWindowController.swift in Sources */,
+				AD41D5332E851EE5A3C60BCC /* FocusCycleHotkeyManager.swift in Sources */,
+				010E7BDDB64C676DFAE7203A /* HotkeyManager.swift in Sources */,
+				9627AFBE527E4FD4AF16F65E /* LaunchAtLoginToggler.swift in Sources */,
+				49D9AD837CA9BE6FBC082E32 /* Onboarding.swift in Sources */,
+				76D2EEC5E45735F445A9216C /* RecoveryProgressController.swift in Sources */,
+				7920197793C0EAD7C45B992A /* SwitcherPanelController.swift in Sources */,
+				D1970DF3172822E69803BF77 /* SwitcherRowViews.swift in Sources */,
+				11D9E5C68EB936547EEE46A8 /* SwitcherSession.swift in Sources */,
+				1BD54363B39DC020E2065B1B /* SwitcherViews.swift in Sources */,
+				8962B464CBE20D3D3AC848DB /* WindowCycleOverlayController.swift in Sources */,
+				E97EEAA15D219F64183E539E /* WindowCycleOverlayCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1045,6 +1144,7 @@
 				C3F2BD681D26627581FBF46C /* FuzzyMatcherTests.swift in Sources */,
 				7BE9E07FA842E9FAA46EA5E1 /* GitRemoteResolverTests.swift in Sources */,
 				4BEAC9E4D73D84ACB7685E6B /* IdNormalizationTests.swift in Sources */,
+				7AC871CAF17BFCF0761734ED /* IdentityTests.swift in Sources */,
 				EEB19B9530C35E462BA6BA67 /* LayoutConfigParserTests.swift in Sources */,
 				01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */,
 				08382A3C82BA6B765B7A4DEC /* ProjectManagerChromeTabTests.swift in Sources */,
@@ -1079,6 +1179,11 @@
 			isa = PBXTargetDependency;
 			target = 2F8381DF7F34050D2FD2C718 /* AgentPanelAppKit */;
 			targetProxy = 67F0E5CE0986CFD5DC23B358 /* PBXContainerItemProxy */;
+		};
+		1F42F42BE031B5633F45D250 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2F8381DF7F34050D2FD2C718 /* AgentPanelAppKit */;
+			targetProxy = 072FB2E8E4E293D31AADDD71 /* PBXContainerItemProxy */;
 		};
 		2178D377C0F1461F856AFBB4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1129,6 +1234,11 @@
 			isa = PBXTargetDependency;
 			target = A7CB1C420487F73AFA87FE79 /* AgentPanelCore */;
 			targetProxy = FAAEE4D65E9199D61ECF6822 /* PBXContainerItemProxy */;
+		};
+		C493CC5E901F868EE002DBD4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A7CB1C420487F73AFA87FE79 /* AgentPanelCore */;
+			targetProxy = FC433D188D5A4E3CFE6E3932 /* PBXContainerItemProxy */;
 		};
 		CCC2568E2AE59EF79D603B39 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1248,6 +1358,25 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentPanel.app/Contents/MacOS/AgentPanel";
 			};
 			name = Release;
+		};
+		5F73847791C1CA47F18FFDEF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = release/AgentPanel.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
+				INFOPLIST_FILE = AgentPanelApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.11;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel.dev;
+				PRODUCT_NAME = "AgentPanel Dev";
+				SDKROOT = macosx;
+			};
+			name = Debug;
 		};
 		71E328B284943EBF83C92403 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -1575,6 +1704,25 @@
 			};
 			name = Release;
 		};
+		FB1DFC3939BF859E7A4883ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = release/AgentPanel.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 10;
+				INFOPLIST_FILE = AgentPanelApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.11;
+				PRODUCT_BUNDLE_IDENTIFIER = com.agentpanel.AgentPanel.dev;
+				PRODUCT_NAME = "AgentPanel Dev";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1641,6 +1789,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		68234610B476EE77C8A2B7D0 /* Build configuration list for PBXNativeTarget "AgentPanelDev" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F73847791C1CA47F18FFDEF /* Debug */,
+				FB1DFC3939BF859E7A4883ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		7454D11952BC0CF7BDEC53D4 /* Build configuration list for PBXNativeTarget "AgentPanelCoreTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1674,6 +1831,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		0E60CCC0BD2692263397D122 /* TOMLDecoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9853D577A6D83C1E545ED27E /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
+			productName = TOMLDecoder;
+		};
+		171F87EF9463BF5CC4137C23 /* TOMLDecoder */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9853D577A6D83C1E545ED27E /* XCRemoteSwiftPackageReference "TOMLDecoder" */;
 			productName = TOMLDecoder;

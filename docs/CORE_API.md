@@ -25,6 +25,9 @@ The public API of `AgentPanelCore` has these main concerns:
 
 ```swift
 public enum AgentPanel {
+    /// Human-readable app name for user-facing guidance (e.g., "AgentPanel", "AgentPanel Dev").
+    public static var displayName: String
+
     /// Current version string (e.g., "1.0.0").
     public static var version: String
 }
