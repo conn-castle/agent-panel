@@ -43,6 +43,17 @@ private struct MenuItems {
 
 /// App lifecycle hook used to create a minimal menu bar presence.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Reads `NSScreen.main?.visibleFrame` on the main thread and can be called
+    /// safely from background queues used by focus cycling/restoration flows.
+    private static func mainScreenVisibleFrame() -> CGRect? {
+        if Thread.isMainThread {
+            return NSScreen.main?.visibleFrame
+        }
+        return DispatchQueue.main.sync {
+            NSScreen.main?.visibleFrame
+        }
+    }
+
     private var statusItem: NSStatusItem?
     private var doctorController: DoctorWindowController?
     private var recoveryController: RecoveryProgressController?
@@ -70,7 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
         screenModeDetector: ScreenModeDetector(),
-        processChecker: AppKitRunningApplicationChecker()
+        processChecker: AppKitRunningApplicationChecker(),
+        mainScreenVisibleFrame: { AppDelegate.mainScreenVisibleFrame() }
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -142,12 +154,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Register window cycling hotkeys (Option-Tab / Option-Shift-Tab)
         let windowCycler = WindowCycler(processChecker: AppKitRunningApplicationChecker())
         let focusCycleManager = FocusCycleHotkeyManager()
+        let windowPositioner = AXWindowPositioner()
+        let mainScreenVisibleFrame = { AppDelegate.mainScreenVisibleFrame() }
         let overlayCoordinator = WindowCycleOverlayCoordinator(
             windowCycler: windowCycler,
             logger: logger,
             shouldSuppressOverlay: { [weak self] in
                 self?.switcherController?.isVisible == true
-            }
+            },
+            windowPositioner: windowPositioner,
+            mainScreenVisibleFrame: mainScreenVisibleFrame
         )
         focusCycleManager.onCycleNext = { [weak self] in
             self?.performImmediateWindowCycle(windowCycler: windowCycler, direction: .next)
@@ -508,7 +524,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   - direction: Cycle direction to apply.
     private func performImmediateWindowCycle(windowCycler: WindowCycler, direction: CycleDirection) {
         immediateWindowCycleQueue.async { [weak self] in
-            if case .failure(let error) = windowCycler.cycleFocus(direction: direction) {
+            switch windowCycler.cycleFocus(direction: direction) {
+            case .success(let candidate?):
+                // Recover the focused window if it is off-screen or oversized.
+                if let screenFrame = AppDelegate.mainScreenVisibleFrame() {
+                    _ = AXWindowPositioner().recoverFocusedWindow(
+                        bundleId: candidate.appBundleId,
+                        screenVisibleFrame: screenFrame
+                    )
+                }
+            case .success(nil):
+                break
+            case .failure(let error):
                 switch direction {
                 case .next:
                     self?.logAppEvent(event: "focus_cycle.next.failed", level: .warn, message: error.message)

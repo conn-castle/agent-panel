@@ -261,6 +261,19 @@ public protocol WindowPositioning {
     ///   `.notFound` if no matching window, or `.failure` on AX error.
     func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError>
 
+    /// Recovers the currently focused window of the given application if off-screen.
+    ///
+    /// Must be called after AeroSpace has focused the target window. Reads the app's
+    /// AX focused window directly (no title match needed), checks its frame against
+    /// `screenVisibleFrame`, and shrinks/centers if off-screen or oversized.
+    ///
+    /// - Parameters:
+    ///   - bundleId: Bundle identifier of the owning application.
+    ///   - screenVisibleFrame: Screen visible frame to constrain within.
+    /// - Returns: `.recovered` if resized/moved, `.unchanged` if already fits,
+    ///   `.notFound` if no focused window, or `.failure` on AX error.
+    func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError>
+
     /// Returns true if macOS Accessibility permission is granted.
     func isAccessibilityTrusted() -> Bool
 

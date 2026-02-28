@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import AgentPanel
+@testable import AgentPanelAppKit
 @testable import AgentPanelCore
 
 @MainActor
@@ -207,6 +208,67 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertEqual(invocationCount, 1, "Recover Project should not run concurrently from repeated keybind presses")
 
         pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
+    }
+
+    func testRecoveryScreenSelectionUsesContainingSecondaryScreen() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1800, y: 120, width: 700, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: primaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, secondaryScreen)
+        XCTAssertNil(
+            AXWindowPositioner.computeRecoveredFrame(
+                currentFrame: windowFrame,
+                screenVisibleFrame: selected
+            )
+        )
+    }
+
+    func testRecoveryScreenSelectionUsesLargestIntersectionWhenMidpointInGap() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1200, y: 120, width: 600, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: primaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, primaryScreen)
+    }
+
+    func testRecoveryScreenSelectionUsesNearestScreenWhenNoIntersection() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1450, y: 120, width: 100, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: secondaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, primaryScreen)
+    }
+
+    func testRecoveryScreenSelectionFallsBackWhenNoScreensAvailable() {
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1800, y: 120, width: 700, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: secondaryScreen,
+            availableScreenFrames: []
+        )
+
+        XCTAssertEqual(selected, secondaryScreen)
     }
 
     private func makeProjectManager(

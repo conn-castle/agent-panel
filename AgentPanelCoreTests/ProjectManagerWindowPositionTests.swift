@@ -56,6 +56,13 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
             return recoverWindowResult
         }
 
+        var recoverFocusedCalls: [(bundleId: String, screenFrame: CGRect)] = []
+        var recoverFocusedResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
+        func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+            recoverFocusedCalls.append((bundleId, screenVisibleFrame))
+            return recoverFocusedResult
+        }
+
         func isAccessibilityTrusted() -> Bool { trusted }
 
         func promptForAccessibility() -> Bool { trusted }

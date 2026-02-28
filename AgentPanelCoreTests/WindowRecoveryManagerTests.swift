@@ -78,6 +78,13 @@ final class WindowRecoveryManagerTests: XCTestCase {
             return recoverResults[windowTitle] ?? defaultRecoverResult
         }
 
+        var recoverFocusedCalls: [(bundleId: String, screenFrame: CGRect)] = []
+        var defaultRecoverFocusedResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
+        func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+            recoverFocusedCalls.append((bundleId, screenVisibleFrame))
+            return defaultRecoverFocusedResult
+        }
+
         func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
             .failure(ApCoreError(message: "not implemented"))
         }

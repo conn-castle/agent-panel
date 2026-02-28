@@ -149,7 +149,49 @@ public struct AXWindowPositioner: WindowPositioning {
             return .failure(error)
         }
 
-        // Read current frame
+        return recoverElement(element, bundleId: bundleId, screenVisibleFrame: screenVisibleFrame)
+    }
+
+    public func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        defer {
+            let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            Self.logger.debug("ax.recover_focused_window bundleId=\(bundleId) elapsed=\(String(format: "%.1f", ms))ms")
+        }
+
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        guard !apps.isEmpty else {
+            return .success(.notFound)
+        }
+
+        // Get the app's AX focused window (set by AeroSpace before this call).
+        for app in apps.sorted(by: { $0.processIdentifier < $1.processIdentifier }) {
+            let appElement = AXUIElementCreateApplication(app.processIdentifier)
+            AXUIElementSetMessagingTimeout(appElement, Self.axTimeoutSeconds)
+
+            var focusedValue: AnyObject?
+            let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedValue)
+            if result == .success,
+               let ref = focusedValue,
+               CFGetTypeID(ref) == AXUIElementGetTypeID() {
+                let element = ref as! AXUIElement
+                AXUIElementSetMessagingTimeout(element, Self.axTimeoutSeconds)
+                return recoverElement(element, bundleId: bundleId, screenVisibleFrame: screenVisibleFrame)
+            }
+        }
+
+        return .success(.notFound)
+    }
+
+    // MARK: - Private Recovery
+
+    /// Recovers a single AX element: reads its frame, shrinks if oversized, and centers
+    /// on screen if off-screen. Returns `.unchanged` if the window already fits.
+    private func recoverElement(
+        _ element: AXUIElement,
+        bundleId: String,
+        screenVisibleFrame: CGRect
+    ) -> Result<RecoveryOutcome, ApCoreError> {
         let currentFrame: CGRect
         switch readFrameNSScreen(element: element, bundleId: bundleId) {
         case .success(let frame):
@@ -158,31 +200,103 @@ public struct AXWindowPositioner: WindowPositioning {
             return .failure(error)
         }
 
-        // Compute recovered frame: shrink if oversized, then center on screen
-        let needsShrinkWidth = currentFrame.width > screenVisibleFrame.width
-        let needsShrinkHeight = currentFrame.height > screenVisibleFrame.height
-        let isOffScreen = !screenVisibleFrame.contains(CGPoint(x: currentFrame.midX, y: currentFrame.midY))
+        let recoveryScreenVisibleFrame = Self.selectRecoveryScreenVisibleFrame(
+            currentFrame: currentFrame,
+            fallbackScreenVisibleFrame: screenVisibleFrame,
+            availableScreenFrames: NSScreen.screens.map(\.visibleFrame)
+        )
 
-        guard needsShrinkWidth || needsShrinkHeight || isOffScreen else {
+        guard let recoveredFrame = Self.computeRecoveredFrame(
+            currentFrame: currentFrame,
+            screenVisibleFrame: recoveryScreenVisibleFrame
+        ) else {
             return .success(.unchanged)
         }
 
-        let width = needsShrinkWidth ? screenVisibleFrame.width : currentFrame.width
-        let height = needsShrinkHeight ? screenVisibleFrame.height : currentFrame.height
-
-        let centeredFrame = CGRect(
-            x: screenVisibleFrame.minX + (screenVisibleFrame.width - width) / 2,
-            y: screenVisibleFrame.minY + (screenVisibleFrame.height - height) / 2,
-            width: width,
-            height: height
-        )
-
-        switch writeFrameNSScreen(element: element, frame: centeredFrame, bundleId: bundleId) {
+        switch writeFrameNSScreen(element: element, frame: recoveredFrame, bundleId: bundleId) {
         case .success:
             return .success(.recovered)
         case .failure(let error):
             return .failure(error)
         }
+    }
+
+    /// Returns a recovered frame (shrunk to fit, centered) if the window is off-screen
+    /// or oversized. Returns `nil` if the window already fits.
+    static func computeRecoveredFrame(
+        currentFrame: CGRect,
+        screenVisibleFrame: CGRect
+    ) -> CGRect? {
+        let needsShrinkWidth = currentFrame.width > screenVisibleFrame.width
+        let needsShrinkHeight = currentFrame.height > screenVisibleFrame.height
+        let isOffScreen = !screenVisibleFrame.contains(
+            CGPoint(x: currentFrame.midX, y: currentFrame.midY)
+        )
+
+        guard needsShrinkWidth || needsShrinkHeight || isOffScreen else {
+            return nil
+        }
+
+        let width = needsShrinkWidth ? screenVisibleFrame.width : currentFrame.width
+        let height = needsShrinkHeight ? screenVisibleFrame.height : currentFrame.height
+
+        return CGRect(
+            x: screenVisibleFrame.minX + (screenVisibleFrame.width - width) / 2,
+            y: screenVisibleFrame.minY + (screenVisibleFrame.height - height) / 2,
+            width: width,
+            height: height
+        )
+    }
+
+    /// Picks the most appropriate screen frame for recovery in multi-display setups.
+    ///
+    /// Selection order:
+    /// 1) screen containing the window midpoint,
+    /// 2) screen with largest intersection area,
+    /// 3) nearest screen center by midpoint distance,
+    /// 4) fallback screen if no screens are available.
+    static func selectRecoveryScreenVisibleFrame(
+        currentFrame: CGRect,
+        fallbackScreenVisibleFrame: CGRect,
+        availableScreenFrames: [CGRect]
+    ) -> CGRect {
+        guard !availableScreenFrames.isEmpty else {
+            return fallbackScreenVisibleFrame
+        }
+
+        let midpoint = CGPoint(x: currentFrame.midX, y: currentFrame.midY)
+
+        if let containing = availableScreenFrames.first(where: { $0.contains(midpoint) }) {
+            return containing
+        }
+
+        if let bestIntersection = availableScreenFrames
+            .map({ (frame: $0, area: intersectionArea($0, currentFrame)) })
+            .max(by: { $0.area < $1.area }),
+           bestIntersection.area > 0 {
+            return bestIntersection.frame
+        }
+
+        if let nearest = availableScreenFrames.min(by: {
+            squaredDistance(from: midpoint, to: CGPoint(x: $0.midX, y: $0.midY)) <
+                squaredDistance(from: midpoint, to: CGPoint(x: $1.midX, y: $1.midY))
+        }) {
+            return nearest
+        }
+
+        return fallbackScreenVisibleFrame
+    }
+
+    private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let intersection = lhs.intersection(rhs)
+        guard !intersection.isNull else { return 0 }
+        return max(intersection.width, 0) * max(intersection.height, 0)
+    }
+
+    private static func squaredDistance(from: CGPoint, to: CGPoint) -> CGFloat {
+        let dx = from.x - to.x
+        let dy = from.y - to.y
+        return dx * dx + dy * dy
     }
 
 }

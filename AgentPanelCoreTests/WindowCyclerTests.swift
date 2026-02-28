@@ -394,4 +394,40 @@ final class WindowCyclerTests: XCTestCase {
         let result = cycler.cancelSession(session: session)
         if case .success = result { XCTFail("Expected failure") }
     }
+
+    // MARK: - cycleFocus returns candidate
+
+    func testCycleFocusReturnsFocusedCandidate() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1), makeWindow(id: 2)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.cycleFocus(direction: .next)
+
+        guard case .success(let candidate?) = result else {
+            XCTFail("Expected non-nil candidate")
+            return
+        }
+        XCTAssertEqual(candidate.windowId, 2)
+        XCTAssertEqual(candidate.appBundleId, "com.test.app2")
+        XCTAssertEqual(candidate.windowTitle, "Window 2")
+    }
+
+    func testCycleFocusReturnsNilWhenSingleWindow() {
+        let stub = StubAeroSpace()
+        let windows = [makeWindow(id: 1)]
+        stub.focusedWindowResult = .success(windows[0])
+        stub.windowsByWorkspace["ap-test"] = windows
+
+        let cycler = makeCycler(stub: stub)
+        let result = cycler.cycleFocus(direction: .next)
+
+        guard case .success(let candidate) = result else {
+            XCTFail("Expected success")
+            return
+        }
+        XCTAssertNil(candidate, "Should return nil when no cycling occurred")
+    }
 }

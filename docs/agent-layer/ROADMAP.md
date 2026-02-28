@@ -124,7 +124,7 @@ Incomplete:
 ### Tasks
 - [ ] Implement full best-practices self-update using a framework for AgentPanel app updates (signed update feed, signature verification, staged install/relaunch UX, and explicit failure reporting).
 - [ ] Add update-available signaling in the app UI (menu indicator + latest version detail + update action entry point).
-- [ ] Auto recover a single window.
+- [x] Auto recover a single window.
 - [x] Get auto recovery for project working when not on project; recover non-project windows on the current desktop.
 - [x] Add switcher `Cmd+R` shortcut to trigger Recover Project for the focused workspace and surface the shortcut in switcher footer hints.
 - [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.

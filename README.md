@@ -25,7 +25,7 @@ For users who want an uncluttered menu bar, it can be desirable to remove or hid
 - **SSH remote projects** -- works with VS Code Remote-SSH for remote development workflows.
 - **Built-in diagnostics** -- `Doctor` checks your setup end-to-end, opens immediately with loading feedback, and renders a color-coded report with actionable fixes.
 - **CLI included** -- `ap doctor`, `ap select-project`, `ap close-project`, and more for scripting and automation.
-- **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed.
+- **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed. Off-screen windows are automatically recovered when focused.
 - **Color coding** -- each project gets a distinct color in VS Code via the Peacock extension.
 
 ## Requirements

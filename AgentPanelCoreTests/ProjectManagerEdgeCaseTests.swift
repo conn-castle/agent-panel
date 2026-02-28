@@ -867,6 +867,8 @@ private final class EdgeRecordingPositioner: WindowPositioning {
 
     func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> { .success(.unchanged) }
 
+    func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> { .success(.unchanged) }
+
     func isAccessibilityTrusted() -> Bool { trusted }
 
     func promptForAccessibility() -> Bool { trusted }

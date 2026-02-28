@@ -201,7 +201,8 @@ public final class ProjectManager {
     public init(
         windowPositioner: WindowPositioning? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        mainScreenVisibleFrame: (() -> CGRect?)? = nil
     )
 
     /// Loads configuration from the default path.
@@ -501,6 +502,10 @@ public protocol WindowPositioning {
     func recoverWindow(
         bundleId: String,
         windowTitle: String,
+        screenVisibleFrame: CGRect
+    ) -> Result<RecoveryOutcome, ApCoreError>
+    func recoverFocusedWindow(
+        bundleId: String,
         screenVisibleFrame: CGRect
     ) -> Result<RecoveryOutcome, ApCoreError>
     func isAccessibilityTrusted() -> Bool
@@ -803,7 +808,7 @@ public struct WindowCycler {
     public func advanceSelection(session: CycleSession, direction: CycleDirection) -> CycleSession
     public func commitSelection(session: CycleSession) -> Result<Void, ApCoreError>
     public func cancelSession(session: CycleSession) -> Result<Void, ApCoreError>
-    public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
+    public func cycleFocus(direction: CycleDirection) -> Result<WindowCycleCandidate?, ApCoreError>
 }
 ```
 
@@ -811,7 +816,7 @@ public struct WindowCycler {
 - `advanceSelection` moves the selected index with wrapping.
 - `commitSelection` focuses the selected candidate.
 - `cancelSession` restores `initialWindowId`.
-- `cycleFocus` remains the immediate one-shot API and now delegates to session start + commit.
+- `cycleFocus` remains the immediate one-shot API and now delegates to session start + commit. Returns the focused `WindowCycleCandidate` on success (or `nil` if no cycling occurred).
 
 ---
 

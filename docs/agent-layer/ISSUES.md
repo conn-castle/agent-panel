@@ -52,10 +52,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: 0.1.11 logs include `capture_position.chrome_read_failed` followed by `capture_position.saved` with `partial:true`; later `position.using_saved_ide_computed_chrome` applies mixed saved/computed layout.
     Next step: Add bounded Chrome-frame re-read before save and mark partial captures as degraded state that is not reused as canonical layout until a complete capture succeeds.
 
-- Issue 2026-02-23 offscreen-window-auto-recovery-threshold: Auto-recover project windows that are materially offscreen
-    Priority: Medium. Area: Window recovery
-    Description: Project windows can remain partially offscreen; when more than 10% of a window is outside visible display bounds, placement should be auto-recovered.
-    Next step: Add a canonical offscreen-coverage calculation and trigger project window recovery when offscreen area exceeds the 10% threshold, with regression tests across single- and multi-display layouts.
+- Issue 2026-02-23 offscreen-window-auto-recovery-threshold: Refine offscreen detection to percentage-based threshold
+    Priority: Low. Area: Window recovery
+    Description: Auto-recovery now triggers on focus when a window's midpoint is off-screen. A more granular approach using a 10% off-screen area threshold could catch partially-offscreen windows where the midpoint is still on-screen but significant content is clipped.
+    Next step: Add a canonical offscreen-coverage calculation (percentage of window area outside visible bounds) and consider triggering recovery when offscreen area exceeds 10%, with regression tests across single- and multi-display layouts.
 
 - Issue 2026-02-23 switcher-dismiss-latency-focus-safety: Switcher dismissal feels delayed after project selection
     Priority: Medium. Area: Switcher UX & focus orchestration
