@@ -16,8 +16,15 @@ private enum MenuTiming {
 private enum MenuBarHealthIndicator {
     static let symbolName = "square.stack"
     static let accessibilityDescription = "AgentPanel health indicator"
+    static let devBadgeTitle = " Dev"
     /// Minimum interval between background Doctor refreshes to avoid spamming CLI calls.
     static let refreshDebounceSeconds: TimeInterval = 30.0
+}
+
+/// User interaction source for switcher toggles managed by AppDelegate.
+private enum SwitcherToggleTrigger {
+    case hotkey
+    case reopen
 }
 
 @main
@@ -78,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let logger: AgentPanelLogging = AgentPanelLogger()
     private let launchAtLoginToggler = LaunchAtLoginToggler()
+    private let appDisplayName = AgentPanel.displayName
+    private let isDevAppVariant = Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
     private let projectManager = ProjectManager(
         windowPositioner: AXWindowPositioner(),
         screenModeDetector: ScreenModeDetector(),
@@ -100,6 +109,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Handles app reopen events (for example double-clicking the app while it's already running).
+    ///
+    /// AgentPanel is a menu bar app (`LSUIElement`) without a standard window, so reopen events
+    /// should produce immediate visible feedback by showing/toggling the switcher.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        logAppEvent(
+            event: "app.reopen.requested",
+            context: ["has_visible_windows": flag ? "true" : "false"]
+        )
+        guard statusItem != nil else {
+            return false
+        }
+        toggleSwitcher(trigger: .reopen)
+        return false
+    }
+
     /// Completes app setup after onboarding succeeds.
     private func completeAppSetup() {
         NSApp.setActivationPolicy(.accessory)
@@ -113,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hotkeyManager = HotkeyManager()
         hotkeyManager.onHotkey = { [weak self] in
-            self?.toggleSwitcher()
+            self?.toggleSwitcher(trigger: .hotkey)
         }
         hotkeyManager.onStatusChange = { [weak self] status in
             self?.updateHotkeyStatus(status)
@@ -336,11 +361,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let aboutItem = NSMenuItem(
-            title: "About Agent Panel",
+            title: "About \(appDisplayName)",
             action: #selector(showAbout),
             keyEquivalent: ""
         )
         menu.addItem(aboutItem)
+
+        if isDevAppVariant {
+            let variantItem = NSMenuItem(
+                title: "Running \(appDisplayName) (dev identity)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            variantItem.isEnabled = false
+            menu.addItem(variantItem)
+        }
 
         menu.addItem(.separator())
 
@@ -400,7 +435,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(recoverAgentPanelItem)
 
         let recoverAllWindowsItem = NSMenuItem(
-            title: "Recover All Windows...",
+            title: "Recover All Projects...",
             action: #selector(recoverAllWindowsAction),
             keyEquivalent: ""
         )
@@ -485,17 +520,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Minimum interval between hotkey toggles to prevent session storms during AeroSpace outages.
     private static let hotkeyDebounceSeconds: TimeInterval = 0.3
 
-    /// Toggles the switcher panel from the global hotkey.
-    private func toggleSwitcher() {
-        // Debounce: ignore rapid presses within 300ms to prevent session storms
-        // when AeroSpace is unresponsive and the user mashes the hotkey.
-        let now = Date()
-        if let last = lastHotkeyToggleAt,
-           now.timeIntervalSince(last) < Self.hotkeyDebounceSeconds {
-            logAppEvent(event: "switcher.hotkey.debounced")
-            return
+    /// Toggles the switcher panel from a user interaction source.
+    /// - Parameter trigger: Interaction source that requested the toggle.
+    private func toggleSwitcher(trigger: SwitcherToggleTrigger) {
+        if trigger == .hotkey {
+            // Debounce: ignore rapid presses within 300ms to prevent session storms
+            // when AeroSpace is unresponsive and the user mashes the hotkey.
+            let now = Date()
+            if let last = lastHotkeyToggleAt,
+               now.timeIntervalSince(last) < Self.hotkeyDebounceSeconds {
+                logAppEvent(event: "switcher.hotkey.debounced")
+                return
+            }
+            lastHotkeyToggleAt = now
         }
-        lastHotkeyToggleAt = now
 
         // Capture the previously active app immediately (AppKit API, instant).
         let previousApp = NSWorkspace.shared.frontmostApplication
@@ -507,13 +545,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let capturedFocus = self.projectManager.captureCurrentFocus()
             DispatchQueue.main.async {
-                self.logAppEvent(
-                    event: "switcher.hotkey.invoked",
-                    context: ["hotkey": "Cmd+Shift+Space"]
-                )
+                let origin: SwitcherPresentationSource
+                switch trigger {
+                case .hotkey:
+                    origin = .hotkey
+                    self.logAppEvent(
+                        event: "switcher.hotkey.invoked",
+                        context: ["hotkey": "Cmd+Shift+Space"]
+                    )
+                case .reopen:
+                    origin = .reopen
+                    self.logAppEvent(event: "switcher.reopen.invoked")
+                }
                 // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
                 // without activating the app (and therefore without switching workspaces).
-                self.ensureSwitcherController().toggle(origin: .hotkey, previousApp: previousApp, capturedFocus: capturedFocus)
+                self.ensureSwitcherController().toggle(
+                    origin: origin,
+                    previousApp: previousApp,
+                    capturedFocus: capturedFocus
+                )
             }
         }
     }
@@ -640,8 +690,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        button.title = ""
-        button.imagePosition = .imageOnly
+        if isDevAppVariant {
+            button.title = MenuBarHealthIndicator.devBadgeTitle
+            button.imagePosition = .imageLeading
+        } else {
+            button.title = ""
+            button.imagePosition = .imageOnly
+        }
         button.contentTintColor = nil
 
         let sizeConfig = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
@@ -1031,7 +1086,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "Agent Panel",
+            .applicationName: appDisplayName,
             .applicationVersion: AgentPanel.version
         ])
     }
@@ -1139,13 +1194,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   - screenFrame: Screen visible frame captured on the main thread.
     ///   - layoutConfig: Layout config for layout-aware recovery. Pass nil to disable layout phase.
     private func makeWindowRecoveryManager(screenFrame: CGRect, layoutConfig: LayoutConfig? = nil) -> WindowRecoveryManager {
-        WindowRecoveryManager(
+        let knownProjectIds = Set(projectManager.projects.map(\.id))
+        return WindowRecoveryManager(
             windowPositioner: AXWindowPositioner(),
             screenVisibleFrame: screenFrame,
             logger: logger,
             processChecker: AppKitRunningApplicationChecker(),
             screenModeDetector: layoutConfig != nil ? ScreenModeDetector() : nil,
-            layoutConfig: layoutConfig ?? LayoutConfig()
+            layoutConfig: layoutConfig ?? LayoutConfig(),
+            knownProjectIds: knownProjectIds
         )
     }
 
@@ -1274,7 +1331,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Recovers all windows across all workspaces, moving them to workspace "1".
+    /// Recovers all windows across all workspaces.
+    /// Project-tagged windows are moved to their project workspace before recovery.
     @objc private func recoverAllWindowsAction() {
         logAppEvent(event: "recover_all_windows.requested")
         statusItem?.menu?.cancelTracking()
@@ -1295,7 +1353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
+            let layoutConfig = self.projectManager.currentLayoutConfig
+            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
 
             let result = manager.recoverAllWindows { current, total in
                 DispatchQueue.main.async {

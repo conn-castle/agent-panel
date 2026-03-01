@@ -26,6 +26,7 @@ public final class WindowRecoveryManager {
     private let logger: AgentPanelLogging
     private let screenModeDetector: ScreenModeDetecting?
     private let layoutConfig: LayoutConfig
+    private let knownProjectIds: Set<String>?
 
     /// Creates a WindowRecoveryManager with production defaults for AeroSpace.
     /// - Parameters:
@@ -35,13 +36,16 @@ public final class WindowRecoveryManager {
     ///   - processChecker: Process checker for AeroSpace auto-recovery. Pass nil to disable.
     ///   - screenModeDetector: Screen mode detector for layout-aware recovery. Pass nil to disable layout phase.
     ///   - layoutConfig: Layout configuration for computing canonical positions. Defaults to `LayoutConfig()`.
+    ///   - knownProjectIds: Optional known project IDs. When provided, recover-all routing only
+    ///     routes tokenized windows for these IDs; unknown IDs are treated as non-project windows.
     public init(
         windowPositioner: WindowPositioning,
         screenVisibleFrame: CGRect,
         logger: AgentPanelLogging,
         processChecker: RunningApplicationChecking? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        layoutConfig: LayoutConfig = LayoutConfig()
+        layoutConfig: LayoutConfig = LayoutConfig(),
+        knownProjectIds: Set<String>? = nil
     ) {
         self.aerospace = ApAeroSpace(processChecker: processChecker)
         self.windowPositioner = windowPositioner
@@ -49,6 +53,7 @@ public final class WindowRecoveryManager {
         self.logger = logger
         self.screenModeDetector = screenModeDetector
         self.layoutConfig = layoutConfig
+        self.knownProjectIds = knownProjectIds
     }
 
     /// Creates a WindowRecoveryManager with injected dependencies (for testing).
@@ -58,7 +63,8 @@ public final class WindowRecoveryManager {
         screenVisibleFrame: CGRect,
         logger: AgentPanelLogging,
         screenModeDetector: ScreenModeDetecting? = nil,
-        layoutConfig: LayoutConfig = LayoutConfig()
+        layoutConfig: LayoutConfig = LayoutConfig(),
+        knownProjectIds: Set<String>? = nil
     ) {
         self.aerospace = aerospace
         self.windowPositioner = windowPositioner
@@ -66,6 +72,7 @@ public final class WindowRecoveryManager {
         self.logger = logger
         self.screenModeDetector = screenModeDetector
         self.layoutConfig = layoutConfig
+        self.knownProjectIds = knownProjectIds
     }
 
     /// Recovers all windows in the given workspace.
@@ -207,7 +214,9 @@ public final class WindowRecoveryManager {
     }
 
     /// Recovers all windows across all workspaces.
-    /// Moves each window to the preferred non-project workspace and runs generic recovery.
+    /// Windows tagged with `AP:<projectId>` are first routed to `ap-<projectId>` when needed.
+    /// Recovery then runs for every workspace that contains snapshot windows, using layout-aware
+    /// recovery for project workspaces and generic recovery for non-project workspaces.
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
     ) -> Result<RecoveryResult, ApCoreError> {
@@ -226,55 +235,94 @@ public final class WindowRecoveryManager {
 
         var allWindows: [ApWindow] = []
         var errors: [String] = []
-        var queriedWorkspaces: [String] = []
-        var workspacesWithWindows: Set<String> = []
 
         for workspace in workspaces {
             switch aerospace.listWindowsWorkspace(workspace: workspace) {
             case .success(let windows):
                 allWindows.append(contentsOf: windows)
-                queriedWorkspaces.append(workspace)
-                if !windows.isEmpty {
-                    workspacesWithWindows.insert(workspace)
-                }
             case .failure(let error):
                 errors.append("Failed to list workspace \(workspace): \(error.message)")
                 logEvent("recover_all.workspace_list_failed", level: .warn, message: error.message, context: ["workspace": workspace])
             }
         }
 
-        let destination = WorkspaceRouting.preferredNonProjectWorkspace(
-            from: queriedWorkspaces,
-            hasWindows: { workspacesWithWindows.contains($0) }
-        )
+        let totalWindows = allWindows.count
+        if totalWindows == 0 {
+            if let originalFocus {
+                _ = aerospace.focusWindow(windowId: originalFocus.windowId)
+            }
 
-        var processed = 0
+            let result = RecoveryResult(windowsProcessed: 0, windowsRecovered: 0, errors: errors)
+            logEvent("recover_all.completed", context: [
+                "processed": "0",
+                "recovered": "0",
+                "errors": "\(errors.count)"
+            ])
+            return .success(result)
+        }
+
+        var plannedWorkspaceWindowCounts: [String: Int] = [:]
+        var recoveryWorkspaces: Set<String> = []
+
+        for window in allWindows {
+            let destinationWorkspace = intendedProjectWorkspace(for: window) ?? window.workspace
+            var assignedWorkspace = window.workspace
+
+            if destinationWorkspace != window.workspace {
+                switch aerospace.moveWindowToWorkspace(workspace: destinationWorkspace, windowId: window.windowId, focusFollows: true) {
+                case .success:
+                    assignedWorkspace = destinationWorkspace
+                case .failure(let error):
+                    errors.append("Move failed for window \(window.windowId) (\(window.windowTitle)): \(error.message)")
+                    logEvent(
+                        "recover_all.move_failed",
+                        level: .warn,
+                        message: error.message,
+                        context: [
+                            "window_id": "\(window.windowId)",
+                            "from_workspace": window.workspace,
+                            "to_workspace": destinationWorkspace
+                        ]
+                    )
+                }
+            }
+
+            plannedWorkspaceWindowCounts[assignedWorkspace, default: 0] += 1
+            recoveryWorkspaces.insert(assignedWorkspace)
+        }
+
+        var progressProcessed = 0
         var recovered = 0
 
-        for (index, window) in allWindows.enumerated() {
-            switch aerospace.moveWindowToWorkspace(workspace: destination, windowId: window.windowId, focusFollows: true) {
-            case .success:
-                break
+        for workspace in recoveryWorkspaces.sorted() {
+            let plannedWindowCount = plannedWorkspaceWindowCounts[workspace] ?? 0
+
+            switch recoverWorkspaceWindows(workspace: workspace) {
+            case .success(let recovery):
+                recovered += recovery.windowsRecovered
+                errors.append(contentsOf: recovery.errors)
             case .failure(let error):
-                errors.append("Move failed for window \(window.windowId) (\(window.windowTitle)): \(error.message)")
-                progress(index + 1, allWindows.count)
-                processed += 1
-                continue
+                errors.append("Recovery failed for workspace \(workspace): \(error.message)")
+                logEvent("recover_all.workspace_recover_failed", level: .warn, message: error.message, context: [
+                    "workspace": workspace
+                ])
             }
 
-            let outcome = recoverSingleWindow(window)
-            switch outcome {
-            case .recovered: recovered += 1
-            case .notFound:
-                errors.append("Window not found for recovery: \(window.windowId) (\(window.windowTitle))")
-            case .error(let message):
-                errors.append(message)
-            case .unchanged:
-                break
-            }
+            reportProgress(
+                progress: progress,
+                processed: &progressProcessed,
+                increment: plannedWindowCount,
+                total: totalWindows
+            )
+        }
 
-            processed += 1
-            progress(index + 1, allWindows.count)
+        if progressProcessed < totalWindows {
+            reportProgress(
+                progress: progress,
+                processed: &progressProcessed,
+                increment: totalWindows - progressProcessed,
+                total: totalWindows
+            )
         }
 
         if let originalFocus {
@@ -282,7 +330,7 @@ public final class WindowRecoveryManager {
         }
 
         let result = RecoveryResult(
-            windowsProcessed: processed,
+            windowsProcessed: totalWindows,
             windowsRecovered: recovered,
             errors: errors
         )
@@ -297,6 +345,19 @@ public final class WindowRecoveryManager {
     }
 
     // MARK: - Private Helpers
+
+    private func reportProgress(
+        progress: @escaping (_ current: Int, _ total: Int) -> Void,
+        processed: inout Int,
+        increment: Int,
+        total: Int
+    ) {
+        guard increment > 0 else { return }
+        for _ in 0..<increment {
+            processed += 1
+            progress(min(processed, total), total)
+        }
+    }
 
     private enum SingleRecoveryResult {
         case recovered
@@ -348,6 +409,36 @@ public final class WindowRecoveryManager {
             windowsRecovered: recovered,
             errors: errors
         )
+    }
+
+    private func intendedProjectWorkspace(for window: ApWindow) -> String? {
+        guard window.appBundleId == ApVSCodeLauncher.bundleId || window.appBundleId == ApChromeLauncher.bundleId else {
+            return nil
+        }
+        guard let projectId = projectId(fromWindowTitle: window.windowTitle) else {
+            return nil
+        }
+        if let knownProjectIds, !knownProjectIds.contains(projectId) {
+            return nil
+        }
+        return WorkspaceRouting.workspaceName(forProjectId: projectId)
+    }
+
+    private func projectId(fromWindowTitle title: String) -> String? {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedTitle.hasPrefix(ApIdeToken.prefix) else {
+            return nil
+        }
+
+        var suffix = trimmedTitle.dropFirst(ApIdeToken.prefix.count)
+        if let delimiterRange = suffix.range(of: " - ") {
+            suffix = suffix[..<delimiterRange.lowerBound]
+        } else if let whitespaceIndex = suffix.firstIndex(where: { $0.isWhitespace }) {
+            suffix = suffix[..<whitespaceIndex]
+        }
+
+        let projectId = String(suffix).trimmingCharacters(in: .whitespacesAndNewlines)
+        return projectId.isEmpty ? nil : projectId
     }
 
     // MARK: - Layout-Aware Recovery

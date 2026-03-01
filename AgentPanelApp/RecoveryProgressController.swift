@@ -1,6 +1,6 @@
 import AppKit
 
-/// Controls a simple progress panel shown during "Recover All Windows" operations.
+/// Controls a simple progress panel shown during "Recover All Projects" operations.
 ///
 /// Displays an indeterminate progress indicator and a status label.
 /// On completion, replaces the indicator with a summary message and a Close button.
@@ -36,7 +36,7 @@ final class RecoveryProgressController: NSObject, NSWindowDelegate {
     ///   - current: Number of windows processed so far.
     ///   - total: Total number of windows to process.
     func updateProgress(current: Int, total: Int) {
-        statusLabel?.stringValue = "Recovering windows... (\(current) / \(total))"
+        statusLabel?.stringValue = "Recovering projects and windows... (\(current) / \(total))"
     }
 
     /// Shows the completion state with a summary message and Close button.
@@ -63,7 +63,7 @@ final class RecoveryProgressController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Recovering Windows"
+        window.title = "Recovering Projects"
         window.center()
         window.isReleasedWhenClosed = false
         window.level = .floating
@@ -79,7 +79,7 @@ final class RecoveryProgressController: NSObject, NSWindowDelegate {
         container.alignment = .centerX
         container.translatesAutoresizingMaskIntoConstraints = false
 
-        let label = NSTextField(labelWithString: "Recovering windows...")
+        let label = NSTextField(labelWithString: "Recovering projects and windows...")
         label.font = .systemFont(ofSize: 13)
         label.alignment = .center
 

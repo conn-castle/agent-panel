@@ -18,6 +18,7 @@ import AgentPanelCore
 enum SwitcherPresentationSource: String {
     case menu
     case hotkey
+    case reopen
     case unknown
 }
 

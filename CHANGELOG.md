@@ -12,6 +12,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 - **Recover current window menu action** -- added a dedicated `Recover Current Window` menu item and reordered the recovery block so `Move Current Window` appears first.
 - **Switcher recover-project shortcut** -- added `Cmd+R` in the switcher to trigger Recover Project for the focused workspace, with footer hint text updated to advertise the shortcut.
 
+### Changed
+
+- **Recover all projects flow** -- renamed the menu action to `Recover All Projects...` and changed behavior to recover every window across all workspaces, routing project-tagged windows (`AP:<projectId>`) for configured projects into their `ap-<projectId>` workspace before workspace recovery runs.
+
 ## [0.1.11] - 2026-02-24
 
 ### Added

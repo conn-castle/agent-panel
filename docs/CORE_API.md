@@ -662,7 +662,8 @@ public final class WindowRecoveryManager {
         logger: AgentPanelLogging,
         processChecker: RunningApplicationChecking? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        layoutConfig: LayoutConfig = LayoutConfig()
+        layoutConfig: LayoutConfig = LayoutConfig(),
+        knownProjectIds: Set<String>? = nil
     )
 
     /// Recovers windows in a workspace. For project workspaces (`ap-<projectId>`),
@@ -676,6 +677,9 @@ public final class WindowRecoveryManager {
     public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError>
 
     /// Recovers all windows across all workspaces, reporting progress.
+    /// Windows tagged with `AP:<projectId>` for known configured projects are moved to
+    /// `ap-<projectId>` first, then each affected workspace is recovered
+    /// (layout-aware in project workspaces).
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
     ) -> Result<RecoveryResult, ApCoreError>

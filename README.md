@@ -228,7 +228,7 @@ Menu actions:
 | Move Current Window | Move the focused window to a project workspace or back to no project |
 | Recover Current Window | Recover only the focused window back on screen |
 | Recover Project | Reset window positions in the focused workspace (project layout in project spaces; generic recovery in non-project spaces) |
-| Recover All Windows... | Center all windows across all workspaces |
+| Recover All Projects... | Recover all windows across all workspaces; project-tagged windows for configured projects are routed to their project workspaces before recovery |
 | Run Doctor... | Open the diagnostic panel |
 | Launch at Login | Toggle auto-start at login |
 

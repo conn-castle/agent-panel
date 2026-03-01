@@ -280,3 +280,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Add a separate `AgentPanelDev` app target/scheme with `PRODUCT_BUNDLE_IDENTIFIER=com.agentpanel.AgentPanel.dev` and `PRODUCT_NAME=AgentPanel Dev`, while keeping existing `AgentPanel` release identity unchanged and continuing to use shared `~/.config/agent-panel` and `~/.local/state/agent-panel` paths.
     Reason: macOS Accessibility/Automation permissions are keyed by app identity, so dev and release need distinct bundle IDs for side-by-side installation without collisions; config/state should remain single-source-of-truth across both variants.
     Tradeoffs: Dev and release share persisted state/logs and can influence each other’s history; login-item and UserDefaults behavior is identity-scoped and may differ between variants by design.
+
+- Decision 2026-02-28 recover-all-routing: Recover-all routes project-tagged windows before workspace recovery
+    Decision: `WindowRecoveryManager.recoverAllWindows` now scans every window, moves `AP:<projectId>` VS Code/Chrome windows for known configured projects into `ap-<projectId>` when misplaced, then runs workspace recovery for each affected workspace (layout-aware for project workspaces, generic for non-project workspaces).
+    Reason: Global recovery previously forced all windows into one non-project workspace, which broke project workspace layout semantics and failed to repair misplaced project windows back to canonical project destinations.
+    Tradeoffs: Recovery now depends on title-token correctness for project routing and performs additional workspace-level recovery passes, which increases command count relative to the old one-destination flow.

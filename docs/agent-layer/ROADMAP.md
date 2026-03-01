@@ -95,7 +95,7 @@ Incomplete:
 
 ## Phase 7 ✅ — Polish required features + harden daily use
 - Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
-- Window recovery and management: "Move Current Window", "Recover Current Window", "Recover Project" / "Recover All Windows" menu items.
+- Window recovery and management: "Move Current Window", "Recover Current Window", "Recover Project" / "Recover All Projects" menu items.
 - Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
 - AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
 - UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
