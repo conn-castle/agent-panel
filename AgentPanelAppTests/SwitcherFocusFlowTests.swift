@@ -402,6 +402,50 @@ final class SwitcherFocusFlowTests: XCTestCase {
         pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
     }
 
+    func testRecoverProjectShortcutRestoresSearchFieldInputFocus() async {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(
+            CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test")
+        )
+
+        var pendingCompletion: ((Result<RecoveryResult, ApCoreError>) -> Void)?
+        controller.onRecoverProjectRequested = { _, completion in
+            pendingCompletion = completion
+        }
+
+        controller.testing_showPanelForFocusAssertions()
+        _ = controller.testing_makeSearchFieldFirstResponder()
+        XCTAssertTrue(
+            controller.testing_makeTableViewFirstResponder(),
+            "Precondition failed: expected table view to become first responder."
+        )
+        XCTAssertFalse(
+            controller.testing_searchFieldHasInputFocus,
+            "Precondition failed: search field should not have input focus before recovery completion."
+        )
+
+        controller.testing_handleRecoverProjectFromShortcut()
+        pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
+
+        let completionApplied = expectation(description: "recover completion applied on main queue")
+        DispatchQueue.main.async {
+            completionApplied.fulfill()
+        }
+        await fulfillment(of: [completionApplied], timeout: 1.0)
+
+        XCTAssertTrue(
+            controller.testing_searchFieldHasInputFocus,
+            "Recover completion should restore search field input focus so Escape keeps dismissing."
+        )
+
+        controller.dismiss(reason: .toggle)
+    }
+
     func testRecoveryScreenSelectionUsesContainingSecondaryScreen() {
         let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
         let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)

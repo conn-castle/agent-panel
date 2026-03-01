@@ -1438,6 +1438,7 @@ final class SwitcherPanelController: NSObject {
                 self.isRecoveringProject = false
                 self.searchField.isEnabled = true
                 self.tableView.isEnabled = true
+                self.restoreSearchFieldInputFocus()
                 switch result {
                 case .success(let recovery):
                     if recovery.errors.isEmpty {
@@ -1462,6 +1463,15 @@ final class SwitcherPanelController: NSObject {
                 }
             }
         }
+    }
+
+    /// Restores keyboard input focus to the search field after background operations.
+    ///
+    /// Some operations temporarily disable controls and can leave the panel without
+    /// a text responder, which breaks Escape handling routed through command dispatch.
+    private func restoreSearchFieldInputFocus() {
+        guard panel.isVisible else { return }
+        _ = panel.makeFirstResponder(searchField)
     }
 
     /// Handles close button clicks from a project row.
@@ -2212,6 +2222,25 @@ extension SwitcherPanelController {
 
     func testing_updateFooterHints() {
         updateFooterHints()
+    }
+
+    func testing_showPanelForFocusAssertions() {
+        showPanel(selectAllQuery: false)
+    }
+
+    @discardableResult
+    func testing_makeSearchFieldFirstResponder() -> Bool {
+        panel.makeFirstResponder(searchField)
+    }
+
+    @discardableResult
+    func testing_makeTableViewFirstResponder() -> Bool {
+        panel.makeFirstResponder(tableView)
+    }
+
+    var testing_searchFieldHasInputFocus: Bool {
+        let responder = panel.firstResponder
+        return responder === searchField || responder === searchField.currentEditor()
     }
 
     var testing_footerHints: String {
