@@ -85,7 +85,7 @@ public struct ConfigWriteBack {
             }
 
             if let ki = keyIndex {
-                lines[ki] = "autoStartAtLogin = \(valueStr)"
+                lines[ki] = rewrittenAutoStartLine(from: lines[ki], valueString: valueStr)
             } else {
                 lines.insert("autoStartAtLogin = \(valueStr)", at: sectionStart + 1)
             }
@@ -100,5 +100,37 @@ public struct ConfigWriteBack {
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// Rewrites an existing `autoStartAtLogin` line while preserving indentation and inline comments.
+    /// - Parameters:
+    ///   - originalLine: Existing line from config.toml.
+    ///   - valueString: Target boolean literal (`true` or `false`).
+    /// - Returns: Normalized key/value line with original indentation and trailing inline comment.
+    private static func rewrittenAutoStartLine(from originalLine: String, valueString: String) -> String {
+        let indentation = leadingWhitespace(in: originalLine)
+        let trailingComment = trailingCommentSegment(in: originalLine)
+        return "\(indentation)autoStartAtLogin = \(valueString)\(trailingComment)"
+    }
+
+    /// Extracts leading indentation (spaces/tabs) from a config line.
+    /// - Parameter line: Config line.
+    /// - Returns: Leading whitespace prefix.
+    private static func leadingWhitespace(in line: String) -> String {
+        String(line.prefix { $0 == " " || $0 == "\t" })
+    }
+
+    /// Returns the trailing inline comment segment, including spacing before `#`.
+    /// - Parameter line: Config line.
+    /// - Returns: Empty string when no inline comment exists.
+    private static func trailingCommentSegment(in line: String) -> String {
+        guard let commentStart = line.firstIndex(of: "#") else {
+            return ""
+        }
+
+        let contentBeforeComment = line[..<commentStart]
+        let trailingSpaceStart = contentBeforeComment.lastIndex(where: { !$0.isWhitespace })
+            .map { line.index(after: $0) } ?? line.startIndex
+        return String(line[trailingSpaceStart...])
     }
 }
