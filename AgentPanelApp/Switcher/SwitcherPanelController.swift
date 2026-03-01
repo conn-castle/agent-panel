@@ -374,23 +374,30 @@ final class SwitcherPanelController: NSObject {
             )
         }
 
-        // Show panel first, then load results.
-        let panelInterval = Self.signposter.beginInterval("SwitcherShowPanel")
-        showPanel(selectAllQuery: shouldReuseQuery && !initialQuery.isEmpty)
-        installKeyEventMonitor()
-        Self.signposter.endInterval("SwitcherShowPanel", panelInterval)
+        // Seed workspace-derived state from captured focus so first paint is closer to final rows.
+        seedWorkspaceStateFromCapturedFocus(capturedFocus)
 
         let configInterval = Self.signposter.beginInterval("SwitcherConfigLoadOrReuse")
         loadOrReuseProjectsForShow()
         Self.signposter.endInterval("SwitcherConfigLoadOrReuse", configInterval)
 
-        if configErrorMessage == nil {
-            refreshWorkspaceState(retryOnFailure: true)
-        }
-
         let initialFilterInterval = Self.signposter.beginInterval("SwitcherInitialFilter")
         applyFilter(query: initialQuery, preferredSelectionKey: nil, useDefaultSelection: true)
         Self.signposter.endInterval("SwitcherInitialFilter", initialFilterInterval)
+
+        // Show panel after initial rows are prepared to avoid opening at min height then jumping.
+        let panelInterval = Self.signposter.beginInterval("SwitcherShowPanel")
+        showPanel(selectAllQuery: shouldReuseQuery && !initialQuery.isEmpty)
+        installKeyEventMonitor()
+        Self.signposter.endInterval("SwitcherShowPanel", panelInterval)
+
+        if configErrorMessage == nil {
+            refreshWorkspaceState(
+                retryOnFailure: true,
+                preferredSelectionKey: selectedRowKey(),
+                useDefaultSelection: false
+            )
+        }
 
         let totalMs = Int((CFAbsoluteTimeGetCurrent() - showStart) * 1000)
 
@@ -844,25 +851,60 @@ final class SwitcherPanelController: NSObject {
         cachedConfigFingerprint = currentConfigFingerprint()
     }
 
+    /// Seeds workspace state from pre-captured focus before first render.
+    ///
+    /// This avoids a two-phase visual update where the initial list is rendered with
+    /// no active project and then immediately re-rendered after async workspace lookup.
+    private func seedWorkspaceStateFromCapturedFocus(_ focus: CapturedFocus?) {
+        guard let focus,
+              let activeProjectId = WorkspaceRouting.projectId(fromWorkspace: focus.workspace) else {
+            return
+        }
+        self.activeProjectId = activeProjectId
+        openIds.insert(activeProjectId)
+    }
+
+    /// Applies a workspace-state snapshot and returns true when state changed.
+    ///
+    /// - Parameter state: Snapshot from `ProjectManager.workspaceState()`.
+    /// - Returns: True when active/open project state changed.
+    @discardableResult
+    private func applyWorkspaceState(_ state: ProjectWorkspaceState) -> Bool {
+        let didChange = activeProjectId != state.activeProjectId || openIds != state.openProjectIds
+        activeProjectId = state.activeProjectId
+        openIds = state.openProjectIds
+        return didChange
+    }
+
     /// Refreshes focused/open project workspace state for row grouping and close affordances.
+    ///
+    /// Runs workspace queries on a background queue to avoid blocking the main thread
+    /// (AeroSpace CLI calls have a 5-second timeout). Results are applied to the UI on
+    /// the main thread, and filtering is re-applied only when the state actually changed.
     ///
     /// - Parameter retryOnFailure: When true, schedules a repeating timer to retry workspace
     ///   state queries. Used during `show()` to auto-recover when the AeroSpace circuit breaker
     ///   is open and background recovery is in progress.
-    /// Refreshes workspace state in the background to avoid blocking the main thread.
-    ///
-    /// AeroSpace CLI calls have a 5-second timeout that would freeze the switcher panel
-    /// if called synchronously. Results are applied to the UI on the main thread.
-    private func refreshWorkspaceState(retryOnFailure: Bool = false) {
+    /// - Parameter preferredSelectionKey: Row key to preserve as the selected row when
+    ///   re-applying the filter after a state change. Pass `nil` for no preference.
+    /// - Parameter useDefaultSelection: When true, falls back to the default selection
+    ///   strategy if the preferred key is not found. Pass `false` to preserve the current
+    ///   selection when workspace state is unchanged.
+    private func refreshWorkspaceState(
+        retryOnFailure: Bool = false,
+        preferredSelectionKey: String? = nil,
+        useDefaultSelection: Bool = true
+    ) {
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }
             let result = self.projectManager.workspaceState()
             DispatchQueue.main.async {
+                var shouldReapplyFilter = false
                 switch result {
                 case .success(let state):
-                    self.activeProjectId = state.activeProjectId
-                    self.openIds = state.openProjectIds
+                    shouldReapplyFilter = self.applyWorkspaceState(state)
                 case .failure(let error):
+                    shouldReapplyFilter = self.activeProjectId != nil || !self.openIds.isEmpty
                     self.activeProjectId = nil
                     self.openIds = []
                     if retryOnFailure {
@@ -885,12 +927,13 @@ final class SwitcherPanelController: NSObject {
                         trigger: "workspaceQuery"
                     ))
                 }
-                // Re-apply filter to reflect updated workspace state in the UI
-                self.applyFilter(
-                    query: self.searchField.stringValue,
-                    preferredSelectionKey: nil,
-                    useDefaultSelection: true
-                )
+                if shouldReapplyFilter {
+                    self.applyFilter(
+                        query: self.searchField.stringValue,
+                        preferredSelectionKey: preferredSelectionKey,
+                        useDefaultSelection: useDefaultSelection
+                    )
+                }
             }
         }
     }
@@ -969,14 +1012,15 @@ final class SwitcherPanelController: NSObject {
             switch result {
             case .success(let state):
                 self.cancelWorkspaceRetryTimer()
-                self.activeProjectId = state.activeProjectId
-                self.openIds = state.openProjectIds
+                let didChange = self.applyWorkspaceState(state)
                 self.clearStatus()
-                self.applyFilter(
-                    query: self.searchField.stringValue,
-                    preferredSelectionKey: nil,
-                    useDefaultSelection: true
-                )
+                if didChange {
+                    self.applyFilter(
+                        query: self.searchField.stringValue,
+                        preferredSelectionKey: self.selectedRowKey(),
+                        useDefaultSelection: false
+                    )
+                }
                 self.session.logEvent(
                     event: "switcher.workspace_retry.succeeded",
                     context: ["attempt": "\(self.workspaceRetryCount)"]
@@ -1246,12 +1290,13 @@ final class SwitcherPanelController: NSObject {
         tableView.isEnabled = false
         isActivating = true
 
-        guard let focusForExit = capturedFocus else {
-            setStatus(message: "Could not capture focus", level: .error)
-            searchField.isEnabled = true
-            tableView.isEnabled = true
-            isActivating = false
-            return
+        let focusForExit = capturedFocus
+        if focusForExit == nil {
+            session.logEvent(
+                event: "switcher.project.selection_without_focus",
+                level: .warn,
+                message: "Proceeding with project selection without captured focus; restore will use workspace routing"
+            )
         }
 
         let projectId = project.id

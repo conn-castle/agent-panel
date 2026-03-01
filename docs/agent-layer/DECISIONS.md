@@ -285,3 +285,18 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `WindowRecoveryManager.recoverAllWindows` now scans every window, moves `AP:<projectId>` VS Code/Chrome windows for known configured projects into `ap-<projectId>` when misplaced, then runs workspace recovery for each affected workspace (layout-aware for project workspaces, generic for non-project workspaces).
     Reason: Global recovery previously forced all windows into one non-project workspace, which broke project workspace layout semantics and failed to repair misplaced project windows back to canonical project destinations.
     Tradeoffs: Recovery now depends on title-token correctness for project routing and performs additional workspace-level recovery passes, which increases command count relative to the old one-destination flow.
+
+- Decision 2026-03-01 switcher-first-paint-sequencing: Prepare switcher rows before panel presentation
+    Decision: `SwitcherPanelController.show()` now seeds workspace-derived presentation state from captured focus, loads/reuses project config, and applies the initial filter before presenting the panel. Async workspace refresh/retry re-applies filtering only when active/open workspace state actually changes, preserving selection when unchanged.
+    Reason: First-open switcher UX could start at minimum height and then resize/jump once async workspace state arrived, even when overall command latency was already low.
+    Tradeoffs: Initial render can briefly reflect captured-focus hints before authoritative workspace state arrives; the async refresh reconciles state immediately without changing AeroSpace command semantics.
+
+- Decision 2026-03-01 prefocus-tolerance: Project selection tolerates missing pre-captured focus
+    Decision: `ProjectManager.selectProject(projectId:preCapturedFocus:)` accepts `CapturedFocus?` via a new optional overload. The non-optional signature remains as a compatibility forwarder. `SwitcherPanelController` no longer hard-fails on nil focus; it logs a warn and proceeds. When nil, no new focus entry is pushed; exit/close first attempts existing focus-history restore paths, then falls back to `WorkspaceRouting.preferredNonProjectWorkspace` if restore is exhausted. The `ProjectManaging` protocol is unchanged (non-optional signature only).
+    Reason: `aerospace list-windows --focused` can fail (exit 1) during AeroSpace instability, leaving `capturedFocus` nil. Hard-failing blocked all project selection until the next successful focus capture.
+    Tradeoffs: Nil-focus activation records no new exact-origin window, so exit/close may restore an older focus-history candidate or use workspace routing fallback when history is exhausted. This is intentional best-effort behavior.
+
+- Decision 2026-03-01 close-workspace-retry: closeWorkspace re-queries and retries transient window-close misses
+    Decision: `ApAeroSpace.closeWorkspace` now re-queries `listWindowsWorkspace` after first-pass close failures, retries only IDs still present (single retry pass, no backoff), and includes specific window IDs in error messages. If re-query fails, returns the original first-pass error with IDs.
+    Reason: Transient window-close failures (window closed by AeroSpace concurrently or timing race) caused the entire close to fail immediately, surfacing as `switcher.close_project.failed` for the user.
+    Tradeoffs: One additional `listWindowsWorkspace` call per close with failures. Adds ~15 lines to the `ap-aerospace-hotspot` file; contained within `closeWorkspace` with no new state or coupling.

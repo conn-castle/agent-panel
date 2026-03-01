@@ -1016,6 +1016,10 @@ final class AeroSpaceWorkspaceLifecycleTests: XCTestCase {
             // close window 1 succeeds
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
             // close window 2 fails
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "no")),
+            // re-query: window 2 still present
+            .success(ApCommandResult(exitCode: 0, stdout: "2||app||ap-test||t\n", stderr: "")),
+            // retry close window 2 fails again
             .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "no"))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
@@ -1095,6 +1099,10 @@ final class AeroSpaceWorkspaceLifecycleTests: XCTestCase {
         let runner = MockCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n", stderr: "")),
+            .failure(ApCoreError(category: .command, message: "close command failed")),
+            // re-query: window 1 still present
+            .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n", stderr: "")),
+            // retry close window 1 fails again
             .failure(ApCoreError(category: .command, message: "close command failed"))
         ]
         let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
@@ -1102,7 +1110,83 @@ final class AeroSpaceWorkspaceLifecycleTests: XCTestCase {
         let result = aero.closeWorkspace(name: "ap-test")
 
         XCTAssertTrue(result.isFailure)
-        XCTAssertEqual(runner.calls.count, 2)
+        // 1 list-windows + 1 close attempt + 1 re-query + 1 retry close = 4 calls
+        XCTAssertEqual(runner.calls.count, 4)
+    }
+
+    func testCloseWorkspaceRetriesTransientMissAndSucceeds() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // First list-windows: 3 windows
+            .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n2||app||ap-test||t\n3||app||ap-test||t\n", stderr: "")),
+            // close window 1 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // close window 2 fails (transient)
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "window gone")),
+            // close window 3 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // Re-query: window 2 is gone (only window 1 and 3 remain, already closed)
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isSuccess, "Should succeed when transient miss disappears on re-query")
+        // 1 list + 3 close + 1 re-query = 5 calls
+        XCTAssertEqual(runner.calls.count, 5)
+    }
+
+    func testCloseWorkspaceRetryFailsWithWindowIdsInError() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // First list-windows: 3 windows
+            .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n2||app||ap-test||t\n3||app||ap-test||t\n", stderr: "")),
+            // close window 1 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // close window 2 fails
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "stuck")),
+            // close window 3 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // Re-query: window 2 is still present
+            .success(ApCommandResult(exitCode: 0, stdout: "2||app||ap-test||t\n", stderr: "")),
+            // Retry close window 2 fails again
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "still stuck")),
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("[2]"), "Error should include failing window ID 2, got: \(error.message)")
+        }
+        // 1 list + 3 close + 1 re-query + 1 retry close = 6 calls
+        XCTAssertEqual(runner.calls.count, 6)
+    }
+
+    func testCloseWorkspaceReturnsOriginalErrorWhenReQueryFails() {
+        let runner = MockCommandRunner()
+        runner.results = [
+            // First list-windows: 2 windows
+            .success(ApCommandResult(exitCode: 0, stdout: "1||app||ap-test||t\n2||app||ap-test||t\n", stderr: "")),
+            // close window 1 fails
+            .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "fail")),
+            // close window 2 succeeds
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            // Re-query fails (AeroSpace timeout/breaker)
+            .failure(ApCoreError(category: .command, message: "aerospace timeout")),
+        ]
+        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+
+        let result = aero.closeWorkspace(name: "ap-test")
+
+        XCTAssertTrue(result.isFailure)
+        if case .failure(let error) = result {
+            XCTAssertTrue(error.message.contains("[1]"), "Error should include failing window ID 1, got: \(error.message)")
+        }
+        // 1 list + 2 close + 1 re-query = 4 calls
+        XCTAssertEqual(runner.calls.count, 4)
     }
 }
 

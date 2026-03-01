@@ -366,24 +366,58 @@ public struct ApAeroSpace {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
-            var failures: [String] = []
-            failures.reserveCapacity(windows.count)
+            var failedIds: [Int] = []
+            var failureDetails: [String] = []
 
             for window in windows {
                 switch closeWindow(windowId: window.windowId) {
                 case .failure(let error):
-                    failures.append("window \(window.windowId): \(error.message)")
+                    failedIds.append(window.windowId)
+                    failureDetails.append("window \(window.windowId): \(error.message)")
                 case .success:
                     continue
                 }
             }
 
-            guard failures.isEmpty else {
+            // If first pass had failures, re-query and retry IDs still present.
+            if !failedIds.isEmpty {
+                let remainingIds: Set<Int>
+                switch listWindowsWorkspace(workspace: trimmed) {
+                case .failure:
+                    // Re-query failed — return original first-pass error with window IDs.
+                    return .failure(
+                        ApCoreError(
+                            category: .command,
+                            message: "Failed to close \(failedIds.count) windows in workspace \(trimmed): \(failedIds).",
+                            detail: failureDetails.joined(separator: "\n")
+                        )
+                    )
+                case .success(let currentWindows):
+                    remainingIds = Set(currentWindows.map(\.windowId))
+                }
+
+                // Retry only IDs that are still present (transient misses will have disappeared).
+                let retryIds = failedIds.filter { remainingIds.contains($0) }
+                failedIds = []
+                failureDetails = []
+
+                for windowId in retryIds {
+                    switch closeWindow(windowId: windowId) {
+                    case .failure(let error):
+                        failedIds.append(windowId)
+                        failureDetails.append("window \(windowId): \(error.message)")
+                    case .success:
+                        continue
+                    }
+                }
+            }
+
+            guard failedIds.isEmpty else {
                 return .failure(
                     ApCoreError(
                         category: .command,
-                        message: "Failed to close \(failures.count) windows in workspace \(trimmed).",
-                        detail: failures.joined(separator: "\n")
+                        message: "Failed to close \(failedIds.count) windows in workspace \(trimmed): \(failedIds).",
+                        detail: failureDetails.joined(separator: "\n")
                     )
                 )
             }

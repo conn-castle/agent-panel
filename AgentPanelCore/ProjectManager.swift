@@ -1069,6 +1069,21 @@ public final class ProjectManager {
     ///     focus when exiting the project later.
     /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError> {
+        await selectProject(projectId: projectId, preCapturedFocus: preCapturedFocus as CapturedFocus?)
+    }
+
+    /// Activates a project with optional pre-captured focus.
+    ///
+    /// When `preCapturedFocus` is nil (e.g., focus capture failed before switcher opened),
+    /// activation proceeds normally but no new focus entry is pushed to history.
+    /// Exit/close can still restore from existing focus history; if none is restorable,
+    /// workspace routing fallback is used.
+    ///
+    /// - Parameters:
+    ///   - projectId: The project ID to activate.
+    ///   - preCapturedFocus: Focus state captured before showing UI, or nil if capture failed.
+    /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
+    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus?) async -> Result<ProjectActivationSuccess, ProjectError> {
         let configSnapshot = withState { config }
         guard let configSnapshot else {
             return .failure(.configNotLoaded)
@@ -1081,22 +1096,29 @@ public final class ProjectManager {
 
         let targetWorkspace = Self.workspacePrefix + projectId
 
-        // Push pre-captured focus for "exit project space" restoration.
-        // Only push if the user is coming from outside project space.
-        // Project-to-project switches (ap-* workspace) are not recorded.
-        if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
-            pushNonProjectFocusForExit(preCapturedFocus)
-        } else {
-            logEvent("focus.push_skipped_project_workspace", context: [
-                "workspace": preCapturedFocus.workspace,
-                "window_id": "\(preCapturedFocus.windowId)"
-            ])
-        }
+        if let preCapturedFocus {
+            // Push pre-captured focus for "exit project space" restoration.
+            // Only push if the user is coming from outside project space.
+            // Project-to-project switches (ap-* workspace) are not recorded.
+            if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
+                pushNonProjectFocusForExit(preCapturedFocus)
+            } else {
+                logEvent("focus.push_skipped_project_workspace", context: [
+                    "workspace": preCapturedFocus.workspace,
+                    "window_id": "\(preCapturedFocus.windowId)"
+                ])
+            }
 
-        // Capture window positions for the source project before switching away.
-        // Only when coming from another project workspace (ap-*).
-        if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
-            captureWindowPositions(projectId: sourceProjectId)
+            // Capture window positions for the source project before switching away.
+            // Only when coming from another project workspace (ap-*).
+            if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
+                captureWindowPositions(projectId: sourceProjectId)
+            }
+        } else {
+            logEvent("select.no_prefocus", level: .warn, context: [
+                "project_id": projectId,
+                "detail": "Focus capture failed before switcher; restore will use workspace routing"
+            ])
         }
 
         // --- Phase 1: Find or launch all windows (no moves yet) ---

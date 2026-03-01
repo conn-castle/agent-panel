@@ -148,6 +148,198 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertTrue(aerospace.focusedWindowIds.contains(ideWindow.windowId))
     }
 
+    func testProjectSelectionProceedsWithoutCapturedFocus() async {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+
+        let projectId = "alpha"
+        let workspace = "ap-\(projectId)"
+        let chromeWindow = ApWindow(
+            windowId: 100,
+            appBundleId: ApChromeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - Chrome"
+        )
+        let ideWindow = ApWindow(
+            windowId: 101,
+            appBundleId: ApVSCodeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - VS Code"
+        )
+
+        aerospace.windowsByBundleId[ApChromeLauncher.bundleId] = [chromeWindow]
+        aerospace.windowsByBundleId[ApVSCodeLauncher.bundleId] = [ideWindow]
+        aerospace.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+        aerospace.focusedWindowResult = .success(ideWindow)
+        aerospace.focusWindowSuccessIds = [ideWindow.windowId]
+        aerospace.allWindows = [chromeWindow, ideWindow]
+
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+        let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        // Explicitly do NOT set capturedFocus — it remains nil
+
+        let expectation = expectation(description: "project selection completes without captured focus")
+        logger.onLog = { entry in
+            if entry.event == "project_manager.select.completed" {
+                expectation.fulfill()
+            }
+        }
+
+        controller.testing_handleProjectSelection(project)
+        await fulfillment(of: [expectation], timeout: 2.0)
+
+        let warnEntries = logger.entriesSnapshot().filter { $0.event == "switcher.project.selection_without_focus" }
+        XCTAssertEqual(warnEntries.count, 1, "Expected warn log for selection without captured focus")
+        XCTAssertTrue(aerospace.focusedWindowIds.contains(ideWindow.windowId))
+    }
+
+    func testShowDoesNotReapplyFilterWhenWorkspaceStateIsUnchanged() async {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+
+        let projectId = "alpha"
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-\(projectId)", isFocused: true)
+        ])
+
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+        let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.show(
+            origin: .hotkey,
+            previousApp: nil,
+            capturedFocus: CapturedFocus(
+                windowId: 101,
+                appBundleId: ApVSCodeLauncher.bundleId,
+                workspace: "ap-\(projectId)"
+            )
+        )
+
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        let filterAppliedCount = logger.entriesSnapshot().filter { $0.event == "switcher.filter.applied" }.count
+        XCTAssertEqual(filterAppliedCount, 1, "Expected one initial filter pass when workspace state is unchanged.")
+
+        controller.dismiss(reason: .toggle)
+    }
+
+    // MARK: - Dismissal focus-safety (selection success path)
+
+    func testProjectSelectionDismissesAndFocusesIde() async {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+
+        let projectId = "alpha"
+        let workspace = "ap-\(projectId)"
+        let chromeWindow = ApWindow(
+            windowId: 100,
+            appBundleId: ApChromeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - Chrome"
+        )
+        let ideWindow = ApWindow(
+            windowId: 101,
+            appBundleId: ApVSCodeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - VS Code"
+        )
+
+        aerospace.windowsByBundleId[ApChromeLauncher.bundleId] = [chromeWindow]
+        aerospace.windowsByBundleId[ApVSCodeLauncher.bundleId] = [ideWindow]
+        aerospace.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+        aerospace.focusedWindowResult = .success(ideWindow)
+        aerospace.focusWindowSuccessIds = [ideWindow.windowId]
+        aerospace.allWindows = [chromeWindow, ideWindow]
+
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+        let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 77, appBundleId: "com.apple.Terminal", workspace: "main"))
+
+        let expectation = expectation(description: "IDE focused after selection")
+        logger.onLog = { entry in
+            if entry.event == "switcher.ide.focused" {
+                expectation.fulfill()
+            }
+        }
+
+        controller.testing_handleProjectSelection(project)
+        await fulfillment(of: [expectation], timeout: 2.0)
+
+        // After IDE focus, dismiss must have already happened (dismiss is called before
+        // focusIdeWindow in handleProjectSelection success path). Verify state:
+        XCTAssertNil(controller.testing_capturedFocus, "Dismiss should have cleared captured focus")
+        XCTAssertTrue(aerospace.focusedWindowIds.contains(ideWindow.windowId), "IDE window should be focused")
+    }
+
+    func testProjectSelectionDoesNotTripDismissReentrancy() async {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+
+        let projectId = "alpha"
+        let workspace = "ap-\(projectId)"
+        let chromeWindow = ApWindow(
+            windowId: 100,
+            appBundleId: ApChromeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - Chrome"
+        )
+        let ideWindow = ApWindow(
+            windowId: 101,
+            appBundleId: ApVSCodeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - VS Code"
+        )
+
+        aerospace.windowsByBundleId[ApChromeLauncher.bundleId] = [chromeWindow]
+        aerospace.windowsByBundleId[ApVSCodeLauncher.bundleId] = [ideWindow]
+        aerospace.windowsByWorkspace[workspace] = [chromeWindow, ideWindow]
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true)
+        ])
+        aerospace.focusedWindowResult = .success(ideWindow)
+        aerospace.focusWindowSuccessIds = [ideWindow.windowId]
+        aerospace.allWindows = [chromeWindow, ideWindow]
+
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+        let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 77, appBundleId: "com.apple.Terminal", workspace: "main"))
+
+        let expectation = expectation(description: "project selection completes")
+        logger.onLog = { entry in
+            if entry.event == "project_manager.select.completed" {
+                expectation.fulfill()
+            }
+        }
+
+        controller.testing_handleProjectSelection(project)
+        await fulfillment(of: [expectation], timeout: 2.0)
+
+        // No re-entrancy warnings should have been logged
+        let reentrantEntries = logger.entriesSnapshot().filter { $0.event == "switcher.dismiss.reentrant_blocked" }
+        XCTAssertTrue(reentrantEntries.isEmpty, "Selection success path should not trigger re-entrant dismiss")
+    }
+
     func testRecoverProjectShortcutInvokesRecoverCallbackWithCapturedFocus() {
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -317,6 +509,10 @@ private final class RecordingLogger: AgentPanelLogging {
         }
         onLog?(entry)
         return .success(())
+    }
+
+    func entriesSnapshot() -> [LogEntryRecord] {
+        queue.sync { entries }
     }
 }
 

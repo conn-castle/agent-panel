@@ -32,20 +32,10 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: Unlike IDE positioning which retries token lookup up to 10x at ~100ms intervals, Chrome positioning calls `setWindowFrames` once and skips entirely on failure. Logs show repeated `position.chrome_set_failed` ("No window found with token 'AP:\<projectId\>' for com.google.Chrome") and `recover_layout.chrome_failed` with no retry or fallback. Chrome title updates can lag just like VS Code.
     Next step: Add bounded retry logic to Chrome frame read in `positionWindows()` (analogous to IDE retry) and in `WindowRecoveryManager.recoverLayout()`, with fallback to the focused/only Chrome window when token matching fails.
 
-- Issue 2026-02-27 switcher-selection-blocked-on-focus-capture-failure: Project selection hard-fails when pre-focus capture misses
-    Priority: High. Area: Switcher activation
-    Description: In 0.1.11, `project_manager.focus.capture.failed` (`aerospace list-windows --focused` exit 1) leads to `switcher.focus.not_provided`; selecting a project then stops with `Could not capture focus` instead of activating.
-    Next step: Make `selectProject` tolerant of missing pre-captured focus (best-effort restore only) and add regression coverage for hotkey/menu flows with focus-capture failure.
-
 - Issue 2026-02-27 multidisplay-ax-coordinate-conversion: AX->NSScreen conversion can produce off-display points
     Priority: High. Area: Window positioning
     Description: `AXWindowPositionerFrameIO` converts coordinates using only primary-screen height; on multi-display setups logs show points like `(2591, -510)` and `screen_frame_not_found`, causing layout to be skipped.
     Next step: Convert frame coordinates against the window's containing display/global space (not primary-only) and add automated tests for negative-Y and vertically stacked monitors.
-
-- Issue 2026-02-27 close-workspace-stale-close-list: closeWorkspace aborts on transient single-window close misses
-    Priority: Medium. Area: Workspace close reliability
-    Description: `closeWorkspace` snapshots window IDs once and fails immediately if any `close --window-id` call fails; 0.1.11 logs show `Failed to close 1 windows in workspace ...` bubbling to `switcher.close_project.failed`.
-    Next step: Re-query workspace windows after first-pass failures, retry unresolved IDs with bounded backoff, and include failing window IDs in `project_manager.close.failed` context.
 
 - Issue 2026-02-27 partial-layout-capture-degrades-restore: IDE-only layout saves create degraded restore state
     Priority: Medium. Area: Layout persistence
@@ -56,11 +46,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Priority: Low. Area: Window recovery
     Description: Auto-recovery now triggers on focus when a window's midpoint is off-screen. A more granular approach using a 10% off-screen area threshold could catch partially-offscreen windows where the midpoint is still on-screen but significant content is clipped.
     Next step: Add a canonical offscreen-coverage calculation (percentage of window area outside visible bounds) and consider triggering recovery when offscreen area exceeds 10%, with regression tests across single- and multi-display layouts.
-
-- Issue 2026-02-23 switcher-dismiss-latency-focus-safety: Switcher dismissal feels delayed after project selection
-    Priority: Medium. Area: Switcher UX & focus orchestration
-    Description: After selecting a project, the switcher often remains visible longer than expected, making transition feel sluggish.
-    Next step: Trace dismissal timing against focus handoff and add regression tests that preserve correct focus behavior for both project-window and non-project-window activation paths.
 
 - Issue 2026-02-23 accessibility-permission-focus-steal: Doctor UI steals focus during accessibility permission prompt
     Priority: High. Area: Onboarding & permissions

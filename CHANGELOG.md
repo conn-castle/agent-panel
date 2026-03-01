@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switcher first-open size jump** -- the switcher now seeds workspace-derived state and computes the initial filtered rows before presenting the panel, reducing the initial "starts small then jumps" effect while preserving existing selection and AeroSpace interaction behavior.
+
 ## [0.1.12] - 2026-03-01
 
 ### Added

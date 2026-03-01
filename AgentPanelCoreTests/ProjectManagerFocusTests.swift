@@ -530,6 +530,69 @@ final class ProjectManagerFocusTests: XCTestCase {
         }
     }
 
+    // MARK: - Nil pre-captured focus (best-effort restore, via selectProject)
+
+    func testSelectProjectWithNilPreCapturedFocusSucceeds() async {
+        let aero = FocusAeroSpaceStub()
+        configureForActivation(aero: aero, projectId: "test")
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        let result = await manager.selectProject(projectId: "test", preCapturedFocus: nil)
+        switch result {
+        case .success:
+            break
+        case .failure(let error):
+            XCTFail("Expected activation success with nil preCapturedFocus but got: \(error)")
+        }
+
+        // Exit should fail with noPreviousWindow because no focus was pushed
+        switch manager.exitToNonProjectWindow() {
+        case .success:
+            XCTFail("Expected noPreviousWindow (no focus was pushed for nil preCapturedFocus)")
+        case .failure(let error):
+            XCTAssertEqual(error, .noPreviousWindow)
+        }
+    }
+
+    func testSelectProjectWithNilPreCapturedFocusUsesExistingHistoryForExit() async {
+        let aero = FocusAeroSpaceStub()
+        configureForActivation(aero: aero, projectId: "test")
+        aero.focusWindowSuccessIds.insert(99)
+        registerWindow(
+            aero: aero,
+            windowId: 99,
+            appBundleId: "com.apple.Safari",
+            workspace: "main",
+            windowTitle: "Safari"
+        )
+
+        let manager = makeFocusManager(aerospace: aero)
+        loadTestConfig(manager: manager)
+
+        manager.pushFocusForTest(CapturedFocus(
+            windowId: 99,
+            appBundleId: "com.apple.Safari",
+            workspace: "main"
+        ))
+
+        let result = await manager.selectProject(projectId: "test", preCapturedFocus: nil)
+        switch result {
+        case .success:
+            break
+        case .failure(let error):
+            XCTFail("Expected activation success with nil preCapturedFocus but got: \(error)")
+        }
+
+        switch manager.exitToNonProjectWindow() {
+        case .failure(let error):
+            XCTFail("Expected exit to restore existing focus history, got: \(error)")
+        case .success:
+            XCTAssertTrue(aero.focusedWindowIds.contains(99))
+        }
+    }
+
     // MARK: - Activation failure does not rollback push (via selectProject)
 
     func testActivationFailureDoesNotRollbackPush() async {
