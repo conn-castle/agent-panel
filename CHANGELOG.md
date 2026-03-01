@@ -6,6 +6,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-03-01
+
 ### Added
 
 - **Auto-recover off-screen windows on focus** -- when focusing a window (project switch exit, non-project restore, or Option-Tab cycling), the app now automatically detects and recovers windows that are off-screen or oversized, silently moving them on-screen.
