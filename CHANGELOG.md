@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-recover off-screen windows on focus** -- when focusing a window (project switch exit, non-project restore, or Option-Tab cycling), the app now automatically detects and recovers windows that are off-screen or oversized, silently moving them on-screen.
+- **Recover current window menu action** -- added a dedicated `Recover Current Window` menu item and reordered the recovery block so `Move Current Window` appears first.
+- **Switcher recover-project shortcut** -- added `Cmd+R` in the switcher to trigger Recover Project for the focused workspace, with footer hint text updated to advertise the shortcut.
+
+### Changed
+
+- **Recover all projects flow** -- renamed the menu action to `Recover All Projects...` and changed behavior to recover every window across all workspaces, routing project-tagged windows (`AP:<projectId>`) for configured projects into their `ap-<projectId>` workspace before workspace recovery runs.
+
 ## [0.1.11] - 2026-02-24
 
 ### Added

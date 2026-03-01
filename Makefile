@@ -1,9 +1,10 @@
-.PHONY: help build test coverage clean regen hooks preflight test-coverage-gate
+.PHONY: help build build-dev test coverage clean regen hooks preflight test-coverage-gate
 
 help:
 	@echo "AgentPanel development commands:"
 	@echo ""
 	@echo "  make build               Build app + CLI (Debug, no code signing)"
+	@echo "  make build-dev           Build dev app identity (Debug, no code signing)"
 	@echo "  make test                Run tests without coverage (fast local iteration)"
 	@echo "  make coverage            Run tests with coverage gate + per-file summary"
 	@echo "  make clean               Remove build artifacts"
@@ -14,6 +15,9 @@ help:
 
 build:
 	scripts/build.sh
+
+build-dev:
+	scripts/build_dev.sh
 
 test:
 	scripts/test.sh --no-coverage

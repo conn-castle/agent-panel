@@ -157,6 +157,23 @@ final class AppConfigTests: XCTestCase {
         XCTAssertTrue(updated.contains("name = \"Test\""))
     }
 
+    func testWriteBackPreservesIndentationAndInlineCommentOnExistingKey() {
+        let original = """
+        [app]
+        \tautoStartAtLogin = false   # keep comment
+
+        [[project]]
+        name = "Test"
+        path = "/Users/test/project"
+        color = "blue"
+        """
+
+        let updated = ConfigWriteBack.updateAutoStartAtLogin(in: original, value: true)
+
+        XCTAssertTrue(updated.contains("\tautoStartAtLogin = true   # keep comment"))
+        XCTAssertFalse(updated.contains("\tautoStartAtLogin = false   # keep comment"))
+    }
+
     func testWriteBackSetFalse() {
         let original = """
         [app]

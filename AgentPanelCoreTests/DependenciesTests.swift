@@ -278,3 +278,101 @@ final class DependenciesTests: XCTestCase {
         XCTAssertEqual(env.allValues()["AGENTPANEL_TEST_ENV"], "value")
     }
 }
+
+// MARK: - Shared Test Doubles
+
+final class MockALCommandRunner: CommandRunning {
+    struct Call: Equatable {
+        let executable: String
+        let arguments: [String]
+        let workingDirectory: String?
+    }
+
+    var calls: [Call] = []
+    var results: [Result<ApCommandResult, ApCoreError>] = []
+
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        calls.append(Call(executable: executable, arguments: arguments, workingDirectory: workingDirectory))
+        guard !results.isEmpty else {
+            return .failure(ApCoreError(message: "MockALCommandRunner: no results left"))
+        }
+        return results.removeFirst()
+    }
+}
+
+struct ALSelectiveFileSystem: FileSystem {
+    let executablePaths: Set<String>
+
+    func fileExists(at url: URL) -> Bool { executablePaths.contains(url.path) }
+    func isExecutableFile(at url: URL) -> Bool { executablePaths.contains(url.path) }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {}
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {}
+}
+
+struct FailingWorkspaceFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { true }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+}
+
+final class SharedVSCodeCommandRunner: CommandRunning {
+    struct Call: Equatable {
+        let executable: String
+        let arguments: [String]
+        let workingDirectory: String?
+    }
+
+    var calls: [Call] = []
+    var results: [Result<ApCommandResult, ApCoreError>] = []
+
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        calls.append(Call(executable: executable, arguments: arguments, workingDirectory: workingDirectory))
+        guard !results.isEmpty else {
+            return .failure(ApCoreError(message: "SharedVSCodeCommandRunner: no results left"))
+        }
+        return results.removeFirst()
+    }
+}
+
+struct FailingSettingsFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { true }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {
+        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
+    }
+}

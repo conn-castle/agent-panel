@@ -13,6 +13,8 @@ final class WindowCycleOverlayCoordinator {
     private let overlayController: WindowCycleOverlayController
     private let logger: AgentPanelLogging
     private let shouldSuppressOverlay: () -> Bool
+    private let windowPositioner: WindowPositioning?
+    private let mainScreenVisibleFrame: (() -> CGRect?)?
     private let queue = DispatchQueue(label: "com.agentpanel.window-cycle-overlay", qos: .userInteractive)
     private var activeSession: WindowCycler.CycleSession?
 
@@ -20,12 +22,16 @@ final class WindowCycleOverlayCoordinator {
         windowCycler: WindowCycler,
         logger: AgentPanelLogging = AgentPanelLogger(),
         overlayController: WindowCycleOverlayController = WindowCycleOverlayController(),
-        shouldSuppressOverlay: @escaping () -> Bool
+        shouldSuppressOverlay: @escaping () -> Bool,
+        windowPositioner: WindowPositioning? = nil,
+        mainScreenVisibleFrame: (() -> CGRect?)? = nil
     ) {
         self.windowCycler = windowCycler
         self.logger = logger
         self.overlayController = overlayController
         self.shouldSuppressOverlay = shouldSuppressOverlay
+        self.windowPositioner = windowPositioner
+        self.mainScreenVisibleFrame = mainScreenVisibleFrame
     }
 
     /// Starts a new overlay cycle session.
@@ -103,9 +109,20 @@ final class WindowCycleOverlayCoordinator {
                     message: error.message,
                     context: nil
                 )
+            } else {
+                self.recoverFocusedWindowIfNeeded(bundleId: session.selectedCandidate.appBundleId)
             }
             self.hideOverlay()
         }
+    }
+
+    // MARK: - Private
+
+    /// Recovers the focused window if it is off-screen or oversized. Non-fatal.
+    private func recoverFocusedWindowIfNeeded(bundleId: String) {
+        guard let windowPositioner,
+              let screenFrame = mainScreenVisibleFrame?() else { return }
+        _ = windowPositioner.recoverFocusedWindow(bundleId: bundleId, screenVisibleFrame: screenFrame)
     }
 
     private func isOverlaySuppressed() -> Bool {

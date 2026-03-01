@@ -168,10 +168,11 @@ public struct DoctorReport: Equatable, Sendable {
             colorize ? severity.coloredLabel() : severity.rawValue
         }
 
+        let name = AgentPanel.displayName
         var lines: [String] = []
-        lines.append("AgentPanel Doctor Report")
+        lines.append("\(name) Doctor Report")
         lines.append("Timestamp: \(metadata.timestamp)")
-        lines.append("AgentPanel version: \(metadata.agentPanelVersion)")
+        lines.append("\(name) version: \(metadata.agentPanelVersion)")
         lines.append("macOS version: \(metadata.macOSVersion)")
         lines.append("AeroSpace app: \(metadata.aerospaceApp)")
         lines.append("aerospace CLI: \(metadata.aerospaceCli)")
@@ -331,6 +332,7 @@ public struct Doctor {
         let runStart = DispatchTime.now().uptimeNanoseconds
         var findings: [DoctorFinding] = []
         var sectionTimings: [String: Int] = [:]
+        let appDisplayName = AgentPanel.displayName
 
         // Check Homebrew
         var sectionStart = runStart
@@ -426,7 +428,7 @@ public struct Doctor {
         case .managedByAgentPanel:
             findings.append(DoctorFinding(
                 severity: .pass,
-                title: "AeroSpace config managed by AgentPanel"
+                title: "AeroSpace config managed by \(appDisplayName)"
             ))
             // Check config version staleness
             let currentVer = configManager.currentConfigVersion()
@@ -437,7 +439,7 @@ public struct Doctor {
                     findings.append(DoctorFinding(
                         severity: .warn,
                         title: "AeroSpace config is outdated (version \(currentLabel), latest is \(templateVer))",
-                        fix: "Restart AgentPanel to auto-update, or run `ap doctor` for details."
+                        fix: "Restart \(appDisplayName) to auto-update, or run `ap doctor` for details."
                     ))
                 }
             } else if configManager.isTemplateAvailable() {
@@ -446,7 +448,7 @@ public struct Doctor {
                     severity: .fail,
                     title: "AeroSpace config template has no version",
                     detail: "The bundled aerospace-safe.toml has no ap-config-version line.",
-                    fix: "Reinstall AgentPanel — the app bundle may be corrupted."
+                    fix: "Reinstall \(appDisplayName) — the app bundle may be corrupted."
                 ))
             }
             // else: template not available (CLI context) — skip staleness check
@@ -455,14 +457,14 @@ public struct Doctor {
                 severity: .fail,
                 title: "AeroSpace config file missing",
                 detail: AeroSpaceConfigManager.configPath,
-                fix: "Run AgentPanel setup to create a compatible AeroSpace config."
+                fix: "Run \(appDisplayName) setup to create a compatible AeroSpace config."
             ))
         case .externalConfig:
             findings.append(DoctorFinding(
                 severity: .warn,
-                title: "AeroSpace config not managed by AgentPanel",
-                detail: "Config exists but was not created by AgentPanel.",
-                fix: "AgentPanel may not function correctly. Consider allowing AgentPanel to manage the config."
+                title: "AeroSpace config not managed by \(appDisplayName)",
+                detail: "Config exists but was not created by \(appDisplayName).",
+                fix: "\(appDisplayName) may not function correctly. Consider allowing \(appDisplayName) to manage the config."
             ))
         case .unknown:
             findings.append(DoctorFinding(
@@ -637,7 +639,7 @@ public struct Doctor {
                     severity: .warn,
                     title: "Accessibility permission not granted",
                     detail: "Required for automatic window positioning when activating projects. macOS revokes this permission when the app binary changes (e.g., after an update).",
-                    fix: "Open System Settings > Privacy & Security > Accessibility > Enable AgentPanel"
+                    fix: "Open System Settings > Privacy & Security > Accessibility > Enable \(appDisplayName)"
                 ))
             }
         }
@@ -690,7 +692,7 @@ public struct Doctor {
             findings.append(DoctorFinding(
                 severity: .fail,
                 title: "Critical: AeroSpace setup incomplete",
-                fix: "Launch AgentPanel.app to run onboarding, or install manually: brew install --cask nikitabobko/tap/aerospace"
+                fix: "Launch \(appDisplayName).app to run onboarding, or install manually: brew install --cask nikitabobko/tap/aerospace"
             ))
         }
 
@@ -948,6 +950,7 @@ public struct Doctor {
         fileExists: Bool,
         checkErrorDetail: String?
     ) -> DoctorFinding {
+        let name = AgentPanel.displayName
         let fixText: String
         let snippet: String
 
@@ -961,15 +964,15 @@ public struct Doctor {
             }
             snippet = innerLines.joined(separator: "\n")
         } else {
-            fixText = "Create or update \(remotePath)/.vscode/settings.json on the remote machine with the content below. The markers allow AgentPanel to manage this block automatically when SSH access is available."
+            fixText = "Create or update \(remotePath)/.vscode/settings.json on the remote machine with the content below. The markers allow \(name) to manage this block automatically when SSH access is available."
             snippet = blockContent
         }
 
         return DoctorFinding(
             severity: .warn,
-            title: "Remote .vscode/settings.json missing AgentPanel block: \(project.id)",
+            title: "Remote .vscode/settings.json missing \(name) block: \(project.id)",
             detail: checkErrorDetail.map { "Could not read remote .vscode/settings.json: \($0)" }
-                ?? "AgentPanel cannot reliably identify the VS Code window for this SSH project until the AgentPanel settings block exists and is writable via SSH.",
+                ?? "\(name) cannot reliably identify the VS Code window for this SSH project until the \(name) settings block exists and is writable via SSH.",
             fix: fixText,
             snippet: snippet,
             snippetLanguage: "jsonc"

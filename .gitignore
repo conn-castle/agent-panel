@@ -1,5 +1,6 @@
 
 .DS_Store
+tmp/
 
 # >>> agent-layer
 # Template hash: fb34acb9c757536ffabf43f198466f9d0e30a0870b6090684af794780efd303d

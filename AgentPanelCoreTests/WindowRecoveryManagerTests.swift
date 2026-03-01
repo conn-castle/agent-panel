@@ -56,7 +56,41 @@ final class WindowRecoveryManagerTests: XCTestCase {
 
         func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> {
             moveWindowCalls.append((workspace, windowId, focusFollows))
-            return moveWindowResult
+            switch moveWindowResult {
+            case .failure(let error):
+                return .failure(error)
+            case .success:
+                break
+            }
+
+            for (sourceWorkspace, listedResult) in windowsByWorkspace {
+                guard case .success(var sourceWindows) = listedResult else { continue }
+                guard let index = sourceWindows.firstIndex(where: { $0.windowId == windowId }) else { continue }
+
+                let window = sourceWindows.remove(at: index)
+                windowsByWorkspace[sourceWorkspace] = .success(sourceWindows)
+
+                let movedWindow = ApWindow(
+                    windowId: window.windowId,
+                    appBundleId: window.appBundleId,
+                    workspace: workspace,
+                    windowTitle: window.windowTitle
+                )
+
+                if case .success(let destinationWindows) = windowsByWorkspace[workspace] {
+                    windowsByWorkspace[workspace] = .success(destinationWindows + [movedWindow])
+                } else if windowsByWorkspace[workspace] == nil {
+                    windowsByWorkspace[workspace] = .success([movedWindow])
+                }
+
+                if !workspaces.contains(workspace) {
+                    workspaces.append(workspace)
+                    workspaces.sort()
+                }
+                return .success(())
+            }
+
+            return .success(())
         }
 
         func focusWorkspace(name: String) -> Result<Void, ApCoreError> {
@@ -76,6 +110,13 @@ final class WindowRecoveryManagerTests: XCTestCase {
         func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
             recoverCalls.append((bundleId, windowTitle, screenVisibleFrame))
             return recoverResults[windowTitle] ?? defaultRecoverResult
+        }
+
+        var recoverFocusedCalls: [(bundleId: String, screenFrame: CGRect)] = []
+        var defaultRecoverFocusedResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
+        func recoverFocusedWindow(bundleId: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
+            recoverFocusedCalls.append((bundleId, screenVisibleFrame))
+            return defaultRecoverFocusedResult
         }
 
         func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
@@ -109,7 +150,8 @@ final class WindowRecoveryManagerTests: XCTestCase {
         aerospace: StubAeroSpace = StubAeroSpace(),
         positioner: StubWindowPositioner = StubWindowPositioner(),
         screenModeDetector: ScreenModeDetecting? = nil,
-        layoutConfig: LayoutConfig = LayoutConfig()
+        layoutConfig: LayoutConfig = LayoutConfig(),
+        knownProjectIds: Set<String>? = nil
     ) -> WindowRecoveryManager {
         WindowRecoveryManager(
             aerospace: aerospace,
@@ -117,7 +159,8 @@ final class WindowRecoveryManagerTests: XCTestCase {
             screenVisibleFrame: screenFrame,
             logger: NoopLogger(),
             screenModeDetector: screenModeDetector,
-            layoutConfig: layoutConfig
+            layoutConfig: layoutConfig,
+            knownProjectIds: knownProjectIds
         )
     }
 
@@ -137,6 +180,102 @@ final class WindowRecoveryManagerTests: XCTestCase {
         for (ws, wins) in byWorkspace {
             aerospace.windowsByWorkspace[ws] = .success(wins)
         }
+    }
+
+    // MARK: - recoverCurrentWindow Tests
+
+    func testRecoverCurrentWindow_recovered_focusesWindowAndRestoresOriginalFocus() {
+        let aerospace = StubAeroSpace()
+        let originalFocus = makeWindow(id: 42, workspace: "2", title: "Original Focus")
+        aerospace.focusedWindowResult = .success(originalFocus)
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Target Window"] = .success(.recovered)
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .success(let outcome) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(outcome, .recovered)
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(positioner.recoverCalls[0].bundleId, "com.test.target")
+        XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Target Window")
+        XCTAssertEqual(aerospace.focusWindowCalls, [7, 42], "Should focus target window, then restore original focus")
+    }
+
+    func testRecoverCurrentWindow_workspaceListFailure_returnsError() {
+        let aerospace = StubAeroSpace()
+        aerospace.windowsByWorkspace["ap-test"] = .failure(ApCoreError(message: "workspace gone"))
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("workspace gone"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when workspace listing fails")
+    }
+
+    func testRecoverCurrentWindow_windowNotFound_returnsError() {
+        let aerospace = StubAeroSpace()
+        aerospace.windowsByWorkspace["ap-test"] = .success([makeWindow(id: 1, workspace: "ap-test", title: "Other Window")])
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("not found"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when target window is missing")
+    }
+
+    func testRecoverCurrentWindow_focusFailure_returnsError() {
+        let aerospace = StubAeroSpace()
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+        aerospace.focusWindowResult = .failure(ApCoreError(message: "focus denied"))
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("focus denied"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when focusing target window fails")
+    }
+
+    func testRecoverCurrentWindow_positionerNotFound_returnsError() {
+        let aerospace = StubAeroSpace()
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Target Window"] = .success(.notFound)
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("not found"))
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
     }
 
     // MARK: - recoverWorkspaceWindows Tests
@@ -365,38 +504,127 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertTrue(progressCalls.isEmpty)
     }
 
-    func testRecoverAll_movesEachWindowToPreferredNonProjectWorkspace() {
+    func testRecoverAll_movesMisplacedProjectWindowsToProjectWorkspace() {
         let aerospace = StubAeroSpace()
-        let w1 = makeWindow(id: 10, workspace: "ap-foo", title: "Foo")
-        let w2 = makeWindow(id: 20, workspace: "2", title: "Bar")
-        setupWorkspaceWindows(aerospace, windows: [w1, w2])
-        aerospace.focusedWindowResult = .success(w1)
+        let misplacedVSCode = makeWindow(
+            id: 10,
+            bundleId: "com.microsoft.VSCode",
+            workspace: "2",
+            title: "AP:foo - VS Code"
+        )
+        let misplacedChrome = makeWindow(
+            id: 20,
+            bundleId: "com.google.Chrome",
+            workspace: "main",
+            title: "AP:bar - Chrome"
+        )
+        let nonProject = makeWindow(
+            id: 30,
+            bundleId: "com.other.App",
+            workspace: "2",
+            title: "Notes"
+        )
+        setupWorkspaceWindows(aerospace, windows: [misplacedVSCode, misplacedChrome, nonProject])
 
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
-        // Workspace "2" is the preferred non-project workspace (has windows)
         XCTAssertEqual(aerospace.moveWindowCalls.count, 2)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "2",
-                       "Should target preferred non-project workspace, not hardcoded '1'")
-        XCTAssertTrue(aerospace.moveWindowCalls[0].focusFollows)
-        XCTAssertEqual(aerospace.moveWindowCalls[1].workspace, "2")
+        XCTAssertTrue(
+            aerospace.moveWindowCalls.contains(where: { $0.windowId == 10 && $0.workspace == "ap-foo" }),
+            "VS Code token window should be moved to its project workspace"
+        )
+        XCTAssertTrue(
+            aerospace.moveWindowCalls.contains(where: { $0.windowId == 20 && $0.workspace == "ap-bar" }),
+            "Chrome token window should be moved to its project workspace"
+        )
     }
 
-    func testRecoverAll_onlyProjectWorkspaces_fallsBackToDefault() {
+    func testRecoverAll_doesNotMoveNonProjectWindows() {
         let aerospace = StubAeroSpace()
-        let w1 = makeWindow(id: 10, workspace: "ap-foo", title: "Foo")
-        let w2 = makeWindow(id: 20, workspace: "ap-bar", title: "Bar")
-        setupWorkspaceWindows(aerospace, windows: [w1, w2])
+        let nonProjectWindow = makeWindow(
+            id: 11,
+            bundleId: "com.other.App",
+            workspace: "2",
+            title: "General Window"
+        )
+        setupWorkspaceWindows(aerospace, windows: [nonProjectWindow])
 
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
-        // Only project workspaces exist — should fall back to WorkspaceRouting.fallbackWorkspace
-        XCTAssertEqual(aerospace.moveWindowCalls.count, 2)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
-                       "Should fall back to default when only project workspaces exist")
-        XCTAssertEqual(aerospace.moveWindowCalls[1].workspace, WorkspaceRouting.fallbackWorkspace)
+        XCTAssertTrue(aerospace.moveWindowCalls.isEmpty, "Non-project windows should stay in-place")
+    }
+
+    func testRecoverAll_doesNotRouteWindowsWhenTokenIsNotLeadingPrefix() {
+        let aerospace = StubAeroSpace()
+        let chromeWindowWithMidTitleToken = makeWindow(
+            id: 13,
+            bundleId: "com.google.Chrome",
+            workspace: "2",
+            title: "Sprint notes AP:foo - Chrome"
+        )
+        setupWorkspaceWindows(aerospace, windows: [chromeWindowWithMidTitleToken])
+
+        let manager = makeManager(aerospace: aerospace)
+        _ = manager.recoverAllWindows { _, _ in }
+
+        XCTAssertTrue(
+            aerospace.moveWindowCalls.isEmpty,
+            "Titles with AP token in the middle should not be treated as project-routable windows"
+        )
+    }
+
+    func testRecoverAll_routesWindowWithLeadingWhitespaceInTokenizedTitle() {
+        let aerospace = StubAeroSpace()
+        let window = makeWindow(
+            id: 14,
+            bundleId: "com.microsoft.VSCode",
+            workspace: "2",
+            title: "  AP:foo - VS Code"
+        )
+        setupWorkspaceWindows(aerospace, windows: [window])
+
+        let manager = makeManager(aerospace: aerospace)
+        _ = manager.recoverAllWindows { _, _ in }
+
+        XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "ap-foo")
+    }
+
+    func testRecoverAll_doesNotRouteUnknownProjectIdWhenKnownProjectsProvided() {
+        let aerospace = StubAeroSpace()
+        let window = makeWindow(
+            id: 15,
+            bundleId: "com.microsoft.VSCode",
+            workspace: "2",
+            title: "AP:unknown - VS Code"
+        )
+        setupWorkspaceWindows(aerospace, windows: [window])
+
+        let manager = makeManager(aerospace: aerospace, knownProjectIds: ["foo", "bar"])
+        _ = manager.recoverAllWindows { _, _ in }
+
+        XCTAssertTrue(
+            aerospace.moveWindowCalls.isEmpty,
+            "Unknown project IDs should not be routed to a project workspace"
+        )
+    }
+
+    func testRecoverAll_keepsProjectWindowAlreadyInCorrectWorkspace() {
+        let aerospace = StubAeroSpace()
+        let alreadyPlaced = makeWindow(
+            id: 12,
+            bundleId: "com.microsoft.VSCode",
+            workspace: "ap-foo",
+            title: "AP:foo - VS Code"
+        )
+        setupWorkspaceWindows(aerospace, windows: [alreadyPlaced])
+
+        let manager = makeManager(aerospace: aerospace)
+        _ = manager.recoverAllWindows { _, _ in }
+
+        XCTAssertTrue(aerospace.moveWindowCalls.isEmpty, "Window already in matching project workspace should not move")
     }
 
     func testRecoverAll_reportsProgressForEachWindow() {
@@ -434,17 +662,20 @@ final class WindowRecoveryManagerTests: XCTestCase {
         let manager = makeManager(aerospace: aerospace)
         _ = manager.recoverAllWindows { _, _ in }
 
-        // Should restore focus to original window (now on destination workspace)
+        // Should restore focus to original window after full recovery pass.
         XCTAssertEqual(aerospace.focusWindowCalls.last, 42)
-        // Should NOT call focusWorkspace — all windows are on the destination,
-        // restoring the original workspace would briefly switch to an empty workspace
         XCTAssertTrue(aerospace.focusWorkspaceCalls.isEmpty)
     }
 
     func testRecoverAll_moveFailure_continuesAndRecordsError() {
         let aerospace = StubAeroSpace()
         let windows = [
-            makeWindow(id: 1, workspace: "ws1", title: "A"),
+            makeWindow(
+                id: 1,
+                bundleId: "com.microsoft.VSCode",
+                workspace: "ws1",
+                title: "AP:foo - VS Code"
+            ),
             makeWindow(id: 2, workspace: "ws1", title: "B")
         ]
         setupWorkspaceWindows(aerospace, windows: windows)
@@ -460,10 +691,8 @@ final class WindowRecoveryManagerTests: XCTestCase {
             return
         }
         XCTAssertEqual(recovery.windowsProcessed, 2)
-        XCTAssertEqual(recovery.errors.count, 2)
-        XCTAssertTrue(recovery.errors[0].contains("move failed"))
-        // Recovery should not be called when move fails
-        XCTAssertEqual(positioner.recoverCalls.count, 0)
+        XCTAssertTrue(recovery.errors.contains { $0.contains("move failed") })
+        XCTAssertEqual(positioner.recoverCalls.count, 2, "Recovery should continue even when routing move fails")
     }
 
     func testRecoverAll_recoveredCountTracksActuallyResized() {
@@ -525,42 +754,38 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertTrue(recovery.errors.contains { $0.contains("ws-broken") })
     }
 
-    func testRecoverAll_failedListingExcludesWorkspaceFromDestinationCandidates() {
+    func testRecoverAll_workspaceRecoveryFailure_surfacesErrorAndStillCountsProgress() {
         let aerospace = StubAeroSpace()
-        // "broken-ws" is non-project but listing fails; "healthy-ws" is non-project and healthy
-        aerospace.workspaces = ["broken-ws", "healthy-ws"]
-        aerospace.windowsByWorkspace["broken-ws"] = .failure(ApCoreError(message: "workspace gone"))
-        aerospace.windowsByWorkspace["healthy-ws"] = .success([makeWindow(id: 1, workspace: "healthy-ws", title: "OK")])
+        // Initial listing succeeds on workspace "2".
+        let misplaced = makeWindow(
+            id: 7,
+            bundleId: "com.microsoft.VSCode",
+            workspace: "2",
+            title: "AP:proj - VS Code"
+        )
+        aerospace.workspaces = ["2"]
+        aerospace.windowsByWorkspace["2"] = .success([misplaced])
+        // The routed destination workspace is explicitly broken during recovery.
+        aerospace.windowsByWorkspace["ap-proj"] = .failure(ApCoreError(message: "workspace unavailable"))
 
         let manager = makeManager(aerospace: aerospace)
-        _ = manager.recoverAllWindows { _, _ in }
-
-        // Destination should be "healthy-ws" (not "broken-ws" which failed listing)
-        XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "healthy-ws",
-                       "Should skip workspace with failed listing and use healthy candidate")
-    }
-
-    func testRecoverAll_allNonProjectListingsFail_fallsBackToDefault() {
-        let aerospace = StubAeroSpace()
-        let projectWindow = makeWindow(id: 7, workspace: "ap-proj", title: "Project Window")
-        // Non-project workspace exists but listing fails.
-        aerospace.workspaces = ["broken-ws", "ap-proj"]
-        aerospace.windowsByWorkspace["broken-ws"] = .failure(ApCoreError(message: "workspace gone"))
-        aerospace.windowsByWorkspace["ap-proj"] = .success([projectWindow])
-
-        let manager = makeManager(aerospace: aerospace)
-        let result = manager.recoverAllWindows { _, _ in }
+        var progressCalls: [(Int, Int)] = []
+        let result = manager.recoverAllWindows { current, total in
+            progressCalls.append((current, total))
+        }
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
             return
         }
         XCTAssertEqual(recovery.windowsProcessed, 1)
-        XCTAssertTrue(recovery.errors.contains { $0.contains("broken-ws") })
+        XCTAssertTrue(recovery.errors.contains { $0.contains("ap-proj") })
+        XCTAssertTrue(recovery.errors.contains { $0.contains("workspace unavailable") })
         XCTAssertEqual(aerospace.moveWindowCalls.count, 1)
-        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, WorkspaceRouting.fallbackWorkspace,
-                       "Should fall back to default when all non-project workspace listings fail")
+        XCTAssertEqual(aerospace.moveWindowCalls[0].workspace, "ap-proj")
+        XCTAssertEqual(progressCalls.count, 1)
+        XCTAssertEqual(progressCalls[0].0, 1)
+        XCTAssertEqual(progressCalls[0].1, 1)
     }
 
     func testRecoverAll_notFoundSurfacedAsError() {
@@ -742,6 +967,33 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(positioner.recoverCalls.count, 1)
     }
 
+    func testRecoverWorkspace_nonProjectWorkspace_onlyRecoversRequestedWorkspaceWindows() {
+        let aerospace = StubAeroSpace()
+        let workspace = "main"
+        let currentDesktopWindow = makeWindow(id: 1, bundleId: "com.test.Main", workspace: workspace,
+                                              title: "Current Desktop Window")
+        let otherDesktopWindow = makeWindow(id: 2, bundleId: "com.test.Other", workspace: "2",
+                                            title: "Other Desktop Window")
+        aerospace.windowsByWorkspace[workspace] = .success([currentDesktopWindow])
+        aerospace.windowsByWorkspace["2"] = .success([otherDesktopWindow])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Current Desktop Window"] = .success(.recovered)
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        XCTAssertEqual(recovery.windowsProcessed, 1)
+        XCTAssertEqual(recovery.windowsRecovered, 1)
+        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Current Desktop Window")
+    }
+
     func testRecoverWorkspace_detectorFailure_usesWideFallbackAndWarns() {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
@@ -814,7 +1066,7 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(recovery.windowsProcessed, 2)
     }
 
-    func testRecoverAll_doesNotUseLayoutPhase() {
+    func testRecoverAll_usesLayoutPhaseForProjectWorkspaces() {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: "ap-proj",
                             title: "AP:proj - VS Code")
@@ -827,10 +1079,9 @@ final class WindowRecoveryManagerTests: XCTestCase {
 
         _ = manager.recoverAllWindows { _, _ in }
 
-        // recoverAllWindows should NOT use layout phase
-        XCTAssertTrue(positioner.setFrameCalls.isEmpty,
-                      "recoverAllWindows must not use layout phase")
-        // Generic recovery should run
-        XCTAssertEqual(positioner.recoverCalls.count, 1)
+        XCTAssertEqual(positioner.setFrameCalls.count, 1)
+        XCTAssertEqual(positioner.setFrameCalls[0].bundleId, "com.microsoft.VSCode")
+        XCTAssertTrue(positioner.recoverCalls.isEmpty,
+                      "Token-matching project windows should be handled by layout phase")
     }
 }

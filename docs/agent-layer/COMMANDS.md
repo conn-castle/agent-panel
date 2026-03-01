@@ -70,6 +70,19 @@ Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeaut
 
 Reference (underlying script): `scripts/build.sh`. Runs `scripts/dev_bootstrap.sh` and then uses `xcodebuild` with a repo-owned DerivedData path under `build/DerivedData`.
 
+## Build (Dev app identity)
+
+Build the development app variant (Debug), without code signing:
+
+```bash
+make build-dev
+```
+
+Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
+Notes: Produces `build/DerivedData/Build/Products/Debug/AgentPanel Dev.app` with a distinct bundle identifier so dev and release can be installed side-by-side.
+
+Reference (underlying script): `scripts/build_dev.sh`
+
 ## Clean
 
 Clean build artifacts (DerivedData + build output). Logs are outside the repo and must be removed manually as instructed by the script:

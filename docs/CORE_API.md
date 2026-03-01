@@ -25,6 +25,9 @@ The public API of `AgentPanelCore` has these main concerns:
 
 ```swift
 public enum AgentPanel {
+    /// Human-readable app name for user-facing guidance (e.g., "AgentPanel", "AgentPanel Dev").
+    public static var displayName: String
+
     /// Current version string (e.g., "1.0.0").
     public static var version: String
 }
@@ -201,7 +204,8 @@ public final class ProjectManager {
     public init(
         windowPositioner: WindowPositioning? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        mainScreenVisibleFrame: (() -> CGRect?)? = nil
     )
 
     /// Loads configuration from the default path.
@@ -407,17 +411,33 @@ public struct Doctor {
     public func requestAccessibility() -> DoctorReport
 }
 
+public struct DoctorMetadata: Equatable, Sendable {
+    public let timestamp: String
+    public let agentPanelVersion: String
+    public let macOSVersion: String
+    public let aerospaceApp: String
+    public let aerospaceCli: String
+    public let errorContext: ErrorContext?
+    public let durationMs: Int
+    public let sectionTimings: [String: Int]
+}
+
 public struct DoctorReport: Equatable, Sendable {
+    public let metadata: DoctorMetadata
     public let findings: [DoctorFinding]
     public let actions: DoctorActionAvailability
 
     public var overallSeverity: DoctorSeverity { get }
     public var hasFailures: Bool { get }
-    public func rendered() -> String
+    public func rendered(colorize: Bool = false) -> String
 }
 
 public struct DoctorFinding: Equatable, Sendable {
     public let severity: DoctorSeverity
+    public let title: String
+    public let bodyLines: [String]
+    public let snippet: String?
+    public let snippetLanguage: String
 }
 
 public enum DoctorSeverity: String, CaseIterable, Sendable {
@@ -485,6 +505,10 @@ public protocol WindowPositioning {
     func recoverWindow(
         bundleId: String,
         windowTitle: String,
+        screenVisibleFrame: CGRect
+    ) -> Result<RecoveryOutcome, ApCoreError>
+    func recoverFocusedWindow(
+        bundleId: String,
         screenVisibleFrame: CGRect
     ) -> Result<RecoveryOutcome, ApCoreError>
     func isAccessibilityTrusted() -> Bool
@@ -638,7 +662,8 @@ public final class WindowRecoveryManager {
         logger: AgentPanelLogging,
         processChecker: RunningApplicationChecking? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        layoutConfig: LayoutConfig = LayoutConfig()
+        layoutConfig: LayoutConfig = LayoutConfig(),
+        knownProjectIds: Set<String>? = nil
     )
 
     /// Recovers windows in a workspace. For project workspaces (`ap-<projectId>`),
@@ -646,7 +671,15 @@ public final class WindowRecoveryManager {
     /// apps present in the workspace), then generic shrink/center recovery for remaining windows.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
 
+    /// Recovers a single focused window in the given workspace.
+    /// Returns `.failure` when the workspace listing fails, the window is missing,
+    /// or AX recovery cannot locate/recover the window.
+    public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError>
+
     /// Recovers all windows across all workspaces, reporting progress.
+    /// Windows tagged with `AP:<projectId>` for known configured projects are moved to
+    /// `ap-<projectId>` first, then each affected workspace is recovered
+    /// (layout-aware in project workspaces).
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
     ) -> Result<RecoveryResult, ApCoreError>
@@ -782,7 +815,7 @@ public struct WindowCycler {
     public func advanceSelection(session: CycleSession, direction: CycleDirection) -> CycleSession
     public func commitSelection(session: CycleSession) -> Result<Void, ApCoreError>
     public func cancelSession(session: CycleSession) -> Result<Void, ApCoreError>
-    public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError>
+    public func cycleFocus(direction: CycleDirection) -> Result<WindowCycleCandidate?, ApCoreError>
 }
 ```
 
@@ -790,7 +823,7 @@ public struct WindowCycler {
 - `advanceSelection` moves the selected index with wrapping.
 - `commitSelection` focuses the selected candidate.
 - `cancelSession` restores `initialWindowId`.
-- `cycleFocus` remains the immediate one-shot API and now delegates to session start + commit.
+- `cycleFocus` remains the immediate one-shot API and now delegates to session start + commit. Returns the focused `WindowCycleCandidate` on success (or `nil` if no cycling occurred).
 
 ---
 

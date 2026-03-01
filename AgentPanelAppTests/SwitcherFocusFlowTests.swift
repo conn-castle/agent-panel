@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import AgentPanel
+@testable import AgentPanelAppKit
 @testable import AgentPanelCore
 
 @MainActor
@@ -145,6 +146,129 @@ final class SwitcherFocusFlowTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 2.0)
 
         XCTAssertTrue(aerospace.focusedWindowIds.contains(ideWindow.windowId))
+    }
+
+    func testRecoverProjectShortcutInvokesRecoverCallbackWithCapturedFocus() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        let focus = CapturedFocus(windowId: 77, appBundleId: "com.apple.Terminal", workspace: "ap-test")
+        controller.testing_setCapturedFocus(focus)
+
+        var callbackFocus: CapturedFocus?
+        controller.onRecoverProjectRequested = { capturedFocus, completion in
+            callbackFocus = capturedFocus
+            completion(.success(RecoveryResult(windowsProcessed: 2, windowsRecovered: 1, errors: [])))
+        }
+
+        controller.testing_handleRecoverProjectFromShortcut()
+
+        XCTAssertEqual(callbackFocus, focus)
+    }
+
+    func testFooterHintsIncludeRecoverProjectWhenShortcutIsAvailable() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test"))
+        controller.onRecoverProjectRequested = { _, completion in
+            completion(.success(RecoveryResult(windowsProcessed: 0, windowsRecovered: 0, errors: [])))
+        }
+
+        controller.testing_updateFooterHints()
+
+        XCTAssertTrue(controller.testing_footerHints.contains("⌘R Recover Project"))
+    }
+
+    func testRecoverProjectShortcutIsSingleFlight() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+        controller.testing_setCapturedFocus(CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test"))
+
+        var invocationCount = 0
+        var pendingCompletion: ((Result<RecoveryResult, ApCoreError>) -> Void)?
+        controller.onRecoverProjectRequested = { _, completion in
+            invocationCount += 1
+            pendingCompletion = completion
+        }
+
+        controller.testing_handleRecoverProjectFromShortcut()
+        controller.testing_handleRecoverProjectFromShortcut()
+
+        XCTAssertEqual(invocationCount, 1, "Recover Project should not run concurrently from repeated keybind presses")
+
+        pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
+    }
+
+    func testRecoveryScreenSelectionUsesContainingSecondaryScreen() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1800, y: 120, width: 700, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: primaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, secondaryScreen)
+        XCTAssertNil(
+            AXWindowPositioner.computeRecoveredFrame(
+                currentFrame: windowFrame,
+                screenVisibleFrame: selected
+            )
+        )
+    }
+
+    func testRecoveryScreenSelectionUsesLargestIntersectionWhenMidpointInGap() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1200, y: 120, width: 600, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: primaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, primaryScreen)
+    }
+
+    func testRecoveryScreenSelectionUsesNearestScreenWhenNoIntersection() {
+        let primaryScreen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1450, y: 120, width: 100, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: secondaryScreen,
+            availableScreenFrames: [primaryScreen, secondaryScreen]
+        )
+
+        XCTAssertEqual(selected, primaryScreen)
+    }
+
+    func testRecoveryScreenSelectionFallsBackWhenNoScreensAvailable() {
+        let secondaryScreen = CGRect(x: 1600, y: 0, width: 1440, height: 900)
+        let windowFrame = CGRect(x: 1800, y: 120, width: 700, height: 500)
+
+        let selected = AXWindowPositioner.selectRecoveryScreenVisibleFrame(
+            currentFrame: windowFrame,
+            fallbackScreenVisibleFrame: secondaryScreen,
+            availableScreenFrames: []
+        )
+
+        XCTAssertEqual(selected, secondaryScreen)
     }
 
     private func makeProjectManager(

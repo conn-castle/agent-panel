@@ -29,7 +29,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     // MARK: - Local project: settings.json injection
 
     func testLocalPathInjectsSettingsJSON() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))  // code --new-window
         ]
@@ -52,7 +52,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testLocalPathOpensCodeWithProjectPath() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))  // code --new-window
         ]
@@ -80,7 +80,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         }
         """.write(to: settingsURL, atomically: true, encoding: .utf8)
 
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
@@ -96,7 +96,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     // MARK: - SSH project: successful remote write
 
     func testSSHProjectSuccessfulRemoteWrite() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),  // SSH read
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),      // SSH write
@@ -144,7 +144,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     // MARK: - SSH project: failures fail loudly
 
     func testSSHProjectReadFailureReturnsErrorAndDoesNotLaunchCode() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .failure(ApCoreError(message: "SSH connection failed"))
         ]
@@ -168,7 +168,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testSSHProjectWriteFailureReturnsErrorAndDoesNotLaunchCode() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
             .success(ApCommandResult(exitCode: 1, stdout: "", stderr: "Permission denied"))
@@ -196,7 +196,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     // MARK: - SSH command safety
 
     func testSSHCommandIncludesOptionTerminator() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
@@ -220,7 +220,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     // MARK: - openNewWindow command execution behavior
 
     func testOpenNewWindowFailsWhenProjectPathNil() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         let launcher = makeLauncher(commandRunner: runner)
 
         let result = launcher.openNewWindow(identifier: "no-path", projectPath: nil)
@@ -236,7 +236,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrEmpty() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 2, stdout: "", stderr: ""))  // code fails
         ]
@@ -256,7 +256,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testOpenNewWindowFailsWhenCodeExitNonZeroAndStderrIncluded() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 3, stdout: "", stderr: "boom"))
         ]
@@ -277,7 +277,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testOpenNewWindowSucceedsWhenCodeExitZero() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
@@ -297,7 +297,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testOpenNewWindowTrimsRemoteAuthorityAndProjectPath() {
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "{}\n", stderr: "")),
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
@@ -323,9 +323,9 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
     }
 
     func testOpenNewWindowReturnsErrorWhenSettingsWriteFails() {
-        let failingFS = FailingFileSystem()
+        let failingFS = FailingSettingsFileSystem()
         let failingSettings = ApVSCodeSettingsManager(fileSystem: failingFS)
-        let runner = MockCommandRunner()
+        let runner = SharedVSCodeCommandRunner()
         let launcher = ApVSCodeLauncher(
             commandRunner: runner,
             fileSystem: failingFS,
@@ -347,7 +347,7 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeLauncher(commandRunner: MockCommandRunner) -> ApVSCodeLauncher {
+    private func makeLauncher(commandRunner: SharedVSCodeCommandRunner) -> ApVSCodeLauncher {
         ApVSCodeLauncher(commandRunner: commandRunner)
     }
 
@@ -355,50 +355,5 @@ final class VSCodeSSHWorkspaceTests: XCTestCase {
         let settingsURL = URL(fileURLWithPath: projectPath)
             .appendingPathComponent(".vscode/settings.json")
         return try? String(contentsOf: settingsURL, encoding: .utf8)
-    }
-}
-
-// MARK: - Test Doubles
-
-/// Mock command runner that records calls and returns pre-configured results.
-private final class MockCommandRunner: CommandRunning {
-    struct Call: Equatable {
-        let executable: String
-        let arguments: [String]
-        let workingDirectory: String?
-    }
-
-    var calls: [Call] = []
-    var results: [Result<ApCommandResult, ApCoreError>] = []
-
-    func run(
-        executable: String,
-        arguments: [String],
-        timeoutSeconds: TimeInterval?,
-        workingDirectory: String?
-    ) -> Result<ApCommandResult, ApCoreError> {
-        calls.append(Call(executable: executable, arguments: arguments, workingDirectory: workingDirectory))
-        guard !results.isEmpty else {
-            return .failure(ApCoreError(message: "MockCommandRunner: no results left"))
-        }
-        return results.removeFirst()
-    }
-}
-
-/// File system that throws on createDirectory/write — for testing settings.json error handling.
-private struct FailingFileSystem: FileSystem {
-    func fileExists(at url: URL) -> Bool { false }
-    func directoryExists(at url: URL) -> Bool { true }
-    func isExecutableFile(at url: URL) -> Bool { false }
-    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
-    func createDirectory(at url: URL) throws {
-        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
-    }
-    func fileSize(at url: URL) throws -> UInt64 { 0 }
-    func removeItem(at url: URL) throws {}
-    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
-    func appendFile(at url: URL, data: Data) throws {}
-    func writeFile(at url: URL, data: Data) throws {
-        throw NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Disk full"])
     }
 }

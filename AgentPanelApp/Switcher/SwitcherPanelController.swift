@@ -18,6 +18,7 @@ import AgentPanelCore
 enum SwitcherPresentationSource: String {
     case menu
     case hotkey
+    case reopen
     case unknown
 }
 
@@ -218,6 +219,7 @@ final class SwitcherPanelController: NSObject {
     private var isDismissing: Bool = false
     private var isActivating: Bool = false
     private var isExitingToNonProject: Bool = false
+    private var isRecoveringProject: Bool = false
     private var lastDismissedAt: Date?
     private var lastDismissedQuery: String = ""
     private var restoreFocusTask: Task<Void, Never>?
@@ -235,6 +237,13 @@ final class SwitcherPanelController: NSObject {
     /// Called when a project operation fails (select, close, exit, workspace query, config load).
     /// Used by AppDelegate to trigger a background health indicator refresh.
     var onProjectOperationFailed: ((ErrorContext) -> Void)?
+
+    /// Called when the user triggers "Recover Project" from the switcher keybind.
+    ///
+    /// Parameters:
+    /// - focus: Focus captured before the switcher opened.
+    /// - completion: Invoked when recovery completes.
+    var onRecoverProjectRequested: ((CapturedFocus, @escaping (Result<RecoveryResult, ApCoreError>) -> Void) -> Void)?
 
     /// Called when the switcher session ends (panel dismissed for any reason).
     /// Used to defer background work (like Doctor refresh) until after the session
@@ -412,6 +421,7 @@ final class SwitcherPanelController: NSObject {
         expectsVisible = false
         isActivating = false
         isExitingToNonProject = false
+        isRecoveringProject = false
         pendingVisibilityCheckToken = nil
         restoreFocusTask?.cancel()
         cancelPendingFilterWorkItem()
@@ -1330,6 +1340,85 @@ final class SwitcherPanelController: NSObject {
         )
     }
 
+    /// Handles "recover project" keyboard action.
+    private func handleRecoverProjectFromShortcut() {
+        guard let focus = capturedFocus else {
+            session.logEvent(
+                event: "switcher.recover_project.skipped",
+                level: .warn,
+                message: "No captured focus available."
+            )
+            setStatus(message: "Recover Project unavailable: no focused workspace.", level: .warning)
+            NSSound.beep()
+            return
+        }
+
+        guard let onRecoverProjectRequested else {
+            session.logEvent(
+                event: "switcher.recover_project.skipped",
+                level: .warn,
+                message: "Recover action is not wired."
+            )
+            setStatus(message: "Recover Project is not available.", level: .warning)
+            NSSound.beep()
+            return
+        }
+
+        guard !isRecoveringProject else {
+            session.logEvent(
+                event: "switcher.recover_project.skipped",
+                level: .warn,
+                message: "Recovery already in progress."
+            )
+            setStatus(message: "Recover Project already in progress.", level: .warning)
+            NSSound.beep()
+            return
+        }
+
+        session.logEvent(
+            event: "switcher.recover_project.requested",
+            context: [
+                "workspace": focus.workspace,
+                "window_id": "\(focus.windowId)"
+            ]
+        )
+        isRecoveringProject = true
+        searchField.isEnabled = false
+        tableView.isEnabled = false
+        setStatus(message: "Recovering focused workspace...", level: .info)
+
+        onRecoverProjectRequested(focus) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isRecoveringProject = false
+                self.searchField.isEnabled = true
+                self.tableView.isEnabled = true
+                switch result {
+                case .success(let recovery):
+                    if recovery.errors.isEmpty {
+                        self.setStatus(
+                            message: "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows.",
+                            level: .info
+                        )
+                    } else {
+                        self.setStatus(
+                            message: "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors).",
+                            level: .warning
+                        )
+                    }
+                case .failure(let error):
+                    self.setStatus(message: "Recover Project failed: \(error.message)", level: .error)
+                    self.onProjectOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: error.message,
+                        trigger: "recoverProject"
+                    ))
+                    NSSound.beep()
+                }
+            }
+        }
+    }
+
     /// Handles close button clicks from a project row.
     private func handleCloseProjectButtonClick(projectId: String, rowIndex: Int) {
         suppressedActionEventTimestamp = NSApp.currentEvent?.timestamp
@@ -1594,6 +1683,10 @@ final class SwitcherPanelController: NSObject {
     private func updateFooterHints() {
         var parts: [String] = ["esc Dismiss"]
 
+        if capturedFocus != nil, onRecoverProjectRequested != nil {
+            parts.append("\u{2318}R Recover Project")
+        }
+
         if let selectedProject = selectedProjectRow(), selectedProject.isOpen {
             parts.append("\u{2318}\u{232B} Close Project")
         }
@@ -1691,6 +1784,13 @@ final class SwitcherPanelController: NSObject {
             if (event.keyCode == 51 || event.keyCode == 117), modifiers == [.command] {
                 self.session.logEvent(event: "switcher.action.close_project_keybind")
                 self.handleCloseSelectedProject()
+                return nil
+            }
+
+            // Cmd+R => recover focused workspace windows.
+            if event.keyCode == 15, modifiers == [.command] {
+                self.session.logEvent(event: "switcher.action.recover_project_keybind")
+                self.handleRecoverProjectFromShortcut()
                 return nil
             }
 
@@ -2059,6 +2159,18 @@ extension SwitcherPanelController {
 
     func testing_setCapturedFocus(_ focus: CapturedFocus?) {
         capturedFocus = focus
+    }
+
+    func testing_handleRecoverProjectFromShortcut() {
+        handleRecoverProjectFromShortcut()
+    }
+
+    func testing_updateFooterHints() {
+        updateFooterHints()
+    }
+
+    var testing_footerHints: String {
+        keybindHintLabel.stringValue
     }
 
     var testing_capturedFocus: CapturedFocus? {

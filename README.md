@@ -25,7 +25,7 @@ For users who want an uncluttered menu bar, it can be desirable to remove or hid
 - **SSH remote projects** -- works with VS Code Remote-SSH for remote development workflows.
 - **Built-in diagnostics** -- `Doctor` checks your setup end-to-end, opens immediately with loading feedback, and renders a color-coded report with actionable fixes.
 - **CLI included** -- `ap doctor`, `ap select-project`, `ap close-project`, and more for scripting and automation.
-- **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed.
+- **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed. Off-screen windows are automatically recovered when focused.
 - **Color coding** -- each project gets a distinct color in VS Code via the Peacock extension.
 
 ## Requirements
@@ -209,6 +209,7 @@ Window cycling behavior:
 | `Esc` | Dismiss switcher |
 | `Shift+Enter` | Back to Non-Project Space (most recent non-project window) |
 | `Cmd+Delete` | Close the selected open project |
+| `Cmd+R` | Recover focused workspace windows ("Recover Project") |
 
 ### Menu bar
 
@@ -224,9 +225,10 @@ Menu actions:
 |------|-------------|
 | Open Switcher... | Open the project switcher |
 | View Config File... | Reveal config in Finder (creates starter if missing) |
-| Recover Project | Reset window positions in current project workspace |
 | Move Current Window | Move the focused window to a project workspace or back to no project |
-| Recover All Windows... | Center all windows across all workspaces |
+| Recover Current Window | Recover only the focused window back on screen |
+| Recover Project | Reset window positions in the focused workspace (project layout in project spaces; generic recovery in non-project spaces) |
+| Recover All Projects... | Recover all windows across all workspaces; project-tagged windows for configured projects are routed to their project workspaces before recovery |
 | Run Doctor... | Open the diagnostic panel |
 | Launch at Login | Toggle auto-start at login |
 
@@ -317,9 +319,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 scripts/dev_bootstrap.sh  # Validate Xcode toolchain (one-time)
 make regen                # Generate Xcode project from project.yml
 make build                # Build (Debug)
+make build-dev            # Build dev app variant (Debug, side-by-side identity)
 make test                 # Run tests (fast, no coverage)
 make coverage             # Run tests with coverage gate (90% minimum)
 ```
+
+### Dev vs release app identity
+
+- `make build` produces `AgentPanel.app` (`com.agentpanel.AgentPanel`) and matches release naming.
+- `make build-dev` produces `AgentPanel Dev.app` (`com.agentpanel.AgentPanel.dev`) for local development.
+- You can install and run both at the same time; macOS treats them as distinct apps for Accessibility and Automation permissions.
+- Both app variants intentionally share the same config/state locations (`~/.config/agent-panel/`, `~/.local/state/agent-panel/`).
 
 ## License
 

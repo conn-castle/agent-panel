@@ -246,6 +246,7 @@ public final class ProjectManager {
     private let windowPositioner: WindowPositioning?
     private let windowPositionStore: WindowPositionStoring?
     private let screenModeDetector: ScreenModeDetecting?
+    private let mainScreenVisibleFrame: (() -> CGRect?)?
     private let logger: AgentPanelLogging
 
     // MARK: - Public Properties
@@ -299,7 +300,8 @@ public final class ProjectManager {
     public init(
         windowPositioner: WindowPositioning? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        mainScreenVisibleFrame: (() -> CGRect?)? = nil
     ) {
         let dataPaths = DataPaths.default()
         let fileSystem = DefaultFileSystem()
@@ -315,6 +317,7 @@ public final class ProjectManager {
         self.windowPositionStore = (windowPositioner != nil && screenModeDetector != nil)
             ? WindowPositionStore(filePath: dataPaths.windowLayoutsFile)
             : nil
+        self.mainScreenVisibleFrame = mainScreenVisibleFrame
         self.logger = AgentPanelLogger()
         self.recencyFilePath = dataPaths.recentProjectsFile
         self.configLoader = { Config.loadDefault() }
@@ -351,6 +354,7 @@ public final class ProjectManager {
         windowPositioner: WindowPositioning? = nil,
         windowPositionStore: WindowPositionStoring? = nil,
         screenModeDetector: ScreenModeDetecting? = nil,
+        mainScreenVisibleFrame: (() -> CGRect?)? = nil,
         windowPollTimeout: TimeInterval = defaultWindowPollTimeout,
         windowPollInterval: TimeInterval = defaultWindowPollInterval
     ) {
@@ -364,6 +368,7 @@ public final class ProjectManager {
         self.windowPositioner = windowPositioner
         self.windowPositionStore = windowPositionStore
         self.screenModeDetector = screenModeDetector
+        self.mainScreenVisibleFrame = mainScreenVisibleFrame
         self.logger = logger
         self.recencyFilePath = recencyFilePath
         self.configLoader = configLoader
@@ -657,6 +662,23 @@ public final class ProjectManager {
         }
     }
 
+    /// Recovers the focused window if it is off-screen or oversized.
+    ///
+    /// Non-fatal: logs the outcome but never fails the calling focus operation.
+    /// Requires both `windowPositioner` and `mainScreenVisibleFrame` to be set.
+    private func recoverFocusedWindowIfNeeded(bundleId: String) {
+        guard let windowPositioner,
+              let screenFrame = mainScreenVisibleFrame?() else { return }
+        switch windowPositioner.recoverFocusedWindow(bundleId: bundleId, screenVisibleFrame: screenFrame) {
+        case .success(.recovered):
+            logEvent("focus.recovery.recovered", context: ["bundle_id": bundleId])
+        case .success(.unchanged), .success(.notFound):
+            break
+        case .failure(let error):
+            logEvent("focus.recovery.failed", level: .warn, message: error.message, context: ["bundle_id": bundleId])
+        }
+    }
+
     private func updateMostRecentNonProjectFocus(_ focus: CapturedFocus) {
         guard !focus.workspace.hasPrefix(Self.workspacePrefix) else { return }
         let entry = FocusHistoryEntry(focus: focus, capturedAt: Date())
@@ -865,6 +887,7 @@ public final class ProjectManager {
             timeout: windowPollTimeout,
             pollInterval: windowPollInterval
         ) {
+            recoverFocusedWindowIfNeeded(bundleId: resolved.appBundleId)
             updateMostRecentNonProjectFocus(resolved)
             let successSnapshot = focusHistorySnapshot()
             let successContext = focusHistoryContext(
@@ -1452,6 +1475,7 @@ public final class ProjectManager {
                   !windows.isEmpty else { continue }
             guard focusWorkspace(name: candidate.workspace) else { continue }
             guard let focused = focusFirstWindow(windows) else { continue }
+            recoverFocusedWindowIfNeeded(bundleId: focused.appBundleId)
             updateMostRecentNonProjectFocus(focused)
             return candidate.workspace
         }

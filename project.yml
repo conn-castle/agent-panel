@@ -10,8 +10,8 @@ packages:
     url: https://github.com/dduan/TOMLDecoder
     exactVersion: 0.4.3
 
-targets:
-  AgentPanel:
+targetTemplates:
+  AgentPanelAppTarget:
     type: application
     platform: macOS
     sources:
@@ -22,18 +22,33 @@ targets:
       - package: TOMLDecoder
     settings:
       base:
-        PRODUCT_NAME: AgentPanel
-        PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
         INFOPLIST_FILE: AgentPanelApp/Info.plist
         MARKETING_VERSION: "0.1.11"
         CURRENT_PROJECT_VERSION: 10
         CODE_SIGN_ENTITLEMENTS: release/AgentPanel.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+targets:
+  AgentPanel:
+    templates:
+      - AgentPanelAppTarget
+    settings:
+      base:
+        PRODUCT_NAME: AgentPanel
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel
       configs:
         Release:
           CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Developer ID Application
           ENABLE_HARDENED_RUNTIME: YES
+
+  AgentPanelDev:
+    templates:
+      - AgentPanelAppTarget
+    settings:
+      base:
+        PRODUCT_NAME: AgentPanel Dev
+        PRODUCT_BUNDLE_IDENTIFIER: com.agentpanel.AgentPanel.dev
 
   AgentPanelCore:
     type: framework.static
@@ -138,3 +153,8 @@ schemes:
         - AgentPanelCoreTests
         - AgentPanelAppTests
         - AgentPanelCLITests
+
+  AgentPanelDev:
+    build:
+      targets:
+        AgentPanelDev: all

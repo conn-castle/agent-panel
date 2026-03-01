@@ -95,7 +95,7 @@ Incomplete:
 
 ## Phase 7 ✅ — Polish required features + harden daily use
 - Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
-- Window recovery and management: "Move Current Window", "Recover Project" / "Recover All Windows" menu items.
+- Window recovery and management: "Move Current Window", "Recover Current Window", "Recover Project" / "Recover All Projects" menu items.
 - Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
 - AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
 - UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
@@ -120,12 +120,15 @@ Incomplete:
 - Ship robust in-app updating and update signaling using a standard framework.
 - Expand recovery behavior for both focused-window and non-project contexts.
 - Deliver high-impact onboarding and Chrome workspace quality improvements.
+- Support side-by-side dev/release app installs with distinct macOS app identities.
 
 ### Tasks
+- [x] Split dev vs release app identity: add `AgentPanelDev` target/scheme with `PRODUCT_NAME=AgentPanel Dev` and `PRODUCT_BUNDLE_IDENTIFIER=com.agentpanel.AgentPanel.dev`, add `make build-dev`, and keep shared `~/.config/agent-panel` + `~/.local/state/agent-panel` paths.
 - [ ] Implement full best-practices self-update using a framework for AgentPanel app updates (signed update feed, signature verification, staged install/relaunch UX, and explicit failure reporting).
 - [ ] Add update-available signaling in the app UI (menu indicator + latest version detail + update action entry point).
-- [ ] Auto recover a single window.
-- [ ] Get auto recovery for project working when not on project; recover all non-project windows.
+- [x] Auto recover a single window.
+- [x] Get auto recovery for project working when not on project; recover non-project windows on the current desktop.
+- [x] Add switcher `Cmd+R` shortcut to trigger Recover Project for the focused workspace and surface the shortcut in switcher footer hints.
 - [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
 - [ ] Chrome profile selection in config: Implement support for selecting specific Chrome profiles via config.toml (`chromeProfile` key or similar). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts. Chrome windows for a project open using the profile specified in the project's configuration. May involve using `--profile-directory` or similar Chrome CLI flags.
 - [ ] Auto-associate existing Chrome window in project workspace: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one. Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen. Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
@@ -135,6 +138,7 @@ Incomplete:
 - The app visibly flags update availability with clear current/latest version information and graceful offline behavior.
 - Single-window recovery and non-project recovery flows are available, deterministic, and validated.
 - UI add-project flow, Chrome profile selection, and Chrome auto-association are implemented and documented.
+- Dev and release app variants can be built and installed side-by-side with distinct bundle IDs and separate Accessibility/Automation permission entries.
 
 ## Phase 11 — Future features
 

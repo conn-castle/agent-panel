@@ -4,7 +4,7 @@ This document covers how to create a new release. Releases are built, signed, no
 
 ## Prerequisites
 
-The GitHub repository must have a `release` environment configured with the following secrets and variables. See `human_setup.md` (not tracked in git) for the one-time setup process.
+The GitHub repository must have a `release` environment configured with the following secrets and variables. If your local `human_setup.md` runbook is unavailable, use the tables below as the source of truth.
 
 The release workflow requires **Xcode 26+** and fails early when an older Xcode is selected. This keeps release artifacts aligned with the current CI/local toolchain baseline.
 

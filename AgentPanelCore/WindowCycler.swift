@@ -172,16 +172,22 @@ public struct WindowCycler {
     /// Cycles focus to the next or previous window in the focused workspace.
     ///
     /// - Parameter direction: `.next` for forward cycling, `.previous` for backward.
-    /// - Returns: `.success(())` if focus was cycled or no action was needed,
-    ///   `.failure` if AeroSpace returned an error.
-    public func cycleFocus(direction: CycleDirection) -> Result<Void, ApCoreError> {
+    /// - Returns: `.success(candidate)` with the focused candidate on success,
+    ///   `.success(nil)` if no cycling was needed (0/1 windows),
+    ///   or `.failure` if AeroSpace returned an error.
+    public func cycleFocus(direction: CycleDirection) -> Result<WindowCycleCandidate?, ApCoreError> {
         switch startSession(direction: direction) {
         case .failure(let error):
             return .failure(error)
         case .success(nil):
-            return .success(())
+            return .success(nil)
         case .success(let session?):
-            return commitSelection(session: session)
+            switch commitSelection(session: session) {
+            case .success:
+                return .success(session.selectedCandidate)
+            case .failure(let error):
+                return .failure(error)
+            }
         }
     }
 
