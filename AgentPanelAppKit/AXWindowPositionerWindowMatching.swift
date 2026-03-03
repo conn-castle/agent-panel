@@ -141,6 +141,97 @@ extension AXWindowPositioner {
         return .success(allMatches.map { $0.element })
     }
 
+    // MARK: - Fallback Window Resolution
+
+    /// Finds an unambiguous window for the given app, ignoring token matching.
+    ///
+    /// Selection strategy:
+    /// 1. If exactly one window exists across all app instances, use it.
+    /// 2. If multiple windows exist, prefer the app's AX focused window.
+    /// 3. If ambiguous (multiple windows, none focused), return `.failure` with inventory.
+    ///
+    /// Returns the resolved AXUIElement and the total window count for diagnostics.
+    func findFocusedOrOnlyWindow(bundleId: String) -> Result<(element: AXUIElement, windowCount: Int, titles: [String]), ApCoreError> {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId)
+        guard !apps.isEmpty else {
+            return .failure(ApCoreError(
+                category: .window,
+                message: "No running application with bundle ID '\(bundleId)'"
+            ))
+        }
+
+        let sortedPids = apps.map { $0.processIdentifier }.sorted()
+        var allWindows: [(title: String, element: AXUIElement)] = []
+        var lastEnumerationError: AXError?
+        var failedPids: [pid_t] = []
+
+        for pid in sortedPids {
+            let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, Self.axTimeoutSeconds)
+
+            var windowsValue: AnyObject?
+            let result = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsValue)
+            guard result == .success, let windows = windowsValue as? [AXUIElement] else {
+                lastEnumerationError = result
+                failedPids.append(pid)
+                continue
+            }
+
+            for window in windows {
+                AXUIElementSetMessagingTimeout(window, Self.axTimeoutSeconds)
+                let title = readTitle(element: window, bundleId: bundleId) ?? "<untitled>"
+                allWindows.append((title: title, element: window))
+            }
+        }
+
+        if !failedPids.isEmpty {
+            let pidList = failedPids.map(String.init).joined(separator: ", ")
+            let axDetail = lastEnumerationError.map { "AX error: \($0.rawValue)" } ?? "unknown"
+            return .failure(ApCoreError(
+                category: .window,
+                message: "Failed to enumerate complete window inventory for \(bundleId); fallback requires complete inventory (failed PIDs: [\(pidList)])",
+                detail: "\(axDetail) (may indicate missing Accessibility permission)"
+            ))
+        }
+
+        let titles = allWindows.map { $0.title }
+
+        guard !allWindows.isEmpty else {
+            return .failure(ApCoreError(
+                category: .window,
+                message: "No windows found for \(bundleId) (0 windows enumerated)"
+            ))
+        }
+
+        // Unambiguous: exactly one window
+        if allWindows.count == 1 {
+            return .success((element: allWindows[0].element, windowCount: 1, titles: titles))
+        }
+
+        // Multiple windows: prefer the app's AX focused window
+        for pid in sortedPids {
+            let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, Self.axTimeoutSeconds)
+
+            var focusedValue: AnyObject?
+            let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedValue)
+            if result == .success,
+               let ref = focusedValue,
+               CFGetTypeID(ref) == AXUIElementGetTypeID() {
+                let element = ref as! AXUIElement
+                AXUIElementSetMessagingTimeout(element, Self.axTimeoutSeconds)
+                return .success((element: element, windowCount: allWindows.count, titles: titles))
+            }
+        }
+
+        // Ambiguous: multiple windows, none focused
+        let titleList = titles.joined(separator: ", ")
+        return .failure(ApCoreError(
+            category: .window,
+            message: "Ambiguous: \(allWindows.count) windows found for \(bundleId), none focused. Titles: [\(titleList)]"
+        ))
+    }
+
     // MARK: - AX Attribute Read/Write
 
     private func readTitle(element: AXUIElement, bundleId: String) -> String? {

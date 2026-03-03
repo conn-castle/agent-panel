@@ -497,6 +497,8 @@ public final class WindowRecoveryManager {
         let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
 
         let token = "\(ApIdeToken.prefix)\(projectId)"
+        let recoveryRetryInterval: TimeInterval = 0.1
+        let maxRecoveryRetries = 3
         var recovered = 0
         var handledWindowIds: Set<Int> = []
 
@@ -504,24 +506,106 @@ public final class WindowRecoveryManager {
             let tokenMatchingWindows = workspaceWindows.filter {
                 $0.appBundleId == target.bundleId && $0.windowTitle.contains(token)
             }
+            let allBundleWindows = workspaceWindows.filter { $0.appBundleId == target.bundleId }
+            let fallbackAnchorWindow: ApWindow? = {
+                if tokenMatchingWindows.count == 1 { return tokenMatchingWindows[0] }
+                if allBundleWindows.count == 1 { return allBundleWindows[0] }
+                return nil
+            }()
 
-            switch windowPositioner.setWindowFrames(
-                bundleId: target.bundleId,
-                projectId: projectId,
-                primaryFrame: targetLayout[keyPath: target.frameKeyPath],
-                cascadeOffsetPoints: cascadeOffsetPoints
-            ) {
-            case .success(let result):
-                recovered += min(result.positioned, tokenMatchingWindows.count)
-                for w in tokenMatchingWindows {
-                    handledWindowIds.insert(w.windowId)
+            // Bounded retry for transient token-miss errors, then fallback
+            var attempt = 0
+            retryLoop: while true {
+                attempt += 1
+                switch windowPositioner.setWindowFrames(
+                    bundleId: target.bundleId,
+                    projectId: projectId,
+                    primaryFrame: targetLayout[keyPath: target.frameKeyPath],
+                    cascadeOffsetPoints: cascadeOffsetPoints
+                ) {
+                case .success(let result):
+                    if attempt > 1 {
+                        logEvent("recover_layout.\(target.label.lowercased())_retried", context: [
+                            "attempts": "\(attempt)"
+                        ])
+                    }
+                    recovered += min(result.positioned, tokenMatchingWindows.count)
+                    if result.hasPartialFailure || result.positioned < tokenMatchingWindows.count {
+                        logEvent("recover_layout.\(target.label.lowercased())_partial", level: .warn, context: [
+                            "positioned": "\(result.positioned)", "matched": "\(result.matched)"
+                        ])
+                        // Keep token windows eligible for generic recovery when layout positioning
+                        // does not fully succeed and we cannot map successful AX writes to IDs.
+                    } else {
+                        for w in tokenMatchingWindows {
+                            handledWindowIds.insert(w.windowId)
+                        }
+                    }
+                    logEvent("recover_layout.\(target.label.lowercased())_positioned", context: [
+                        "positioned": "\(result.positioned)", "matched": "\(result.matched)"
+                    ])
+                    break retryLoop
+                case .failure(let error):
+                    let isTransient = error.message.hasPrefix("No window found with token")
+                    if isTransient && attempt < maxRecoveryRetries {
+                        Thread.sleep(forTimeInterval: recoveryRetryInterval)
+                        continue
+                    }
+                    // Retry exhausted or permanent error — try fallback
+                    if isTransient {
+                        guard let fallbackAnchorWindow else {
+                            logEvent("recover_layout.\(target.label.lowercased())_fallback_ambiguous", level: .warn, context: [
+                                "attempts": "\(attempt)",
+                                "workspace_bundle_windows": "\(allBundleWindows.count)",
+                                "token_windows": "\(tokenMatchingWindows.count)"
+                            ])
+                            errors.append(
+                                "Recovery \(target.label) positioning failed: fallback requires exactly one workspace window (found \(allBundleWindows.count))"
+                            )
+                            break retryLoop
+                        }
+
+                        if case .failure(let focusError) = aerospace.focusWindow(windowId: fallbackAnchorWindow.windowId) {
+                            logEvent("recover_layout.\(target.label.lowercased())_fallback_focus_failed", level: .warn,
+                                     message: focusError.message,
+                                     context: ["attempts": "\(attempt)", "window_id": "\(fallbackAnchorWindow.windowId)"])
+                            errors.append(
+                                "Recovery \(target.label) positioning failed: focus failed for fallback window \(fallbackAnchorWindow.windowId): \(focusError.message)"
+                            )
+                            break retryLoop
+                        }
+
+                        switch windowPositioner.setFallbackWindowFrames(
+                            bundleId: target.bundleId,
+                            primaryFrame: targetLayout[keyPath: target.frameKeyPath],
+                            cascadeOffsetPoints: cascadeOffsetPoints
+                        ) {
+                        case .success(let result):
+                            logEvent("recover_layout.\(target.label.lowercased())_fallback_used", level: .warn, context: [
+                                "attempts": "\(attempt)",
+                                "positioned": "\(result.positioned)",
+                                "window_id": "\(fallbackAnchorWindow.windowId)"
+                            ])
+                            if result.positioned > 0 {
+                                recovered += result.positioned
+                                handledWindowIds.insert(fallbackAnchorWindow.windowId)
+                            } else {
+                                errors.append("Recovery \(target.label) positioning failed: fallback positioned 0 windows")
+                            }
+                            break retryLoop
+                        case .failure(let fallbackError):
+                            logEvent("recover_layout.\(target.label.lowercased())_failed", level: .warn,
+                                     message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
+                                     context: ["attempts": "\(attempt)"])
+                            errors.append("Recovery \(target.label) positioning failed: \(fallbackError.message)")
+                            break retryLoop
+                        }
+                    } else {
+                        logEvent("recover_layout.\(target.label.lowercased())_failed", level: .warn, message: error.message)
+                        errors.append("Recovery \(target.label) positioning failed: \(error.message)")
+                        break retryLoop
+                    }
                 }
-                logEvent("recover_layout.\(target.label.lowercased())_positioned", context: [
-                    "positioned": "\(result.positioned)", "matched": "\(result.matched)"
-                ])
-            case .failure(let error):
-                logEvent("recover_layout.\(target.label.lowercased())_failed", level: .warn, message: error.message)
-                errors.append("Recovery \(target.label) positioning failed: \(error.message)")
             }
         }
 

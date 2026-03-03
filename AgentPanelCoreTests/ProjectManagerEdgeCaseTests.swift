@@ -850,19 +850,49 @@ private struct EdgeLoggerStub: AgentPanelLogging {
 
 private final class EdgeRecordingPositioner: WindowPositioning {
     var getFrameResults: [String: Result<CGRect, ApCoreError>] = [:]
+    /// Sequential results: each call shifts the first element. When empty, falls back to getFrameResults.
+    var getFrameSequences: [String: [Result<CGRect, ApCoreError>]] = [:]
     var setFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:]
+    /// Sequential results for setWindowFrames.
+    var setFrameSequences: [String: [Result<WindowPositionResult, ApCoreError>]] = [:]
     var trusted: Bool = true
     private(set) var setFrameCalls: [(bundleId: String, projectId: String)] = []
 
+    // Fallback method support
+    var getFallbackFrameResults: [String: Result<CGRect, ApCoreError>] = [:]
+    var setFallbackFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:]
+    private(set) var getFallbackFrameCalls: [String] = []
+    private(set) var setFallbackFrameCalls: [(bundleId: String, primaryFrame: CGRect)] = []
+
     func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
         let key = "\(bundleId)|\(projectId)"
+        if var seq = getFrameSequences[key], !seq.isEmpty {
+            let result = seq.removeFirst()
+            getFrameSequences[key] = seq
+            return result
+        }
         return getFrameResults[key] ?? .failure(ApCoreError(category: .window, message: "no stub"))
     }
 
     func setWindowFrames(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
         setFrameCalls.append((bundleId, projectId))
         let key = "\(bundleId)|\(projectId)"
+        if var seq = setFrameSequences[key], !seq.isEmpty {
+            let result = seq.removeFirst()
+            setFrameSequences[key] = seq
+            return result
+        }
         return setFrameResults[key] ?? .success(WindowPositionResult(positioned: 1, matched: 1))
+    }
+
+    func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError> {
+        getFallbackFrameCalls.append(bundleId)
+        return getFallbackFrameResults[bundleId] ?? .failure(ApCoreError(category: .window, message: "Fallback not available"))
+    }
+
+    func setFallbackWindowFrames(bundleId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
+        setFallbackFrameCalls.append((bundleId, primaryFrame))
+        return setFallbackFrameResults[bundleId] ?? .failure(ApCoreError(category: .window, message: "Fallback not available"))
     }
 
     func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> { .success(.unchanged) }

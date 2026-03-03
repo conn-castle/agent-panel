@@ -114,6 +114,50 @@ public struct AXWindowPositioner: WindowPositioning {
         return .success(WindowPositionResult(positioned: positioned, matched: matches.count))
     }
 
+    public func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError> {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        defer {
+            let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            Self.logger.debug("ax.get_fallback_frame bundleId=\(bundleId) elapsed=\(String(format: "%.1f", ms))ms")
+        }
+
+        switch findFocusedOrOnlyWindow(bundleId: bundleId) {
+        case .success(let match):
+            Self.logger.info("ax.fallback_resolved bundleId=\(bundleId) windowCount=\(match.windowCount)")
+            return readFrameNSScreen(element: match.element, bundleId: bundleId)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    public func setFallbackWindowFrames(
+        bundleId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError> {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        defer {
+            let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            Self.logger.debug("ax.set_fallback_frames bundleId=\(bundleId) elapsed=\(String(format: "%.1f", ms))ms")
+        }
+
+        let element: AXUIElement
+        switch findFocusedOrOnlyWindow(bundleId: bundleId) {
+        case .success(let match):
+            element = match.element
+            Self.logger.info("ax.fallback_set_resolved bundleId=\(bundleId) windowCount=\(match.windowCount)")
+        case .failure(let error):
+            return .failure(error)
+        }
+
+        switch writeFrameNSScreen(element: element, frame: primaryFrame, bundleId: bundleId) {
+        case .success:
+            return .success(WindowPositionResult(positioned: 1, matched: 1))
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
     public func isAccessibilityTrusted() -> Bool {
         let t0 = CFAbsoluteTimeGetCurrent()
         let trusted = AXIsProcessTrusted()
