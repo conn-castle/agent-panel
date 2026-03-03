@@ -228,6 +228,10 @@ public final class ProjectManager {
     private var mostRecentNonProjectFocus: FocusHistoryEntry?
     // Retry bookkeeping for focus candidates that fail to stabilize.
     private var focusRestoreRetryAttemptsByWindowId: [Int: Int] = [:]
+    /// Per-project snapshot of the focus state at action-initiation time.
+    /// When a user activates Project B from Project A's window, this stores A's window
+    /// under key "B". On close of B, we try to restore A's window first.
+    private var preEntryFocus: [String: FocusHistoryEntry] = [:]
 
     // Serializes all mutable state across background + main usage.
     private let stateQueue = DispatchQueue(label: "com.agentpanel.project_manager.state")
@@ -488,6 +492,13 @@ public final class ProjectManager {
             focusRestoreRetryAttemptsByWindowId[focus.windowId] = 0
         }
         persistFocusHistory()
+    }
+
+    /// Test helper: sets the pre-entry focus for a project (simulates selectProject storing it).
+    func setPreEntryFocusForTest(projectId: String, focus: CapturedFocus) {
+        withState {
+            preEntryFocus[projectId] = FocusHistoryEntry(focus: focus, capturedAt: Date())
+        }
     }
 
     /// Loads configuration from the default path.
@@ -1109,6 +1120,18 @@ public final class ProjectManager {
                 ])
             }
 
+            // Store pre-entry focus for close-project restoration.
+            // Captures ALL pre-action focuses (including cross-project transitions)
+            // so closing Project B after A→B returns to Project A's window.
+            withState {
+                preEntryFocus[projectId] = FocusHistoryEntry(focus: preCapturedFocus, capturedAt: Date())
+            }
+            logEvent("focus.pre_entry_stored", context: [
+                "project_id": projectId,
+                "source_window_id": "\(preCapturedFocus.windowId)",
+                "source_workspace": preCapturedFocus.workspace
+            ])
+
             // Capture window positions for the source project before switching away.
             // Only when coming from another project workspace (ap-*).
             if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
@@ -1291,8 +1314,43 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to non-project space; if global lookup fails, restore uses persisted history directly.
-        let restoredFocus = restoreNonProjectFocus(windowLookup: listAllWindowsById())
+        // Try restoring the focus that was active when this project was first entered.
+        // This handles cross-project transitions (A→B→close B→restore A) that the
+        // non-project focus stack cannot track.
+        let preEntry: FocusHistoryEntry? = withState { preEntryFocus.removeValue(forKey: projectId) }
+        let windowLookup = listAllWindowsById()
+        var restoredFocus: CapturedFocus?
+
+        if let preEntry {
+            // Never restore to the workspace currently being closed.
+            // This can happen if a stale/same-project pre-entry snapshot exists.
+            if preEntry.focus.workspace == workspace {
+                logEvent("close.pre_entry_focus_skipped_same_workspace", context: [
+                    "project_id": projectId,
+                    "workspace": workspace,
+                    "window_id": "\(preEntry.focus.windowId)"
+                ])
+            } else if let windowLookup,
+                      windowLookup[preEntry.focus.windowId] != nil {
+                switch aerospace.focusWindow(windowId: preEntry.focus.windowId) {
+                case .success:
+                    restoredFocus = preEntry.focus
+                    logEvent("close.focus_restored_pre_entry", context: [
+                        "project_id": projectId,
+                        "window_id": "\(preEntry.focus.windowId)",
+                        "app": preEntry.focus.appBundleId,
+                        "source_workspace": preEntry.focus.workspace
+                    ])
+                case .failure(let error):
+                    logEvent("close.pre_entry_focus_failed", level: .warn, message: error.message)
+                }
+            }
+        }
+
+        // Fall back to existing stack-based restoration if pre-entry didn't work.
+        if restoredFocus == nil {
+            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
+        }
 
         if let focus = restoredFocus {
             logEvent("close.focus_restored", context: [

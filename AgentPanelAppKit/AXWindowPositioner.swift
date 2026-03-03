@@ -77,7 +77,10 @@ public struct AXWindowPositioner: WindowPositioning {
             ))
         }
 
-        // Determine the screen containing the primary frame for cascade clamping
+        // Screen-selection heuristic: find which screen contains the target midpoint
+        // so cascading windows are clamped to the correct display. This intentionally
+        // uses a simple midpoint containment test (not the area-based threshold used
+        // by recovery) because we need a single best-match screen, not a go/no-go decision.
         let screenFrame = NSScreen.screens.first {
             $0.visibleFrame.contains(CGPoint(x: primaryFrame.midX, y: primaryFrame.midY))
         }?.visibleFrame
@@ -265,6 +268,23 @@ public struct AXWindowPositioner: WindowPositioning {
         }
     }
 
+    /// Fraction of window area that must be off-screen to trigger recovery.
+    /// A 10% threshold catches partially-visible windows where the midpoint is
+    /// still on-screen but significant content is clipped.
+    static let offscreenRecoveryThreshold: CGFloat = 0.10
+
+    /// Returns the fraction of a window's area that lies outside the given screen frame.
+    ///
+    /// - Returns: A value in `[0, 1]`, or `nil` if the window has zero area
+    ///   (either dimension is zero).
+    static func offscreenCoverage(windowFrame: CGRect, screenFrame: CGRect) -> CGFloat? {
+        let standardized = windowFrame.standardized
+        let windowArea = standardized.width * standardized.height
+        guard windowArea > 0 else { return nil }
+        let onScreenArea = intersectionArea(screenFrame, standardized)
+        return (windowArea - onScreenArea) / windowArea
+    }
+
     /// Returns a recovered frame (shrunk to fit, centered) if the window is off-screen
     /// or oversized. Returns `nil` if the window already fits.
     static func computeRecoveredFrame(
@@ -273,9 +293,14 @@ public struct AXWindowPositioner: WindowPositioning {
     ) -> CGRect? {
         let needsShrinkWidth = currentFrame.width > screenVisibleFrame.width
         let needsShrinkHeight = currentFrame.height > screenVisibleFrame.height
-        let isOffScreen = !screenVisibleFrame.contains(
-            CGPoint(x: currentFrame.midX, y: currentFrame.midY)
-        )
+
+        let isOffScreen: Bool
+        if let coverage = offscreenCoverage(windowFrame: currentFrame, screenFrame: screenVisibleFrame) {
+            isOffScreen = coverage > offscreenRecoveryThreshold
+        } else {
+            // Zero-area window — not recoverable.
+            isOffScreen = false
+        }
 
         guard needsShrinkWidth || needsShrinkHeight || isOffScreen else {
             return nil

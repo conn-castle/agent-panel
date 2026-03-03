@@ -10,6 +10,7 @@
 		010E7BDDB64C676DFAE7203A /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6015F4E5793AFDC8F7DF575 /* HotkeyManager.swift */; };
 		01A4337E85FF3BD89B789098 /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 1DD44D941F769ACBCEB6C63F /* TOMLDecoder */; };
 		01D51833F3464779361E5EE1 /* LoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFEA52B096500A617A9783 /* LoggerTests.swift */; };
+		01D9CA65632261796F2A05F6 /* AeroSpaceCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E03A7A01AED226CFB26CC0E /* AeroSpaceCompatibility.swift */; };
 		03BEE37A5A3CA803A17B9B9B /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = BDB5BEA283FCCF7063B76969 /* TOMLDecoder */; };
 		054FB3CEFA90F1AC223E30D2 /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
 		0563D807E75A5AAA485BE4DA /* ErrorContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */; };
@@ -18,6 +19,7 @@
 		0A9D9F52EF8359CA874498CC /* ChromeConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8EF52077E9BE5CDECD6C61 /* ChromeConfigTests.swift */; };
 		0BE04D807C8BA5B5C554DEDB /* ConfigParserGlobalSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23786AE3CABB5657D1F2EA1D /* ConfigParserGlobalSections.swift */; };
 		0CC7C30ED18250F29ED6809B /* AgentPanelCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B89C3DA5AE4025D43AEFF1F6 /* AgentPanelCore.framework */; };
+		0D100DF974B98F457EC2E384 /* AeroSpaceCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DA8B20E241BA7F4D851150B /* AeroSpaceCommandTransport.swift */; };
 		0DDF42CE7E81D0B7064840F2 /* ProjectManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CC240A74C38218E4C33B36B /* ProjectManager.swift */; };
 		0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */; };
 		11D9E5C68EB936547EEE46A8 /* SwitcherSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E12670FF87D9A5EC1ADA7 /* SwitcherSession.swift */; };
@@ -44,6 +46,7 @@
 		255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */; };
 		29DA27D454BB7B4314632482 /* AppConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B3CFD02BB3D49CBCB70F7BF /* AppConfigTests.swift */; };
 		2A810B0BCCF033B5CA32CBFA /* WindowCycler.swift in Sources */ = {isa = PBXBuildFile; fileRef = C152889C3F2C9097CB66DE13 /* WindowCycler.swift */; };
+		2AD4A15AB84B23DB35CD4402 /* DoctorActivationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FD67FDD38B183122EAFE7B4 /* DoctorActivationTests.swift */; };
 		2BD9383F76BEA285D638339E /* FocusHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E5F87E9B834D2CF33BA70D /* FocusHistoryStore.swift */; };
 		2D004103669A5EBBB770F1AF /* WindowRecoveryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0FA6B487E72C63168C91525 /* WindowRecoveryManager.swift */; };
 		2DA0A01C8AA224575487D65F /* AgentPanelApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33011E68C3F32399FC4A5408 /* AgentPanelApp.swift */; };
@@ -107,6 +110,7 @@
 		88E2327FF7D81CD7C4B9FFB5 /* ConfigParserHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEAF4885D9ECE13D7D08100 /* ConfigParserHelpers.swift */; };
 		89352ED066D4230A089016ED /* TOMLDecoder in Frameworks */ = {isa = PBXBuildFile; productRef = 32AABCDA8E094E52F9B718B4 /* TOMLDecoder */; };
 		8962B464CBE20D3D3AC848DB /* WindowCycleOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E889482DE8B9E43D5F2B3E7 /* WindowCycleOverlayController.swift */; };
+		8BA002B4626B685791046B4C /* AeroSpaceParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6014CCF414C8E9183D604B5 /* AeroSpaceParser.swift */; };
 		8E0CC4EB285463C6F72EF24B /* DoctorWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DDE5E49E88AA30CBDA98203 /* DoctorWindowController.swift */; };
 		91154669AF8FB7CF054D2961 /* WindowCycleOverlayCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FB9A1AB3DB9720C1092952 /* WindowCycleOverlayCoordinator.swift */; };
 		911B77A51564FA54F939ABA7 /* AccessibilityStartupPromptGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B09A95D6863DC3EDC40EE478 /* AccessibilityStartupPromptGateTests.swift */; };
@@ -319,6 +323,7 @@
 		6C4F78292D1AA1E00396BB86 /* ChromeTabStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabStoreTests.swift; sourceTree = "<group>"; };
 		6C8E9CF917B3E9C1AF573815 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6DD9C2D933614F56A766F300 /* WorkspaceRouting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceRouting.swift; sourceTree = "<group>"; };
+		6E03A7A01AED226CFB26CC0E /* AeroSpaceCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCompatibility.swift; sourceTree = "<group>"; };
 		6E8DE3E79215020A2587A722 /* Errors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Errors.swift; sourceTree = "<group>"; };
 		718A87C6BFC69D8D075A86CA /* SystemCommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunner.swift; sourceTree = "<group>"; };
 		7632C3BFC71ED54D57C69705 /* WindowCyclerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCyclerTests.swift; sourceTree = "<group>"; };
@@ -339,8 +344,10 @@
 		8B9A5ACE8DEFE166746BEF75 /* AeroSpaceCircuitBreaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCircuitBreaker.swift; sourceTree = "<group>"; };
 		8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VSCodeSettingsManagerRemoteTests.swift; sourceTree = "<group>"; };
 		8D9DD5D6EFEEEE1BAF5BA17E /* AeroSpaceFallbackBehaviorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceFallbackBehaviorTests.swift; sourceTree = "<group>"; };
+		8DA8B20E241BA7F4D851150B /* AeroSpaceCommandTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceCommandTransport.swift; sourceTree = "<group>"; };
 		8E0C94572B6882ED047B94AE /* ErrorContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorContextTests.swift; sourceTree = "<group>"; };
 		8E889482DE8B9E43D5F2B3E7 /* WindowCycleOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCycleOverlayController.swift; sourceTree = "<group>"; };
+		8FD67FDD38B183122EAFE7B4 /* DoctorActivationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorActivationTests.swift; sourceTree = "<group>"; };
 		90C7BFA350C37FF25BCDC969 /* SystemCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerTests.swift; sourceTree = "<group>"; };
 		91616BD52F8F0B9C3B94A6D4 /* ChromeTabResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabResolverTests.swift; sourceTree = "<group>"; };
 		930B37D5D8A0F77FABC52946 /* ChromeTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeTabs.swift; sourceTree = "<group>"; };
@@ -377,6 +384,7 @@
 		BFD58F6D82CA6AB0DA4176B6 /* SSHHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHHelpers.swift; sourceTree = "<group>"; };
 		C152889C3F2C9097CB66DE13 /* WindowCycler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCycler.swift; sourceTree = "<group>"; };
 		C37E0D0D7CC05F2E42448932 /* IdNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdNormalizationTests.swift; sourceTree = "<group>"; };
+		C6014CCF414C8E9183D604B5 /* AeroSpaceParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AeroSpaceParser.swift; sourceTree = "<group>"; };
 		C8B5ED71DD97D8A4C6CC7755 /* FuzzyMatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FuzzyMatcherTests.swift; sourceTree = "<group>"; };
 		CB049349875901281339DAE9 /* LayoutConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutConfig.swift; sourceTree = "<group>"; };
 		CC772C2D446A9C1E174686C1 /* ConfigParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParser.swift; sourceTree = "<group>"; };
@@ -658,6 +666,7 @@
 		5002CCE87F8945257B0A9D9D /* AgentPanelAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				8FD67FDD38B183122EAFE7B4 /* DoctorActivationTests.swift */,
 				D8518B6406C5D08F07916FE1 /* LaunchAtLoginTogglerTests.swift */,
 				F33C8323F7FFF366C896EDF8 /* SwitcherFocusFlowTests.swift */,
 			);
@@ -701,8 +710,11 @@
 			isa = PBXGroup;
 			children = (
 				8B9A5ACE8DEFE166746BEF75 /* AeroSpaceCircuitBreaker.swift */,
+				8DA8B20E241BA7F4D851150B /* AeroSpaceCommandTransport.swift */,
+				6E03A7A01AED226CFB26CC0E /* AeroSpaceCompatibility.swift */,
 				351268AE41E22F84F634BF7F /* AeroSpaceConfigManager.swift */,
 				EAE2F960F23F83B2A30F8B4C /* AeroSpaceConfigModels.swift */,
+				C6014CCF414C8E9183D604B5 /* AeroSpaceParser.swift */,
 				D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */,
 			);
 			path = AeroSpace;
@@ -1031,8 +1043,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				FD1E0645C535E9DCD8C9DB88 /* AeroSpaceCircuitBreaker.swift in Sources */,
+				0D100DF974B98F457EC2E384 /* AeroSpaceCommandTransport.swift in Sources */,
+				01D9CA65632261796F2A05F6 /* AeroSpaceCompatibility.swift in Sources */,
 				255EEB9635EEC2C72CC90C23 /* AeroSpaceConfigManager.swift in Sources */,
 				EFF77F1F2DA3F0EFC4A52DBF /* AeroSpaceConfigModels.swift in Sources */,
+				8BA002B4626B685791046B4C /* AeroSpaceParser.swift in Sources */,
 				D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */,
 				A44D8A06EE6BCC913FC8933C /* ChromeTabs.swift in Sources */,
 				5141A819B89EBFC8A69B9211 /* Config.swift in Sources */,
@@ -1085,6 +1100,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2AD4A15AB84B23DB35CD4402 /* DoctorActivationTests.swift in Sources */,
 				43566340FE259F8F1D18BFB2 /* LaunchAtLoginTogglerTests.swift in Sources */,
 				57FBBB4742691FE73CD2DB42 /* SwitcherFocusFlowTests.swift in Sources */,
 			);

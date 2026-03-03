@@ -74,6 +74,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingCriticalContext: ErrorContext?
     private var lastHealthRefreshAt: Date?
     private var lastHotkeyToggleAt: Date?
+    /// Set when the accessibility permission prompt fires this launch.
+    /// Prevents Doctor's startup health refresh from stealing focus from the system dialog.
+    private var didPromptForAccessibilityThisLaunch = false
     private var menuFocusCapture: CapturedFocus?
     /// Cached workspace state for non-blocking menu population.
     /// Updated by background refreshes; read by `menuNeedsUpdate`.
@@ -300,6 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: "accessibility.startup_prompt.requested",
             context: ["build": currentBuild]
         )
+        didPromptForAccessibilityThisLaunch = true
         let trustedAfterPrompt = windowPositioner.promptForAccessibility()
         logAppEvent(
             event: "accessibility.startup_prompt.completed",
@@ -864,7 +868,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         event: "doctor.auto_show",
                         context: ["trigger": ctx.trigger, "category": ctx.category.rawValue]
                     )
-                    self.showDoctorReport(report)
+                    // Suppress activation when the accessibility prompt is still open
+                    // to avoid stealing focus from the system permission dialog.
+                    let skipActivation = trigger == "startup" && self.didPromptForAccessibilityThisLaunch
+                    self.showDoctorReport(report, skipActivation: skipActivation)
                 }
 
                 // Refresh cached workspace/focus state for non-blocking menu updates
@@ -1151,10 +1158,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   - report: Doctor report payload.
     ///   - capturedFocus: AeroSpace focus captured before showing the window (nil if re-opening).
     ///   - previousApp: Frontmost app captured before showing the window (nil if re-opening).
+    ///   - skipActivation: When `true`, the window appears without stealing focus via
+    ///     `NSApp.activate`. Used during startup when the accessibility prompt may be open.
     private func showDoctorReport(
         _ report: DoctorReport,
         capturedFocus: CapturedFocus? = nil,
-        previousApp: NSRunningApplication? = nil
+        previousApp: NSRunningApplication? = nil,
+        skipActivation: Bool = false
     ) {
         let controller = ensureDoctorController()
         // Only set focus state on first open (capturedFocus/previousApp are nil on re-runs).
@@ -1164,7 +1174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let previousApp {
             controller.previousApp = previousApp
         }
-        controller.showReport(report)
+        controller.showReport(report, skipActivation: skipActivation)
     }
 
     /// Ensures the DoctorWindowController exists and has callbacks configured.

@@ -35,25 +35,29 @@ final class DoctorWindowController: NSObject, NSWindowDelegate {
 
     // MARK: - Public Interface
 
-    func showLoading() {
+    func showLoading(skipActivation: Bool = false) {
         if window == nil {
             setupWindow()
         }
 
         setLoadingState()
 
-        NSApp.activate(ignoringOtherApps: true)
+        if !skipActivation {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func showReport(_ report: DoctorReport) {
+    func showReport(_ report: DoctorReport, skipActivation: Bool = false) {
         if window == nil {
             setupWindow()
         }
 
         updateUI(with: report)
 
-        NSApp.activate(ignoringOtherApps: true)
+        if !skipActivation {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         window?.makeKeyAndOrderFront(nil)
     }
 

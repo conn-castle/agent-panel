@@ -4,14 +4,6 @@ import os
 
 extension AXWindowPositioner {
     func readFrameNSScreen(element: AXUIElement, bundleId: String) -> Result<CGRect, ApCoreError> {
-        guard let primaryHeight = primaryScreenHeight() else {
-            return .failure(ApCoreError(
-                category: .system,
-                message: "Cannot determine primary display",
-                detail: "No NSScreen with origin (0,0) found"
-            ))
-        }
-
         // Read AX position
         var posValue: AnyObject?
         let t0 = CFAbsoluteTimeGetCurrent()
@@ -78,14 +70,12 @@ extension AXWindowPositioner {
         }
 
         // Convert AX → NSScreen
-        let nsX = axPosition.x
-        let nsY = primaryHeight - axPosition.y - axSize.height
-
-        return .success(CGRect(x: nsX, y: nsY, width: axSize.width, height: axSize.height))
-    }
-
-    func writeFrameNSScreen(element: AXUIElement, frame: CGRect, bundleId: String) -> Result<Void, ApCoreError> {
-        guard let primaryHeight = primaryScreenHeight() else {
+        let screenFrames = NSScreen.screens.map(\.frame)
+        guard let nsFrame = Self.axFrameToNSScreen(
+            axPosition: axPosition,
+            axSize: axSize,
+            screenFrames: screenFrames
+        ) else {
             return .failure(ApCoreError(
                 category: .system,
                 message: "Cannot determine primary display",
@@ -93,9 +83,29 @@ extension AXWindowPositioner {
             ))
         }
 
+        // Diagnostic: warn if converted frame center is off all known screens
+        let center = CGPoint(x: nsFrame.midX, y: nsFrame.midY)
+        if !Self.isPointOnScreen(center, screenFrames: screenFrames) {
+            Self.logger.warning("ax.read_frame_offscreen bundleId=\(bundleId) center=(\(String(format: "%.0f", center.x)), \(String(format: "%.0f", center.y)))")
+        }
+
+        return .success(nsFrame)
+    }
+
+    func writeFrameNSScreen(element: AXUIElement, frame: CGRect, bundleId: String) -> Result<Void, ApCoreError> {
         // Convert NSScreen → AX
-        let axX = frame.origin.x
-        let axY = primaryHeight - frame.origin.y - frame.height
+        guard let ax = Self.nsScreenFrameToAX(
+            frame: frame,
+            screenFrames: NSScreen.screens.map(\.frame)
+        ) else {
+            return .failure(ApCoreError(
+                category: .system,
+                message: "Cannot determine primary display",
+                detail: "No NSScreen with origin (0,0) found"
+            ))
+        }
+        let axX = ax.position.x
+        let axY = ax.position.y
 
         // Set AX position
         var axPosition = CGPoint(x: axX, y: axY)
@@ -140,12 +150,62 @@ extension AXWindowPositioner {
         return .success(())
     }
 
-    // MARK: - Primary Screen
+    // MARK: - Coordinate Conversion
 
-    /// Finds the primary screen height by looking for NSScreen with origin at (0, 0).
-    /// This is more robust than using `NSScreen.screens[0]`.
-    private func primaryScreenHeight() -> CGFloat? {
-        NSScreen.screens.first { $0.frame.origin == .zero }?.frame.height
+    /// Converts an AX-space position and size to an NSScreen-space frame.
+    ///
+    /// AX coordinate space: origin at top-left of primary display, Y increases downward.
+    /// NSScreen coordinate space: origin at bottom-left of primary display, Y increases upward.
+    /// Both are global coordinate spaces anchored to the primary display, so conversion
+    /// uses only the primary screen height as the Y-axis flip point. This formula is correct
+    /// for ALL displays, not just the primary.
+    ///
+    /// - Parameters:
+    ///   - axPosition: Window top-left in AX coordinates.
+    ///   - axSize: Window size.
+    ///   - screenFrames: Available screen frames in NSScreen coordinates.
+    /// - Returns: The window frame in NSScreen coordinates, or `nil` if the primary
+    ///   screen (origin 0,0) cannot be found.
+    static func axFrameToNSScreen(
+        axPosition: CGPoint,
+        axSize: CGSize,
+        screenFrames: [CGRect]
+    ) -> CGRect? {
+        guard let primaryHeight = screenFrames.first(where: { $0.origin == .zero })?.height else {
+            return nil
+        }
+        return CGRect(
+            x: axPosition.x,
+            y: primaryHeight - axPosition.y - axSize.height,
+            width: axSize.width,
+            height: axSize.height
+        )
+    }
+
+    /// Converts an NSScreen-space frame to AX-space position and size.
+    ///
+    /// Inverse of ``axFrameToNSScreen(axPosition:axSize:screenFrames:)``.
+    ///
+    /// - Parameters:
+    ///   - frame: Window frame in NSScreen coordinates (bottom-left origin).
+    ///   - screenFrames: Available screen frames in NSScreen coordinates.
+    /// - Returns: The AX position and size, or `nil` if the primary screen cannot be found.
+    static func nsScreenFrameToAX(
+        frame: CGRect,
+        screenFrames: [CGRect]
+    ) -> (position: CGPoint, size: CGSize)? {
+        guard let primaryHeight = screenFrames.first(where: { $0.origin == .zero })?.height else {
+            return nil
+        }
+        return (
+            CGPoint(x: frame.origin.x, y: primaryHeight - frame.origin.y - frame.height),
+            CGSize(width: frame.width, height: frame.height)
+        )
+    }
+
+    /// Returns whether the given NSScreen-space point falls on any of the provided screen frames.
+    static func isPointOnScreen(_ point: CGPoint, screenFrames: [CGRect]) -> Bool {
+        screenFrames.contains { $0.contains(point) }
     }
 
     // MARK: - Frame Clamping
