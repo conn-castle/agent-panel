@@ -27,6 +27,21 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
+- Issue 2026-03-04 doctor-circuit-breaker-bypass: Doctor CLI check fails when circuit breaker is open
+    Priority: High. Area: doctor
+    Description: `ApAeroSpace.isCliAvailable()` routes through `runAerospace()` which checks the circuit breaker first. When the breaker is open, the doctor falsely reports "aerospace CLI not available" and "Critical: AeroSpace setup incomplete" even though AeroSpace.app is installed and running. The doctor is a diagnostic tool and should independently verify actual system state, not reflect cached circuit-breaker state.
+    Next step: Add a direct CLI check method that bypasses the circuit breaker (e.g., call the command runner directly with `aerospace --help`), or give the Doctor its own `ApAeroSpace` instance with the circuit breaker disabled/reset.
+
+- Issue 2026-03-04 circuit-breaker-cascade-noise: Single AeroSpace timeout generates ~60 duplicate warnings across layers
+    Priority: Medium. Area: logging
+    Description: When the circuit breaker trips, each layer (ProjectManager focus capture, ProjectManager workspace state, Switcher focus, Switcher workspace state) independently logs warnings on every hotkey press and retry tick. A single timeout event at 17:56:46 generated ~60 of the 72 total warnings in today's log. No deduplication or throttling exists.
+    Next step: Suppress per-call warnings when the circuit breaker is already open (the transport layer already logs `circuit_breaker.tripped` once). Alternatively, add a throttle so repeated breaker-open failures log at most once per cooldown period per event type.
+
+- Issue 2026-03-04 token-retry-no-fast-fail: IDE window token retry loops 10 times when 0 windows are enumerated
+    Priority: Medium. Area: window-positioning
+    Description: In `ProjectManager+WindowPositioningActivation.swift`, the IDE frame read retries up to 10 times (at 0.1s intervals) even when `getFallbackWindowFrame()` returns "No windows found for com.microsoft.VSCode (0 windows enumerated)". Zero windows is a permanent condition (app not running or no windows open), making retries pointless. This adds ~1s latency to project switches when VS Code isn't open.
+    Next step: Detect the "0 windows enumerated" condition in the fallback error and exit the retry loop immediately instead of continuing.
+
 - Issue 2026-03-03 coordinator-coverage-gap: AppHealthCoordinator and MenuWorkspaceStateCoordinator lack direct unit tests
     Priority: Low. Area: tests
     Description: These coordinators were extracted from AgentPanelApp but have no dedicated test files. Behavior regressions in refresh scheduling, focus snapshot lifecycle, or state transitions are only caught indirectly through integration-level SwitcherFocusFlowTests.
