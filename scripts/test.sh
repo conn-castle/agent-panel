@@ -144,7 +144,7 @@ xcodebuild \
   -resultBundlePath "$result_bundle_path" \
   -enableCodeCoverage YES \
   -parallel-testing-enabled NO \
-  "${only_testing_args[@]}" \
+  ${only_testing_args[@]+"${only_testing_args[@]}"} \
   test \
   CODE_SIGNING_ALLOWED=NO \
   2>&1 | xcbeautify
