@@ -1120,18 +1120,6 @@ public final class ProjectManager {
                 ])
             }
 
-            // Store pre-entry focus for close-project restoration.
-            // Captures ALL pre-action focuses (including cross-project transitions)
-            // so closing Project B after A→B returns to Project A's window.
-            withState {
-                preEntryFocus[projectId] = FocusHistoryEntry(focus: preCapturedFocus, capturedAt: Date())
-            }
-            logEvent("focus.pre_entry_stored", context: [
-                "project_id": projectId,
-                "source_window_id": "\(preCapturedFocus.windowId)",
-                "source_workspace": preCapturedFocus.workspace
-            ])
-
             // Capture window positions for the source project before switching away.
             // Only when coming from another project workspace (ap-*).
             if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
@@ -1276,6 +1264,19 @@ public final class ProjectManager {
         // Position windows (non-fatal)
         let layoutWarning = positionWindows(projectId: projectId)
 
+        // Store pre-entry focus for close-project restoration now that activation
+        // succeeded. Stored here (not earlier) so failure paths never leave stale entries.
+        if let preCapturedFocus {
+            withState {
+                preEntryFocus[projectId] = FocusHistoryEntry(focus: preCapturedFocus, capturedAt: Date())
+            }
+            logEvent("focus.pre_entry_stored", context: [
+                "project_id": projectId,
+                "source_window_id": "\(preCapturedFocus.windowId)",
+                "source_workspace": preCapturedFocus.workspace
+            ])
+        }
+
         // Record activation
         recordActivation(projectId: projectId)
         logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindowId)"])
@@ -1330,8 +1331,9 @@ public final class ProjectManager {
                     "workspace": workspace,
                     "window_id": "\(preEntry.focus.windowId)"
                 ])
-            } else if let windowLookup,
-                      windowLookup[preEntry.focus.windowId] != nil {
+            } else if windowLookup == nil || windowLookup?[preEntry.focus.windowId] != nil {
+                // Attempt restore even when lookup is unavailable (transient failure);
+                // use lookup only as a validation step when present.
                 switch aerospace.focusWindow(windowId: preEntry.focus.windowId) {
                 case .success:
                     restoredFocus = preEntry.focus
@@ -1339,11 +1341,17 @@ public final class ProjectManager {
                         "project_id": projectId,
                         "window_id": "\(preEntry.focus.windowId)",
                         "app": preEntry.focus.appBundleId,
-                        "source_workspace": preEntry.focus.workspace
+                        "source_workspace": preEntry.focus.workspace,
+                        "lookup_available": "\(windowLookup != nil)"
                     ])
                 case .failure(let error):
                     logEvent("close.pre_entry_focus_failed", level: .warn, message: error.message)
                 }
+            } else {
+                logEvent("close.pre_entry_focus_window_gone", context: [
+                    "project_id": projectId,
+                    "window_id": "\(preEntry.focus.windowId)"
+                ])
             }
         }
 

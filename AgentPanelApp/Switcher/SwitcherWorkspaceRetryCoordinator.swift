@@ -118,19 +118,16 @@ final class SwitcherWorkspaceRetryCoordinator {
 
     /// Handles a single tick of the retry timer.
     ///
-    /// Runs on a background queue. Guards against stale timers by checking
-    /// both session ID and retry generation. Does NOT call `cancelRetry()`
-    /// when the tick is stale, because a newer timer may already be active.
+    /// The workspace query runs on the timer's background queue; all state
+    /// reads/writes (generation, count, callbacks) happen on the main thread
+    /// to avoid data races.
     private func handleRetryTick(expectedSessionId: String?, expectedGeneration: UInt64) {
-        guard expectedSessionId == session.sessionId, expectedGeneration == retryGeneration else {
-            return
-        }
-
         let result = projectManager.workspaceState()
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            guard expectedGeneration == self.retryGeneration else { return }
+            guard expectedSessionId == self.session.sessionId,
+                  expectedGeneration == self.retryGeneration else { return }
             self.retryCount += 1
 
             switch result {
