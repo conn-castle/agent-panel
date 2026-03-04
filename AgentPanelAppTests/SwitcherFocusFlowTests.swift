@@ -467,9 +467,15 @@ final class SwitcherFocusFlowTests: XCTestCase {
             ApWorkspaceSummary(workspace: "ap-\(projectId)", isFocused: true)
         ])
 
-        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
         let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
-        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+        let config = Config(projects: [project], chrome: ChromeConfig())
+        let manager = makeProjectManager(
+            aerospace: aerospace,
+            logger: logger,
+            fileSystem: fileSystem,
+            configLoader: { .success(ConfigLoadSuccess(config: config)) }
+        )
+        manager.loadTestConfig(config)
 
         let controller = SwitcherPanelController(logger: logger, projectManager: manager)
         controller.show(
@@ -1088,7 +1094,8 @@ final class SwitcherFocusFlowTests: XCTestCase {
     private func makeProjectManager(
         aerospace: TestAeroSpaceStub,
         logger: RecordingLogger,
-        fileSystem: InMemoryFileSystem
+        fileSystem: InMemoryFileSystem,
+        configLoader: (() -> Result<ConfigLoadSuccess, ConfigLoadError>)? = nil
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: "/recency.json", isDirectory: false)
         let focusHistoryFilePath = URL(fileURLWithPath: "/focus-history.json", isDirectory: false)
@@ -1105,6 +1112,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
             logger: logger,
             recencyFilePath: recencyFilePath,
             focusHistoryFilePath: focusHistoryFilePath,
+            configLoader: configLoader ?? { Config.loadDefault() },
             fileSystem: fileSystem,
             windowPollTimeout: 0.5,
             windowPollInterval: 0.05
