@@ -315,3 +315,33 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Extracted `AeroSpaceParser` (pure static parsing functions), `AeroSpaceCommandTransport` (execute+record with circuit breaker), and `AeroSpaceCompatibility` (static fallback detection) from `ApAeroSpace.swift`. ApAeroSpace retains `runAerospace()` orchestration (recovery/retry) and delegates to the extracted types. The compatibility extension preserves the `ApAeroSpace.shouldAttemptCompatibilityFallback` call site for test compatibility.
     Reason: `ApAeroSpace.swift` was a ~1k LOC hotspot mixing transport, parsing, and compatibility concerns. Extraction reduces cognitive load and enables independent testing of each concern.
     Tradeoffs: ApAeroSpace keeps `runAerospace()` because auto-recovery calls `start()` which is tightly coupled to lifecycle operations. Transport does not own the recovery loop.
+
+- Decision 2026-03-03 coordinator-extraction: Extract coordinators from SwitcherPanelController and AppDelegate
+    Decision: Extracted `SwitcherOperationCoordinator`, `SwitcherWorkspaceRetryCoordinator`, `AppHealthCoordinator`, and `MenuWorkspaceStateCoordinator`. Coordinators own guard state and background dispatch; they report results through closure callbacks wired by their owners. Coordinator properties must be eagerly initialized (non-lazy); `lazy var` is disallowed because lazy init during `deinit` crashes (`weak_register_no_lock` on a deallocating object).
+    Reason: Both `SwitcherPanelController` and `AppDelegate` were high-churn hotspots mixing orchestration with presentation. Extraction enables independent unit testing of retry/guard/dispatch logic.
+    Tradeoffs: Callback closures add indirection vs inline code. The `SwitcherWorkspaceRetryCoordinator` timer interval is now injectable (default 2s, tests use 0.05s) to keep tests fast.
+
+- Decision 2026-03-03 no-lazy-coordinator: Never use lazy var for coordinator properties that capture [weak self]
+    Decision: Coordinators wired with `[weak self]` closures must be initialized eagerly (in `init`, before `super.init` or immediately after) — never as `lazy var`.
+    Reason: Swift aborts (`objc_fatal` / `SIGABRT`) if a `lazy var` getter is first triggered during `deinit`, because `[weak self]` calls `objc_initWeak` on a deallocating object. The `deinit` of `SwitcherPanelController` accessed `workspaceRetryCoordinator.cancelRetry()`, triggering lazy init during dealloc.
+    Tradeoffs: Eager init means coordinators are always allocated even if never used, but this is negligible for these small objects.
+
+- Decision 2026-03-03 test-host-guard: XCTest environment guard in AppDelegate
+    Decision: `applicationDidFinishLaunching` returns early when `XCTestConfigurationFilePath` environment variable is set, skipping all real app setup (AeroSpace CLI, Doctor, hotkeys, onboarding).
+    Reason: Test host was running real code (CLI calls, hotkey registration) during unit tests, causing side effects and slowing test runs.
+    Tradeoffs: Tests that need specific AppDelegate behavior must use mocks/stubs rather than relying on the real setup path. This is already the case for all existing tests.
+
+- Decision 2026-03-03 injectable-timing: Make timing constants injectable for fast tests
+    Decision: Converted `ApAeroSpace.startupTimeoutSeconds` and `readinessCheckInterval` from static constants to instance properties with default values, injectable via both init methods.
+    Reason: `testStartReturnsFailureWhenReadinessTimesOut` waited for the real 10s startup timeout on every test run. With injectable timing, the test uses 0.1s timeout and completes in ~0.1s instead of ~10s.
+    Tradeoffs: Two extra optional parameters on init; callers outside tests use defaults and see no change.
+
+- Decision 2026-03-03 fast-precommit: Pre-commit hook runs targeted tests instead of full suite (superseded by test-infra-overhaul)
+    Decision: Originally changed pre-commit from `make coverage` to `make test`. Superseded same day by `test-infra-overhaul`: pre-commit now maps staged files to test targets and runs only affected suites. Coverage is always collected (zero overhead) but the gate is not enforced at commit time.
+    Reason: Full test suite on every commit was too slow. Smart targeting reduces commit-time testing to only the affected targets.
+    Tradeoffs: Cross-target regressions are caught in CI, not at commit time.
+
+- Decision 2026-03-03 test-infra-overhaul: Always-coverage, smart pre-commit, sequential testing, one-time bootstrap
+    Decision: (1) Coverage collection is always-on (zero overhead); `--no-coverage` removed, `--gate` flag added for enforcement. (2) Pre-commit hook maps staged files to test targets instead of running all tests. (3) Tests run sequentially (`-parallel-testing-enabled NO`); parallel was reverted due to flake risk in focus-sensitive app tests. (4) `dev_bootstrap.sh` removed from test runner; `make setup` runs it once. (5) CI build step removed (coverage already builds). (6) Test failure diagnostics use `xcresulttool get test-results tests` JSON with `testNodes` root traversal.
+    Reason: Pre-commit was running all 1,125 tests (~69s) on every commit. Four test suites used real infrastructure deps (6-10s each). Parallel testing was tried but reverted to avoid nondeterminism in stateful app tests.
+    Tradeoffs: Smart pre-commit may miss cross-target regressions (CI catches them). `make setup` must be run once after clone. Test plan file must stay in sync with project.yml targets. Sequential testing is slower than parallel but deterministic.

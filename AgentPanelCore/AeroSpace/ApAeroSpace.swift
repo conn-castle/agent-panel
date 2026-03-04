@@ -40,11 +40,14 @@ public struct ApAeroSpace {
     /// Legacy app path for fallback detection.
     private static let legacyAppPath = "/Applications/AeroSpace.app"
 
-    /// Maximum time to wait for AeroSpace to become ready after launch.
-    private static let startupTimeoutSeconds: TimeInterval = 10.0
+    /// Default maximum time to wait for AeroSpace to become ready after launch.
+    public static let defaultStartupTimeoutSeconds: TimeInterval = 10.0
 
-    /// Interval between readiness checks during startup.
-    private static let readinessCheckInterval: TimeInterval = 0.25
+    /// Default interval between readiness checks during startup.
+    public static let defaultReadinessCheckInterval: TimeInterval = 0.25
+
+    let startupTimeoutSeconds: TimeInterval
+    let readinessCheckInterval: TimeInterval
 
     private let transport: AeroSpaceCommandTransport
     private let appDiscovery: AppDiscovering
@@ -56,11 +59,18 @@ public struct ApAeroSpace {
     private var circuitBreaker: AeroSpaceCircuitBreaker { transport.circuitBreaker }
 
     /// Creates a new AeroSpace wrapper with default dependencies.
-    /// - Parameter processChecker: Optional process checker for auto-recovery.
-    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
-    ///   the wrapper will automatically attempt to restart AeroSpace.
-    ///   Pass `nil` to disable auto-recovery (e.g., for Doctor diagnostics).
-    public init(processChecker: RunningApplicationChecking? = nil) {
+    /// - Parameters:
+    ///   - processChecker: Optional process checker for auto-recovery.
+    ///     When provided and AeroSpace crashes (circuit breaker open, process dead),
+    ///     the wrapper will automatically attempt to restart AeroSpace.
+    ///     Pass `nil` to disable auto-recovery (e.g., for Doctor diagnostics).
+    ///   - startupTimeoutSeconds: Maximum time to wait for readiness after launch.
+    ///   - readinessCheckInterval: Interval between readiness checks during startup.
+    public init(
+        processChecker: RunningApplicationChecking? = nil,
+        startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
+        readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
+    ) {
         self.transport = AeroSpaceCommandTransport(
             commandRunner: ApSystemCommandRunner(),
             circuitBreaker: .shared
@@ -68,6 +78,8 @@ public struct ApAeroSpace {
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.fileSystem = DefaultFileSystem()
         self.processChecker = processChecker
+        self.startupTimeoutSeconds = startupTimeoutSeconds
+        self.readinessCheckInterval = readinessCheckInterval
     }
 
     /// Creates a new AeroSpace wrapper with custom dependencies.
@@ -77,12 +89,16 @@ public struct ApAeroSpace {
     ///   - fileSystem: File system for path checks.
     ///   - circuitBreaker: Circuit breaker for timeout cascade prevention.
     ///   - processChecker: Optional process checker for auto-recovery.
+    ///   - startupTimeoutSeconds: Maximum time to wait for readiness after launch.
+    ///   - readinessCheckInterval: Interval between readiness checks during startup.
     init(
         commandRunner: CommandRunning,
         appDiscovery: AppDiscovering,
         fileSystem: FileSystem = DefaultFileSystem(),
         circuitBreaker: AeroSpaceCircuitBreaker = .shared,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
+        readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
     ) {
         self.transport = AeroSpaceCommandTransport(
             commandRunner: commandRunner,
@@ -91,6 +107,8 @@ public struct ApAeroSpace {
         self.appDiscovery = appDiscovery
         self.fileSystem = fileSystem
         self.processChecker = processChecker
+        self.startupTimeoutSeconds = startupTimeoutSeconds
+        self.readinessCheckInterval = readinessCheckInterval
     }
 
     /// Returns the path to AeroSpace.app if installed.
@@ -157,18 +175,18 @@ public struct ApAeroSpace {
     /// Waits for AeroSpace CLI to become responsive after launch.
     /// - Returns: Success when CLI is available, or an error on timeout.
     private func waitForReadiness() -> Result<Void, ApCoreError> {
-        let deadline = Date().addingTimeInterval(Self.startupTimeoutSeconds)
+        let deadline = Date().addingTimeInterval(startupTimeoutSeconds)
 
         while Date() < deadline {
             if isCliAvailable() {
                 return .success(())
             }
-            Thread.sleep(forTimeInterval: Self.readinessCheckInterval)
+            Thread.sleep(forTimeInterval: readinessCheckInterval)
         }
 
         return .failure(ApCoreError(
             category: .command,
-            message: "AeroSpace did not become ready within \(Self.startupTimeoutSeconds)s after launch."
+            message: "AeroSpace did not become ready within \(startupTimeoutSeconds)s after launch."
         ))
     }
 

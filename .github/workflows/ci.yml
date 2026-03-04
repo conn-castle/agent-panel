@@ -59,10 +59,7 @@ jobs:
       - name: Release preflight
         run: scripts/ci_preflight.sh
 
-      - name: Build
-        run: make build
-
-      - name: Test
+      - name: Test with coverage gate
         run: make coverage
 
       - name: Test coverage gate integration

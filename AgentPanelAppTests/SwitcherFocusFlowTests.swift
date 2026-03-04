@@ -481,11 +481,46 @@ final class SwitcherFocusFlowTests: XCTestCase {
                 workspace: "ap-\(projectId)"
             )
         )
+        // Order out immediately so the panel doesn't steal keyboard focus during the wait.
+        controller.testing_orderOutPanel()
 
         try? await Task.sleep(nanoseconds: 300_000_000)
 
         let filterAppliedCount = logger.entriesSnapshot().filter { $0.event == "switcher.filter.applied" }.count
         XCTAssertEqual(filterAppliedCount, 1, "Expected one initial filter pass when workspace state is unchanged.")
+
+        controller.dismiss(reason: .toggle)
+    }
+
+    func testShowAlwaysStartsWithEmptyQuery() {
+        let logger = RecordingLogger()
+        let fileSystem = InMemoryFileSystem()
+        let aerospace = TestAeroSpaceStub()
+
+        let projectId = "alpha"
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: "ap-\(projectId)", isFocused: true)
+        ])
+
+        let manager = makeProjectManager(aerospace: aerospace, logger: logger, fileSystem: fileSystem)
+        let project = ProjectConfig(id: projectId, name: "Alpha", path: "/tmp/alpha", color: "blue", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        let controller = SwitcherPanelController(logger: logger, projectManager: manager)
+
+        // First show: type a query, then dismiss.
+        controller.show(origin: .hotkey)
+        controller.testing_setSearchFieldValue("some query")
+        controller.dismiss(reason: .toggle)
+
+        // Second show: query must be empty regardless of how quickly we reopen.
+        controller.show(origin: .hotkey)
+
+        XCTAssertEqual(
+            controller.testing_searchFieldValue,
+            "",
+            "Switcher must start with an empty search field on every launch."
+        )
 
         controller.dismiss(reason: .toggle)
     }

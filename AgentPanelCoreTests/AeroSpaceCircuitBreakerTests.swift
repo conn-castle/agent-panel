@@ -422,7 +422,9 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
         let aero = ApAeroSpace(
             commandRunner: runner,
             appDiscovery: StubAppDiscovery(),
-            circuitBreaker: breaker
+            circuitBreaker: breaker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
         )
 
         // start() runs on a background thread (guard !Thread.isMainThread)
@@ -432,7 +434,7 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
             startResult = aero.start()
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 15)
+        waitForExpectations(timeout: 5)
 
         if case .success = startResult {} else {
             XCTFail("Expected start to succeed, got: \(String(describing: startResult))")
@@ -508,7 +510,9 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             commandRunner: runner,
             appDiscovery: StubAppDiscovery(),
             circuitBreaker: breaker,
-            processChecker: processChecker
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
         )
 
         // start() requires !Thread.isMainThread
@@ -518,7 +522,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             result = aero.getWorkspaces()
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 15)
+        waitForExpectations(timeout: 5)
 
         if case .success(let workspaces) = result {
             XCTAssertEqual(workspaces, ["ws-1"])
@@ -602,7 +606,9 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             commandRunner: runner,
             appDiscovery: StubAppDiscovery(),
             circuitBreaker: breaker,
-            processChecker: processChecker
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
         )
 
         // Run off-main so recovery is synchronous and we can verify state immediately
@@ -612,7 +618,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             result = aero.getWorkspaces()
             expectation.fulfill()
         }
-        waitForExpectations(timeout: 15)
+        waitForExpectations(timeout: 5)
 
         if case .failure(let error) = result {
             XCTAssertTrue(error.message.contains("circuit breaker"))
@@ -647,7 +653,9 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             commandRunner: runner,
             appDiscovery: StubAppDiscovery(),
             circuitBreaker: breaker,
-            processChecker: processChecker
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
         )
 
         // Call on main thread — should return immediately with breaker error

@@ -587,7 +587,12 @@ final class AeroSpaceStartTests: XCTestCase {
             // aerospace --help ready
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
-        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
 
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Void, ApCoreError>?
@@ -597,7 +602,7 @@ final class AeroSpaceStartTests: XCTestCase {
             result = aero.start()
             semaphore.signal()
         }
-        let wait = semaphore.wait(timeout: .now() + 5)
+        let wait = semaphore.wait(timeout: .now() + 2)
         XCTAssertNotEqual(wait, .timedOut)
         XCTAssertEqual(ranOnMainThread, false)
 
@@ -613,7 +618,12 @@ final class AeroSpaceStartTests: XCTestCase {
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
         ]
-        let aero = ApAeroSpace(commandRunner: runner, appDiscovery: StubAppDiscovery())
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: StubAppDiscovery(),
+            startupTimeoutSeconds: 0.1,
+            readinessCheckInterval: 0.02
+        )
 
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Void, ApCoreError>?
@@ -622,7 +632,7 @@ final class AeroSpaceStartTests: XCTestCase {
             semaphore.signal()
         }
 
-        let wait = semaphore.wait(timeout: .now() + 15)
+        let wait = semaphore.wait(timeout: .now() + 2)
         XCTAssertNotEqual(wait, .timedOut)
         switch result {
         case .success:

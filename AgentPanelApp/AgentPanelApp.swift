@@ -70,17 +70,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var switcherController: SwitcherPanelController?
     private var menuItems: MenuItems?
     private var doctorIndicatorSeverity: DoctorSeverity?
-    private var isHealthRefreshInFlight: Bool = false
-    private var pendingCriticalContext: ErrorContext?
-    private var lastHealthRefreshAt: Date?
     private var lastHotkeyToggleAt: Date?
     /// Set when the accessibility permission prompt fires this launch.
     /// Prevents Doctor's startup health refresh from stealing focus from the system dialog.
     private var didPromptForAccessibilityThisLaunch = false
-    private var menuFocusCapture: CapturedFocus?
-    /// Cached workspace state for non-blocking menu population.
-    /// Updated by background refreshes; read by `menuNeedsUpdate`.
-    private var cachedWorkspaceState: ProjectWorkspaceState?
+    private var healthCoordinator: AppHealthCoordinator?
+    private var menuWorkspaceCoordinator: MenuWorkspaceStateCoordinator?
     /// Serial queue for immediate (non-overlay) Option-Tab fallback to avoid focus races.
     private let immediateWindowCycleQueue = DispatchQueue(
         label: "com.agentpanel.window-cycle-immediate",
@@ -98,6 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Skip real app setup when running inside the test host.
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
+
         // Run onboarding check asynchronously before setting up the app
         let onboarding = Onboarding(logger: logger)
         onboarding.runIfNeeded { [weak self] result in
@@ -135,6 +135,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = makeMenu()
         self.statusItem = statusItem
         updateMenuBarHealthIndicator(severity: nil)
+
+        // Initialize coordinators — closures capture [weak self] to avoid retain cycles.
+        let menuWSCoordinator = MenuWorkspaceStateCoordinator(
+            projectManager: projectManager
+        )
+        self.menuWorkspaceCoordinator = menuWSCoordinator
+
+        let healthCoord = AppHealthCoordinator(
+            logger: logger,
+            refreshDebounceSeconds: MenuBarHealthIndicator.refreshDebounceSeconds,
+            makeDoctor: { [weak self] in
+                self?.makeDoctor() ?? Doctor(
+                    runningApplicationChecker: AppKitRunningApplicationChecker(),
+                    hotkeyStatusProvider: nil,
+                    focusCycleStatusProvider: nil,
+                    windowPositioner: AXWindowPositioner()
+                )
+            },
+            currentIndicatorSeverity: { [weak self] in
+                self?.doctorIndicatorSeverity
+            },
+            updateMenuBarHealthIndicator: { [weak self] severity in
+                self?.updateMenuBarHealthIndicator(severity: severity)
+            },
+            showDoctorReport: { [weak self] report, skipActivation in
+                self?.showDoctorReport(report, skipActivation: skipActivation)
+            },
+            refreshMenuStateInBackground: { [weak self] in
+                self?.menuWorkspaceCoordinator?.refreshInBackground()
+            },
+            shouldSkipAutoShowActivation: { [weak self] trigger in
+                trigger == "startup" && (self?.didPromptForAccessibilityThisLaunch ?? false)
+            }
+        )
+        self.healthCoordinator = healthCoord
+
         requestAccessibilityOnFirstLaunchIfNeeded()
 
         self.switcherController = makeSwitcherController()
@@ -238,9 +274,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 // On startup, run Doctor after settings blocks are written so it doesn't
                 // report spurious warnings for blocks that are still being written.
-                if self?.lastHealthRefreshAt == nil {
+                if self?.healthCoordinator?.lastHealthRefreshAt == nil {
                     DispatchQueue.main.async {
-                        self?.refreshHealthInBackground(trigger: "startup", force: true)
+                        self?.healthCoordinator?.refreshHealthInBackground(trigger: "startup", force: true)
                     }
                 }
             }
@@ -258,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // If config load failed (no projects), the callback never fired — run Doctor directly.
         if loadedConfig == nil {
-            refreshHealthInBackground(trigger: "startup", force: true)
+            healthCoordinator?.refreshHealthInBackground(trigger: "startup", force: true)
         }
 
         let dataStore = DataPaths.default()
@@ -507,15 +543,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let capturedFocus = self.projectManager.captureCurrentFocus()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                if let capturedFocus {
-                    self.menuFocusCapture = capturedFocus
-                }
+                self.menuWorkspaceCoordinator?.updateFocusCapture(capturedFocus)
                 let delay = max(0, showAfter.timeIntervalSinceNow)
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                     guard let self else { return }
                     // The panel uses .nonactivatingPanel style mask, so it receives keyboard input
                     // without activating the app (and therefore without switching workspaces).
-                    self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: self.menuFocusCapture)
+                    self.ensureSwitcherController().show(origin: .menu, previousApp: previousApp, capturedFocus: self.menuWorkspaceCoordinator?.menuFocusCapture)
                 }
             }
         }
@@ -604,7 +638,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeSwitcherController() -> SwitcherPanelController {
         let controller = SwitcherPanelController(logger: logger, projectManager: projectManager)
         controller.onProjectOperationFailed = { [weak self] context in
-            self?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
+            self?.healthCoordinator?.refreshHealthInBackground(trigger: "project_operation_failed", errorContext: context)
         }
         controller.onRecoverProjectRequested = { [weak self] focus, completion in
             guard let self else {
@@ -644,7 +678,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         controller.onSessionEnded = { [weak self] in
-            self?.refreshHealthInBackground(trigger: "switcher_session_ended")
+            self?.healthCoordinator?.refreshHealthInBackground(trigger: "switcher_session_ended")
         }
         return controller
     }
@@ -747,171 +781,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = logger.log(event: event, level: level, message: message, context: context)
     }
 
-    /// Logs a comprehensive summary for Doctor reports to aid remote diagnostics.
-    /// Includes finding titles, timing breakdown, and the full rendered report text.
-    /// - Parameters:
-    ///   - report: Doctor report to summarize.
-    ///   - event: Event name to log.
-    private func logDoctorSummary(_ report: DoctorReport, event: String) {
-        let passCount = report.findings.filter { $0.severity == .pass }.count
-        let warnCount = report.findings.filter { $0.severity == .warn }.count
-        let failCount = report.findings.filter { $0.severity == .fail }.count
-
-        let level: LogLevel = {
-            switch report.overallSeverity {
-            case .fail:
-                return .error
-            case .warn:
-                return .warn
-            case .pass:
-                return .info
-            }
-        }()
-
-        var context: [String: String] = [
-            "pass_count": "\(passCount)",
-            "warn_count": "\(warnCount)",
-            "fail_count": "\(failCount)"
-        ]
-        context["overall_severity"] = report.overallSeverity.rawValue
-        if let doctorIndicatorSeverity {
-            context["menu_bar_severity"] = doctorIndicatorSeverity.rawValue
-        } else {
-            context["menu_bar_severity"] = "PENDING"
-        }
-
-        // Include FAIL and WARN finding titles for remote diagnostics
-        let failTitles = report.findings
-            .filter { $0.severity == .fail && !$0.title.isEmpty }
-            .map { $0.title }
-        let warnTitles = report.findings
-            .filter { $0.severity == .warn && !$0.title.isEmpty }
-            .map { $0.title }
-        if !failTitles.isEmpty {
-            context["fail_findings"] = failTitles.joined(separator: "; ")
-        }
-        if !warnTitles.isEmpty {
-            context["warn_findings"] = warnTitles.joined(separator: "; ")
-        }
-
-        // Include timing breakdown for performance diagnostics
-        context["duration_ms"] = "\(report.metadata.durationMs)"
-        let sortedSections = report.metadata.sectionTimings.sorted { $0.key < $1.key }
-        for (section, ms) in sortedSections {
-            context["timing_\(section)_ms"] = "\(ms)"
-        }
-
-        // Include the full rendered report text so remote debugging never lacks detail
-        context["rendered_report"] = report.rendered()
-
-        logAppEvent(
-            event: event,
-            level: level,
-            context: context
-        )
-    }
-
-    /// Runs Doctor in the background and updates the menu bar health indicator.
-    ///
-    /// Debounced: skips the run if a refresh is already in flight or if the last
-    /// refresh completed less than `MenuBarHealthIndicator.refreshDebounceSeconds` ago.
-    /// Pass `force: true` to bypass debouncing (used for startup).
-    /// Critical errors (from `errorContext.isCritical`) skip debounce automatically.
-    ///
-    /// - Parameters:
-    ///   - trigger: Log event name suffix describing what triggered the refresh.
-    ///   - force: When true, bypasses the debounce window (e.g., for startup).
-    ///   - errorContext: Optional error context that triggered this refresh.
-    private func refreshHealthInBackground(
-        trigger: String,
-        force: Bool = false,
-        errorContext: ErrorContext? = nil
-    ) {
-        let skipDebounce = force || (errorContext?.isCritical == true)
-
-        guard !isHealthRefreshInFlight else {
-            // Store critical context so it's not dropped when in-flight
-            if let errorContext, errorContext.isCritical {
-                pendingCriticalContext = errorContext
-            }
-            logAppEvent(
-                event: "doctor.refresh.skipped",
-                context: ["trigger": trigger, "reason": "in_flight"]
-            )
-            return
-        }
-
-        if !skipDebounce, let lastRefresh = lastHealthRefreshAt,
-           Date().timeIntervalSince(lastRefresh) < MenuBarHealthIndicator.refreshDebounceSeconds {
-            logAppEvent(
-                event: "doctor.refresh.skipped",
-                context: ["trigger": trigger, "reason": "debounced"]
-            )
-            return
-        }
-
-        isHealthRefreshInFlight = true
-        logAppEvent(event: "doctor.refresh.requested", context: ["trigger": trigger])
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let report = self.makeDoctor().run(context: errorContext)
-            DispatchQueue.main.async {
-                self.isHealthRefreshInFlight = false
-                self.lastHealthRefreshAt = Date()
-                self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
-                self.logDoctorSummary(report, event: "doctor.refresh.completed")
-
-                // Auto-show Doctor window for critical errors with FAIL findings
-                if let ctx = errorContext, ctx.isCritical, report.hasFailures {
-                    self.logAppEvent(
-                        event: "doctor.auto_show",
-                        context: ["trigger": ctx.trigger, "category": ctx.category.rawValue]
-                    )
-                    // Suppress activation when the accessibility prompt is still open
-                    // to avoid stealing focus from the system permission dialog.
-                    let skipActivation = trigger == "startup" && self.didPromptForAccessibilityThisLaunch
-                    self.showDoctorReport(report, skipActivation: skipActivation)
-                }
-
-                // Refresh cached workspace/focus state for non-blocking menu updates
-                self.refreshMenuStateInBackground()
-
-                // If a critical error was queued while in-flight, trigger a new refresh
-                if let pending = self.pendingCriticalContext {
-                    self.pendingCriticalContext = nil
-                    self.refreshHealthInBackground(
-                        trigger: pending.trigger,
-                        errorContext: pending
-                    )
-                }
-            }
-        }
-    }
-
-    /// Refreshes cached workspace state and focus in the background.
-    ///
-    /// Called after Doctor refreshes, switcher session ends, and on menu open.
-    /// The cached values are used by `menuNeedsUpdate` to avoid blocking the
-    /// main thread with AeroSpace CLI calls.
-    ///
-    /// Thread safety: `captureCurrentFocus()` and `workspaceState()` are safe off-main
-    /// and use ProjectManager's internal serialization (focus capture may persist history).
-    private func refreshMenuStateInBackground() {
-        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-            guard let self else { return }
-            let focus = self.projectManager.captureCurrentFocus()
-            let state = try? self.projectManager.workspaceState().get()
-            DispatchQueue.main.async {
-                self.cachedWorkspaceState = state
-                // Also update menuFocusCapture so it stays fresh between menu opens
-                if let focus {
-                    self.menuFocusCapture = focus
-                }
-            }
-        }
-    }
-
     /// Creates a Doctor instance with the current hotkey status providers.
     private func makeDoctor() -> Doctor {
         Doctor(
@@ -951,7 +820,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
                 controller.showReport(report)
-                self.logDoctorSummary(report, event: "doctor.run.completed")
+                self.healthCoordinator?.logDoctorSummary(report, event: "doctor.run.completed")
             }
         }
     }
@@ -968,63 +837,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pasteboard.setString(report, forType: .string)
     }
 
-    /// Runs a Doctor action and shows the resulting report.
-    /// - Parameters:
-    ///   - action: The Doctor method to call.
-    ///   - requestedEvent: Event name to log before the action.
-    ///   - completedEvent: Event name to log after the action.
-    private func runDoctorAction(
-        _ action: @escaping (Doctor) -> DoctorReport,
-        requestedEvent: String,
-        completedEvent: String
-    ) {
-        logAppEvent(event: requestedEvent)
-        // Show loading state immediately — the action + re-run can take 20-30s.
-        doctorController?.showLoading()
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let report = action(self.makeDoctor())
-            DispatchQueue.main.async {
-                self.updateMenuBarHealthIndicator(severity: report.overallSeverity)
-                self.showDoctorReport(report)
-                self.logDoctorSummary(report, event: completedEvent)
-            }
-        }
-    }
-
     /// Installs AeroSpace via Homebrew and refreshes the report.
     private func installAeroSpace() {
-        runDoctorAction(
+        healthCoordinator?.runDoctorAction(
             { $0.installAeroSpace() },
             requestedEvent: "doctor.install_aerospace.requested",
-            completedEvent: "doctor.install_aerospace.completed"
+            completedEvent: "doctor.install_aerospace.completed",
+            showLoading: { [weak self] in self?.doctorController?.showLoading() }
         )
     }
 
     /// Starts AeroSpace and refreshes the report.
     private func startAeroSpace() {
-        runDoctorAction(
+        healthCoordinator?.runDoctorAction(
             { $0.startAeroSpace() },
             requestedEvent: "doctor.start_aerospace.requested",
-            completedEvent: "doctor.start_aerospace.completed"
+            completedEvent: "doctor.start_aerospace.completed",
+            showLoading: { [weak self] in self?.doctorController?.showLoading() }
         )
     }
 
     /// Reloads AeroSpace config and refreshes the report.
     private func reloadAeroSpaceConfig() {
-        runDoctorAction(
+        healthCoordinator?.runDoctorAction(
             { $0.reloadAeroSpaceConfig() },
             requestedEvent: "doctor.reload_aerospace.requested",
-            completedEvent: "doctor.reload_aerospace.completed"
+            completedEvent: "doctor.reload_aerospace.completed",
+            showLoading: { [weak self] in self?.doctorController?.showLoading() }
         )
     }
 
     /// Requests Accessibility permission and refreshes the report.
     private func requestAccessibility() {
-        runDoctorAction(
+        healthCoordinator?.runDoctorAction(
             { $0.requestAccessibility() },
             requestedEvent: "doctor.request_accessibility.requested",
-            completedEvent: "doctor.request_accessibility.completed"
+            completedEvent: "doctor.request_accessibility.completed",
+            showLoading: { [weak self] in self?.doctorController?.showLoading() }
         )
     }
 
@@ -1221,7 +1070,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logAppEvent(event: "recover_current_window.requested")
         statusItem?.menu?.cancelTracking()
 
-        guard let focus = menuFocusCapture else {
+        guard let focus = menuWorkspaceCoordinator?.menuFocusCapture else {
             logAppEvent(event: "recover_current_window.skipped", level: .warn, message: "No focused window available")
             return
         }
@@ -1277,7 +1126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logAppEvent(event: "recover_agent_panel.requested")
         statusItem?.menu?.cancelTracking()
 
-        guard let focus = menuFocusCapture else {
+        guard let focus = menuWorkspaceCoordinator?.menuFocusCapture else {
             logAppEvent(event: "recover_agent_panel.skipped", level: .warn, message: "No focused workspace available")
             return
         }
@@ -1407,7 +1256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Moves the focused window to the selected project's workspace.
     @objc private func addWindowToProject(_ sender: NSMenuItem) {
         guard let projectId = sender.representedObject as? String else { return }
-        guard let focus = menuFocusCapture else {
+        guard let focus = menuWorkspaceCoordinator?.menuFocusCapture else {
             logAppEvent(event: "add_window_to_project.no_focus", level: .warn)
             return
         }
@@ -1435,7 +1284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         context: ["window_id": "\(windowId)", "project_id": projectId]
                     )
                     // Refresh workspace state cache after the move
-                    self.refreshMenuStateInBackground()
+                    self.menuWorkspaceCoordinator?.refreshInBackground()
                 case .failure(let error):
                     self.logAppEvent(
                         event: "add_window_to_project.failed",
@@ -1449,7 +1298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Moves the focused window out of its project workspace to the default workspace.
     @objc private func removeWindowFromProject(_ sender: NSMenuItem) {
-        guard let focus = menuFocusCapture else {
+        guard let focus = menuWorkspaceCoordinator?.menuFocusCapture else {
             logAppEvent(event: "remove_window_from_project.no_focus", level: .warn)
             return
         }
@@ -1473,7 +1322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         event: "remove_window_from_project.completed",
                         context: ["window_id": "\(windowId)"]
                     )
-                    self.refreshMenuStateInBackground()
+                    self.menuWorkspaceCoordinator?.refreshInBackground()
                 case .failure(let error):
                     self.logAppEvent(
                         event: "remove_window_from_project.failed",
@@ -1500,57 +1349,26 @@ extension AppDelegate: NSMenuDelegate {
         // Reflect Launch at Login state
         menuItems.launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
+        let hasFocus = menuWorkspaceCoordinator?.menuFocusCapture != nil
         // Use cached focus (updated by background refreshes, not a live CLI call)
-        menuItems.recoverCurrentWindow.isEnabled = menuFocusCapture != nil
-        menuItems.recoverAgentPanel.isEnabled = menuFocusCapture != nil
+        menuItems.recoverCurrentWindow.isEnabled = hasFocus
+        menuItems.recoverAgentPanel.isEnabled = hasFocus
 
         // Populate "Move Current Window" submenu from cached workspace state
         let submenu = menuItems.addWindowToProject.submenu ?? NSMenu()
-        submenu.removeAllItems()
 
-        let currentWorkspace = menuFocusCapture?.workspace
-        let inProjectWorkspaceForMove = currentWorkspace?.hasPrefix(ProjectManager.workspacePrefix) ?? false
-
-        var hasOpenProjects = false
-        if let state = cachedWorkspaceState {
-            let openProjects = projectManager.projects.filter { state.openProjectIds.contains($0.id) }
-            if !openProjects.isEmpty {
-                hasOpenProjects = true
-                for project in openProjects {
-                    let item = NSMenuItem(
-                        title: project.name,
-                        action: #selector(addWindowToProject(_:)),
-                        keyEquivalent: ""
-                    )
-                    item.target = self
-                    item.representedObject = project.id
-                    if currentWorkspace == ProjectManager.workspacePrefix + project.id {
-                        item.state = .on
-                    }
-                    submenu.addItem(item)
-                }
-            }
-        }
-
-        // Separator + "No Project" option
-        if hasOpenProjects {
-            submenu.addItem(.separator())
-        }
-        let noProjectItem = NSMenuItem(
-            title: "No Project",
-            action: #selector(removeWindowFromProject(_:)),
-            keyEquivalent: ""
-        )
-        noProjectItem.target = self
-        if !inProjectWorkspaceForMove {
-            noProjectItem.state = .on
-        }
-        submenu.addItem(noProjectItem)
+        let isVisible = menuWorkspaceCoordinator?.populateMoveWindowSubmenu(
+            submenu,
+            addWindowTarget: self,
+            addWindowAction: #selector(addWindowToProject(_:)),
+            removeWindowTarget: self,
+            removeWindowAction: #selector(removeWindowFromProject(_:))
+        ) ?? false
 
         menuItems.addWindowToProject.submenu = submenu
-        menuItems.addWindowToProject.isHidden = !hasOpenProjects && !inProjectWorkspaceForMove
+        menuItems.addWindowToProject.isHidden = !isVisible
 
         // Refresh cache in background for next menu open
-        refreshMenuStateInBackground()
+        menuWorkspaceCoordinator?.refreshInBackground()
     }
 }

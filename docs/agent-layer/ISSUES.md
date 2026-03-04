@@ -27,17 +27,36 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-03-03 switcher-search-query-reset-on-launch: Switcher search text persists across launches
-    Priority: Medium. Area: Switcher state lifecycle
-    Description: The switcher currently reopens with the previous search text still populated on subsequent launches. Expected behavior is to start with an empty search field each launch.
-    Next step: Clear search query state when the switcher is dismissed or relaunched, and add a regression test that verifies a fresh empty query on the next launch.
+- Issue 2026-03-03 coordinator-coverage-gap: AppHealthCoordinator and MenuWorkspaceStateCoordinator lack direct unit tests
+    Priority: Low. Area: tests
+    Description: These coordinators were extracted from AgentPanelApp but have no dedicated test files. Behavior regressions in refresh scheduling, focus snapshot lifecycle, or state transitions are only caught indirectly through integration-level SwitcherFocusFlowTests.
+    Next step: Add unit tests for AppHealthCoordinator refresh gating and MenuWorkspaceStateCoordinator capture/clear lifecycle.
 
-- Issue 2026-02-22 appdelegate-hotspot: App delegate file concentrates too many responsibilities
-    Priority: Medium. Area: App architecture
-    Description: `AgentPanelApp.swift` (~1.3k LOC, highest recent churn) owns lifecycle, menu composition, health orchestration, recovery actions, and menu delegate behavior in one hotspot.
-    Next step: Extract focused coordinators (for example health refresh, recovery actions, and menu state) and keep AppDelegate as a composition/wiring layer.
+- Issue 2026-03-03 slow-syscmdrunner-tests: SystemCommandRunnerTests takes ~6.6s due to real shell spawning
+    Priority: Low. Area: tests
+    Description: `SystemCommandRunnerTests.swift` uses real `Process` spawning and `Thread.sleep` for circuit breaker timing tests. This accounts for ~6.6s of test time but cannot be fixed without introducing a clock abstraction into production `ApSystemCommandRunner` code.
+    Next step: Add an injectable `Clock` protocol to `ApSystemCommandRunner` so circuit breaker timing tests can use a fake clock instead of real sleeps.
+- Issue 2026-03-03 focus-capture-race: Switcher focus capture can be clobbered by menu refresh timing
+    Priority: Medium. Area: switcher
+    Description: `MenuWorkspaceStateCoordinator` background refresh can set `capturedFocus` to nil nondeterministically before panel show, because the refresh callback and focus capture happen on overlapping async paths.
+    Next step: Serialize focus capture and menu refresh onto a single queue, or snapshot focus before starting background refresh.
 
-- Issue 2026-02-22 switcher-controller-hotspot: SwitcherPanelController is an oversized high-churn hotspot
-    Priority: Medium. Area: Switcher architecture
-    Description: `SwitcherPanelController.swift` concentrates lifecycle, workspace retry, filtering/model updates, operation dispatch, and status presentation in ~2k LOC, increasing coupling and regression risk.
-    Next step: Extract cohesive units (for example workspace retry coordination and switcher operations orchestration) while keeping the panel controller presentation-focused.
+- Issue 2026-03-03 health-coord-thread: Off-main access of main-thread-confined AppHealthCoordinator state
+    Priority: Medium. Area: app-delegate
+    Description: `lastHealthRefreshAt` in `AppHealthCoordinator` is read from background dispatch contexts but is documented as main-thread-only. The `requireMainThread()` guard was added but callers may still race.
+    Next step: Audit all call sites of `refreshHealth()` and `lastHealthRefreshAt` to ensure main-thread dispatch.
+
+- Issue 2026-03-03 aerospace-timing-validation: ApAeroSpace retry timing inputs are not validated
+    Priority: Medium. Area: aerospace
+    Description: Injectable `startupTimeoutSeconds` and `readinessCheckInterval` are not validated; zero or negative intervals can cause hot-loop polling or break timeout semantics.
+    Next step: Add precondition guards (timeout > 0, interval > 0, interval < timeout) to the ApAeroSpace init.
+
+- Issue 2026-03-03 retry-generation-race: SwitcherWorkspaceRetryCoordinator retryGeneration lacks synchronization
+    Priority: Low. Area: switcher
+    Description: `retryGeneration` is read/written across timer queue and main queue without synchronization. Cancel/tick interleaving could read a stale generation value.
+    Next step: Protect `retryGeneration` with a lock or move all reads/writes to the same queue.
+
+- Issue 2026-03-03 coordinator-test-flake: Several SwitcherCoordinatorTests are timing-coupled or have inverted expectations
+    Priority: Low. Area: tests
+    Description: Two retry tests use inverted expectations that can false-pass (never explicitly fulfilled by success). One test uses a 0.15s timeout vs 50ms timer that can flake under CI jitter. One test asserts state that may still be on main-actor cleanup path.
+    Next step: Replace inverted expectations with explicit fulfillment; increase timing margins or use deterministic scheduling.

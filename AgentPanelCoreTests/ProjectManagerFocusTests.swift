@@ -1019,8 +1019,8 @@ final class ProjectManagerFocusTests: XCTestCase {
         preloadedFocusHistoryState: FocusHistoryState? = nil,
         windowPositioner: WindowPositioning? = nil,
         mainScreenVisibleFrame: (() -> CGRect?)? = nil,
-        windowPollTimeout: TimeInterval = 10.0,
-        windowPollInterval: TimeInterval = 0.1
+        windowPollTimeout: TimeInterval = 0.5,
+        windowPollInterval: TimeInterval = 0.05
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-recency-\(UUID().uuidString).json")
@@ -1065,8 +1065,8 @@ final class ProjectManagerFocusTests: XCTestCase {
         agentLayerIdeLauncher: IdeLauncherProviding = FocusIdeLauncherStub(),
         chromeLauncher: ChromeLauncherProviding = FocusChromeLauncherStub(),
         preloadedFocusHistoryState: FocusHistoryState? = nil,
-        windowPollTimeout: TimeInterval = 10.0,
-        windowPollInterval: TimeInterval = 0.1
+        windowPollTimeout: TimeInterval = 0.5,
+        windowPollInterval: TimeInterval = 0.05
     ) -> ProjectManager {
         let recencyFilePath = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pm-focus-recency-\(UUID().uuidString).json")
