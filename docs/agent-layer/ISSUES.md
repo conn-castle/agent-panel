@@ -32,9 +32,9 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
     Description: These coordinators were extracted from AgentPanelApp but have no dedicated test files. Behavior regressions in refresh scheduling, focus snapshot lifecycle, or state transitions are only caught indirectly through integration-level SwitcherFocusFlowTests.
     Next step: Add unit tests for AppHealthCoordinator refresh gating and MenuWorkspaceStateCoordinator capture/clear lifecycle.
 
-- Issue 2026-03-03 slow-syscmdrunner-tests: SystemCommandRunnerTests takes ~6.6s due to real shell spawning
+- Issue 2026-03-03 slow-syscmdrunner-tests: SystemCommandRunner login-shell tests take ~6.6s due to real shell spawning
     Priority: Low. Area: tests
-    Description: `SystemCommandRunnerTests.swift` uses real `Process` spawning and `Thread.sleep` for circuit breaker timing tests. This accounts for ~6.6s of test time but cannot be fixed without introducing a clock abstraction into production `ApSystemCommandRunner` code.
+    Description: `SystemCommandRunnerLoginShellTests.swift` uses real `Process` spawning and timeout waits to validate login-shell fallback behavior. This accounts for ~6.6s of test time but cannot be fixed without introducing a clock abstraction into production `ApSystemCommandRunner` code.
     Next step: Add an injectable `Clock` protocol to `ApSystemCommandRunner` so circuit breaker timing tests can use a fake clock instead of real sleeps.
 - Issue 2026-03-03 focus-capture-race: Switcher focus capture can be clobbered by menu refresh timing
     Priority: Medium. Area: switcher
