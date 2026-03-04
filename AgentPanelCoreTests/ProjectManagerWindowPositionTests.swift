@@ -32,21 +32,51 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
 
     private final class RecordingWindowPositioner: WindowPositioning {
         var getFrameResults: [String: Result<CGRect, ApCoreError>] = [:]
+        /// Sequential results: each call shifts the first element. When empty, falls back to getFrameResults.
+        var getFrameSequences: [String: [Result<CGRect, ApCoreError>]] = [:]
         var setFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:]
+        /// Sequential results for setWindowFrames.
+        var setFrameSequences: [String: [Result<WindowPositionResult, ApCoreError>]] = [:]
         var trusted: Bool = true
         private(set) var setFrameCalls: [(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffset: CGFloat)] = []
         private(set) var getFrameCalls: [(bundleId: String, projectId: String)] = []
 
+        // Fallback method support
+        var getFallbackFrameResults: [String: Result<CGRect, ApCoreError>] = [:]
+        var setFallbackFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:]
+        private(set) var getFallbackFrameCalls: [String] = []
+        private(set) var setFallbackFrameCalls: [(bundleId: String, primaryFrame: CGRect)] = []
+
         func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
             getFrameCalls.append((bundleId, projectId))
             let key = "\(bundleId)|\(projectId)"
+            if var seq = getFrameSequences[key], !seq.isEmpty {
+                let result = seq.removeFirst()
+                getFrameSequences[key] = seq
+                return result
+            }
             return getFrameResults[key] ?? .failure(ApCoreError(category: .window, message: "no stub for \(key)"))
         }
 
         func setWindowFrames(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
             setFrameCalls.append((bundleId, projectId, primaryFrame, cascadeOffsetPoints))
             let key = "\(bundleId)|\(projectId)"
+            if var seq = setFrameSequences[key], !seq.isEmpty {
+                let result = seq.removeFirst()
+                setFrameSequences[key] = seq
+                return result
+            }
             return setFrameResults[key] ?? .success(WindowPositionResult(positioned: 1, matched: 1))
+        }
+
+        func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError> {
+            getFallbackFrameCalls.append(bundleId)
+            return getFallbackFrameResults[bundleId] ?? .failure(ApCoreError(category: .window, message: "Fallback not available"))
+        }
+
+        func setFallbackWindowFrames(bundleId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
+            setFallbackFrameCalls.append((bundleId, primaryFrame))
+            return setFallbackFrameResults[bundleId] ?? .failure(ApCoreError(category: .window, message: "Fallback not available"))
         }
 
         var recoverWindowCalls: [(bundleId: String, windowTitle: String)] = []
@@ -176,7 +206,8 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         aerospace: AeroSpaceProviding,
         windowPositioner: WindowPositioning? = nil,
         windowPositionStore: WindowPositionStoring? = nil,
-        screenModeDetector: ScreenModeDetecting? = nil
+        screenModeDetector: ScreenModeDetecting? = nil,
+        windowPollInterval: TimeInterval = 0.1
     ) -> ProjectManager {
         let tmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         let chromeTabsDir = tmp.appendingPathComponent("pm-window-tabs-\(UUID().uuidString)", isDirectory: true)
@@ -195,7 +226,8 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
             focusHistoryFilePath: focusHistoryPath,
             windowPositioner: windowPositioner,
             windowPositionStore: windowPositionStore,
-            screenModeDetector: screenModeDetector
+            screenModeDetector: screenModeDetector,
+            windowPollInterval: windowPollInterval
         )
     }
 
@@ -405,7 +437,7 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         XCTAssertTrue(store.saveCalls.isEmpty, "Should not save when IDE frame unreadable")
     }
 
-    func testCloseProjectSavesIDEOnlyWhenChromeFrameReadFails() {
+    func testCloseProjectSkipsSaveWhenChromeFramePermanentlyFails() {
         let projectId = "eta"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -413,6 +445,7 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
 
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+        // Permanent error (not "No window found with token") — skips save to preserve prior layout
         positioner.getFrameResults["com.google.Chrome|\(projectId)"] =
             .failure(ApCoreError(category: .window, message: "gone"))
 
@@ -430,11 +463,8 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         let result = manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
-        // Should save IDE-only (partial save) when Chrome frame unreadable
-        XCTAssertEqual(store.saveCalls.count, 1, "Should save IDE-only when Chrome frame fails")
-        XCTAssertEqual(store.saveCalls[0].projectId, projectId)
-        XCTAssertEqual(store.saveCalls[0].frames.ide.x, Double(defaultIdeFrame.origin.x), accuracy: 1)
-        XCTAssertNil(store.saveCalls[0].frames.chrome, "Chrome frame should be nil in partial save")
+        // Skip save entirely when Chrome frame unavailable — preserves previous complete layout
+        XCTAssertTrue(store.saveCalls.isEmpty, "Should skip save when Chrome frame permanently unavailable")
     }
 
     // MARK: - exitToNonProjectWindow Tests
@@ -974,5 +1004,616 @@ final class ProjectManagerWindowPositionTests: XCTestCase {
         // It should be from WindowLayoutEngine.computeLayout
         XCTAssertNotEqual(chromeCall.primaryFrame.origin.x, 50, accuracy: 1,
                           "Chrome should use computed layout, not saved IDE position")
+    }
+
+    // MARK: - IDE Fallback Tests
+
+    func testIDEFallbackUsedAfterTokenRetryExhaustion() async {
+        let projectId = "fb-ide-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 10 retries fail with transient token-miss
+        positioner.getFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 10)
+        // Fallback succeeds
+        positioner.getFallbackFrameResults["com.microsoft.VSCode"] = .success(defaultIdeFrame)
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "FB", path: "/tmp/fb", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning, "Fallback succeeded — no warning expected")
+        }
+
+        // Verify fallback was called
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.getFallbackFrameCalls[0], "com.microsoft.VSCode")
+        // Verify positioning proceeded (IDE + Chrome setWindowFrames)
+        XCTAssertEqual(positioner.setFrameCalls.count, 2)
+    }
+
+    func testIDEFallbackFailureReturnsLayoutWarning() async {
+        let projectId = "fb-ide-2"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.getFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 10)
+        // Fallback also fails
+        positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(category: .window, message: "Ambiguous: 3 windows"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "FB2", path: "/tmp/fb2", color: "red", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning, "Should have layout warning when fallback fails")
+            XCTAssertTrue(success.layoutWarning?.contains("Ambiguous") == true)
+        }
+
+        // No setWindowFrames calls since IDE frame was never resolved
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty)
+    }
+
+    func testIDEPermanentErrorSkipsFallback() async {
+        let projectId = "fb-ide-3"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+
+        // Permanent error (not "No window found with token")
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] =
+            .failure(ApCoreError(category: .window, message: "AX permission denied"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "FB3", path: "/tmp/fb3", color: "green", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning)
+            XCTAssertTrue(success.layoutWarning?.contains("AX permission denied") == true)
+        }
+
+        // Permanent error: no fallback attempted, no retry
+        XCTAssertTrue(positioner.getFallbackFrameCalls.isEmpty)
+        XCTAssertEqual(positioner.getFrameCalls.count, 1)
+    }
+
+    // MARK: - IDE Set Retry + Fallback Tests
+
+    func testIDESetRetriesAndSucceeds() async {
+        let projectId = "is-retry-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // Fail twice, then succeed.
+        positioner.setFrameSequences[ideKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+        ]
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "ISR", path: "/tmp/isr", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning, "Retry succeeded — no warning expected")
+        }
+
+        let ideSetCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideSetCalls.count, 3)
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Fallback not needed")
+    }
+
+    func testIDESetFallbackUsedAfterRetryExhaustion() async {
+        let projectId = "is-fb-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All retries fail.
+        positioner.setFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "ISFB", path: "/tmp/isfb", color: "red", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning)
+        }
+
+        let ideSetCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideSetCalls.count, 5)
+        XCTAssertEqual(positioner.setFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.setFallbackFrameCalls[0].bundleId, "com.microsoft.VSCode")
+    }
+
+    func testIDESetFallbackFailureAddsWarning() async {
+        let projectId = "is-fb-2"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.setFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(category: .window, message: "Ambiguous: 2 windows"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "ISFB2", path: "/tmp/isfb2", color: "green", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning)
+            XCTAssertTrue(success.layoutWarning?.contains("Ambiguous") == true)
+        }
+    }
+
+    func testIDESetPermanentErrorSkipsFallback() async {
+        let projectId = "is-perm-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        // Permanent error (not "No window found with token")
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        positioner.setFrameResults[ideKey] =
+            .failure(ApCoreError(category: .window, message: "AX permission denied"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "ISPerm", path: "/tmp/isperm", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning)
+            XCTAssertTrue(success.layoutWarning?.contains("AX permission denied") == true)
+        }
+
+        // Permanent error: no fallback attempted, only one IDE set call
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Permanent error should not trigger fallback")
+        let ideCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideCalls.count, 1, "Should only try once for permanent error")
+    }
+
+    // MARK: - Chrome Set Retry + Fallback Tests
+
+    func testChromeSetRetriesAndSucceeds() async {
+        let projectId = "cs-retry-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // Fail twice, then succeed
+        positioner.setFrameSequences[chromeKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+        ]
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CSR", path: "/tmp/csr", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning, "Retry succeeded — no warning")
+        }
+
+        // IDE set + 3 Chrome set attempts
+        let chromeCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.google.Chrome" }
+        XCTAssertEqual(chromeCalls.count, 3)
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Fallback not needed")
+    }
+
+    func testChromeSetFallbackUsedAfterRetryExhaustion() async {
+        let projectId = "cs-fb-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 5 retries fail
+        positioner.setFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        // Fallback succeeds
+        positioner.setFallbackFrameResults["com.google.Chrome"] =
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CSFB", path: "/tmp/csfb", color: "red", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            // Fallback succeeded — no warning about Chrome failure
+            XCTAssertNil(success.layoutWarning)
+        }
+
+        XCTAssertEqual(positioner.setFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.setFallbackFrameCalls[0].bundleId, "com.google.Chrome")
+    }
+
+    func testChromeSetFallbackFailureAddsWarning() async {
+        let projectId = "cs-fb-2"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.setFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        // Fallback also fails
+        positioner.setFallbackFrameResults["com.google.Chrome"] =
+            .failure(ApCoreError(category: .window, message: "Ambiguous: 2 windows"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CSFB2", path: "/tmp/csfb2", color: "green", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning)
+            XCTAssertTrue(success.layoutWarning?.contains("Ambiguous") == true)
+        }
+    }
+
+    func testChromeSetPermanentErrorSkipsFallback() async {
+        let projectId = "cs-perm-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        // Permanent error (not "No window found with token")
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        positioner.setFrameResults[chromeKey] =
+            .failure(ApCoreError(category: .window, message: "AX permission denied"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CSPerm", path: "/tmp/csperm", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning)
+            XCTAssertTrue(success.layoutWarning?.contains("AX permission denied") == true)
+        }
+
+        // Permanent error: no fallback attempted, only one Chrome set call
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Permanent error should not trigger fallback")
+        let chromeCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.google.Chrome" }
+        XCTAssertEqual(chromeCalls.count, 1, "Should only try once for permanent error")
+    }
+
+    // MARK: - Capture Retry + Fallback + Skip-Save Tests
+
+    func testCaptureRetriesChromeReadAndSaves() {
+        let projectId = "cap-retry-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // Fail twice, succeed on third
+        positioner.getFrameSequences[chromeKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .success(defaultChromeFrame)
+        ]
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CapR", path: "/tmp/capr", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let result = manager.closeProject(projectId: projectId)
+        if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
+
+        // Save should have happened with both IDE and Chrome frames
+        XCTAssertEqual(store.saveCalls.count, 1)
+        XCTAssertNotNil(store.saveCalls[0].frames.chrome)
+        // Chrome read was called 3 times (2 failures + 1 success)
+        let chromeGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.google.Chrome" }
+        XCTAssertEqual(chromeGetCalls.count, 3)
+    }
+
+    func testCaptureUsesChromeReadFallbackAndSaves() {
+        let projectId = "cap-fb-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 5 retries fail
+        positioner.getFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        // Fallback succeeds
+        positioner.getFallbackFrameResults["com.google.Chrome"] = .success(defaultChromeFrame)
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CapFB", path: "/tmp/capfb", color: "red", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let result = manager.closeProject(projectId: projectId)
+        if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
+
+        // Save should have happened with fallback Chrome frame
+        XCTAssertEqual(store.saveCalls.count, 1)
+        XCTAssertNotNil(store.saveCalls[0].frames.chrome)
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.getFallbackFrameCalls[0], "com.google.Chrome")
+    }
+
+    func testCaptureSkipsSaveWhenChromeRetryAndFallbackFail() {
+        let projectId = "cap-skip-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+
+        positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
+
+        let chromeKey = "com.google.Chrome|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 5 retries fail
+        positioner.getFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
+        // Fallback also fails
+        positioner.getFallbackFrameResults["com.google.Chrome"] =
+            .failure(ApCoreError(category: .window, message: "Ambiguous: 2 windows"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "CapSkip", path: "/tmp/capskip", color: "green", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let result = manager.closeProject(projectId: projectId)
+        if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
+
+        // Skip save entirely — preserves previous complete layout
+        XCTAssertTrue(store.saveCalls.isEmpty, "Should skip save when Chrome unavailable after retry+fallback")
     }
 }

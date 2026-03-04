@@ -502,6 +502,12 @@ public protocol WindowPositioning {
         primaryFrame: CGRect,
         cascadeOffsetPoints: CGFloat
     ) -> Result<WindowPositionResult, ApCoreError>
+    func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError>
+    func setFallbackWindowFrames(
+        bundleId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError>
     func recoverWindow(
         bundleId: String,
         windowTitle: String,

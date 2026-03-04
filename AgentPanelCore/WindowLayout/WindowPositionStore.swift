@@ -2,9 +2,9 @@ import Foundation
 
 /// Saved window frames for IDE and Chrome in NSScreen coordinate space.
 ///
-/// `chrome` is optional: when Chrome is not running or its frame cannot be read,
-/// the IDE frame is saved alone. On restore, a nil Chrome frame falls back to
-/// computed layout.
+/// `chrome` remains optional for backward compatibility with historical snapshots
+/// that persisted IDE-only layouts. Current capture behavior writes complete
+/// IDE+Chrome frames and skips save when Chrome is unavailable.
 public struct SavedWindowFrames: Codable, Equatable, Sendable {
     public let ide: SavedFrame
     public let chrome: SavedFrame?
@@ -67,7 +67,8 @@ struct ProjectModeFrames: Codable, Equatable {
 /// Persistence layer for window position history.
 ///
 /// Stores IDE and Chrome window frames per project per screen mode in a single
-/// JSON file. Follows the `ChromeTabStore` Result-based API pattern.
+/// JSON file. Existing IDE-only historical snapshots are still readable.
+/// Follows the `ChromeTabStore` Result-based API pattern.
 struct WindowPositionStore: WindowPositionStoring {
     private let filePath: URL
     private let fileSystem: FileSystem

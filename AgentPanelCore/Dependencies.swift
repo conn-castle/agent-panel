@@ -281,6 +281,50 @@ public protocol WindowPositioning {
     /// Shows the macOS system Accessibility permission dialog.
     /// - Returns: true if permission is already granted (no prompt shown).
     func promptForAccessibility() -> Bool
+
+    /// Returns the frame of an unambiguous window for the given app, ignoring token matching.
+    ///
+    /// Used as a last-resort fallback when token-based lookup (`getPrimaryWindowFrame`) fails
+    /// after retry exhaustion. Selection strategy:
+    /// 1. If exactly one window exists, use it.
+    /// 2. If multiple windows exist, prefer the app's AX focused window.
+    /// 3. If ambiguous (multiple windows, none focused), fail with diagnostic inventory.
+    ///
+    /// - Parameter bundleId: Bundle identifier of the owning application.
+    /// - Returns: `.success(frame)` if an unambiguous window is found, `.failure` with
+    ///   window inventory diagnostics otherwise.
+    func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError>
+
+    /// Positions the unambiguous window for the given app, ignoring token matching.
+    ///
+    /// Used as a last-resort fallback when token-based positioning (`setWindowFrames`) fails
+    /// after retry exhaustion. Uses the same selection strategy as `getFallbackWindowFrame`.
+    ///
+    /// - Parameters:
+    ///   - bundleId: Bundle identifier of the owning application.
+    ///   - primaryFrame: Target frame in NSScreen coordinates.
+    ///   - cascadeOffsetPoints: Cascade offset (unused for single-window fallback).
+    /// - Returns: `.success` with positioned count, or `.failure` with diagnostic inventory.
+    func setFallbackWindowFrames(
+        bundleId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError>
+}
+
+/// Default implementations for backward-compatible protocol additions.
+extension WindowPositioning {
+    public func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError> {
+        .failure(ApCoreError(category: .window, message: "Fallback not available"))
+    }
+
+    public func setFallbackWindowFrames(
+        bundleId: String,
+        primaryFrame: CGRect,
+        cascadeOffsetPoints: CGFloat
+    ) -> Result<WindowPositionResult, ApCoreError> {
+        .failure(ApCoreError(category: .window, message: "Fallback not available"))
+    }
 }
 
 /// Screen mode detection based on physical monitor dimensions.

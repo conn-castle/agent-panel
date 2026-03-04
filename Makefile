@@ -1,17 +1,25 @@
-.PHONY: help build build-dev test coverage clean regen hooks preflight test-coverage-gate
+.PHONY: help setup build build-dev test test-app test-core test-cli test-one coverage clean regen hooks preflight test-coverage-gate
 
 help:
 	@echo "AgentPanel development commands:"
 	@echo ""
+	@echo "  make setup               Validate Xcode toolchain (run once after clone)"
 	@echo "  make build               Build app + CLI (Debug, no code signing)"
 	@echo "  make build-dev           Build dev app identity (Debug, no code signing)"
-	@echo "  make test                Run tests without coverage (fast local iteration)"
-	@echo "  make coverage            Run tests with coverage gate + per-file summary"
+	@echo "  make test                Run all tests with coverage collection"
+	@echo "  make test-app            Run AgentPanelAppTests only"
+	@echo "  make test-core           Run AgentPanelCoreTests only"
+	@echo "  make test-cli            Run AgentPanelCLITests only"
+	@echo "  make test-one            Run a single test (TARGET=... TEST=...)"
+	@echo "  make coverage            Run tests with coverage gate enforcement"
 	@echo "  make clean               Remove build artifacts"
 	@echo "  make regen               Regenerate Xcode project from project.yml"
 	@echo "  make hooks               Install git pre-commit hook"
 	@echo "  make preflight           Validate release configuration"
 	@echo "  make test-coverage-gate  Run coverage_gate.swift integration tests"
+
+setup:
+	scripts/dev_bootstrap.sh
 
 build:
 	scripts/build.sh
@@ -20,10 +28,27 @@ build-dev:
 	scripts/build_dev.sh
 
 test:
-	scripts/test.sh --no-coverage
+	scripts/test.sh
+
+test-app:
+	scripts/test.sh --target AgentPanelAppTests
+
+test-core:
+	scripts/test.sh --target AgentPanelCoreTests
+
+test-cli:
+	scripts/test.sh --target AgentPanelCLITests
+
+test-one:
+	@if [ -z "$(TARGET)" ] || [ -z "$(TEST)" ]; then \
+		echo "error: make test-one requires TARGET and TEST"; \
+		echo "usage: make test-one TARGET=<BundleName> TEST=<ClassName/testMethod>"; \
+		exit 2; \
+	fi
+	scripts/test.sh --target "$(TARGET)" --test "$(TEST)"
 
 coverage:
-	scripts/test.sh
+	scripts/test.sh --gate
 
 clean:
 	scripts/clean.sh

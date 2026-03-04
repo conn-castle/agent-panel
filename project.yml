@@ -149,10 +149,13 @@ schemes:
         AgentPanelCLI: all
         AgentPanelCoreTests: [test]
     test:
+      testPlans:
+        - path: TestPlans/AgentPanel.xctestplan
+          defaultPlan: true
       targets:
-        - AgentPanelCoreTests
-        - AgentPanelAppTests
-        - AgentPanelCLITests
+        - name: AgentPanelCoreTests
+        - name: AgentPanelAppTests
+        - name: AgentPanelCLITests
 
   AgentPanelDev:
     build:

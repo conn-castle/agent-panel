@@ -78,10 +78,7 @@ final class ErrorContextTests: XCTestCase {
     func testDoctorRunAcceptsContext() {
         // Verify that Doctor.run(context:) accepts an ErrorContext and includes it in metadata
         let ctx = ErrorContext(category: .command, message: "activation failed", trigger: "activation")
-        let doctor = Doctor(
-            runningApplicationChecker: StubRunningApplicationChecker(),
-            hotkeyStatusProvider: StubHotkeyStatusProvider()
-        )
+        let doctor = makeDoctor()
 
         let report = doctor.run(context: ctx)
 
@@ -92,16 +89,32 @@ final class ErrorContextTests: XCTestCase {
     }
 
     func testDoctorRunWithoutContext() {
-        let doctor = Doctor(
-            runningApplicationChecker: StubRunningApplicationChecker(),
-            hotkeyStatusProvider: StubHotkeyStatusProvider()
-        )
+        let doctor = makeDoctor()
 
         let report = doctor.run()
 
         // Report should not contain "Triggered by:" when no context
         let rendered = report.rendered()
         XCTAssertFalse(rendered.contains("Triggered by:"))
+    }
+
+    // MARK: - Helper
+
+    private func makeDoctor() -> Doctor {
+        Doctor(
+            runningApplicationChecker: StubRunningApplicationChecker(),
+            hotkeyStatusProvider: StubHotkeyStatusProvider(),
+            dateProvider: StubDateProvider(),
+            aerospaceHealth: StubAeroSpaceHealth(),
+            appDiscovery: StubAppDiscovery(),
+            executableResolver: ExecutableResolver(
+                fileSystem: StubFileSystem(),
+                searchPaths: [],
+                loginShellFallbackEnabled: false
+            ),
+            commandRunner: StubCommandRunner(),
+            dataStore: DataPaths(homeDirectory: URL(fileURLWithPath: NSTemporaryDirectory()))
+        )
     }
 }
 
@@ -114,4 +127,52 @@ private struct StubRunningApplicationChecker: RunningApplicationChecking {
 private struct StubHotkeyStatusProvider: HotkeyStatusProviding {
     var status: HotkeyRegistrationStatus? = .registered
     func hotkeyRegistrationStatus() -> HotkeyRegistrationStatus? { status }
+}
+
+private struct StubDateProvider: DateProviding {
+    func now() -> Date { Date() }
+}
+
+private struct StubAeroSpaceHealth: AeroSpaceHealthChecking {
+    func installStatus() -> AeroSpaceInstallStatus {
+        AeroSpaceInstallStatus(isInstalled: true, appPath: "/Applications/AeroSpace.app")
+    }
+    func isCliAvailable() -> Bool { true }
+    func healthCheckCompatibility() -> AeroSpaceCompatibility { .compatible }
+    func healthInstallViaHomebrew() -> Bool { true }
+    func healthStart() -> Bool { true }
+    func healthReloadConfig() -> Bool { true }
+}
+
+private struct StubAppDiscovery: AppDiscovering {
+    func applicationURL(bundleIdentifier: String) -> URL? {
+        URL(fileURLWithPath: "/Applications/Test.app")
+    }
+    func applicationURL(named appName: String) -> URL? {
+        URL(fileURLWithPath: "/Applications/Test.app")
+    }
+    func bundleIdentifier(forApplicationAt url: URL) -> String? { nil }
+}
+
+private struct StubFileSystem: FileSystem {
+    func fileExists(at url: URL) -> Bool { false }
+    func isExecutableFile(at url: URL) -> Bool { false }
+    func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
+    func createDirectory(at url: URL) throws {}
+    func fileSize(at url: URL) throws -> UInt64 { 0 }
+    func removeItem(at url: URL) throws {}
+    func moveItem(at sourceURL: URL, to destinationURL: URL) throws {}
+    func appendFile(at url: URL, data: Data) throws {}
+    func writeFile(at url: URL, data: Data) throws {}
+}
+
+private class StubCommandRunner: CommandRunning {
+    func run(
+        executable: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        workingDirectory: String?
+    ) -> Result<ApCommandResult, ApCoreError> {
+        .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+    }
 }

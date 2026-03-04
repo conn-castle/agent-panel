@@ -47,16 +47,18 @@ Run from repo root. Prerequisites: `xcodegen` installed (for example via `brew i
 
 Reference (underlying script): `scripts/regenerate_xcodeproj.sh`
 
-## Bootstrap
+## Setup
 
-Validate Xcode toolchain selection and first-launch state:
+Validate Xcode toolchain selection and first-launch state (run once after clone):
 
 ```bash
-scripts/dev_bootstrap.sh
+make setup
 ```
 
 Run from repo root. Prerequisites: full Xcode installed and selected via `xcode-select`.
 If this fails due to first-launch state, run the printed fix commands (for example `sudo xcodebuild -runFirstLaunch`).
+
+Reference (underlying script): `scripts/dev_bootstrap.sh`
 
 ## Build
 
@@ -95,31 +97,49 @@ Run from repo root. Notes: The script prints the exact `rm -rf` command to delet
 
 Reference (underlying script): `scripts/clean.sh`
 
-## Test (fast, no coverage)
+## Test
 
-Run unit tests (Debug) without code coverage for fast local iteration:
+Run all unit tests (Debug) with coverage collection and parallel execution:
 
 ```bash
 make test
 ```
 
 Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
-Notes: Skips coverage instrumentation and the coverage gate. Use `make coverage` for the full quality gate.
+Notes: Always collects coverage data (zero overhead). Does not enforce the coverage gate — use `make coverage` for the full quality gate.
 
-Reference (underlying script): `scripts/test.sh --no-coverage`
+Reference (underlying script): `scripts/test.sh`
 
-## Test with Coverage (quality gate)
+## Test (selective targets)
 
-Run unit tests with code coverage enabled, enforce the 90% coverage gate, and print a per-file coverage summary:
+Run a single test bundle:
+
+```bash
+make test-app    # AgentPanelAppTests only
+make test-core   # AgentPanelCoreTests only
+make test-cli    # AgentPanelCLITests only
+```
+
+Run a single test method:
+
+```bash
+make test-one TARGET=AgentPanelAppTests TEST=SwitcherWorkspaceRetryCoordinatorTests/testScheduleRetryTriggersOnRetrySucceededWhenWorkspaceStateSucceeds
+```
+
+Run from repo root. Notes: Uses `-only-testing:` xcodebuild flag. `--test` requires `--target`. `make test-one` requires both `TARGET` and `TEST`. All selective runs collect coverage.
+
+## Test with Coverage Gate
+
+Run unit tests with coverage collection and enforce the 90% coverage gate:
 
 ```bash
 make coverage
 ```
 
 Run from repo root. Prerequisites: `xcbeautify` installed (`brew install xcbeautify`).
-Notes: This is the quality gate used by CI and the pre-commit hook. Prints per-file coverage sorted by % ascending (lowest first).
+Notes: This is the quality gate used by CI. Prints per-file coverage sorted by % ascending (lowest first). The pre-commit hook runs selective tests (without the gate) based on staged files.
 
-Reference (underlying script): `scripts/test.sh` (default, with coverage)
+Reference (underlying script): `scripts/test.sh --gate`
 
 ## Re-check Coverage Gate
 
@@ -176,12 +196,12 @@ Run from repo root. Prerequisites: GitHub `release` environment with secrets (`A
 
 ## Git hooks
 
-Install repo-managed git hooks (pre-commit runs `make coverage`):
+Install repo-managed git hooks (pre-commit runs targeted tests based on staged files):
 
 ```bash
 make hooks
 ```
 
-Run from repo root. Notes: sets local git config `core.hooksPath` to `.githooks`.
+Run from repo root. Notes: sets local git config `core.hooksPath` to `.githooks`. The pre-commit hook maps staged file paths to test targets (e.g., `AgentPanelApp/*` → AgentPanelAppTests) and only runs the affected targets. Infrastructure file changes (`project.yml`, `Makefile`, `scripts/*`) trigger all tests. Non-source changes skip tests entirely. No coverage gate — CI enforces that.
 
 Reference (underlying script): `scripts/install_git_hooks.sh`

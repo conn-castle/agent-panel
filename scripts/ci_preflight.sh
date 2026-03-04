@@ -6,11 +6,36 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 errors=0
 runner_label=""
-setup_xcode_ref="maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd"
+
+# ── Policy constants ──────────────────────────────────────────────────
+# Update these when changing runner, Xcode, or signing requirements.
+POLICY_RUNNER_LABEL="macos-26"            # GitHub Actions runner label for release builds
+POLICY_XCODE_MAJOR_FLOOR=26              # Minimum Xcode major version enforced in workflow
+POLICY_XCODE_CHANNEL="latest-stable"     # setup-xcode version channel
+POLICY_SETUP_XCODE_REF="maxim-lobanov/setup-xcode@60606e260d2fc5762a71e64e74b2174e8ea3c8bd"
+POLICY_CODE_SIGN_STYLE="Manual"          # Release code signing style in project.yml
+POLICY_ENVIRONMENT="release"             # GitHub Actions environment name
+POLICY_TAG_PATTERN='v\*'                 # Tag glob that triggers release workflow (escaped for grep)
+POLICY_INTERMEDIATE_CERT="DeveloperIDG2CA.cer"  # Apple Developer ID G2 intermediate cert
+
+# ── Helpers ───────────────────────────────────────────────────────────
 
 fail() {
   echo "FAIL: $1" >&2
   errors=$((errors + 1))
+}
+
+# Match a YAML key-value pattern in a file, tolerant of whitespace and
+# quote variations.  Strips leading/trailing whitespace from each line,
+# collapses internal whitespace, and removes surrounding single/double quotes
+# from values before testing the pattern.
+yaml_grep() {
+  local file="$1" pattern="$2"
+  sed -E 's/[[:space:]]+#.*$//' "$file" \
+    | sed '/^[[:space:]]*#/d' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/[[:space:]]\{1,\}/ /g' \
+    | sed "s/['\"]//g" \
+    | grep -qE "$pattern"
 }
 
 echo "=== Release preflight checks ==="
@@ -84,49 +109,54 @@ workflow="$REPO_ROOT/.github/workflows/release.yml"
 if [[ ! -f "$workflow" ]]; then
   fail "Release workflow missing at .github/workflows/release.yml"
 else
-  if grep -q 'environment: release' "$workflow"; then
-    echo "PASS: Release workflow uses 'release' environment"
+  if yaml_grep "$workflow" "environment: *${POLICY_ENVIRONMENT}"; then
+    echo "PASS: Release workflow uses '$POLICY_ENVIRONMENT' environment"
   else
-    fail "Release workflow does not reference 'release' environment"
+    fail "Release workflow does not reference '$POLICY_ENVIRONMENT' environment"
   fi
-  # Verify tag trigger pattern
-  if grep -q "tags:.*'v\*'" "$workflow" || grep -q 'tags:.*"v\*"' "$workflow"; then
+  # Verify tag trigger pattern (tolerates single/double quotes and bracket syntax)
+  if yaml_grep "$workflow" "tags:.*${POLICY_TAG_PATTERN}"; then
     echo "PASS: Release workflow triggers on v* tags"
   else
     fail "Release workflow does not trigger on v* tags"
   fi
 
-  runner_label=$(grep -E '^[[:space:]]*runs-on:[[:space:]]*' "$workflow" | head -1 | sed -E 's/^[[:space:]]*runs-on:[[:space:]]*//')
-  if [[ "$runner_label" == "macos-26" ]]; then
-    echo "PASS: Release workflow runs on macos-26"
+  # Extract runner label (normalize whitespace, strip quotes)
+  runner_label=$(sed -E 's/[[:space:]]+#.*$//' "$workflow" \
+    | sed '/^[[:space:]]*#/d' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/[[:space:]]\{1,\}/ /g' \
+    | sed "s/['\"]//g" \
+    | grep -E '^runs-on:' | head -1 | sed -E 's/^runs-on: *//')
+  if [[ "$runner_label" == "$POLICY_RUNNER_LABEL" ]]; then
+    echo "PASS: Release workflow runs on $POLICY_RUNNER_LABEL"
   else
-    fail "Release workflow runner is '$runner_label' (expected macos-26)"
+    fail "Release workflow runner is '$runner_label' (expected $POLICY_RUNNER_LABEL)"
   fi
 
-  if grep -q "uses: $setup_xcode_ref" "$workflow"; then
-    echo "PASS: Release workflow pins setup-xcode to immutable ref ($setup_xcode_ref)"
+  if yaml_grep "$workflow" "uses: *${POLICY_SETUP_XCODE_REF}"; then
+    echo "PASS: Release workflow pins setup-xcode to immutable ref"
   else
-    fail "Release workflow missing pinned setup-xcode ref ($setup_xcode_ref)"
+    fail "Release workflow missing pinned setup-xcode ref ($POLICY_SETUP_XCODE_REF)"
   fi
 
-  if grep -q 'xcode-version: latest-stable' "$workflow"; then
-    echo "PASS: Release workflow uses latest-stable Xcode channel"
+  if yaml_grep "$workflow" "xcode-version: *${POLICY_XCODE_CHANNEL}"; then
+    echo "PASS: Release workflow uses $POLICY_XCODE_CHANNEL Xcode channel"
   else
-    fail "Release workflow does not use xcode-version: latest-stable"
+    fail "Release workflow does not use xcode-version: $POLICY_XCODE_CHANNEL"
   fi
 
-  if grep -q '\-lt 26' "$workflow"; then
-    echo "PASS: Release workflow enforces Xcode major >= 26"
+  if grep -q "\-lt ${POLICY_XCODE_MAJOR_FLOOR}" "$workflow"; then
+    echo "PASS: Release workflow enforces Xcode major >= $POLICY_XCODE_MAJOR_FLOOR"
   else
-    fail "Release workflow does not enforce Xcode major >= 26"
+    fail "Release workflow does not enforce Xcode major >= $POLICY_XCODE_MAJOR_FLOOR"
   fi
 fi
 
 # 7. project.yml has Release code signing configured for app and CLI
-if grep -A2 'CODE_SIGN_STYLE:' "$REPO_ROOT/project.yml" | grep -q 'Manual'; then
-  echo "PASS: Release code signing configured (Manual)"
+if grep -A2 'CODE_SIGN_STYLE:' "$REPO_ROOT/project.yml" | grep -q "$POLICY_CODE_SIGN_STYLE"; then
+  echo "PASS: Release code signing configured ($POLICY_CODE_SIGN_STYLE)"
 else
-  fail "project.yml missing Release code signing configuration (CODE_SIGN_STYLE: Manual)"
+  fail "project.yml missing Release code signing configuration (CODE_SIGN_STYLE: $POLICY_CODE_SIGN_STYLE)"
 fi
 
 # 8. ci_archive.sh passes DEVELOPMENT_TEAM to xcodebuild archive
@@ -192,10 +222,10 @@ if [[ -f "$signing_script" ]]; then
   fi
   # The .p12 only has the leaf cert. IDEDistribution needs the Apple intermediate CA
   # to validate the chain for developer-id distribution. Without it: "Unknown Distribution Error".
-  if grep -q 'DeveloperIDG2CA.cer' "$signing_script"; then
+  if grep -q "$POLICY_INTERMEDIATE_CERT" "$signing_script"; then
     echo "PASS: ci_setup_signing.sh downloads Apple Developer ID G2 intermediate certificate"
   else
-    fail "ci_setup_signing.sh missing Apple Developer ID G2 intermediate cert download — exportArchive will fail"
+    fail "ci_setup_signing.sh missing Apple Developer ID G2 intermediate cert download ($POLICY_INTERMEDIATE_CERT) — exportArchive will fail"
   fi
 fi
 

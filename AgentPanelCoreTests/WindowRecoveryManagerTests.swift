@@ -21,6 +21,8 @@ final class WindowRecoveryManagerTests: XCTestCase {
         var moveWindowCalls: [(workspace: String, windowId: Int, focusFollows: Bool)] = []
         var moveWindowResult: Result<Void, ApCoreError> = .success(())
         var focusWindowResult: Result<Void, ApCoreError> = .success(())
+        /// Per-windowId overrides for focusWindow. Checked before `focusWindowResult`.
+        var focusWindowResults: [Int: Result<Void, ApCoreError>] = [:]
 
         func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(workspaces.contains(name)) }
@@ -51,7 +53,7 @@ final class WindowRecoveryManagerTests: XCTestCase {
 
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
             focusWindowCalls.append(windowId)
-            return focusWindowResult
+            return focusWindowResults[windowId] ?? focusWindowResult
         }
 
         func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> {
@@ -105,7 +107,13 @@ final class WindowRecoveryManagerTests: XCTestCase {
         var defaultRecoverResult: Result<RecoveryOutcome, ApCoreError> = .success(.unchanged)
         var setFrameCalls: [(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffset: CGFloat)] = []
         var setFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:] // keyed by bundleId
+        /// Sequential results for setWindowFrames (keyed by bundleId). Each call shifts first element.
+        var setFrameSequences: [String: [Result<WindowPositionResult, ApCoreError>]] = [:]
         var defaultSetFrameResult: Result<WindowPositionResult, ApCoreError> = .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        // Fallback method support
+        var setFallbackFrameResults: [String: Result<WindowPositionResult, ApCoreError>] = [:]
+        private(set) var setFallbackFrameCalls: [(bundleId: String, primaryFrame: CGRect)] = []
 
         func recoverWindow(bundleId: String, windowTitle: String, screenVisibleFrame: CGRect) -> Result<RecoveryOutcome, ApCoreError> {
             recoverCalls.append((bundleId, windowTitle, screenVisibleFrame))
@@ -125,7 +133,21 @@ final class WindowRecoveryManagerTests: XCTestCase {
 
         func setWindowFrames(bundleId: String, projectId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
             setFrameCalls.append((bundleId, projectId, primaryFrame, cascadeOffsetPoints))
+            if var seq = setFrameSequences[bundleId], !seq.isEmpty {
+                let result = seq.removeFirst()
+                setFrameSequences[bundleId] = seq
+                return result
+            }
             return setFrameResults[bundleId] ?? defaultSetFrameResult
+        }
+
+        func getFallbackWindowFrame(bundleId: String) -> Result<CGRect, ApCoreError> {
+            .failure(ApCoreError(category: .window, message: "Fallback not available"))
+        }
+
+        func setFallbackWindowFrames(bundleId: String, primaryFrame: CGRect, cascadeOffsetPoints: CGFloat) -> Result<WindowPositionResult, ApCoreError> {
+            setFallbackFrameCalls.append((bundleId, primaryFrame))
+            return setFallbackFrameResults[bundleId] ?? .failure(ApCoreError(category: .window, message: "Fallback not available"))
         }
 
         func isAccessibilityTrusted() -> Bool { true }
@@ -873,6 +895,39 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(recovery.windowsRecovered, 2, "Layout phase positioned 2 windows (default stub result)")
     }
 
+    func testRecoverWorkspace_projectWorkspace_partialLayoutAllowsGenericRecoveryForTokenWindows() {
+        let aerospace = StubAeroSpace()
+        let projectId = "partial"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow1 = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                    title: "AP:\(projectId) - VS Code")
+        let ideWindow2 = makeWindow(id: 2, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                    title: "AP:\(projectId) - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow1, ideWindow2])
+
+        let positioner = StubWindowPositioner()
+        // Simulate partial AX write success for layout positioning.
+        positioner.setFrameResults["com.microsoft.VSCode"] = .success(WindowPositionResult(positioned: 1, matched: 2))
+
+        let detector = StubScreenModeDetector()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Partial layout must not hide token windows from generic recovery.
+        let genericBundleIds = positioner.recoverCalls.map { $0.bundleId }
+        XCTAssertEqual(genericBundleIds, ["com.microsoft.VSCode", "com.microsoft.VSCode"])
+
+        // Count should include the one layout-positioned window.
+        XCTAssertEqual(recovery.windowsRecovered, 1)
+    }
+
     func testRecoverWorkspace_projectWorkspace_onlyTargetsBundleIdsInWorkspace() {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
@@ -1083,5 +1138,321 @@ final class WindowRecoveryManagerTests: XCTestCase {
         XCTAssertEqual(positioner.setFrameCalls[0].bundleId, "com.microsoft.VSCode")
         XCTAssertTrue(positioner.recoverCalls.isEmpty,
                       "Token-matching project windows should be handled by layout phase")
+    }
+
+    // MARK: - Layout Recovery Retry + Fallback Tests
+
+    func testRecoverLayout_retriesTransientTokenMissAndSucceeds() {
+        let aerospace = StubAeroSpace()
+        let projectId = "retry-proj"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        let chromeWindow = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                      title: "AP:\(projectId) - Chrome")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow, chromeWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // IDE: fail once then succeed
+        positioner.setFrameSequences["com.microsoft.VSCode"] = [
+            .failure(tokenMiss),
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+        ]
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // IDE retried and succeeded, Chrome succeeded on first attempt
+        let ideCalls = positioner.setFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideCalls.count, 2, "IDE should have been called twice (1 retry + 1 success)")
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Fallback not needed")
+        XCTAssertEqual(recovery.windowsRecovered, 2, "Both IDE and Chrome should be recovered")
+    }
+
+    func testRecoverLayout_usesFallbackAfterRetryExhaustion() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-proj"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        // Extra VS Code window in workspace (without token in title)
+        let ideWindow2 = makeWindow(id: 10, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                    title: "Untitled - VS Code")
+        let chromeWindow = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                      title: "AP:\(projectId) - Chrome")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow, ideWindow2, chromeWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // IDE: all 3 retries fail
+        positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
+        // IDE fallback succeeds
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Fallback was used for IDE
+        XCTAssertEqual(positioner.setFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.setFallbackFrameCalls[0].bundleId, "com.microsoft.VSCode")
+        XCTAssertTrue(aerospace.focusWindowCalls.contains(ideWindow.windowId),
+                      "Fallback should anchor focus to a deterministic workspace window")
+
+        // Only the fallback-anchor window is handled by layout; extra VS Code windows remain
+        // eligible for generic recovery.
+        let genericBundleIds = positioner.recoverCalls.map { $0.bundleId }
+        XCTAssertEqual(genericBundleIds, ["com.microsoft.VSCode"],
+                       "Non-anchor VS Code windows should still receive generic recovery")
+
+        XCTAssertTrue(recovery.errors.isEmpty, "Fallback succeeded — no errors expected")
+        // Fallback positioned 1 IDE + 1 Chrome via normal path = 2 total
+        XCTAssertEqual(recovery.windowsRecovered, 2,
+                       "Fallback anchor + Chrome should be counted as recovered")
+    }
+
+    func testRecoverLayout_fallbackRequiresUniqueWorkspaceWindow() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-ambiguous"
+        let workspace = "ap-\(projectId)"
+
+        let chromeWindow1 = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                       title: "Window A")
+        let chromeWindow2 = makeWindow(id: 3, bundleId: "com.google.Chrome", workspace: workspace,
+                                       title: "Window B")
+        aerospace.windowsByWorkspace[workspace] = .success([chromeWindow1, chromeWindow2])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.setFrameSequences["com.google.Chrome"] = Array(repeating: .failure(tokenMiss), count: 3)
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Ambiguous fallback must not execute")
+        XCTAssertTrue(recovery.errors.contains {
+            $0.contains("fallback requires exactly one workspace window")
+        })
+
+        // Ambiguous fallback leaves both windows for generic recovery.
+        let genericBundleIds = positioner.recoverCalls.map { $0.bundleId }
+        XCTAssertEqual(genericBundleIds, ["com.google.Chrome", "com.google.Chrome"])
+
+        // No windows recovered via layout phase (both fell through to generic)
+        XCTAssertEqual(recovery.windowsRecovered, 0,
+                       "Ambiguous fallback should not count any windows as recovered")
+    }
+
+    func testRecoverLayout_fallbackFailureAddsError() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-fail"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 3 retries fail
+        positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
+        // Fallback also fails
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(category: .window, message: "Ambiguous: 3 windows"))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Error should be reported
+        XCTAssertFalse(recovery.errors.isEmpty, "Should have error when both retry and fallback fail")
+        XCTAssertTrue(recovery.errors.first?.contains("Ambiguous") == true)
+
+        // Fallback failed — no windows recovered via layout
+        XCTAssertEqual(recovery.windowsRecovered, 0,
+                       "Failed fallback should not count windows as recovered")
+    }
+
+    func testRecoverLayout_fallbackPositionedZeroAddsError() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-zero"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // All 3 retries fail
+        positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
+        // Fallback succeeds but positions 0 windows
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .success(WindowPositionResult(positioned: 0, matched: 0))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Fallback returned positioned: 0 — should be treated as error
+        XCTAssertTrue(recovery.errors.contains { $0.contains("fallback positioned 0 windows") })
+        XCTAssertEqual(recovery.windowsRecovered, 0,
+                       "positioned: 0 fallback should not count as recovered")
+    }
+
+    func testRecoverLayout_fallbackAnchorFromBundleWindowWhenNoTokenMatch() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-bundle"
+        let workspace = "ap-\(projectId)"
+
+        // Single Chrome window WITHOUT the token in its title (title hasn't updated yet)
+        let chromeWindow = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                      title: "New Tab - Google Chrome")
+        aerospace.windowsByWorkspace[workspace] = .success([chromeWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.setFrameSequences["com.google.Chrome"] = Array(repeating: .failure(tokenMiss), count: 3)
+        // Fallback succeeds
+        positioner.setFallbackFrameResults["com.google.Chrome"] =
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // tokenMatchingWindows is empty, allBundleWindows has 1 → fallback anchor from bundle
+        XCTAssertEqual(positioner.setFallbackFrameCalls.count, 1)
+        XCTAssertEqual(positioner.setFallbackFrameCalls[0].bundleId, "com.google.Chrome")
+        XCTAssertTrue(aerospace.focusWindowCalls.contains(chromeWindow.windowId),
+                      "Should focus the lone bundle window as fallback anchor")
+        XCTAssertTrue(recovery.errors.isEmpty, "Fallback succeeded — no errors expected")
+        XCTAssertEqual(recovery.windowsRecovered, 1)
+    }
+
+    func testRecoverLayout_fallbackFocusFailureAddsError() {
+        let aerospace = StubAeroSpace()
+        let projectId = "fb-focus-fail"
+        let workspace = "ap-\(projectId)"
+
+        let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
+                                   title: "AP:\(projectId) - VS Code")
+        aerospace.windowsByWorkspace[workspace] = .success([ideWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
+        // Fallback would succeed, but focus will fail first
+        positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
+            .success(WindowPositionResult(positioned: 1, matched: 1))
+
+        // Focus fails only for the anchor window
+        aerospace.focusWindowResults[ideWindow.windowId] =
+            .failure(ApCoreError(category: .window, message: "Window not found in tree"))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // Fallback was NOT called because focus failed
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty,
+                      "Focus failure should prevent fallback execution")
+        XCTAssertTrue(recovery.errors.contains { $0.contains("focus failed for fallback window") })
+        XCTAssertEqual(recovery.windowsRecovered, 0,
+                       "Focus failure should not count windows as recovered")
+    }
+
+    func testRecoverLayout_permanentErrorSkipsFallback() {
+        let aerospace = StubAeroSpace()
+        let projectId = "perm-err"
+        let workspace = "ap-\(projectId)"
+
+        let chromeWindow = makeWindow(id: 2, bundleId: "com.google.Chrome", workspace: workspace,
+                                      title: "AP:\(projectId) - Chrome")
+        aerospace.windowsByWorkspace[workspace] = .success([chromeWindow])
+
+        let positioner = StubWindowPositioner()
+        let detector = StubScreenModeDetector()
+
+        // Permanent error (not "No window found with token")
+        positioner.setFrameResults["com.google.Chrome"] =
+            .failure(ApCoreError(category: .window, message: "AX permission denied"))
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner,
+                                  screenModeDetector: detector)
+
+        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+
+        guard case .success(let recovery) = result else {
+            XCTFail("Expected success, got \(result)")
+            return
+        }
+
+        // No retry, no fallback — permanent error reported directly
+        XCTAssertEqual(positioner.setFrameCalls.count, 1, "Should only try once for permanent error")
+        XCTAssertTrue(positioner.setFallbackFrameCalls.isEmpty, "Permanent error should not trigger fallback")
+        XCTAssertFalse(recovery.errors.isEmpty)
+        XCTAssertTrue(recovery.errors.first?.contains("AX permission denied") == true)
     }
 }

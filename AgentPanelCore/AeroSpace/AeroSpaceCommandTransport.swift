@@ -1,0 +1,65 @@
+import Foundation
+import os
+
+/// Handles low-level execution of AeroSpace CLI commands with circuit-breaker integration.
+///
+/// This layer is responsible for running the `aerospace` executable, recording success/timeout
+/// outcomes on the circuit breaker, and constructing breaker-related errors. Higher-level
+/// orchestration (recovery, retry) lives in `ApAeroSpace`.
+struct AeroSpaceCommandTransport {
+    private static let logger = Logger(subsystem: "com.agentpanel", category: "AeroSpaceCommandTransport")
+
+    let commandRunner: CommandRunning
+    let circuitBreaker: AeroSpaceCircuitBreaker
+
+    /// Returns true when the circuit breaker allows a command to proceed.
+    func shouldAllow() -> Bool {
+        circuitBreaker.shouldAllow()
+    }
+
+    /// Executes an aerospace command and records the outcome on the circuit breaker.
+    ///
+    /// On success, records a success. On timeout, records a timeout (which may trip the breaker).
+    /// Non-timeout failures pass through without affecting breaker state.
+    ///
+    /// - Parameters:
+    ///   - arguments: Arguments to pass to the `aerospace` executable.
+    ///   - timeoutSeconds: Timeout in seconds.
+    /// - Returns: Command result on success, or an error.
+    func executeAndRecord(
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) -> Result<ApCommandResult, ApCoreError> {
+        let result = commandRunner.run(
+            executable: "aerospace",
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds
+        )
+
+        switch result {
+        case .success:
+            circuitBreaker.recordSuccess()
+        case .failure(let error):
+            if error.message.hasPrefix("Command timed out") {
+                let wasOpen = !circuitBreaker.shouldAllow()
+                circuitBreaker.recordTimeout()
+                if !wasOpen {
+                    Self.logger.warning("circuit_breaker.tripped command=aerospace \(arguments.joined(separator: " "), privacy: .public) timeout=\(timeoutSeconds)s")
+                }
+            }
+        }
+
+        return result
+    }
+
+    /// Returns the standard error for when the circuit breaker is open.
+    ///
+    /// - Returns: An error indicating AeroSpace is unresponsive.
+    func breakerOpenError() -> ApCoreError {
+        ApCoreError(
+            category: .command,
+            message: "AeroSpace is unresponsive (circuit breaker open).",
+            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
+        )
+    }
+}

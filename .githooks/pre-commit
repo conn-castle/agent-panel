@@ -4,5 +4,51 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-echo "pre-commit: running make coverage (includes coverage gate)..."
-make coverage
+# Determine which test targets are affected by staged files.
+# Includes both added/modified AND deleted files, since deleting source
+# can break compilation or tests in the affected target.
+targets=()
+run_all=false
+
+while IFS= read -r file; do
+  case "$file" in
+    AgentPanelApp/*|AgentPanelAppTests/*)
+      targets+=("AgentPanelAppTests")
+      ;;
+    AgentPanelAppKit/*)
+      targets+=("AgentPanelCoreTests")
+      targets+=("AgentPanelAppTests")
+      targets+=("AgentPanelCLITests")
+      ;;
+    AgentPanelCore/*|AgentPanelCoreTests/*)
+      targets+=("AgentPanelCoreTests")
+      targets+=("AgentPanelAppTests")
+      targets+=("AgentPanelCLITests")
+      ;;
+    AgentPanelCLI/*|AgentPanelCLICore/*|AgentPanelCLITests/*)
+      targets+=("AgentPanelCLITests")
+      ;;
+    project.yml|Makefile|scripts/*|*.xcodeproj/*|*.xcscheme|TestPlans/*)
+      run_all=true
+      ;;
+  esac
+done < <(git diff --cached --name-only)
+
+if "$run_all"; then
+  echo "pre-commit: infrastructure files changed — running all tests..."
+  scripts/test.sh
+  exit 0
+fi
+
+# Deduplicate targets
+unique_targets=($(printf '%s\n' "${targets[@]}" 2>/dev/null | sort -u))
+
+if [[ ${#unique_targets[@]} -eq 0 ]]; then
+  echo "pre-commit: no source changes staged — skipping tests."
+  exit 0
+fi
+
+for t in "${unique_targets[@]}"; do
+  echo "pre-commit: running $t..."
+  scripts/test.sh --target "$t"
+done

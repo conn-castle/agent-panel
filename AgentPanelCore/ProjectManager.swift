@@ -228,6 +228,10 @@ public final class ProjectManager {
     private var mostRecentNonProjectFocus: FocusHistoryEntry?
     // Retry bookkeeping for focus candidates that fail to stabilize.
     private var focusRestoreRetryAttemptsByWindowId: [Int: Int] = [:]
+    /// Per-project snapshot of the focus state at action-initiation time.
+    /// When a user activates Project B from Project A's window, this stores A's window
+    /// under key "B". On close of B, we try to restore A's window first.
+    private var preEntryFocus: [String: FocusHistoryEntry] = [:]
 
     // Serializes all mutable state across background + main usage.
     private let stateQueue = DispatchQueue(label: "com.agentpanel.project_manager.state")
@@ -488,6 +492,13 @@ public final class ProjectManager {
             focusRestoreRetryAttemptsByWindowId[focus.windowId] = 0
         }
         persistFocusHistory()
+    }
+
+    /// Test helper: sets the pre-entry focus for a project (simulates selectProject storing it).
+    func setPreEntryFocusForTest(projectId: String, focus: CapturedFocus) {
+        withState {
+            preEntryFocus[projectId] = FocusHistoryEntry(focus: focus, capturedAt: Date())
+        }
     }
 
     /// Loads configuration from the default path.
@@ -1069,6 +1080,21 @@ public final class ProjectManager {
     ///     focus when exiting the project later.
     /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError> {
+        await selectProject(projectId: projectId, preCapturedFocus: preCapturedFocus as CapturedFocus?)
+    }
+
+    /// Activates a project with optional pre-captured focus.
+    ///
+    /// When `preCapturedFocus` is nil (e.g., focus capture failed before switcher opened),
+    /// activation proceeds normally but no new focus entry is pushed to history.
+    /// Exit/close can still restore from existing focus history; if none is restorable,
+    /// workspace routing fallback is used.
+    ///
+    /// - Parameters:
+    ///   - projectId: The project ID to activate.
+    ///   - preCapturedFocus: Focus state captured before showing UI, or nil if capture failed.
+    /// - Returns: Activation success (IDE window ID + optional tab restore warning) or error.
+    public func selectProject(projectId: String, preCapturedFocus: CapturedFocus?) async -> Result<ProjectActivationSuccess, ProjectError> {
         let configSnapshot = withState { config }
         guard let configSnapshot else {
             return .failure(.configNotLoaded)
@@ -1081,22 +1107,29 @@ public final class ProjectManager {
 
         let targetWorkspace = Self.workspacePrefix + projectId
 
-        // Push pre-captured focus for "exit project space" restoration.
-        // Only push if the user is coming from outside project space.
-        // Project-to-project switches (ap-* workspace) are not recorded.
-        if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
-            pushNonProjectFocusForExit(preCapturedFocus)
-        } else {
-            logEvent("focus.push_skipped_project_workspace", context: [
-                "workspace": preCapturedFocus.workspace,
-                "window_id": "\(preCapturedFocus.windowId)"
-            ])
-        }
+        if let preCapturedFocus {
+            // Push pre-captured focus for "exit project space" restoration.
+            // Only push if the user is coming from outside project space.
+            // Project-to-project switches (ap-* workspace) are not recorded.
+            if !preCapturedFocus.workspace.hasPrefix(Self.workspacePrefix) {
+                pushNonProjectFocusForExit(preCapturedFocus)
+            } else {
+                logEvent("focus.push_skipped_project_workspace", context: [
+                    "workspace": preCapturedFocus.workspace,
+                    "window_id": "\(preCapturedFocus.windowId)"
+                ])
+            }
 
-        // Capture window positions for the source project before switching away.
-        // Only when coming from another project workspace (ap-*).
-        if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
-            captureWindowPositions(projectId: sourceProjectId)
+            // Capture window positions for the source project before switching away.
+            // Only when coming from another project workspace (ap-*).
+            if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
+                captureWindowPositions(projectId: sourceProjectId)
+            }
+        } else {
+            logEvent("select.no_prefocus", level: .warn, context: [
+                "project_id": projectId,
+                "detail": "Focus capture failed before switcher; restore will use workspace routing"
+            ])
         }
 
         // --- Phase 1: Find or launch all windows (no moves yet) ---
@@ -1231,6 +1264,19 @@ public final class ProjectManager {
         // Position windows (non-fatal)
         let layoutWarning = positionWindows(projectId: projectId)
 
+        // Store pre-entry focus for close-project restoration now that activation
+        // succeeded. Stored here (not earlier) so failure paths never leave stale entries.
+        if let preCapturedFocus {
+            withState {
+                preEntryFocus[projectId] = FocusHistoryEntry(focus: preCapturedFocus, capturedAt: Date())
+            }
+            logEvent("focus.pre_entry_stored", context: [
+                "project_id": projectId,
+                "source_window_id": "\(preCapturedFocus.windowId)",
+                "source_workspace": preCapturedFocus.workspace
+            ])
+        }
+
         // Record activation
         recordActivation(projectId: projectId)
         logEvent("select.completed", context: ["project_id": projectId, "ide_window_id": "\(ideWindowId)"])
@@ -1269,8 +1315,50 @@ public final class ProjectManager {
             logEvent("close.workspace_closed", context: ["project_id": projectId])
         }
 
-        // Restore focus to non-project space; if global lookup fails, restore uses persisted history directly.
-        let restoredFocus = restoreNonProjectFocus(windowLookup: listAllWindowsById())
+        // Try restoring the focus that was active when this project was first entered.
+        // This handles cross-project transitions (A→B→close B→restore A) that the
+        // non-project focus stack cannot track.
+        let preEntry: FocusHistoryEntry? = withState { preEntryFocus.removeValue(forKey: projectId) }
+        let windowLookup = listAllWindowsById()
+        var restoredFocus: CapturedFocus?
+
+        if let preEntry {
+            // Never restore to the workspace currently being closed.
+            // This can happen if a stale/same-project pre-entry snapshot exists.
+            if preEntry.focus.workspace == workspace {
+                logEvent("close.pre_entry_focus_skipped_same_workspace", context: [
+                    "project_id": projectId,
+                    "workspace": workspace,
+                    "window_id": "\(preEntry.focus.windowId)"
+                ])
+            } else if windowLookup == nil || windowLookup?[preEntry.focus.windowId] != nil {
+                // Attempt restore even when lookup is unavailable (transient failure);
+                // use lookup only as a validation step when present.
+                switch aerospace.focusWindow(windowId: preEntry.focus.windowId) {
+                case .success:
+                    restoredFocus = preEntry.focus
+                    logEvent("close.focus_restored_pre_entry", context: [
+                        "project_id": projectId,
+                        "window_id": "\(preEntry.focus.windowId)",
+                        "app": preEntry.focus.appBundleId,
+                        "source_workspace": preEntry.focus.workspace,
+                        "lookup_available": "\(windowLookup != nil)"
+                    ])
+                case .failure(let error):
+                    logEvent("close.pre_entry_focus_failed", level: .warn, message: error.message)
+                }
+            } else {
+                logEvent("close.pre_entry_focus_window_gone", context: [
+                    "project_id": projectId,
+                    "window_id": "\(preEntry.focus.windowId)"
+                ])
+            }
+        }
+
+        // Fall back to existing stack-based restoration if pre-entry didn't work.
+        if restoredFocus == nil {
+            restoredFocus = restoreNonProjectFocus(windowLookup: windowLookup)
+        }
 
         if let focus = restoredFocus {
             logEvent("close.focus_restored", context: [
@@ -1685,9 +1773,8 @@ public final class ProjectManager {
         let maxFrameRetries = 10
         let frameRetryInterval = windowPollInterval // ~0.1s default, injectable for tests
         var frameAttempt = 0
-        var lastFrameError: ApCoreError?
 
-        while true {
+        ideFrameLoop: while true {
             frameAttempt += 1
             switch positioner.getPrimaryWindowFrame(bundleId: ApVSCodeLauncher.bundleId, projectId: projectId) {
             case .success(let frame):
@@ -1698,9 +1785,7 @@ public final class ProjectManager {
                     ])
                 }
                 ideFrame = frame
-                lastFrameError = nil
             case .failure(let error):
-                lastFrameError = error
                 // Only retry transient "window not found" errors (title not yet updated).
                 // Permanent errors (AX permission denied, app not running, etc.) fail immediately.
                 let isTransient = error.message.hasPrefix("No window found with token")
@@ -1708,15 +1793,32 @@ public final class ProjectManager {
                     Thread.sleep(forTimeInterval: frameRetryInterval)
                     continue
                 }
-                logEvent("position.ide_frame_read_failed", level: .warn, message: error.message, context: [
-                    "project_id": projectId,
-                    "attempts": "\(frameAttempt)"
-                ])
-                return "Window positioning skipped: \(error.message)"
+                // Retry exhausted or permanent error — try fallback to focused/only window
+                if isTransient {
+                    switch positioner.getFallbackWindowFrame(bundleId: ApVSCodeLauncher.bundleId) {
+                    case .success(let fallbackFrame):
+                        logEvent("position.ide_fallback_used", level: .warn, context: [
+                            "project_id": projectId,
+                            "attempts": "\(frameAttempt)"
+                        ])
+                        ideFrame = fallbackFrame
+                        break ideFrameLoop
+                    case .failure(let fallbackError):
+                        logEvent("position.ide_frame_read_failed", level: .warn,
+                                 message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
+                                 context: ["project_id": projectId, "attempts": "\(frameAttempt)"])
+                        return "Window positioning skipped: \(fallbackError.message)"
+                    }
+                } else {
+                    logEvent("position.ide_frame_read_failed", level: .warn, message: error.message, context: [
+                        "project_id": projectId,
+                        "attempts": "\(frameAttempt)"
+                    ])
+                    return "Window positioning skipped: \(error.message)"
+                }
             }
-            break
+            break ideFrameLoop
         }
-        _ = lastFrameError // suppress unused warning
 
         // Detect screen mode (use center of IDE frame as reference point)
         let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
@@ -1794,48 +1896,136 @@ public final class ProjectManager {
         // Compute cascade offset in points: 0.5 inches * (screen points / screen inches)
         let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
 
-        // Position IDE windows
-        switch positioner.setWindowFrames(
-            bundleId: ApVSCodeLauncher.bundleId,
-            projectId: projectId,
-            primaryFrame: targetLayout.ideFrame,
-            cascadeOffsetPoints: cascadeOffsetPoints
-        ) {
-        case .success(let result):
-            if result.positioned < 1 {
-                logEvent("position.ide_set_none", level: .warn)
-                warnings.append("IDE: no windows were positioned")
-            } else if result.hasPartialFailure {
-                logEvent("position.ide_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
-                warnings.append("IDE: positioned \(result.positioned) of \(result.matched) windows")
-            } else {
-                logEvent("position.ide_positioned", context: ["count": "\(result.positioned)"])
+        // Position IDE windows (retry briefly — IDE title may not be visible to AX immediately)
+        let maxIDESetRetries = 5
+        var ideSetAttempt = 0
+        ideSetLoop: while true {
+            ideSetAttempt += 1
+            switch positioner.setWindowFrames(
+                bundleId: ApVSCodeLauncher.bundleId,
+                projectId: projectId,
+                primaryFrame: targetLayout.ideFrame,
+                cascadeOffsetPoints: cascadeOffsetPoints
+            ) {
+            case .success(let result):
+                if ideSetAttempt > 1 {
+                    logEvent("position.ide_set_retried", context: [
+                        "project_id": projectId,
+                        "attempts": "\(ideSetAttempt)"
+                    ])
+                }
+                if result.positioned < 1 {
+                    logEvent("position.ide_set_none", level: .warn)
+                    warnings.append("IDE: no windows were positioned")
+                } else if result.hasPartialFailure {
+                    logEvent("position.ide_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                    warnings.append("IDE: positioned \(result.positioned) of \(result.matched) windows")
+                } else {
+                    logEvent("position.ide_positioned", context: ["count": "\(result.positioned)"])
+                }
+                break ideSetLoop
+            case .failure(let error):
+                let isTransient = error.message.hasPrefix("No window found with token")
+                if isTransient && ideSetAttempt < maxIDESetRetries {
+                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    continue
+                }
+                // Retry exhausted or permanent error — try fallback
+                if isTransient {
+                    switch positioner.setFallbackWindowFrames(
+                        bundleId: ApVSCodeLauncher.bundleId,
+                        primaryFrame: targetLayout.ideFrame,
+                        cascadeOffsetPoints: cascadeOffsetPoints
+                    ) {
+                    case .success(let result):
+                        logEvent("position.ide_set_fallback_used", level: .warn, context: [
+                            "project_id": projectId,
+                            "attempts": "\(ideSetAttempt)",
+                            "positioned": "\(result.positioned)"
+                        ])
+                        if result.positioned < 1 {
+                            warnings.append("IDE: no windows were positioned")
+                        }
+                        break ideSetLoop
+                    case .failure(let fallbackError):
+                        logEvent("position.ide_set_failed", level: .warn,
+                                 message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
+                                 context: ["project_id": projectId, "attempts": "\(ideSetAttempt)"])
+                        warnings.append("IDE positioning failed: \(fallbackError.message)")
+                        break ideSetLoop
+                    }
+                } else {
+                    logEvent("position.ide_set_failed", level: .warn, message: error.message)
+                    warnings.append("IDE positioning failed: \(error.message)")
+                    break ideSetLoop
+                }
             }
-        case .failure(let error):
-            logEvent("position.ide_set_failed", level: .warn, message: error.message)
-            warnings.append("IDE positioning failed: \(error.message)")
         }
 
-        // Position Chrome windows
-        switch positioner.setWindowFrames(
-            bundleId: ApChromeLauncher.bundleId,
-            projectId: projectId,
-            primaryFrame: targetLayout.chromeFrame,
-            cascadeOffsetPoints: cascadeOffsetPoints
-        ) {
-        case .success(let result):
-            if result.positioned < 1 {
-                logEvent("position.chrome_set_none", level: .warn)
-                warnings.append("Chrome: no windows were positioned")
-            } else if result.hasPartialFailure {
-                logEvent("position.chrome_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
-                warnings.append("Chrome: positioned \(result.positioned) of \(result.matched) windows")
-            } else {
-                logEvent("position.chrome_positioned", context: ["count": "\(result.positioned)"])
+        // Position Chrome windows (retry briefly — Chrome title may not be visible to AX immediately)
+        let maxChromeSetRetries = 5
+        var chromeSetAttempt = 0
+        chromeSetLoop: while true {
+            chromeSetAttempt += 1
+            switch positioner.setWindowFrames(
+                bundleId: ApChromeLauncher.bundleId,
+                projectId: projectId,
+                primaryFrame: targetLayout.chromeFrame,
+                cascadeOffsetPoints: cascadeOffsetPoints
+            ) {
+            case .success(let result):
+                if chromeSetAttempt > 1 {
+                    logEvent("position.chrome_set_retried", context: [
+                        "project_id": projectId,
+                        "attempts": "\(chromeSetAttempt)"
+                    ])
+                }
+                if result.positioned < 1 {
+                    logEvent("position.chrome_set_none", level: .warn)
+                    warnings.append("Chrome: no windows were positioned")
+                } else if result.hasPartialFailure {
+                    logEvent("position.chrome_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                    warnings.append("Chrome: positioned \(result.positioned) of \(result.matched) windows")
+                } else {
+                    logEvent("position.chrome_positioned", context: ["count": "\(result.positioned)"])
+                }
+                break chromeSetLoop
+            case .failure(let error):
+                let isTransient = error.message.hasPrefix("No window found with token")
+                if isTransient && chromeSetAttempt < maxChromeSetRetries {
+                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    continue
+                }
+                // Retry exhausted or permanent error — try fallback
+                if isTransient {
+                    switch positioner.setFallbackWindowFrames(
+                        bundleId: ApChromeLauncher.bundleId,
+                        primaryFrame: targetLayout.chromeFrame,
+                        cascadeOffsetPoints: cascadeOffsetPoints
+                    ) {
+                    case .success(let result):
+                        logEvent("position.chrome_set_fallback_used", level: .warn, context: [
+                            "project_id": projectId,
+                            "attempts": "\(chromeSetAttempt)",
+                            "positioned": "\(result.positioned)"
+                        ])
+                        if result.positioned < 1 {
+                            warnings.append("Chrome: no windows were positioned")
+                        }
+                        break chromeSetLoop
+                    case .failure(let fallbackError):
+                        logEvent("position.chrome_set_failed", level: .warn,
+                                 message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
+                                 context: ["project_id": projectId, "attempts": "\(chromeSetAttempt)"])
+                        warnings.append("Chrome positioning failed: \(fallbackError.message)")
+                        break chromeSetLoop
+                    }
+                } else {
+                    logEvent("position.chrome_set_failed", level: .warn, message: error.message)
+                    warnings.append("Chrome positioning failed: \(error.message)")
+                    break chromeSetLoop
+                }
             }
-        case .failure(let error):
-            logEvent("position.chrome_set_failed", level: .warn, message: error.message)
-            warnings.append("Chrome positioning failed: \(error.message)")
         }
 
         return warnings.isEmpty ? nil : warnings.joined(separator: "; ")
@@ -1862,18 +2052,63 @@ public final class ProjectManager {
             return
         }
 
-        // Read Chrome primary frame (optional — save proceeds without it)
-        let chromeFrame: CGRect?
-        switch positioner.getPrimaryWindowFrame(bundleId: ApChromeLauncher.bundleId, projectId: projectId) {
-        case .success(let frame):
-            chromeFrame = frame
-        case .failure(let error):
-            // ERROR level: Chrome frame read should normally succeed. This is a bandaid
-            // that prevents data loss but should be investigated if it occurs regularly.
-            logEvent("capture_position.chrome_read_failed", level: .error,
-                     message: "Chrome frame read failed — saving IDE-only (investigate if recurring): \(error.message)",
+        // Read Chrome primary frame with bounded retry + fallback.
+        // Chrome title is set synchronously via AppleScript but AX visibility can lag.
+        let captureRetryInterval = windowPollInterval // ~0.1s default, injectable for tests
+        let maxCaptureRetries = 5
+        var chromeFrame: CGRect?
+        var captureAttempt = 0
+        captureLoop: while true {
+            captureAttempt += 1
+            switch positioner.getPrimaryWindowFrame(bundleId: ApChromeLauncher.bundleId, projectId: projectId) {
+            case .success(let frame):
+                if captureAttempt > 1 {
+                    logEvent("capture_position.chrome_read_retried", context: [
+                        "project_id": projectId,
+                        "attempts": "\(captureAttempt)"
+                    ])
+                }
+                chromeFrame = frame
+                break captureLoop
+            case .failure(let error):
+                let isTransient = error.message.hasPrefix("No window found with token")
+                if isTransient && captureAttempt < maxCaptureRetries {
+                    Thread.sleep(forTimeInterval: captureRetryInterval)
+                    continue
+                }
+                // Retry exhausted or permanent error — try fallback
+                if isTransient {
+                    switch positioner.getFallbackWindowFrame(bundleId: ApChromeLauncher.bundleId) {
+                    case .success(let fallbackFrame):
+                        logEvent("capture_position.chrome_fallback_used", level: .warn, context: [
+                            "project_id": projectId,
+                            "attempts": "\(captureAttempt)"
+                        ])
+                        chromeFrame = fallbackFrame
+                        break captureLoop
+                    case .failure(let fallbackError):
+                        logEvent("capture_position.chrome_read_failed", level: .warn,
+                                 message: "Chrome frame unavailable after retries — preserving previous saved layout: \(fallbackError.message)",
+                                 context: ["project_id": projectId, "attempts": "\(captureAttempt)"])
+                        chromeFrame = nil
+                        break captureLoop
+                    }
+                } else {
+                    logEvent("capture_position.chrome_read_failed", level: .warn,
+                             message: "Chrome frame read failed (permanent): \(error.message)",
+                             context: ["project_id": projectId])
+                    chromeFrame = nil
+                    break captureLoop
+                }
+            }
+        }
+
+        // Skip save when Chrome frame is unavailable — preserve previous complete capture as canonical
+        guard let resolvedChromeFrame = chromeFrame else {
+            logEvent("capture_position.skipped_partial", level: .warn,
+                     message: "Skipping layout save — Chrome frame unavailable, preserving previous saved layout",
                      context: ["project_id": projectId])
-            chromeFrame = nil
+            return
         }
 
         // Detect screen mode
@@ -1887,22 +2122,16 @@ public final class ProjectManager {
             screenMode = .wide
         }
 
-        // Save frames (Chrome may be nil for IDE-only save)
+        // Save complete frames (both IDE and Chrome available)
         let frames = SavedWindowFrames(
             ide: SavedFrame(rect: ideFrame),
-            chrome: chromeFrame.map { SavedFrame(rect: $0) }
+            chrome: SavedFrame(rect: resolvedChromeFrame)
         )
         switch store.save(projectId: projectId, mode: screenMode, frames: frames) {
         case .success:
-            if chromeFrame == nil {
-                logEvent("capture_position.saved", level: .error,
-                         message: "Saved IDE-only layout for \(projectId) — Chrome frame was unavailable (investigate if recurring)",
-                         context: ["project_id": projectId, "mode": screenMode.rawValue, "partial": "true"])
-            } else {
-                logEvent("capture_position.saved", context: [
-                    "project_id": projectId, "mode": screenMode.rawValue, "partial": "false"
-                ])
-            }
+            logEvent("capture_position.saved", context: [
+                "project_id": projectId, "mode": screenMode.rawValue
+            ])
         case .failure(let error):
             logEvent("capture_position.save_failed", level: .warn, message: error.message)
         }

@@ -40,29 +40,46 @@ public struct ApAeroSpace {
     /// Legacy app path for fallback detection.
     private static let legacyAppPath = "/Applications/AeroSpace.app"
 
-    /// Maximum time to wait for AeroSpace to become ready after launch.
-    private static let startupTimeoutSeconds: TimeInterval = 10.0
+    /// Default maximum time to wait for AeroSpace to become ready after launch.
+    public static let defaultStartupTimeoutSeconds: TimeInterval = 10.0
 
-    /// Interval between readiness checks during startup.
-    private static let readinessCheckInterval: TimeInterval = 0.25
+    /// Default interval between readiness checks during startup.
+    public static let defaultReadinessCheckInterval: TimeInterval = 0.25
 
-    private let commandRunner: CommandRunning
+    let startupTimeoutSeconds: TimeInterval
+    let readinessCheckInterval: TimeInterval
+
+    private let transport: AeroSpaceCommandTransport
     private let appDiscovery: AppDiscovering
     private let fileSystem: FileSystem
-    private let circuitBreaker: AeroSpaceCircuitBreaker
     private let processChecker: RunningApplicationChecking?
 
+    /// Convenience accessors for shared dependencies.
+    private var commandRunner: CommandRunning { transport.commandRunner }
+    private var circuitBreaker: AeroSpaceCircuitBreaker { transport.circuitBreaker }
+
     /// Creates a new AeroSpace wrapper with default dependencies.
-    /// - Parameter processChecker: Optional process checker for auto-recovery.
-    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
-    ///   the wrapper will automatically attempt to restart AeroSpace.
-    ///   Pass `nil` to disable auto-recovery (e.g., for Doctor diagnostics).
-    public init(processChecker: RunningApplicationChecking? = nil) {
-        self.commandRunner = ApSystemCommandRunner()
+    /// - Parameters:
+    ///   - processChecker: Optional process checker for auto-recovery.
+    ///     When provided and AeroSpace crashes (circuit breaker open, process dead),
+    ///     the wrapper will automatically attempt to restart AeroSpace.
+    ///     Pass `nil` to disable auto-recovery (e.g., for Doctor diagnostics).
+    ///   - startupTimeoutSeconds: Maximum time to wait for readiness after launch.
+    ///   - readinessCheckInterval: Interval between readiness checks during startup.
+    public init(
+        processChecker: RunningApplicationChecking? = nil,
+        startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
+        readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
+    ) {
+        self.transport = AeroSpaceCommandTransport(
+            commandRunner: ApSystemCommandRunner(),
+            circuitBreaker: .shared
+        )
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.fileSystem = DefaultFileSystem()
-        self.circuitBreaker = .shared
         self.processChecker = processChecker
+        self.startupTimeoutSeconds = startupTimeoutSeconds
+        self.readinessCheckInterval = readinessCheckInterval
     }
 
     /// Creates a new AeroSpace wrapper with custom dependencies.
@@ -72,18 +89,26 @@ public struct ApAeroSpace {
     ///   - fileSystem: File system for path checks.
     ///   - circuitBreaker: Circuit breaker for timeout cascade prevention.
     ///   - processChecker: Optional process checker for auto-recovery.
+    ///   - startupTimeoutSeconds: Maximum time to wait for readiness after launch.
+    ///   - readinessCheckInterval: Interval between readiness checks during startup.
     init(
         commandRunner: CommandRunning,
         appDiscovery: AppDiscovering,
         fileSystem: FileSystem = DefaultFileSystem(),
         circuitBreaker: AeroSpaceCircuitBreaker = .shared,
-        processChecker: RunningApplicationChecking? = nil
+        processChecker: RunningApplicationChecking? = nil,
+        startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
+        readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
     ) {
-        self.commandRunner = commandRunner
+        self.transport = AeroSpaceCommandTransport(
+            commandRunner: commandRunner,
+            circuitBreaker: circuitBreaker
+        )
         self.appDiscovery = appDiscovery
         self.fileSystem = fileSystem
-        self.circuitBreaker = circuitBreaker
         self.processChecker = processChecker
+        self.startupTimeoutSeconds = startupTimeoutSeconds
+        self.readinessCheckInterval = readinessCheckInterval
     }
 
     /// Returns the path to AeroSpace.app if installed.
@@ -150,18 +175,18 @@ public struct ApAeroSpace {
     /// Waits for AeroSpace CLI to become responsive after launch.
     /// - Returns: Success when CLI is available, or an error on timeout.
     private func waitForReadiness() -> Result<Void, ApCoreError> {
-        let deadline = Date().addingTimeInterval(Self.startupTimeoutSeconds)
+        let deadline = Date().addingTimeInterval(startupTimeoutSeconds)
 
         while Date() < deadline {
             if isCliAvailable() {
                 return .success(())
             }
-            Thread.sleep(forTimeInterval: Self.readinessCheckInterval)
+            Thread.sleep(forTimeInterval: readinessCheckInterval)
         }
 
         return .failure(ApCoreError(
             category: .command,
-            message: "AeroSpace did not become ready within \(Self.startupTimeoutSeconds)s after launch."
+            message: "AeroSpace did not become ready within \(startupTimeoutSeconds)s after launch."
         ))
     }
 
@@ -366,24 +391,58 @@ public struct ApAeroSpace {
         case .failure(let error):
             return .failure(error)
         case .success(let windows):
-            var failures: [String] = []
-            failures.reserveCapacity(windows.count)
+            var failedIds: [Int] = []
+            var failureDetails: [String] = []
 
             for window in windows {
                 switch closeWindow(windowId: window.windowId) {
                 case .failure(let error):
-                    failures.append("window \(window.windowId): \(error.message)")
+                    failedIds.append(window.windowId)
+                    failureDetails.append("window \(window.windowId): \(error.message)")
                 case .success:
                     continue
                 }
             }
 
-            guard failures.isEmpty else {
+            // If first pass had failures, re-query and retry IDs still present.
+            if !failedIds.isEmpty {
+                let remainingIds: Set<Int>
+                switch listWindowsWorkspace(workspace: trimmed) {
+                case .failure:
+                    // Re-query failed — return original first-pass error with window IDs.
+                    return .failure(
+                        ApCoreError(
+                            category: .command,
+                            message: "Failed to close \(failedIds.count) windows in workspace \(trimmed): \(failedIds).",
+                            detail: failureDetails.joined(separator: "\n")
+                        )
+                    )
+                case .success(let currentWindows):
+                    remainingIds = Set(currentWindows.map(\.windowId))
+                }
+
+                // Retry only IDs that are still present (transient misses will have disappeared).
+                let retryIds = failedIds.filter { remainingIds.contains($0) }
+                failedIds = []
+                failureDetails = []
+
+                for windowId in retryIds {
+                    switch closeWindow(windowId: windowId) {
+                    case .failure(let error):
+                        failedIds.append(windowId)
+                        failureDetails.append("window \(windowId): \(error.message)")
+                    case .success:
+                        continue
+                    }
+                }
+            }
+
+            guard failedIds.isEmpty else {
                 return .failure(
                     ApCoreError(
                         category: .command,
-                        message: "Failed to close \(failures.count) windows in workspace \(trimmed).",
-                        detail: failures.joined(separator: "\n")
+                        message: "Failed to close \(failedIds.count) windows in workspace \(trimmed): \(failedIds).",
+                        detail: failureDetails.joined(separator: "\n")
                     )
                 )
             }
@@ -678,8 +737,8 @@ public struct ApAeroSpace {
         arguments: [String],
         timeoutSeconds: TimeInterval = 5
     ) -> Result<ApCommandResult, ApCoreError> {
-        if circuitBreaker.shouldAllow() {
-            return executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
+        if transport.shouldAllow() {
+            return transport.executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
         }
 
         // Breaker is open — attempt auto-recovery if process checker is available
@@ -707,7 +766,7 @@ public struct ApAeroSpace {
                 case .success:
                     Self.logger.info("circuit_breaker.recovery_succeeded")
                     circuitBreaker.endRecovery(success: true)
-                    return executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
+                    return transport.executeAndRecord(arguments: arguments, timeoutSeconds: timeoutSeconds)
                 case .failure:
                     Self.logger.warning("circuit_breaker.recovery_failed")
                     circuitBreaker.endRecovery(success: false)
@@ -715,43 +774,7 @@ public struct ApAeroSpace {
             }
         }
 
-        return .failure(breakerOpenError())
-    }
-
-    /// Executes an aerospace command and records the outcome on the circuit breaker.
-    private func executeAndRecord(
-        arguments: [String],
-        timeoutSeconds: TimeInterval
-    ) -> Result<ApCommandResult, ApCoreError> {
-        let result = commandRunner.run(
-            executable: "aerospace",
-            arguments: arguments,
-            timeoutSeconds: timeoutSeconds
-        )
-
-        switch result {
-        case .success:
-            circuitBreaker.recordSuccess()
-        case .failure(let error):
-            if error.message.hasPrefix("Command timed out") {
-                let wasOpen = !circuitBreaker.shouldAllow()
-                circuitBreaker.recordTimeout()
-                if !wasOpen {
-                    Self.logger.warning("circuit_breaker.tripped command=aerospace \(arguments.joined(separator: " "), privacy: .public) timeout=\(timeoutSeconds)s")
-                }
-            }
-        }
-
-        return result
-    }
-
-    /// Returns the standard error for when the circuit breaker is open.
-    private func breakerOpenError() -> ApCoreError {
-        ApCoreError(
-            category: .command,
-            message: "AeroSpace is unresponsive (circuit breaker open).",
-            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
-        )
+        return .failure(transport.breakerOpenError())
     }
 
     // MARK: - Private Helpers
@@ -794,120 +817,12 @@ public struct ApAeroSpace {
         }
     }
 
-    /// Parses window summaries from formatted AeroSpace output.
-    ///
-    /// Expected format: `<window-id>||<app-bundle-id>||<workspace>||<window-title>`
-    /// where fields are separated by `||` (double pipe).
-    ///
-    /// - Parameter output: Output from `aerospace list-windows --format`.
-    /// - Returns: Parsed window summaries or an error.
     private func parseWindowSummaries(output: String) -> Result<[ApWindow], ApCoreError> {
-        let lines = output.split(whereSeparator: \.isNewline)
-        var windows: [ApWindow] = []
-        windows.reserveCapacity(lines.count)
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                continue
-            }
-
-            guard let firstSeparator = trimmed.range(of: "||") else {
-                return .failure(parseError(
-                    "Unexpected aerospace output format.",
-                    detail: "Expected '<window-id>||<app-bundle-id>||<workspace>||<window-title>', got: \(trimmed)"
-                ))
-            }
-
-            let idPart = String(trimmed[..<firstSeparator.lowerBound])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let windowId = Int(idPart) else {
-                return .failure(parseError(
-                    "Window id was not an integer.",
-                    detail: "Got: \(idPart)"
-                ))
-            }
-
-            let remainder = trimmed[firstSeparator.upperBound...]
-            guard let secondSeparator = remainder.range(of: "||") else {
-                return .failure(parseError(
-                    "Unexpected aerospace output format.",
-                    detail: "Expected '<window-id>||<app-bundle-id>||<workspace>||<window-title>', got: \(trimmed)"
-                ))
-            }
-
-            let appBundleId = String(remainder[..<secondSeparator.lowerBound])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let remainderAfterBundle = remainder[secondSeparator.upperBound...]
-            guard let thirdSeparator = remainderAfterBundle.range(of: "||") else {
-                return .failure(parseError(
-                    "Unexpected aerospace output format.",
-                    detail: "Expected '<window-id>||<app-bundle-id>||<workspace>||<window-title>', got: \(trimmed)"
-                ))
-            }
-            let workspace = String(remainderAfterBundle[..<thirdSeparator.lowerBound])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let titlePart = remainderAfterBundle[thirdSeparator.upperBound...]
-            let windowTitle = String(titlePart).trimmingCharacters(in: .whitespacesAndNewlines)
-
-            windows.append(
-                ApWindow(
-                    windowId: windowId,
-                    appBundleId: appBundleId,
-                    workspace: workspace,
-                    windowTitle: windowTitle
-                )
-            )
-        }
-
-        return .success(windows)
+        AeroSpaceParser.parseWindowSummaries(output: output)
     }
 
-    /// Parses workspace summaries from formatted AeroSpace output.
-    ///
-    /// Expected format: `<workspace>||<is-focused>`
-    /// where fields are separated by `||` (double pipe), and focus values are `true` or `false`.
-    ///
-    /// - Parameter output: Output from `aerospace list-workspaces --all --format`.
-    /// - Returns: Parsed workspace summaries or an error.
     private func parseWorkspaceSummaries(output: String) -> Result<[ApWorkspaceSummary], ApCoreError> {
-        let lines = output.split(whereSeparator: \.isNewline)
-        var workspaces: [ApWorkspaceSummary] = []
-        workspaces.reserveCapacity(lines.count)
-
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                continue
-            }
-
-            guard let separator = trimmed.range(of: "||") else {
-                return .failure(parseError(
-                    "Unexpected workspace summary format.",
-                    detail: "Expected '<workspace>||<is-focused>', got: \(trimmed)"
-                ))
-            }
-
-            let workspace = String(trimmed[..<separator.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let focusToken = String(trimmed[separator.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-            let isFocused: Bool
-            switch focusToken {
-            case "true":
-                isFocused = true
-            case "false":
-                isFocused = false
-            default:
-                return .failure(parseError(
-                    "Unexpected workspace focus value.",
-                    detail: "Expected 'true' or 'false', got: \(focusToken)"
-                ))
-            }
-
-            workspaces.append(ApWorkspaceSummary(workspace: workspace, isFocused: isFocused))
-        }
-
-        return .success(workspaces)
+        AeroSpaceParser.parseWorkspaceSummaries(output: output)
     }
 
     /// Returns help output for a CLI command.
@@ -927,38 +842,6 @@ public struct ApAeroSpace {
                 .filter { !$0.isEmpty }
                 .joined(separator: "\n")
             return .success(output)
-        }
-    }
-
-    /// Returns true when a primary command result should trigger a compatibility fallback.
-    ///
-    /// Fallback is attempted only for non-zero command exits whose output suggests a
-    /// CLI version or flag incompatibility (e.g. "unknown option", "unrecognized command").
-    /// Hard command-run failures (for example executable resolution failures) do not fall back,
-    /// and neither do non-zero exits caused by operational errors (workspace not found, etc.).
-    static func shouldAttemptCompatibilityFallback(_ result: Result<ApCommandResult, ApCoreError>) -> Bool {
-        switch result {
-        case .success(let output):
-            guard output.exitCode != 0 else {
-                return false
-            }
-            let diagnosticText = (output.stderr + "\n" + output.stdout).lowercased()
-            let compatibilityIndicators = [
-                "unknown option",
-                "unknown flag",
-                "unknown command",
-                "unknown subcommand",
-                "unrecognized option",
-                "unrecognised option",
-                "unrecognized command",
-                "invalid option",
-                "no such option",
-                "no such command",
-                "mandatory option is not specified"
-            ]
-            return compatibilityIndicators.contains { diagnosticText.contains($0) }
-        case .failure:
-            return false
         }
     }
 }

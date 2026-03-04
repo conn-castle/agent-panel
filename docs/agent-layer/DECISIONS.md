@@ -211,10 +211,10 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Reason: Four release iterations (v0.1.0–v0.1.3) were spent investigating remote issues without sufficient log data. The user explicitly requested "everything you need to know for sure what is wrong" in a single release attempt.
     Tradeoffs: Log entries are significantly larger (~2-4KB per Doctor run). Acceptable for a diagnostic tool that runs infrequently.
 
-- Decision 2026-02-20 capture-on-switch: Capture window positions during project-to-project switching
-    Decision: `selectProject()` now calls `captureWindowPositions(sourceProjectId)` at the start when `preCapturedFocus.workspace` starts with `"ap-"`. Source project ID is extracted from the workspace name using the existing `projectId(fromWorkspace:)` helper. `SavedWindowFrames.chrome` is now optional (`SavedFrame?`) — Chrome frame read failure saves IDE-only (partial save) instead of aborting. Partial-save and partial-restore paths log at ERROR level to ensure visibility.
+- Decision 2026-02-20 capture-on-switch: Capture window positions during project-to-project switching (partially superseded by `token-fallback-skip-save`)
+    Decision: `selectProject()` now calls `captureWindowPositions(sourceProjectId)` at the start when `preCapturedFocus.workspace` starts with `"ap-"`. Source project ID is extracted from the workspace name using the existing `projectId(fromWorkspace:)` helper. At the time, `SavedWindowFrames.chrome` was made optional (`SavedFrame?`) so Chrome frame read failures could persist IDE-only snapshots.
     Reason: `captureWindowPositions()` was only called from `closeProject()` and `exitToNonProjectWindow()`, never during the most common workflow (project-to-project switching via the switcher). This meant window positions were never persisted during normal use, causing every return to a project to use computed layout instead of the user's manual arrangement.
-    Tradeoffs: One extra `captureWindowPositions()` call per project switch (non-fatal, ~10ms). The optional Chrome frame is a bandaid for edge cases where Chrome is absent — partial saves log at ERROR so the underlying cause can be investigated.
+    Tradeoffs: One extra `captureWindowPositions()` call per project switch (non-fatal, ~10ms). Later work (`token-fallback-skip-save`, 2026-03-02) replaced partial-save behavior with retry/fallback and skip-save to preserve prior complete snapshots.
 
 - Decision 2026-02-17 direct-codesign: Use direct `codesign` instead of `xcodebuild -exportArchive`
     Decision: `ci_archive.sh` extracts the .app from the xcarchive and re-signs with `codesign --force --deep --options runtime --timestamp --entitlements` instead of using `xcodebuild -exportArchive` with ExportOptions.plist.
@@ -285,3 +285,63 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: `WindowRecoveryManager.recoverAllWindows` now scans every window, moves `AP:<projectId>` VS Code/Chrome windows for known configured projects into `ap-<projectId>` when misplaced, then runs workspace recovery for each affected workspace (layout-aware for project workspaces, generic for non-project workspaces).
     Reason: Global recovery previously forced all windows into one non-project workspace, which broke project workspace layout semantics and failed to repair misplaced project windows back to canonical project destinations.
     Tradeoffs: Recovery now depends on title-token correctness for project routing and performs additional workspace-level recovery passes, which increases command count relative to the old one-destination flow.
+
+- Decision 2026-03-01 switcher-first-paint-sequencing: Prepare switcher rows before panel presentation
+    Decision: `SwitcherPanelController.show()` now seeds workspace-derived presentation state from captured focus, loads/reuses project config, and applies the initial filter before presenting the panel. Async workspace refresh/retry re-applies filtering only when active/open workspace state actually changes, preserving selection when unchanged.
+    Reason: First-open switcher UX could start at minimum height and then resize/jump once async workspace state arrived, even when overall command latency was already low.
+    Tradeoffs: Initial render can briefly reflect captured-focus hints before authoritative workspace state arrives; the async refresh reconciles state immediately without changing AeroSpace command semantics.
+
+- Decision 2026-03-01 prefocus-tolerance: Project selection tolerates missing pre-captured focus
+    Decision: `ProjectManager.selectProject(projectId:preCapturedFocus:)` accepts `CapturedFocus?` via a new optional overload. The non-optional signature remains as a compatibility forwarder. `SwitcherPanelController` no longer hard-fails on nil focus; it logs a warn and proceeds. When nil, no new focus entry is pushed; exit/close first attempts existing focus-history restore paths, then falls back to `WorkspaceRouting.preferredNonProjectWorkspace` if restore is exhausted. The `ProjectManaging` protocol is unchanged (non-optional signature only).
+    Reason: `aerospace list-windows --focused` can fail (exit 1) during AeroSpace instability, leaving `capturedFocus` nil. Hard-failing blocked all project selection until the next successful focus capture.
+    Tradeoffs: Nil-focus activation records no new exact-origin window, so exit/close may restore an older focus-history candidate or use workspace routing fallback when history is exhausted. This is intentional best-effort behavior.
+
+- Decision 2026-03-01 close-workspace-retry: closeWorkspace re-queries and retries transient window-close misses
+    Decision: `ApAeroSpace.closeWorkspace` now re-queries `listWindowsWorkspace` after first-pass close failures, retries only IDs still present (single retry pass, no backoff), and includes specific window IDs in error messages. If re-query fails, returns the original first-pass error with IDs.
+    Reason: Transient window-close failures (window closed by AeroSpace concurrently or timing race) caused the entire close to fail immediately, surfacing as `switcher.close_project.failed` for the user.
+    Tradeoffs: One additional `listWindowsWorkspace` call per close with failures. Adds ~15 lines to the `ap-aerospace-hotspot` file; contained within `closeWorkspace` with no new state or coupling.
+
+- Decision 2026-03-02 token-fallback-skip-save: Token-miss fallback and capture skip-save for window positioning
+    Decision: Added `getFallbackWindowFrame`/`setFallbackWindowFrames` to `WindowPositioning` protocol with default `.failure` implementations. IDE/Chrome positioning and Chrome capture use focused-or-only fallback when token matching exhausts retries. Recovery fallback now requires a unique workspace anchor window and explicitly focuses that window before invoking fallback positioning. Layout partial-success paths keep token windows eligible for generic recovery because AX writes cannot be mapped back to individual AeroSpace window IDs.
+    Reason: Token matching fails intermittently after VS Code/Chrome title updates lag AX visibility. Partial (IDE-only) saves degraded future restores by overwriting complete layouts.
+    Tradeoffs: Activation/capture fallback remains ambiguous-unsafe across app-global windows; recovery fallback is stricter and may fail in multi-window ambiguous workspaces (then generic recovery handles remaining windows). Skip-save preserves stale layouts rather than saving partial ones.
+
+- Decision 2026-03-02 pre-entry-focus: Per-project pre-entry focus snapshot for close-project restoration
+    Decision: `ProjectManager` stores a `preEntryFocus: [String: FocusHistoryEntry]` dictionary. When `selectProject()` succeeds with a non-nil `preCapturedFocus`, it records the caller's prior window under the project ID. On `closeProject()`, the pre-entry snapshot is consulted first (if still valid); falls back to the existing non-project focus stack.
+    Reason: The LIFO non-project focus stack only tracked non-project windows. Cross-project transitions (A→B→close B→should restore A) were lost because A's window was never on the non-project stack.
+    Tradeoffs: The dictionary is in-memory only (not persisted); pre-entry state is lost on app restart. Stale entries for projects that are never closed accumulate until the app restarts.
+
+- Decision 2026-03-02 aerospace-decompose: ApAeroSpace mechanical decomposition into Parser, Transport, Compatibility
+    Decision: Extracted `AeroSpaceParser` (pure static parsing functions), `AeroSpaceCommandTransport` (execute+record with circuit breaker), and `AeroSpaceCompatibility` (static fallback detection) from `ApAeroSpace.swift`. ApAeroSpace retains `runAerospace()` orchestration (recovery/retry) and delegates to the extracted types. The compatibility extension preserves the `ApAeroSpace.shouldAttemptCompatibilityFallback` call site for test compatibility.
+    Reason: `ApAeroSpace.swift` was a ~1k LOC hotspot mixing transport, parsing, and compatibility concerns. Extraction reduces cognitive load and enables independent testing of each concern.
+    Tradeoffs: ApAeroSpace keeps `runAerospace()` because auto-recovery calls `start()` which is tightly coupled to lifecycle operations. Transport does not own the recovery loop.
+
+- Decision 2026-03-03 coordinator-extraction: Extract coordinators from SwitcherPanelController and AppDelegate
+    Decision: Extracted `SwitcherOperationCoordinator`, `SwitcherWorkspaceRetryCoordinator`, `AppHealthCoordinator`, and `MenuWorkspaceStateCoordinator`. Coordinators own guard state and background dispatch; they report results through closure callbacks wired by their owners. Coordinator properties must be eagerly initialized (non-lazy); `lazy var` is disallowed because lazy init during `deinit` crashes (`weak_register_no_lock` on a deallocating object).
+    Reason: Both `SwitcherPanelController` and `AppDelegate` were high-churn hotspots mixing orchestration with presentation. Extraction enables independent unit testing of retry/guard/dispatch logic.
+    Tradeoffs: Callback closures add indirection vs inline code. The `SwitcherWorkspaceRetryCoordinator` timer interval is now injectable (default 2s, tests use 0.05s) to keep tests fast.
+
+- Decision 2026-03-03 no-lazy-coordinator: Never use lazy var for coordinator properties that capture [weak self]
+    Decision: Coordinators wired with `[weak self]` closures must be initialized eagerly (in `init`, before `super.init` or immediately after) — never as `lazy var`.
+    Reason: Swift aborts (`objc_fatal` / `SIGABRT`) if a `lazy var` getter is first triggered during `deinit`, because `[weak self]` calls `objc_initWeak` on a deallocating object. The `deinit` of `SwitcherPanelController` accessed `workspaceRetryCoordinator.cancelRetry()`, triggering lazy init during dealloc.
+    Tradeoffs: Eager init means coordinators are always allocated even if never used, but this is negligible for these small objects.
+
+- Decision 2026-03-03 test-host-guard: XCTest environment guard in AppDelegate
+    Decision: `applicationDidFinishLaunching` returns early when `XCTestConfigurationFilePath` environment variable is set, skipping all real app setup (AeroSpace CLI, Doctor, hotkeys, onboarding).
+    Reason: Test host was running real code (CLI calls, hotkey registration) during unit tests, causing side effects and slowing test runs.
+    Tradeoffs: Tests that need specific AppDelegate behavior must use mocks/stubs rather than relying on the real setup path. This is already the case for all existing tests.
+
+- Decision 2026-03-03 injectable-timing: Make timing constants injectable for fast tests
+    Decision: Converted `ApAeroSpace.startupTimeoutSeconds` and `readinessCheckInterval` from static constants to instance properties with default values, injectable via both init methods.
+    Reason: `testStartReturnsFailureWhenReadinessTimesOut` waited for the real 10s startup timeout on every test run. With injectable timing, the test uses 0.1s timeout and completes in ~0.1s instead of ~10s.
+    Tradeoffs: Two extra optional parameters on init; callers outside tests use defaults and see no change.
+
+- Decision 2026-03-03 fast-precommit: Pre-commit hook runs targeted tests instead of full suite (superseded by test-infra-overhaul)
+    Decision: Originally changed pre-commit from `make coverage` to `make test`. Superseded same day by `test-infra-overhaul`: pre-commit now maps staged files to test targets and runs only affected suites. Coverage is always collected (zero overhead) but the gate is not enforced at commit time.
+    Reason: Full test suite on every commit was too slow. Smart targeting reduces commit-time testing to only the affected targets.
+    Tradeoffs: Cross-target regressions are caught in CI, not at commit time.
+
+- Decision 2026-03-03 test-infra-overhaul: Always-coverage, smart pre-commit, sequential testing, one-time bootstrap
+    Decision: (1) Coverage collection is always-on (zero overhead); `--no-coverage` removed, `--gate` flag added for enforcement. (2) Pre-commit hook maps staged files to test targets instead of running all tests. (3) Tests run sequentially (`-parallel-testing-enabled NO`); parallel was reverted due to flake risk in focus-sensitive app tests. (4) `dev_bootstrap.sh` removed from test runner; `make setup` runs it once. (5) CI build step removed (coverage already builds). (6) Test failure diagnostics use `xcresulttool get test-results tests` JSON with `testNodes` root traversal.
+    Reason: Pre-commit was running all 1,125 tests (~69s) on every commit. Four test suites used real infrastructure deps (6-10s each). Parallel testing was tried but reverted to avoid nondeterminism in stateful app tests.
+    Tradeoffs: Smart pre-commit may miss cross-target regressions (CI catches them). `make setup` must be run once after clone. Test plan file must stay in sync with project.yml targets. Sequential testing is slower than parallel but deterministic.

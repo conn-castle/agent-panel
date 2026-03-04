@@ -34,7 +34,7 @@ AgentPanel is structured as six non-test build targets:
 
 ```sh
 # Validate Xcode toolchain (one-time)
-scripts/dev_bootstrap.sh
+make setup
 
 # Generate Xcode project from project.yml
 make regen
@@ -45,7 +45,7 @@ make build
 # Build development app variant (Debug, no code signing)
 make build-dev
 
-# Run tests (fast, no coverage)
+# Run all tests (coverage collected automatically)
 make test
 
 # Run tests with coverage gate (90% minimum)
@@ -69,10 +69,10 @@ The Xcode project (`AgentPanel.xcodeproj`) is generated from `project.yml` using
 
 ## Testing
 
-Tests live in `AgentPanelCoreTests/` and `AgentPanelCLITests/`. Coverage is enforced at 90% minimum on `AgentPanelCore` and `AgentPanelCLICore`. The `AgentPanelAppKit` target is excluded from the coverage gate because it requires a live window server.
+Tests live in `AgentPanelAppTests/`, `AgentPanelCoreTests/`, and `AgentPanelCLITests/`. Coverage is enforced at 90% minimum on `AgentPanelCore` and `AgentPanelCLICore`. The `AgentPanelAppKit` target is excluded from the coverage gate because it requires a live window server.
 
 ```sh
-# Run tests (fast, no coverage — for local iteration)
+# Run all tests (coverage collected automatically)
 make test
 
 # Run tests with coverage gate + per-file summary
@@ -104,7 +104,7 @@ scripts/coverage_gate.sh build/TestResults/Test-AgentPanel.xcresult
 
 ## Git Hooks
 
-Install the pre-commit hook (runs `make coverage` before commit):
+Install the pre-commit hook (runs targeted tests for staged files before commit):
 
 ```sh
 make hooks
