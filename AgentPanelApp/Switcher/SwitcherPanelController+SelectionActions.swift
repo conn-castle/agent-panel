@@ -80,7 +80,7 @@ extension SwitcherPanelController {
 
     /// Handles close button clicks from a project row.
     func handleCloseProjectButtonClick(projectId: String, rowIndex: Int) {
-        suppressedActionEventTimestamp = NSApp.currentEvent?.timestamp
+        suppressedActionEventNumber = NSApp.currentEvent?.eventNumber
 
         let projectName = allProjects.first(where: { $0.id == projectId })?.name ?? projectId
         performCloseProject(

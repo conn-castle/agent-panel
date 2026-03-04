@@ -204,7 +204,7 @@ final class SwitcherPanelController: NSObject {
     var expectsVisible: Bool = false
     var pendingVisibilityCheckToken: UUID?
     var previouslyActiveApp: NSRunningApplication?
-    var suppressedActionEventTimestamp: TimeInterval?
+    var suppressedActionEventNumber: Int?
     var isDismissing: Bool = false
     var restoreFocusTask: Task<Void, Never>?
     var lastSelectedRowIndex: Int = -1

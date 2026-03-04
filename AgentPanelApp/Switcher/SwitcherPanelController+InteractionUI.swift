@@ -204,13 +204,13 @@ extension SwitcherPanelController {
     @objc func handleTableViewAction(_ sender: Any?) {
         guard panel.isVisible else { return }
 
-        if let suppressedTimestamp = suppressedActionEventTimestamp,
-           let currentTimestamp = NSApp.currentEvent?.timestamp,
-           abs(currentTimestamp - suppressedTimestamp) < 0.0001 {
-            suppressedActionEventTimestamp = nil
+        if let suppressedEventNumber = suppressedActionEventNumber,
+           let currentEventNumber = NSApp.currentEvent?.eventNumber,
+           currentEventNumber == suppressedEventNumber {
+            suppressedActionEventNumber = nil
             return
         }
-        suppressedActionEventTimestamp = nil
+        suppressedActionEventNumber = nil
         handlePrimaryAction()
     }
 }

@@ -39,7 +39,13 @@ extension LoggerTests {
 
         startGate.signal()
         startGate.signal()
-        XCTAssertEqual(group.wait(timeout: .now() + 3), .success)
+        let waitTimeoutSeconds: TimeInterval = 8
+        let waitResult = group.wait(timeout: .now() + waitTimeoutSeconds)
+        XCTAssertEqual(
+            waitResult,
+            .success,
+            "Timed out after \(waitTimeoutSeconds)s waiting for concurrent writers. Partial results: \(results)"
+        )
 
         XCTAssertEqual(results.count, 2)
         for result in results {

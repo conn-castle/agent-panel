@@ -6,11 +6,11 @@ extension VSCodeSettingsManagerTests {
 
     // MARK: - writeLocalSettings: errors on unreadable file
 
-    func testWriteLocalSettingsReturnsErrorWhenFileExistsButUnreadable() {
+    func testWriteLocalSettingsReturnsErrorWhenFileExistsButUnreadable() throws {
         let unreadableFS = SettingsUnreadableFileSystem()
         let manager = ApVSCodeSettingsManager(fileSystem: unreadableFS)
 
-        let tempDir = makeTempDir()
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         let result = manager.writeLocalSettings(projectPath: tempDir.path, identifier: "test")
@@ -24,8 +24,8 @@ extension VSCodeSettingsManagerTests {
 
     // MARK: - writeLocalSettings: creates .vscode directory
 
-    func testWriteLocalSettingsCreatesVSCodeDirectory() {
-        let tempDir = makeTempDir()
+    func testWriteLocalSettingsCreatesVSCodeDirectory() throws {
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         let manager = ApVSCodeSettingsManager()
@@ -44,14 +44,14 @@ extension VSCodeSettingsManagerTests {
 
     // MARK: - writeLocalSettings: preserves existing content
 
-    func testWriteLocalSettingsPreservesExistingContent() {
-        let tempDir = makeTempDir()
+    func testWriteLocalSettingsPreservesExistingContent() throws {
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         let vscodeDir = tempDir.appendingPathComponent(".vscode")
-        try! FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
         let settingsURL = vscodeDir.appendingPathComponent("settings.json")
-        try! """
+        try """
         {
           "editor.fontSize": 14
         }
@@ -65,15 +65,15 @@ extension VSCodeSettingsManagerTests {
             return
         }
 
-        let content = try! String(contentsOf: settingsURL, encoding: .utf8)
+        let content = try String(contentsOf: settingsURL, encoding: .utf8)
         XCTAssertTrue(content.contains("// >>> agent-panel"))
         XCTAssertTrue(content.contains("\"editor.fontSize\": 14"))
     }
 
     // MARK: - writeLocalSettings: creates new file when missing
 
-    func testWriteLocalSettingsCreatesNewFileWhenMissing() {
-        let tempDir = makeTempDir()
+    func testWriteLocalSettingsCreatesNewFileWhenMissing() throws {
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         let manager = ApVSCodeSettingsManager()
@@ -87,21 +87,21 @@ extension VSCodeSettingsManagerTests {
         let settingsURL = tempDir.appendingPathComponent(".vscode/settings.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: settingsURL.path))
 
-        let content = try! String(contentsOf: settingsURL, encoding: .utf8)
+        let content = try String(contentsOf: settingsURL, encoding: .utf8)
         XCTAssertTrue(content.contains("AP:new-proj"))
     }
 
     // MARK: - writeLocalSettings: handles empty existing file
 
-    func testWriteLocalSettingsHandlesEmptyExistingFile() {
-        let tempDir = makeTempDir()
+    func testWriteLocalSettingsHandlesEmptyExistingFile() throws {
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         // Create an empty settings.json (0 bytes)
         let vscodeDir = tempDir.appendingPathComponent(".vscode", isDirectory: true)
-        try! FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
         let settingsURL = vscodeDir.appendingPathComponent("settings.json")
-        FileManager.default.createFile(atPath: settingsURL.path, contents: Data())
+        XCTAssertTrue(FileManager.default.createFile(atPath: settingsURL.path, contents: Data()))
 
         let manager = ApVSCodeSettingsManager()
         let result = manager.writeLocalSettings(projectPath: tempDir.path, identifier: "empty-file-proj")
@@ -111,18 +111,18 @@ extension VSCodeSettingsManagerTests {
             return
         }
 
-        let content = try! String(contentsOf: settingsURL, encoding: .utf8)
+        let content = try String(contentsOf: settingsURL, encoding: .utf8)
         XCTAssertTrue(content.contains("// >>> agent-panel"), "Should inject block into empty file")
         XCTAssertTrue(content.contains("AP:empty-file-proj"), "Should contain project id")
     }
 
     // MARK: - writeLocalSettings: returns error on write failure
 
-    func testWriteLocalSettingsReturnsErrorOnWriteFailure() {
+    func testWriteLocalSettingsReturnsErrorOnWriteFailure() throws {
         let failingFS = SettingsFailingFileSystem()
         let manager = ApVSCodeSettingsManager(fileSystem: failingFS)
 
-        let tempDir = makeTempDir()
+        let tempDir = try makeTempDir()
         defer { cleanup(tempDir) }
 
         let result = manager.writeLocalSettings(projectPath: tempDir.path, identifier: "test")
@@ -137,10 +137,10 @@ extension VSCodeSettingsManagerTests {
 
     // MARK: - Helpers
 
-    private func makeTempDir() -> URL {
+    private func makeTempDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("SettingsMgrTests-\(UUID().uuidString)", isDirectory: true)
-        try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 

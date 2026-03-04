@@ -137,7 +137,7 @@ extension ProjectManager {
                         config: config.layout
                     )
                     chromeTarget = computed.chromeFrame
-                    logEvent("position.using_saved_ide_computed_chrome", level: .error,
+                    logEvent("position.using_saved_ide_computed_chrome", level: .warn,
                              message: "Saved layout has no Chrome frame — using computed Chrome (investigate if recurring)",
                              context: ["project_id": projectId, "mode": screenMode.rawValue])
                 }

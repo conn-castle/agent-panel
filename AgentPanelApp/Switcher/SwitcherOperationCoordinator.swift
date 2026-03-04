@@ -113,52 +113,54 @@ final class SwitcherOperationCoordinator {
         }
 
         let projectId = project.id
-        Task { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
-            let result = await self.projectManager.selectProject(
-                projectId: projectId,
-                preCapturedFocus: capturedFocus
-            )
+            Task {
+                let result = await self.projectManager.selectProject(
+                    projectId: projectId,
+                    preCapturedFocus: capturedFocus
+                )
 
-            await MainActor.run {
-                self.isActivating = false
-                self.onSetControlsEnabled?(true)
+                await MainActor.run {
+                    self.isActivating = false
+                    self.onSetControlsEnabled?(true)
 
-                switch result {
-                case .success(let activation):
-                    if let warning = activation.tabRestoreWarning {
+                    switch result {
+                    case .success(let activation):
+                        if let warning = activation.tabRestoreWarning {
+                            self.session.logEvent(
+                                event: "switcher.project.tab_restore_warning",
+                                level: .warn,
+                                message: warning,
+                                context: ["project_id": projectId]
+                            )
+                        }
+                        if let warning = activation.layoutWarning {
+                            self.session.logEvent(
+                                event: "switcher.project.layout_warning",
+                                level: .warn,
+                                message: warning,
+                                context: ["project_id": projectId]
+                            )
+                        }
+                        self.onDismiss?(.projectSelected)
+                        self.onFocusIdeWindow?(activation.ideWindowId)
+                    case .failure(let error):
+                        self.onSetStatus?(self.projectErrorMessage(error), .error)
+                        self.onRestoreSearchFieldFocus?()
                         self.session.logEvent(
-                            event: "switcher.project.tab_restore_warning",
-                            level: .warn,
-                            message: warning,
+                            event: "switcher.project.activation_failed",
+                            level: .error,
+                            message: "\(error)",
                             context: ["project_id": projectId]
                         )
+                        self.onOperationFailed?(ErrorContext(
+                            category: .command,
+                            message: "\(error)",
+                            trigger: "activation"
+                        ))
                     }
-                    if let warning = activation.layoutWarning {
-                        self.session.logEvent(
-                            event: "switcher.project.layout_warning",
-                            level: .warn,
-                            message: warning,
-                            context: ["project_id": projectId]
-                        )
-                    }
-                    self.onDismiss?(.projectSelected)
-                    self.onFocusIdeWindow?(activation.ideWindowId)
-                case .failure(let error):
-                    self.onSetStatus?(self.projectErrorMessage(error), .error)
-                    self.onRestoreSearchFieldFocus?()
-                    self.session.logEvent(
-                        event: "switcher.project.activation_failed",
-                        level: .error,
-                        message: "\(error)",
-                        context: ["project_id": projectId]
-                    )
-                    self.onOperationFailed?(ErrorContext(
-                        category: .command,
-                        message: "\(error)",
-                        trigger: "activation"
-                    ))
                 }
             }
         }

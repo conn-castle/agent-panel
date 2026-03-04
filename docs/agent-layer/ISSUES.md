@@ -49,29 +49,27 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 - Issue 2026-03-03 slow-syscmdrunner-tests: SystemCommandRunner login-shell tests take ~6.6s due to real shell spawning
     Priority: Low. Area: tests
-    Description: `SystemCommandRunnerLoginShellTests.swift` uses real `Process` spawning and timeout waits to validate login-shell fallback behavior. This accounts for ~6.6s of test time but cannot be fixed without introducing a clock abstraction into production `ApSystemCommandRunner` code.
-    Next step: Add an injectable `Clock` protocol to `ApSystemCommandRunner` so circuit breaker timing tests can use a fake clock instead of real sleeps.
-- Issue 2026-03-03 focus-capture-race: Switcher focus capture can be clobbered by menu refresh timing
-    Priority: Medium. Area: switcher
-    Description: `MenuWorkspaceStateCoordinator` background refresh can set `capturedFocus` to nil nondeterministically before panel show, because the refresh callback and focus capture happen on overlapping async paths.
-    Next step: Serialize focus capture and menu refresh onto a single queue, or snapshot focus before starting background refresh.
+    Description: `SystemCommandRunnerLoginShellTests.swift` uses real `Process` spawning and timeout waits to validate login-shell fallback behavior. This accounts for ~6.6s of test time.
+    Next step: Shorten the timeout in `testResolveViaLoginShellReturnsNilWhenShellCommandTimesOut`, or segregate slow login-shell tests into a separate test plan that runs outside the fast feedback loop.
 
-- Issue 2026-03-03 health-coord-thread: Off-main access of main-thread-confined AppHealthCoordinator state
-    Priority: Medium. Area: app-delegate
-    Description: `lastHealthRefreshAt` in `AppHealthCoordinator` is read from background dispatch contexts but is documented as main-thread-only. The `requireMainThread()` guard was added but callers may still race.
-    Next step: Audit all call sites of `refreshHealth()` and `lastHealthRefreshAt` to ensure main-thread dispatch.
+- Issue 2026-03-03 focus-capture-race: MenuWorkspaceStateCoordinator background refresh can overwrite explicitly-set menuFocusCapture
+    Priority: Low. Area: switcher
+    Description: `refreshInBackground()` dispatches to a global queue, captures focus, then dispatches back to main to set `menuFocusCapture`. If `updateFocusCapture()` sets `menuFocusCapture` on main between the background dispatch and the callback landing, the callback overwrites the explicit value with stale data. Note: the switcher's own `capturedFocus` (on `SwitcherPanelController`) is a separate property and is not affected.
+    Next step: Guard the `refreshInBackground()` callback so it does not overwrite `menuFocusCapture` if it was explicitly set since the refresh started (e.g., a generation counter or snapshot-before-refresh).
 
 - Issue 2026-03-03 aerospace-timing-validation: ApAeroSpace retry timing inputs are not validated
-    Priority: Medium. Area: aerospace
-    Description: Injectable `startupTimeoutSeconds` and `readinessCheckInterval` are not validated; zero or negative intervals can cause hot-loop polling or break timeout semantics.
+    Priority: Low. Area: aerospace
+    Description: Injectable `startupTimeoutSeconds` and `readinessCheckInterval` are not validated; zero or negative intervals can cause hot-loop polling or break timeout semantics. Only test code can pass custom values (production uses safe defaults of 10.0s/0.25s), so real-world risk is near-zero.
     Next step: Add precondition guards (timeout > 0, interval > 0, interval < timeout) to the ApAeroSpace init.
 
-- Issue 2026-03-03 retry-generation-race: SwitcherWorkspaceRetryCoordinator retryGeneration lacks synchronization
+- Issue 2026-03-03 retry-generation-race: SwitcherWorkspaceRetryCoordinator retryGeneration lacks enforced thread confinement
     Priority: Low. Area: switcher
-    Description: `retryGeneration` is read/written across timer queue and main queue without synchronization. Cancel/tick interleaving could read a stale generation value.
-    Next step: Protect `retryGeneration` with a lock or move all reads/writes to the same queue.
+    Description: `retryGeneration` reads/writes all happen on the main thread in practice, but `scheduleRetry()` and `cancelRetry()` lack `requireMainThread()` enforcement. If either were ever called off-main, a data race with `handleRetryTick()` would occur.
+    Next step: Add `requireMainThread()` guards to `scheduleRetry()` and `cancelRetry()` to enforce the existing main-thread convention.
+    Notes: Related to `coordinator-test-flake` — test flakiness is partially a symptom of the unenforced threading model.
 
 - Issue 2026-03-03 coordinator-test-flake: Several SwitcherCoordinatorTests are timing-coupled or have inverted expectations
     Priority: Low. Area: tests
     Description: Two retry tests use inverted expectations that can false-pass (never explicitly fulfilled by success). One test uses a 0.15s timeout vs 50ms timer that can flake under CI jitter. One test asserts state that may still be on main-actor cleanup path.
     Next step: Replace inverted expectations with explicit fulfillment; increase timing margins or use deterministic scheduling.
+    Notes: Related to `retry-generation-race` — some test fragility stems from the unenforced threading model in the retry coordinator.
