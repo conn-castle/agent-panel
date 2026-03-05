@@ -99,7 +99,7 @@ public final class ProjectManager {
         let workspaceSummaries: [ApWorkspaceSummary]
         switch aerospace.listWorkspacesWithFocus() {
         case .failure(let error):
-            logEvent("workspace_state.failed", level: .warn, message: error.message)
+            logEvent("workspace_state.failed", level: error.isBreakerOpen ? .info : .warn, message: error.message)
             return .failure(.aeroSpaceError(detail: error.message))
         case .success(let result):
             workspaceSummaries = result

@@ -97,7 +97,7 @@ Incomplete:
 - Window positioning: layout engine with `[layout]` config, AX-based positioning, per-project per-mode persistence, Accessibility permission check in Doctor.
 - Window recovery and management: "Move Current Window", "Recover Current Window", "Recover Project" / "Recover All Projects" menu items.
 - Workspace cycling: native Swift Option-Tab / Option-Shift-Tab via `WindowCycler` + Carbon hotkeys.
-- AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery on crash (max 2 attempts), managed config with versioned templates and user sections.
+- AeroSpace resilience: circuit breaker (30s cooldown), auto-recovery for breaker-open states with bounded restart/terminate behavior (max 2 attempts), managed config with versioned templates and user sections.
 - UX: auto-start at login, auto-doctor on critical errors, VS Code Peacock color differentiation, Doctor SSH parallelization.
 
 ## Phase 8 ✅ — Release: packaging, verification, and documentation
@@ -129,7 +129,7 @@ Incomplete:
 - [x] Auto recover a single window.
 - [x] Get auto recovery for project working when not on project; recover non-project windows on the current desktop.
 - [x] Add switcher `Cmd+R` shortcut to trigger Recover Project for the focused workspace and surface the shortcut in switcher footer hints.
-- [ ] Add project flow in the UI (including "+" button) that writes to config safely. Done using a GUI form, auto detect based on path, etc.
+- [ ] Add project flow in the UI (including "+" button) that writes to config safely, including a GUI form and path-based auto-detection.
 - [ ] Chrome profile selection in config: Implement support for selecting specific Chrome profiles via config.toml (`chromeProfile` key or similar). This allows different projects to open in their respective Chrome profiles, maintaining separation of state and accounts. Chrome windows for a project open using the profile specified in the project's configuration. May involve using `--profile-directory` or similar Chrome CLI flags.
 - [ ] Auto-associate existing Chrome window in project workspace: If a project lacks an associated Chrome window but a window is found within the project's workspace (e.g., without matching title), associate it instead of opening a new one. Selecting a project without a matched Chrome window automatically adopts an existing Chrome window if it's already on the project's assigned workspace/screen. Improves seamlessness when switching projects where Chrome windows might have lost their specific title match but are still in the right place.
 

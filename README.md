@@ -25,7 +25,7 @@ For users who want an uncluttered menu bar, it can be desirable to remove or hid
 - **SSH remote projects** -- works with VS Code Remote-SSH for remote development workflows.
 - **Built-in diagnostics** -- `Doctor` checks your setup end-to-end, opens immediately with loading feedback, and renders a color-coded report with actionable fixes.
 - **CLI included** -- `ap doctor`, `ap select-project`, `ap close-project`, and more for scripting and automation.
-- **Self-healing** -- circuit breaker and auto-recovery when AeroSpace crashes. No manual restarts needed. Off-screen windows are automatically recovered when focused.
+- **Self-healing** -- circuit breaker and bounded auto-recovery when the breaker is open. Off-main calls can recover immediately after a responsive probe (retry without restart); main-thread calls fail fast while recovery runs asynchronously. Unresponsive probes attempt termination before restart. Off-screen windows are automatically recovered when focused.
 - **Color coding** -- each project gets a distinct color in VS Code via the Peacock extension.
 
 ## Requirements
@@ -286,7 +286,7 @@ Each finding includes a severity (PASS / WARN / FAIL) and an actionable fix. The
 
 **AeroSpace errors or slow recovery**
 - Open **Run Doctor...** to inspect AeroSpace status.
-- AgentPanel auto-recovers crashed AeroSpace processes (circuit breaker with 30s cooldown, max 2 restart attempts).
+- AgentPanel attempts AeroSpace recovery after breaker trips (30s cooldown, max 2 recovery attempts per breaker trip). Off-main calls can immediately retry after a responsive probe; main-thread calls fail fast while recovery runs asynchronously. If a probe confirms AeroSpace is running but unresponsive, AgentPanel attempts termination before restart; failed recovery is surfaced by Doctor and logs.
 
 **Agent Layer project fails**
 - Ensure `al` and `code` are on your PATH.
@@ -320,7 +320,7 @@ scripts/dev_bootstrap.sh  # Validate Xcode toolchain (one-time)
 make regen                # Generate Xcode project from project.yml
 make build                # Build (Debug)
 make build-dev            # Build dev app variant (Debug, side-by-side identity)
-make test                 # Run tests (fast, no coverage)
+make test                 # Run tests (coverage collected; no coverage gate)
 make coverage             # Run tests with coverage gate (90% minimum)
 ```
 

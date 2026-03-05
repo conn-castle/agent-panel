@@ -4,22 +4,20 @@ import XCTest
 // MARK: - Auto-Recovery Integration Tests
 
 final class AeroSpaceAutoRecoveryTests: XCTestCase {
+    private let mainThreadFailFastUpperBoundSeconds: TimeInterval = 2.5
 
-    /// When breaker is open, process is dead, and processChecker is wired,
-    /// auto-recovery should restart AeroSpace and retry the command.
-    func testAutoRecoveryRestartsAeroSpaceWhenProcessDead() {
+    /// When breaker is open and process is dead, recovery should restart AeroSpace and retry.
+    func testAutoRecoveryWhenProcessDeadSkipsTerminateAndRestarts() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
         let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
 
-        // Trip the breaker
         breaker.recordTimeout()
 
-        // Set up results for recovery: open -a AeroSpace, readiness probe, then retried command
         runner.results = [
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),  // open -a AeroSpace
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),  // aerospace --help (readiness)
-            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: ""))  // retried getWorkspaces
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
         ]
 
         let aero = ApAeroSpace(
@@ -31,89 +29,428 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             readinessCheckInterval: 0.05
         )
 
-        // start() requires !Thread.isMainThread
-        let expectation = expectation(description: "recovery completes")
-        var result: Result<[String], ApCoreError>?
-        DispatchQueue.global().async {
-            result = aero.getWorkspaces()
-            expectation.fulfill()
-        }
-        waitForExpectations(timeout: 5)
+        let result = runGetWorkspacesOffMain(aero)
 
         if case .success(let workspaces) = result {
             XCTAssertEqual(workspaces, ["ws-1"])
         } else {
-            XCTFail("Expected success after auto-recovery, got: \(String(describing: result))")
+            XCTFail("Expected success after dead-process recovery, got: \(result)")
         }
 
-        // Breaker should be closed after successful recovery
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
+            ]
+        )
         XCTAssertEqual(breaker.currentState, .closed)
     }
 
-    /// When processChecker is nil, no recovery is attempted — standard breaker error is returned.
+    /// Readiness probe timeouts during start must not trigger nested recovery attempts.
+    func testAutoRecoveryReadinessTimeoutDoesNotReenterRecovery() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace --help")), // readiness probe #1
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // readiness probe #2
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+
+        if case .success(let workspaces) = result {
+            XCTAssertEqual(workspaces, ["ws-1"])
+        } else {
+            XCTFail("Expected success after readiness-timeout retry, got: \(result)")
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
+            ]
+        )
+        XCTAssertEqual(breaker.currentState, .closed)
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// When processChecker is nil, no recovery is attempted.
     func testNoRecoveryWhenProcessCheckerIsNil() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
-
-        // Trip the breaker
         breaker.recordTimeout()
 
         let aero = ApAeroSpace(
             commandRunner: runner,
             appDiscovery: CircuitBreakerStubAppDiscovery(),
             circuitBreaker: breaker
-            // processChecker is nil (default)
         )
 
         let result = aero.getWorkspaces()
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("circuit breaker"))
-        } else {
-            XCTFail("Expected circuit breaker error without process checker")
-        }
+        assertBreakerOpenFailure(result)
 
-        // Runner should not have been called at all
-        XCTAssertEqual(runner.calls.count, 0)
+        XCTAssertTrue(runner.calls.isEmpty)
     }
 
-    /// When process is still running (hanging, not crashed), no recovery is attempted.
-    func testNoRecoveryWhenProcessIsRunning() {
+    /// Running + responsive should skip termination and restart.
+    func testAutoRecoveryRunningButResponsiveDoesNotTerminateProcess() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
         let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
 
-        // Trip the breaker
         breaker.recordTimeout()
+
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace list-workspaces --focused probe
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
+        ]
 
         let aero = ApAeroSpace(
             commandRunner: runner,
             appDiscovery: CircuitBreakerStubAppDiscovery(),
             circuitBreaker: breaker,
-            processChecker: processChecker
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
         )
 
-        let result = aero.getWorkspaces()
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("circuit breaker"))
+        let result = runGetWorkspacesOffMain(aero)
+
+        if case .success(let workspaces) = result {
+            XCTAssertEqual(workspaces, ["ws-1"])
         } else {
-            XCTFail("Expected circuit breaker error when process is still running")
+            XCTFail("Expected success after responsive-process recovery, got: \(result)")
         }
 
-        // Runner should not have been called
-        XCTAssertEqual(runner.calls.count, 0)
+        XCTAssertEqual(processChecker.terminateCalls, 0, "Responsive process should not be terminated")
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
+            ]
+        )
+        XCTAssertEqual(breaker.currentState, .closed)
     }
 
-    /// When recovery fails (start() fails), it should fall back to breaker error and
-    /// allow one more recovery attempt before exhausting the limit.
+    /// Running + unresponsive should terminate, then restart, then retry.
+    func testAutoRecoveryRunningAndUnresponsiveTerminatesThenRestarts() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")), // aerospace list-workspaces --focused probe
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+
+        if case .success(let workspaces) = result {
+            XCTAssertEqual(workspaces, ["ws-1"])
+        } else {
+            XCTFail("Expected success after unresponsive-process recovery, got: \(result)")
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 1, "Unresponsive process should be terminated")
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertEqual(processChecker.terminateBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
+            ]
+        )
+        XCTAssertEqual(breaker.currentState, .closed)
+    }
+
+    /// Running + unresponsive must fail fast when checker cannot terminate.
+    func testAutoRecoveryRunningAndUnresponsiveWithoutTerminatorFailsWithDetail() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerQueryOnlyProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused"))
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
+        if case .failure(let error) = result {
+            XCTAssertEqual(
+                error.detail,
+                CircuitBreakerRecoveryTestValues.terminateUnsupportedDetail
+            )
+        }
+
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        assertCommandSequence(
+            runner,
+            equals: [commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)]
+        )
+        if case .open = breaker.currentState {
+            // Expected: missing terminate capability keeps breaker open for fail-fast behavior.
+        } else {
+            XCTFail("Expected breaker to remain open when terminate capability is unavailable")
+        }
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// Legacy timeout-message probe failures should still trigger terminate/restart recovery.
+    func testAutoRecoveryLegacyTimeoutProbeStillTerminatesThenRestarts() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(ApCoreError(message: "Command timed out after 2.0s: aerospace list-workspaces --focused")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: ""))
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+
+        if case .success(let workspaces) = result {
+            XCTAssertEqual(workspaces, ["ws-1"])
+        } else {
+            XCTFail("Expected success after legacy-timeout recovery, got: \(result)")
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 1)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertEqual(processChecker.terminateBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
+            ]
+        )
+        XCTAssertEqual(breaker.currentState, .closed)
+    }
+
+    /// Terminate failure should fail recovery and must not restart.
+    func testAutoRecoveryTerminateFailureReturnsBreakerErrorAndSkipsRestart() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(
+            isRunning: true,
+            terminateResult: false
+        )
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")) // aerospace list-workspaces --focused probe
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
+        if case .failure(let error) = result {
+            XCTAssertEqual(
+                error.detail,
+                CircuitBreakerRecoveryTestValues.terminateFailedDetail
+            )
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 1)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertEqual(processChecker.terminateBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)]
+        )
+        if case .open = breaker.currentState {
+            // Expected: failed terminate keeps breaker open for fail-fast behavior.
+        } else {
+            XCTFail("Expected breaker to remain open after terminate failure")
+        }
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// Non-timeout probe failures must fail recovery without terminating the process.
+    func testAutoRecoveryNonTimeoutProbeFailureSkipsTerminateAndReturnsDetail() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(ApCoreError(message: "Executable not found: aerospace")) // aerospace list-workspaces --focused probe
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
+        if case .failure(let error) = result {
+            XCTAssertEqual(
+                error.detail,
+                CircuitBreakerRecoveryTestValues.nonTimeoutProbeFailureDetail
+            )
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)]
+        )
+        if case .open = breaker.currentState {
+            // Expected: failed recovery keeps breaker open for fail-fast behavior.
+        } else {
+            XCTFail("Expected breaker to remain open after non-timeout probe failure")
+        }
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// Non-zero probe exits must fail recovery without terminating the process.
+    func testAutoRecoveryNonZeroProbeExitSkipsTerminateAndReturnsDetail() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .success(ApCommandResult(exitCode: 3, stdout: "", stderr: "socket unavailable")) // aerospace list-workspaces --focused probe
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
+        if case .failure(let error) = result {
+            XCTAssertEqual(
+                error.detail,
+                CircuitBreakerRecoveryTestValues.nonZeroProbeExitDetail(exitCode: 3)
+            )
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)]
+        )
+        if case .open = breaker.currentState {
+            // Expected: failed recovery keeps breaker open for fail-fast behavior.
+        } else {
+            XCTFail("Expected breaker to remain open after non-zero probe exit")
+        }
+        XCTAssertFalse(breaker.isRecoveryInProgress)
+    }
+
+    /// When start() fails during recovery, return breaker error and keep retry budget.
     func testRecoveryFailureFallsBackToBreakerError() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
         let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
 
-        // Trip the breaker
         breaker.recordTimeout()
 
-        // Start fails (open -a AeroSpace fails)
         runner.results = [
             .failure(ApCoreError(message: "Executable not found: open"))
         ]
@@ -127,42 +464,35 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             readinessCheckInterval: 0.05
         )
 
-        // Run off-main so recovery is synchronous and we can verify state immediately
-        let expectation = expectation(description: "recovery completes")
-        var result: Result<[String], ApCoreError>?
-        DispatchQueue.global().async {
-            result = aero.getWorkspaces()
-            expectation.fulfill()
-        }
-        waitForExpectations(timeout: 5)
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
 
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("circuit breaker"))
-        } else {
-            XCTFail("Expected circuit breaker error after failed recovery")
-        }
-
-        // Recovery should have been attempted (start called open -a AeroSpace)
-        XCTAssertEqual(runner.calls.count, 1)
-        XCTAssertEqual(runner.calls[0].arguments, ["-a", "AeroSpace"])
-
-        // Should still allow one more recovery attempt
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10)
+            ]
+        )
         XCTAssertTrue(breaker.shouldAttemptRecovery())
     }
 
-    /// On the main thread, recovery fires asynchronously and the caller gets an
-    /// immediate breaker error (no main-thread stall).
+    /// Main-thread callers should fail fast while background recovery completes.
     func testMainThreadRecoveryFailsFastAndRecoversAsync() {
+        XCTAssertTrue(Thread.isMainThread, "This test must execute on the main thread.")
+
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
         let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
 
         breaker.recordTimeout()
 
-        // Provide results for async recovery: open -a AeroSpace + readiness probe
         runner.results = [
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: ""))
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace --help (readiness)
         ]
 
         let aero = ApAeroSpace(
@@ -174,25 +504,226 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             readinessCheckInterval: 0.05
         )
 
-        // Call on main thread — should return immediately with breaker error
+        let startedAt = Date()
         let result = aero.getWorkspaces()
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("circuit breaker"),
-                "Main-thread caller should get immediate breaker error")
+        assertFailFastLatency(Date().timeIntervalSince(startedAt))
+        assertBreakerOpenFailure(result)
+
+        waitUntil(description: "main-thread async recovery completes") {
+            breaker.currentState == .closed &&
+                !breaker.isRecoveryInProgress &&
+                runner.calls.count == 2
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2)
+            ]
+        )
+    }
+
+    /// Main-thread callers should fail fast while async recovery handles start() failure.
+    func testMainThreadRecoveryFailsFastWhenAsyncStartFails() {
+        XCTAssertTrue(Thread.isMainThread, "This test must execute on the main thread.")
+
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(ApCoreError(message: "Executable not found: open"))
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let startedAt = Date()
+        let result = aero.getWorkspaces()
+        assertFailFastLatency(Date().timeIntervalSince(startedAt))
+        assertBreakerOpenFailure(result)
+
+        waitUntil(description: "main-thread async start-failure recovery completes") {
+            !breaker.isRecoveryInProgress && runner.calls.count == 1
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10)
+            ]
+        )
+        if case .open = breaker.currentState {
+            // Expected: failed background start keeps breaker open for fail-fast behavior.
         } else {
-            XCTFail("Expected immediate breaker error on main thread")
+            XCTFail("Expected breaker to remain open after async start failure")
+        }
+    }
+
+    /// Main-thread hung-process recovery should terminate in background before restart.
+    func testMainThreadRecoveryTerminatesHungProcessAsync() {
+        XCTAssertTrue(Thread.isMainThread, "This test must execute on the main thread.")
+
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")), // aerospace list-workspaces --focused probe
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace --help (readiness)
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let startedAt = Date()
+        let result = aero.getWorkspaces()
+        assertFailFastLatency(Date().timeIntervalSince(startedAt))
+        assertBreakerOpenFailure(result)
+
+        waitUntil(description: "main-thread hung-process recovery completes") {
+            breaker.currentState == .closed &&
+                !breaker.isRecoveryInProgress &&
+                processChecker.terminateCalls == 1 &&
+                runner.calls.count == 3
         }
 
-        // Wait for async recovery to complete in background
-        let recovered = expectation(description: "async recovery completes")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
-            recovered.fulfill()
-        }
-        waitForExpectations(timeout: 5)
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertEqual(processChecker.terminateBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
+                commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
+                commandCall("aerospace", ["--help"], timeoutSeconds: 2)
+            ]
+        )
+    }
 
-        // Breaker should now be closed from the async recovery
-        XCTAssertEqual(breaker.currentState, .closed)
-        XCTAssertFalse(breaker.isRecoveryInProgress)
+    /// Main-thread responsive-process recovery should close breaker without restart.
+    func testMainThreadRecoveryResponsiveProcessClosesBreaker() {
+        XCTAssertTrue(Thread.isMainThread, "This test must execute on the main thread.")
+
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: true)
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace list-workspaces --focused probe
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let startedAt = Date()
+        let result = aero.getWorkspaces()
+        assertFailFastLatency(Date().timeIntervalSince(startedAt))
+        assertBreakerOpenFailure(result)
+
+        waitUntil(description: "main-thread responsive-process recovery completes") {
+            breaker.currentState == .closed &&
+                !breaker.isRecoveryInProgress &&
+                runner.calls.count == 1
+        }
+
+        XCTAssertEqual(processChecker.terminateCalls, 0, "Responsive process should not be terminated")
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)
+            ]
+        )
+    }
+
+    /// Main-thread recovery should fail fast when terminate fails and skip restart.
+    func testMainThreadRecoveryTerminateFailureFailsFastAndSkipsRestart() {
+        XCTAssertTrue(Thread.isMainThread, "This test must execute on the main thread.")
+
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(
+            isRunning: true,
+            terminateResult: false
+        )
+
+        breaker.recordTimeout()
+
+        runner.results = [
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")) // aerospace list-workspaces --focused probe
+        ]
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker,
+            startupTimeoutSeconds: 1.0,
+            readinessCheckInterval: 0.05
+        )
+
+        let startedAt = Date()
+        let result = aero.getWorkspaces()
+        assertFailFastLatency(Date().timeIntervalSince(startedAt))
+        assertBreakerOpenFailure(result)
+
+        waitUntil(description: "main-thread terminate-failure recovery completes") {
+            !breaker.isRecoveryInProgress &&
+                processChecker.terminateCalls == 1 &&
+                runner.calls.count == 1
+        }
+
+        XCTAssertEqual(processChecker.isApplicationRunningBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertEqual(processChecker.terminateBundleIdentifiers, [ApAeroSpace.bundleIdentifier])
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        assertCommandSequence(
+            runner,
+            equals: [
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)
+            ]
+        )
+        if case .open = breaker.currentState {
+            // Expected: failed terminate keeps breaker open for fail-fast behavior.
+        } else {
+            XCTFail("Expected breaker to remain open after terminate failure")
+        }
     }
 
     /// After maxRecoveryAttempts failed recoveries, no more attempts are made.
@@ -201,14 +732,12 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
         let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
 
-        // Exhaust recovery attempts
         for _ in 0..<AeroSpaceCircuitBreaker.maxRecoveryAttempts {
             breaker.recordTimeout()
             _ = breaker.beginRecovery()
             breaker.endRecovery(success: false)
         }
 
-        // Ensure breaker is still open
         breaker.recordTimeout()
 
         let aero = ApAeroSpace(
@@ -219,13 +748,123 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
         )
 
         let result = aero.getWorkspaces()
-        if case .failure(let error) = result {
-            XCTAssertTrue(error.message.contains("circuit breaker"))
-        } else {
-            XCTFail("Expected circuit breaker error after exhausted recovery")
+        assertBreakerOpenFailure(result)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+    }
+
+    /// Breaker-open calls should fail fast when recovery is already in progress.
+    func testRecoveryBlockedWhenAlreadyInProgressReturnsBreakerOpenWithoutNewAttempt() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+        let processChecker = CircuitBreakerMockProcessChecker(isRunning: false)
+
+        breaker.recordTimeout()
+        XCTAssertTrue(breaker.beginRecovery())
+
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            processChecker: processChecker
+        )
+
+        let result = runGetWorkspacesOffMain(aero)
+        assertBreakerOpenFailure(result)
+
+        XCTAssertTrue(runner.calls.isEmpty)
+        XCTAssertTrue(processChecker.isApplicationRunningBundleIdentifiers.isEmpty)
+        XCTAssertTrue(processChecker.terminateBundleIdentifiers.isEmpty)
+        XCTAssertEqual(processChecker.terminateCalls, 0)
+        XCTAssertTrue(processChecker.invalidBundleIdentifiers.isEmpty)
+        XCTAssertTrue(breaker.isRecoveryInProgress)
+        XCTAssertFalse(breaker.shouldAttemptRecovery())
+
+        breaker.endRecovery(success: false)
+        XCTAssertTrue(
+            breaker.shouldAttemptRecovery(),
+            "Recovery should become eligible again after current attempt ends (not exhausted)."
+        )
+    }
+
+    // MARK: - Helpers
+
+    private func runGetWorkspacesOffMain(
+        _ aero: ApAeroSpace,
+        timeout: TimeInterval = 5
+    ) -> Result<[String], ApCoreError> {
+        let completed = expectation(description: "off-main getWorkspaces completes")
+        var result: Result<[String], ApCoreError>?
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            result = aero.getWorkspaces()
+            completed.fulfill()
         }
 
-        // Runner should not have been called (recovery not attempted)
-        XCTAssertEqual(runner.calls.count, 0)
+        wait(for: [completed], timeout: timeout)
+        guard let result else {
+            XCTFail("Expected off-main getWorkspaces to produce a result")
+            return .failure(ApCoreError(message: "off-main test harness did not capture a result"))
+        }
+        return result
+    }
+
+    private func waitUntil(
+        description: String,
+        timeout: TimeInterval = 5.0,
+        condition: @escaping () -> Bool
+    ) {
+        let predicate = NSPredicate { _, _ in condition() }
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: NSObject())
+        let result = XCTWaiter().wait(for: [expectation], timeout: timeout)
+        XCTAssertEqual(result, .completed, "Timed out waiting for \(description)")
+    }
+
+    private func assertCommandSequence(
+        _ runner: CircuitBreakerMockCommandRunner,
+        equals expected: [CircuitBreakerMockCommandRunner.Call],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(runner.calls, expected, file: file, line: line)
+    }
+
+    private func commandCall(
+        _ executable: String,
+        _ arguments: [String],
+        timeoutSeconds: TimeInterval?
+    ) -> CircuitBreakerMockCommandRunner.Call {
+        CircuitBreakerMockCommandRunner.Call(
+            executable: executable,
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
+
+    private func assertFailFastLatency(
+        _ elapsedSeconds: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertLessThan(
+            elapsedSeconds,
+            mainThreadFailFastUpperBoundSeconds,
+            "Expected main-thread recovery to fail fast (<\(mainThreadFailFastUpperBoundSeconds)s), but took \(elapsedSeconds)s.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertBreakerOpenFailure(
+        _ result: Result<[String], ApCoreError>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard case .failure(let error) = result else {
+            XCTFail("Expected circuit-breaker-open failure, got success.", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(error.reason, .circuitBreakerOpen, file: file, line: line)
+        XCTAssertTrue(error.isBreakerOpen, file: file, line: line)
     }
 }

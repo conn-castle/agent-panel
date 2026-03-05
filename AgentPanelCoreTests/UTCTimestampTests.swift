@@ -91,6 +91,11 @@ private struct MockRunningAppChecker: RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool {
         false
     }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in UTCTimestampTests for bundleIdentifier=\(bundleIdentifier)")
+        return false
+    }
 }
 
 private struct MockDateProvider: DateProviding {

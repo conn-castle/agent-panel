@@ -53,17 +53,20 @@ extension SwitcherPanelController {
                         return
                     }
 
-                    let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
-                    await MainActor.run {
-                        session.logEvent(
-                            event: "switcher.focus.restore_failed",
-                            level: .warn,
-                            message: "AeroSpace focus restore failed, falling back to app activation.",
-                            context: [
-                                "window_id": "\(focus.windowId)",
-                                "restore_ms": "\(restoreMs)"
-                            ]
-                        )
+                    if previousApp == nil {
+                        let restoreMs = Int((CFAbsoluteTimeGetCurrent() - restoreStart) * 1000)
+                        await MainActor.run {
+                            session.logEvent(
+                                event: "switcher.focus.restore_failed",
+                                level: .warn,
+                                message: "AeroSpace focus restore failed and no previous app fallback is available.",
+                                context: [
+                                    "window_id": "\(focus.windowId)",
+                                    "has_app_fallback": "false",
+                                    "restore_ms": "\(restoreMs)"
+                                ]
+                            )
+                        }
                     }
                 }
             }

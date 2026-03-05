@@ -9,7 +9,12 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
 
         // First call times out
         runner.results = [
-            .failure(ApCoreError(message: "Command timed out after 5.0s: aerospace list-workspaces --all"))
+            .failure(
+                CircuitBreakerRecoveryTestValues.timeoutError(
+                    command: "aerospace list-workspaces --all",
+                    timeoutSeconds: 5
+                )
+            )
         ]
         let aero = ApAeroSpace(
             commandRunner: runner,
@@ -25,11 +30,7 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
         // Second call should fail fast without hitting the runner
         runner.results = []
         let result2 = aero.getWorkspaces()
-        if case .failure(let error) = result2 {
-            XCTAssertTrue(error.message.contains("circuit breaker"), "Error should mention circuit breaker, got: \(error.message)")
-        } else {
-            XCTFail("Expected circuit breaker failure")
-        }
+        assertBreakerOpenFailure(result2)
 
         // Runner should only have been called once (the first timeout)
         XCTAssertEqual(runner.calls.count, 1)
@@ -66,13 +67,36 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
         XCTAssertEqual(runner.calls.count, 2)
     }
 
+    func testLegacyTimeoutMessageStillTripsBreaker() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        // Legacy fixture without structured reason should still trip via message fallback.
+        runner.results = [
+            .failure(ApCoreError(message: "Command timed out after 5.0s: aerospace list-workspaces --all"))
+        ]
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker
+        )
+
+        _ = aero.getWorkspaces()
+        XCTAssertFalse(breaker.shouldAllow())
+    }
+
     func testSuccessAfterCooldownResetsBreaker() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 0.05)
 
         // Timeout trips the breaker
         runner.results = [
-            .failure(ApCoreError(message: "Command timed out after 5.0s: aerospace list-workspaces --all"))
+            .failure(
+                CircuitBreakerRecoveryTestValues.timeoutError(
+                    command: "aerospace list-workspaces --all",
+                    timeoutSeconds: 5
+                )
+            )
         ]
         let aero = ApAeroSpace(
             commandRunner: runner,
@@ -138,13 +162,65 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
         XCTAssertTrue(breaker.shouldAllow())
     }
 
+    func testStartReadinessTimeoutTripsBreakerWhenNotRecovering() {
+        let runner = CircuitBreakerMockCommandRunner()
+        let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
+
+        runner.results = [
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")),
+            .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace --help"))
+        ]
+        let aero = ApAeroSpace(
+            commandRunner: runner,
+            appDiscovery: CircuitBreakerStubAppDiscovery(),
+            circuitBreaker: breaker,
+            startupTimeoutSeconds: 0.3,
+            readinessCheckInterval: 0.1
+        )
+
+        let completed = expectation(description: "start completes off-main")
+        var result: Result<Void, ApCoreError>?
+        DispatchQueue.global(qos: .userInitiated).async {
+            result = aero.start()
+            completed.fulfill()
+        }
+        wait(for: [completed], timeout: 5)
+
+        guard case .failure = result else {
+            XCTFail("Expected start readiness timeout failure, got: \(String(describing: result))")
+            return
+        }
+        XCTAssertFalse(breaker.shouldAllow(), "Readiness timeout should trip the breaker outside recovery")
+        XCTAssertEqual(
+            runner.calls,
+            [
+                CircuitBreakerMockCommandRunner.Call(
+                    executable: "open",
+                    arguments: ["-a", "AeroSpace"],
+                    timeoutSeconds: 10
+                ),
+                CircuitBreakerMockCommandRunner.Call(
+                    executable: "aerospace",
+                    arguments: ["--help"],
+                    timeoutSeconds: 2
+                )
+            ],
+            "start() should issue exactly open + one readiness probe command before failing fast."
+        )
+    }
+
     func testCascadePreventionMultipleMethods() {
         let runner = CircuitBreakerMockCommandRunner()
         let breaker = AeroSpaceCircuitBreaker(cooldownSeconds: 60)
 
         // First call times out
         runner.results = [
-            .failure(ApCoreError(message: "Command timed out after 5.0s: aerospace list-workspaces --focused"))
+            .failure(
+                CircuitBreakerRecoveryTestValues.timeoutError(
+                    command: "aerospace list-workspaces --focused",
+                    timeoutSeconds: 5
+                )
+            )
         ]
         let aero = ApAeroSpace(
             commandRunner: runner,
@@ -163,19 +239,26 @@ final class AeroSpaceCircuitBreakerIntegrationTests: XCTestCase {
         let r3 = aero.focusWorkspace(name: "test")
         let r4 = aero.isCliAvailable()
 
-        if case .failure(let e) = r1 { XCTAssertTrue(e.message.contains("circuit breaker")) }
-        else { XCTFail("Expected circuit breaker failure") }
-
-        if case .failure(let e) = r2 { XCTAssertTrue(e.message.contains("circuit breaker")) }
-        else { XCTFail("Expected circuit breaker failure") }
-
-        if case .failure(let e) = r3 { XCTAssertTrue(e.message.contains("circuit breaker")) }
-        else { XCTFail("Expected circuit breaker failure") }
+        assertBreakerOpenFailure(r1)
+        assertBreakerOpenFailure(r2)
+        assertBreakerOpenFailure(r3)
 
         XCTAssertFalse(r4) // isCliAvailable returns false, doesn't expose error
 
         // Only 1 actual command was sent to the runner
         XCTAssertEqual(runner.calls.count, 1)
     }
-}
 
+    private func assertBreakerOpenFailure<T>(
+        _ result: Result<T, ApCoreError>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard case .failure(let error) = result else {
+            XCTFail("Expected circuit-breaker-open failure, got success.", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(error.reason, .circuitBreakerOpen, file: file, line: line)
+        XCTAssertTrue(error.isBreakerOpen, file: file, line: line)
+    }
+}

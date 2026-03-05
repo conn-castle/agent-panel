@@ -32,6 +32,20 @@ public protocol RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool
 }
 
+/// Running application termination interface for recovery policies.
+public protocol RunningApplicationTerminating {
+    /// Terminates all processes matching the given bundle identifier.
+    ///
+    /// Attempts graceful termination first, then force-kills if needed.
+    /// Returns true when the process is no longer running (including when
+    /// it was already dead — vacuously successful).
+    /// Conformers must implement this explicitly; no default fallback exists.
+    ///
+    /// - Parameter bundleIdentifier: Bundle identifier of the application to terminate.
+    /// - Returns: True if the process is no longer running after this call.
+    func terminateApplication(bundleIdentifier: String) -> Bool
+}
+
 // MARK: - Hotkey Status
 
 /// Current registration status for the global switcher hotkey.
@@ -363,4 +377,3 @@ protocol WindowPositionStoring {
     /// - Returns: `.failure` on write errors.
     func save(projectId: String, mode: ScreenMode, frames: SavedWindowFrames) -> Result<Void, ApCoreError>
 }
-

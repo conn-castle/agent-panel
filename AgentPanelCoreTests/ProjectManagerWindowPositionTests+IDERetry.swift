@@ -44,9 +44,13 @@ extension ProjectManagerWindowPositionTests {
             XCTAssertNil(success.layoutWarning, "Fallback succeeded — no warning expected")
         }
 
-        // Verify fallback was called
-        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 1)
+        // Probe runs on first miss, then fallback runs after retry exhaustion.
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 2)
         XCTAssertEqual(positioner.getFallbackFrameCalls[0], "com.microsoft.VSCode")
+        XCTAssertEqual(positioner.getFallbackFrameCalls[1], "com.microsoft.VSCode")
+        // Verify token retries were not short-circuited by the probe.
+        let ideGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideGetCalls.count, 10)
         // Verify positioning proceeded (IDE + Chrome setWindowFrames)
         XCTAssertEqual(positioner.setFrameCalls.count, 2)
     }
@@ -128,6 +132,133 @@ extension ProjectManagerWindowPositionTests {
         // Permanent error: no fallback attempted, no retry
         XCTAssertTrue(positioner.getFallbackFrameCalls.isEmpty)
         XCTAssertEqual(positioner.getFrameCalls.count, 1)
+    }
+
+    // MARK: - Zero-Windows Fast-Fail
+
+    func testConfirmedZeroWindowsFastFailRequiresRetryConfidence() async {
+        let projectId = "zw-ff-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // Persistent transient token misses with repeated zero-window probes.
+        // Fast-fail should require additional confidence before short-circuiting.
+        positioner.getFrameSequences[ideKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss)
+        ]
+        // Probe reports zero windows.
+        positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(category: .window, message: "No windows found for com.microsoft.VSCode (count=0)"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "ZW", path: "/tmp/zw", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNotNil(success.layoutWarning, "Should have layout warning for zero windows")
+            XCTAssertTrue(success.layoutWarning?.contains("No windows found") == true)
+        }
+
+        // Fast-fail should trigger only after retry confidence is met.
+        let ideGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(
+            ideGetCalls.count,
+            10,
+            "Should preserve the full token retry budget before confirming permanent zero-window fast-fail"
+        )
+
+        // Probe was called on each retry before the final exhausted attempt.
+        // The exhausted attempt should use zero-window fast-fail (not fallback frame resolution).
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, ideGetCalls.count - 1)
+        XCTAssertTrue(positioner.getFallbackFrameCalls.allSatisfy { $0 == "com.microsoft.VSCode" })
+
+        // No setWindowFrames since IDE frame was never resolved
+        XCTAssertTrue(positioner.setFrameCalls.isEmpty)
+    }
+
+    func testTransientEarlyZeroWindowProbesDoNotFastFailWhenTokenRetryRecovers() async {
+        let projectId = "zw-probe-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        // Two early token misses occur before the title token settles, then recovery succeeds.
+        positioner.getFrameSequences[ideKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .success(defaultIdeFrame)
+        ]
+        // Early zero-window probe failures are transient/noisy and should not short-circuit retries.
+        positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(category: .window, message: "No windows found for com.microsoft.VSCode (count=0)"))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "Probe", path: "/tmp/probe", color: "green", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning, "Token retry succeeded — no layout warning expected")
+        }
+
+        // Early zero-window probes must not short-circuit; token retry should recover.
+        let ideGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideGetCalls.count, 3, "Expected token retries to continue after early zero-window probes")
+
+        // Probes occur for the early misses only; no third probe after token recovery.
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 2)
+
+        // Positioning should have proceeded (IDE + Chrome setWindowFrames)
+        XCTAssertEqual(positioner.setFrameCalls.count, 2, "Should have set frames for IDE and Chrome")
     }
 
     // MARK: - IDE Set Retry + Fallback Tests
