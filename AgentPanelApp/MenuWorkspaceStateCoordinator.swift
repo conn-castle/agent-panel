@@ -19,6 +19,10 @@ final class MenuWorkspaceStateCoordinator {
     /// Updated by background refreshes and explicit captures.
     private(set) var menuFocusCapture: CapturedFocus?
 
+    /// Generation counter for focus capture. Incremented on explicit `updateFocusCapture()`
+    /// calls so that stale background refresh callbacks do not overwrite explicit values.
+    private var focusCaptureGeneration: UInt64 = 0
+
     private let projectManager: ProjectManager
 
     // MARK: - Init
@@ -40,6 +44,8 @@ final class MenuWorkspaceStateCoordinator {
     ///
     /// - Parameter focus: Newly captured focus or `nil`.
     func updateFocusCapture(_ focus: CapturedFocus?) {
+        precondition(Thread.isMainThread, "updateFocusCapture(_:) must be called on the main thread.")
+        focusCaptureGeneration &+= 1
         menuFocusCapture = focus
     }
 
@@ -54,14 +60,20 @@ final class MenuWorkspaceStateCoordinator {
     /// Thread safety: `captureCurrentFocus()` and `workspaceState()` are safe off-main
     /// and use ProjectManager's internal serialization (focus capture may persist history).
     func refreshInBackground() {
+        precondition(Thread.isMainThread, "refreshInBackground() must be called on the main thread.")
+        let expectedGeneration = focusCaptureGeneration
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             guard let self else { return }
             let focus = self.projectManager.captureCurrentFocus()
             let state = try? self.projectManager.workspaceState().get()
             DispatchQueue.main.async {
                 self.cachedWorkspaceState = state
-                // Always mirror latest capture (including nil) to avoid stale focus.
-                self.menuFocusCapture = focus
+                // Only update focus if no explicit updateFocusCapture() call occurred
+                // since the refresh started. This prevents stale background data from
+                // overwriting a value that was explicitly set.
+                if self.focusCaptureGeneration == expectedGeneration {
+                    self.menuFocusCapture = focus
+                }
             }
         }
     }

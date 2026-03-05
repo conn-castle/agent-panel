@@ -353,7 +353,7 @@ final class SwitcherPanelController: NSObject {
         removeKeyEventMonitor()
         cancelPendingFilterWorkItem()
         restoreFocusTask?.cancel()
-        workspaceRetryCoordinator.cancelRetry()
+        workspaceRetryCoordinator.cancelRetryForTeardown()
     }
 
 }

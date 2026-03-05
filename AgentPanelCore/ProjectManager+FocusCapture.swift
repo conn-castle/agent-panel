@@ -7,7 +7,7 @@ extension ProjectManager {
     public func captureCurrentFocus() -> CapturedFocus? {
         switch aerospace.focusedWindow() {
         case .failure(let error):
-            logEvent("focus.capture.failed", level: .warn, message: error.message)
+            logEvent("focus.capture.failed", level: error.isBreakerOpen ? .info : .warn, message: error.message)
             return nil
         case .success(let window):
             let captured = CapturedFocus(windowId: window.windowId, appBundleId: window.appBundleId, workspace: window.workspace)
@@ -38,7 +38,7 @@ extension ProjectManager {
     public func focusWorkspace(name: String) -> Bool {
         switch aerospace.focusWorkspace(name: name) {
         case .failure(let error):
-            logEvent("focus.workspace.failed", level: .warn, message: error.message, context: ["workspace": name])
+            logEvent("focus.workspace.failed", level: error.isBreakerOpen ? .info : .warn, message: error.message, context: ["workspace": name])
             return false
         case .success:
             logEvent("focus.workspace.succeeded", context: ["workspace": name])
@@ -51,7 +51,7 @@ extension ProjectManager {
     public func focusWindow(windowId: Int) -> Bool {
         switch aerospace.focusWindow(windowId: windowId) {
         case .failure(let error):
-            logEvent("focus.restore.failed", level: .warn, message: error.message, context: ["window_id": "\(windowId)"])
+            logEvent("focus.restore.failed", level: error.isBreakerOpen ? .info : .warn, message: error.message, context: ["window_id": "\(windowId)"])
             return false
         case .success:
             logEvent("focus.restored", context: ["window_id": "\(windowId)"])
@@ -229,7 +229,7 @@ extension ProjectManager {
     func listAllWindowsById() -> [Int: ApWindow]? {
         switch aerospace.listAllWindows() {
         case .failure(let error):
-            logEvent("focus.window_lookup.failed", level: .warn, message: error.message)
+            logEvent("focus.window_lookup.failed", level: error.isBreakerOpen ? .info : .warn, message: error.message)
             return nil
         case .success(let windows):
             var lookup: [Int: ApWindow] = [:]

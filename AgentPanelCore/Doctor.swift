@@ -246,6 +246,8 @@ public struct Doctor {
     private let dataStore: DataPaths
     private let windowPositioner: WindowPositioning?
     private let configManager: AeroSpaceConfigManager
+    /// True when the default Doctor wiring uses a dedicated breaker (not `.shared`).
+    let usesDedicatedAeroSpaceCircuitBreaker: Bool
 
     /// Creates a Doctor instance with default dependencies.
     /// - Parameters:
@@ -262,7 +264,18 @@ public struct Doctor {
         self.hotkeyStatusProvider = hotkeyStatusProvider
         self.focusCycleStatusProvider = focusCycleStatusProvider
         self.dateProvider = SystemDateProvider()
-        self.aerospaceHealth = ApAeroSpace()
+        let doctorCircuitBreaker = AeroSpaceCircuitBreaker()
+        let doctorAeroSpace = ApAeroSpace(
+            commandRunner: ApSystemCommandRunner(),
+            appDiscovery: LaunchServicesAppDiscovery(),
+            circuitBreaker: doctorCircuitBreaker
+        )
+        // Doctor uses a dedicated circuit breaker so diagnostic checks are never
+        // blocked by the shared breaker state (which may be open due to a timeout
+        // in the main app flow). Doctor is a diagnostic tool and should independently
+        // verify actual system state.
+        self.usesDedicatedAeroSpaceCircuitBreaker = !doctorAeroSpace.usesSharedCircuitBreaker
+        self.aerospaceHealth = doctorAeroSpace
         self.appDiscovery = LaunchServicesAppDiscovery()
         self.executableResolver = ExecutableResolver()
         self.commandRunner = ApSystemCommandRunner()
@@ -283,6 +296,8 @@ public struct Doctor {
     ///   - executableResolver: Resolver for checking CLI tools.
     ///   - commandRunner: Command runner for SSH remote path checks.
     ///   - dataStore: Data store for path checks.
+    ///   - usesDedicatedAeroSpaceCircuitBreaker: Whether the injected `aerospaceHealth`
+    ///     uses a dedicated breaker instance (test seam for wiring assertions).
     ///   - configManager: AeroSpace config manager for config status and content checks.
     init(
         runningApplicationChecker: RunningApplicationChecking,
@@ -294,6 +309,7 @@ public struct Doctor {
         executableResolver: ExecutableResolver,
         commandRunner: CommandRunning,
         dataStore: DataPaths,
+        usesDedicatedAeroSpaceCircuitBreaker: Bool = false,
         fileSystem: FileSystem = DefaultFileSystem(),
         windowPositioner: WindowPositioning? = nil,
         configManager: AeroSpaceConfigManager = AeroSpaceConfigManager()
@@ -307,6 +323,7 @@ public struct Doctor {
         self.executableResolver = executableResolver
         self.commandRunner = commandRunner
         self.dataStore = dataStore
+        self.usesDedicatedAeroSpaceCircuitBreaker = usesDedicatedAeroSpaceCircuitBreaker
         self.fileSystem = fileSystem
         self.windowPositioner = windowPositioner
         self.configManager = configManager

@@ -27,6 +27,12 @@ public enum ApCoreErrorCategory: String, Sendable {
     case system
 }
 
+/// Structured reason codes for `ApCoreError`.
+public enum ApCoreErrorReason: String, Sendable {
+    /// Error was returned because the AeroSpace circuit breaker is currently open.
+    case circuitBreakerOpen
+}
+
 /// Errors emitted by AgentPanelCore operations.
 public struct ApCoreError: Error, Equatable, Sendable {
     /// Error category for programmatic handling.
@@ -39,6 +45,8 @@ public struct ApCoreError: Error, Equatable, Sendable {
     let command: String?
     /// Exit code from command execution, if applicable.
     let exitCode: Int32?
+    /// Structured reason for programmatic branching, when available.
+    public let reason: ApCoreErrorReason?
 
     /// Creates a new ApCoreError with full details.
     /// - Parameters:
@@ -52,13 +60,27 @@ public struct ApCoreError: Error, Equatable, Sendable {
         message: String,
         detail: String? = nil,
         command: String? = nil,
-        exitCode: Int32? = nil
+        exitCode: Int32? = nil,
+        reason: ApCoreErrorReason? = nil
     ) {
         self.category = category
         self.message = message
         self.detail = detail
         self.command = command
         self.exitCode = exitCode
+        self.reason = reason
+    }
+
+    /// Whether this error represents a circuit-breaker-open condition.
+    ///
+    /// When true, callers should log at `.info` rather than `.warn` since the
+    /// transport layer already logged the canonical `circuit_breaker.tripped` warning
+    /// when the breaker first opened. Subsequent per-call warnings are noise.
+    public var isBreakerOpen: Bool {
+        if reason == .circuitBreakerOpen {
+            return true
+        }
+        return message.localizedCaseInsensitiveContains("circuit breaker open")
     }
 
     /// Creates a new ApCoreError with just a message.
@@ -70,6 +92,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
         self.detail = nil
         self.command = nil
         self.exitCode = nil
+        self.reason = nil
     }
 }
 

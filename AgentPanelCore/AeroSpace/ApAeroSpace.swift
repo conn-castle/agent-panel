@@ -57,6 +57,8 @@ public struct ApAeroSpace {
     /// Convenience accessors for shared dependencies.
     private var commandRunner: CommandRunning { transport.commandRunner }
     private var circuitBreaker: AeroSpaceCircuitBreaker { transport.circuitBreaker }
+    /// Test seam: true when this wrapper is wired to the shared circuit breaker.
+    var usesSharedCircuitBreaker: Bool { circuitBreaker === AeroSpaceCircuitBreaker.shared }
 
     /// Creates a new AeroSpace wrapper with default dependencies.
     /// - Parameters:
@@ -71,6 +73,12 @@ public struct ApAeroSpace {
         startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
         readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
     ) {
+        precondition(startupTimeoutSeconds.isFinite, "startupTimeoutSeconds must be finite")
+        precondition(readinessCheckInterval.isFinite, "readinessCheckInterval must be finite")
+        precondition(startupTimeoutSeconds > 0, "startupTimeoutSeconds must be positive")
+        precondition(readinessCheckInterval > 0, "readinessCheckInterval must be positive")
+        precondition(readinessCheckInterval < startupTimeoutSeconds, "readinessCheckInterval must be less than startupTimeoutSeconds")
+
         self.transport = AeroSpaceCommandTransport(
             commandRunner: ApSystemCommandRunner(),
             circuitBreaker: .shared
@@ -100,6 +108,12 @@ public struct ApAeroSpace {
         startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
         readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
     ) {
+        precondition(startupTimeoutSeconds.isFinite, "startupTimeoutSeconds must be finite")
+        precondition(readinessCheckInterval.isFinite, "readinessCheckInterval must be finite")
+        precondition(startupTimeoutSeconds > 0, "startupTimeoutSeconds must be positive")
+        precondition(readinessCheckInterval > 0, "readinessCheckInterval must be positive")
+        precondition(readinessCheckInterval < startupTimeoutSeconds, "readinessCheckInterval must be less than startupTimeoutSeconds")
+
         self.transport = AeroSpaceCommandTransport(
             commandRunner: commandRunner,
             circuitBreaker: circuitBreaker

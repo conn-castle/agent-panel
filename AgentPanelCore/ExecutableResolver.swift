@@ -23,6 +23,7 @@ struct ExecutableResolver {
     private let fileSystem: FileSystem
     private let searchPaths: [String]
     private let loginShellFallbackEnabled: Bool
+    private let loginShellTimeoutSeconds: TimeInterval
 
     /// Creates an executable resolver.
     /// - Parameters:
@@ -30,14 +31,18 @@ struct ExecutableResolver {
     ///   - searchPaths: Paths to search for executables.
     ///   - loginShellFallbackEnabled: Whether to fall back to login shell `which` lookup. Default true.
     ///     Set to false in tests to control which executables are "found".
+    ///   - loginShellTimeoutSeconds: Timeout for login shell commands. Default 5s.
+    ///     Protects against slow shell init files. Pass a shorter value in tests.
     init(
         fileSystem: FileSystem = DefaultFileSystem(),
         searchPaths: [String] = ExecutableResolver.standardSearchPaths,
-        loginShellFallbackEnabled: Bool = true
+        loginShellFallbackEnabled: Bool = true,
+        loginShellTimeoutSeconds: TimeInterval = 5
     ) {
         self.fileSystem = fileSystem
         self.searchPaths = searchPaths
         self.loginShellFallbackEnabled = loginShellFallbackEnabled
+        self.loginShellTimeoutSeconds = loginShellTimeoutSeconds
     }
 
     /// Resolves an executable name to its full path.
@@ -95,10 +100,6 @@ struct ExecutableResolver {
     private func resolveViaLoginShell(_ name: String) -> String? {
         runLoginShellCommand("which \(name)")
     }
-
-    /// Timeout for login shell commands (seconds).
-    /// Protects against slow shell init files (heavy .zshrc plugins, nvm, pyenv, etc.).
-    private static let loginShellTimeoutSeconds: TimeInterval = 5
 
     /// Detects the user's login shell from `$SHELL`, falling back to `/bin/zsh`.
     /// Validates that the value is an absolute path to avoid `Process(executableURL:)` failures.
@@ -163,7 +164,7 @@ struct ExecutableResolver {
             return nil
         }
 
-        let waitResult = completion.wait(timeout: .now() + Self.loginShellTimeoutSeconds)
+        let waitResult = completion.wait(timeout: .now() + loginShellTimeoutSeconds)
         if waitResult == .timedOut {
             process.terminate()
             _ = completion.wait(timeout: .now() + 1)

@@ -33,9 +33,15 @@ final class CoordinatorTestRecordingLogger: AgentPanelLogging {
 }
 
 final class CoordinatorTestAeroSpaceStub: AeroSpaceProviding {
+    static let defaultListWorkspacesWithFocusWaitTimeoutSeconds: TimeInterval = 5.0
+
     var focusedWindowResult: Result<ApWindow, ApCoreError> = .failure(ApCoreError(message: "stub"))
     var focusWindowSuccessIds: Set<Int> = []
     var workspacesWithFocusResult: Result<[ApWorkspaceSummary], ApCoreError> = .success([])
+    var onListWorkspacesWithFocus: (() -> Void)?
+    var onListWorkspacesWithFocusReturn: (() -> Void)?
+    var listWorkspacesWithFocusWaitSemaphore: DispatchSemaphore?
+    var listWorkspacesWithFocusWaitTimeoutSeconds: TimeInterval = defaultListWorkspacesWithFocusWaitTimeoutSeconds
     var focusWorkspaceResult: Result<Void, ApCoreError> = .success(())
     var windowsByBundleId: [String: [ApWindow]] = [:]
     var windowsByWorkspace: [String: [ApWindow]] = [:]
@@ -46,7 +52,20 @@ final class CoordinatorTestAeroSpaceStub: AeroSpaceProviding {
     func getWorkspaces() -> Result<[String], ApCoreError> { .success([]) }
     func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(false) }
     func listWorkspacesFocused() -> Result<[String], ApCoreError> { .success([]) }
-    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> { workspacesWithFocusResult }
+    func listWorkspacesWithFocus() -> Result<[ApWorkspaceSummary], ApCoreError> {
+        onListWorkspacesWithFocus?()
+        if let waitSemaphore = listWorkspacesWithFocusWaitSemaphore {
+            let waitResult = waitSemaphore.wait(timeout: .now() + listWorkspacesWithFocusWaitTimeoutSeconds)
+            if waitResult == .timedOut {
+                let message = "Timed out waiting \(listWorkspacesWithFocusWaitTimeoutSeconds)s for listWorkspacesWithFocusWaitSemaphore signal"
+                XCTFail(message)
+                onListWorkspacesWithFocusReturn?()
+                return .failure(ApCoreError(message: message))
+            }
+        }
+        onListWorkspacesWithFocusReturn?()
+        return workspacesWithFocusResult
+    }
     func createWorkspace(_ name: String) -> Result<Void, ApCoreError> { .success(()) }
     func closeWorkspace(name: String) -> Result<Void, ApCoreError> { .success(()) }
 

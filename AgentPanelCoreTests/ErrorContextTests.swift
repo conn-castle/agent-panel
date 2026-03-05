@@ -62,6 +62,58 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertFalse(ctx.isCritical)
     }
 
+    // MARK: - isBreakerOpen
+
+    func testIsBreakerOpenReturnsTrueForBreakerMessage() {
+        let error = ApCoreError(message: "circuit breaker open")
+        XCTAssertTrue(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenReturnsTrueWhenMessageContainsBreakerPhrase() {
+        let error = ApCoreError(
+            category: .command,
+            message: "aerospace list-workspaces failed: circuit breaker open (5 failures in 30s)"
+        )
+        XCTAssertTrue(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenReturnsTrueForStructuredReasonWithoutMessagePhrase() {
+        let error = ApCoreError(
+            category: .command,
+            message: "AeroSpace unavailable.",
+            reason: .circuitBreakerOpen
+        )
+        XCTAssertTrue(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenMatchesCaseInsensitiveMessagePhrase() {
+        let error = ApCoreError(
+            category: .command,
+            message: "AEROSPACE is unresponsive (CIRCUIT BREAKER OPEN)."
+        )
+        XCTAssertTrue(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenMatchesProductionBreakerOpenErrorMessage() {
+        // This tests the actual message format produced by AeroSpaceCommandTransport.breakerOpenError().
+        // If that message is ever reworded, this test will catch the mismatch.
+        let error = ApCoreError(
+            category: .command,
+            message: "AeroSpace is unresponsive (circuit breaker open)."
+        )
+        XCTAssertTrue(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenReturnsFalseForUnrelatedError() {
+        let error = ApCoreError(message: "command timed out after 5s")
+        XCTAssertFalse(error.isBreakerOpen)
+    }
+
+    func testIsBreakerOpenReturnsFalseForEmptyMessage() {
+        let error = ApCoreError(message: "")
+        XCTAssertFalse(error.isBreakerOpen)
+    }
+
     // MARK: - Equatable
 
     func testErrorContextEquatable() {

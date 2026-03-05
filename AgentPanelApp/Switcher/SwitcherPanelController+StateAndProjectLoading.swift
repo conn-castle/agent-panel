@@ -222,7 +222,7 @@ extension SwitcherPanelController {
                     }
                     self.session.logEvent(
                         event: "switcher.workspace_state.failed",
-                        level: .warn,
+                        level: Self.workspaceStateFailureLogLevel(for: error, retryOnFailure: retryOnFailure),
                         message: "\(error)"
                     )
                     self.onProjectOperationFailed?(ErrorContext(
@@ -240,6 +240,21 @@ extension SwitcherPanelController {
                 }
             }
         }
+    }
+
+    /// Returns the log level for workspace-state failures.
+    ///
+    /// Circuit-breaker-open failures are expected while recovery is in progress and are
+    /// logged as info to avoid warning storms from repeated retry ticks.
+    static func workspaceStateFailureLogLevel(for error: ProjectError, retryOnFailure: Bool) -> LogLevel {
+        guard retryOnFailure else {
+            return .warn
+        }
+        guard case .aeroSpaceError(let detail) = error else {
+            return .warn
+        }
+        // Delegate to ApCoreError.isBreakerOpen to avoid duplicating the sentinel string.
+        return ApCoreError(category: .command, message: detail).isBreakerOpen ? .info : .warn
     }
 
     /// Converts ConfigLoadError to a user-friendly message.

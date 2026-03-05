@@ -18,6 +18,16 @@ final class DoctorCoverageTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Doctor circuit breaker isolation
+
+    func testDoctorUsesDedicatedCircuitBreakerInDefaultWiring() throws {
+        let doctor = Doctor(runningApplicationChecker: StubRunningAppCheckerOverride(runningAeroSpace: true))
+        XCTAssertTrue(
+            doctor.usesDedicatedAeroSpaceCircuitBreaker,
+            "Doctor should use a dedicated circuit breaker instance, not AeroSpaceCircuitBreaker.shared."
+        )
+    }
+
     // MARK: - Doctor.run() uncovered branches
 
     func testRunReportsLogsDirectoryWillBeCreated() throws {

@@ -59,7 +59,8 @@ struct AeroSpaceCommandTransport {
         ApCoreError(
             category: .command,
             message: "AeroSpace is unresponsive (circuit breaker open).",
-            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
+            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s.",
+            reason: .circuitBreakerOpen
         )
     }
 }

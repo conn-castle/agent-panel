@@ -45,6 +45,7 @@ final class SwitcherWorkspaceRetryCoordinator {
 
     // MARK: - State
 
+    private let stateLock = NSLock()
     private var retryTimer: DispatchSourceTimer?
     private var retryCount: Int = 0
     private var retryGeneration: UInt64 = 0
@@ -71,7 +72,7 @@ final class SwitcherWorkspaceRetryCoordinator {
     }
 
     deinit {
-        cancelRetry()
+        cancelRetryForTeardown()
     }
 
     // MARK: - Public API
@@ -83,12 +84,15 @@ final class SwitcherWorkspaceRetryCoordinator {
     /// `onRetrySucceeded` callback is invoked and the timer is canceled.
     /// After `maxAttempts` the `onRetryExhausted` callback is invoked.
     func scheduleRetry() {
+        precondition(Thread.isMainThread, "scheduleRetry() must be called on the main thread.")
         cancelRetry()
         retryCount = 0
-        retryGeneration &+= 1
+        let generation = withStateLock { () -> UInt64 in
+            retryGeneration &+= 1
+            return retryGeneration
+        }
 
         let timerSessionId = session.sessionId
-        let generation = retryGeneration
 
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
         timer.schedule(
@@ -99,7 +103,9 @@ final class SwitcherWorkspaceRetryCoordinator {
             self?.handleRetryTick(expectedSessionId: timerSessionId, expectedGeneration: generation)
         }
         timer.resume()
-        retryTimer = timer
+        withStateLock {
+            retryTimer = timer
+        }
 
         session.logEvent(
             event: "switcher.workspace_retry.scheduled",
@@ -107,27 +113,50 @@ final class SwitcherWorkspaceRetryCoordinator {
         )
     }
 
-    /// Cancels the retry timer and resets retry state.
+    /// Cancels the retry timer and invalidates in-flight tick callbacks.
     func cancelRetry() {
-        retryGeneration &+= 1
-        retryTimer?.cancel()
-        retryTimer = nil
+        precondition(Thread.isMainThread, "cancelRetry() must be called on the main thread.")
+        cancelRetryStateFromAnyThread()
+    }
+
+    /// Cancels retries in teardown/off-main contexts without crashing on preconditions.
+    /// The teardown path avoids synchronous main-thread hops to prevent deadlocks.
+    func cancelRetryForTeardown() {
+        cancelRetryStateFromAnyThread()
+    }
+
+    /// Invalidates generation and cancels any existing timer from any thread.
+    private func cancelRetryStateFromAnyThread() {
+        let timerToCancel = withStateLock { () -> DispatchSourceTimer? in
+            retryGeneration &+= 1
+            let timer = retryTimer
+            retryTimer = nil
+            return timer
+        }
+        timerToCancel?.cancel()
+    }
+
+    private func withStateLock<T>(_ body: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return body()
     }
 
     // MARK: - Private
 
     /// Handles a single tick of the retry timer.
     ///
-    /// The workspace query runs on the timer's background queue; all state
-    /// reads/writes (generation, count, callbacks) happen on the main thread
-    /// to avoid data races.
+    /// The workspace query runs on the timer's background queue; generation/timer
+    /// identity is synchronized with `stateLock`, while retry count and callbacks
+    /// are processed on the main thread.
     private func handleRetryTick(expectedSessionId: String?, expectedGeneration: UInt64) {
         let result = projectManager.workspaceState()
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            let currentGeneration = self.withStateLock { self.retryGeneration }
             guard expectedSessionId == self.session.sessionId,
-                  expectedGeneration == self.retryGeneration else { return }
+                  expectedGeneration == currentGeneration else { return }
             self.retryCount += 1
 
             switch result {

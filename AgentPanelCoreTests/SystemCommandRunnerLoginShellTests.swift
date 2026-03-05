@@ -228,7 +228,8 @@ final class SystemCommandRunnerLoginShellTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shellURL.path)
 
         withShell(shellURL.path) {
-            let resolver = ExecutableResolver(loginShellFallbackEnabled: true)
+            // Use a short timeout (1s) to avoid ~6.6s wait with the default 5s timeout.
+            let resolver = ExecutableResolver(loginShellFallbackEnabled: true, loginShellTimeoutSeconds: 1.0)
             // Force the login-shell fallback path; the stub shell never completes, so it should time out.
             XCTAssertNil(resolver.resolve("this-executable-should-not-exist-abcdef"))
         }
