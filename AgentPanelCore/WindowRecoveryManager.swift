@@ -76,61 +76,30 @@ public final class WindowRecoveryManager {
     }
 
     /// Recovers all windows in the given workspace.
+    /// Returns `.failure` when the workspace cannot be focused or listed.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_workspace.started", context: ["workspace": workspace])
 
         let originalFocus = try? aerospace.focusedWindow().get()
+        defer {
+            restoreOriginalFocus(originalFocus, eventPrefix: "recover_workspace")
+        }
 
-        let windows: [ApWindow]
-        switch aerospace.listWindowsWorkspace(workspace: workspace) {
-        case .success(let result):
-            windows = result
+        switch focusWorkspaceForRecovery(workspace: workspace, eventPrefix: "recover_workspace") {
+        case .success:
+            break
         case .failure(let error):
-            logEvent("recover_workspace.list_failed", level: .error, message: error.message)
             return .failure(error)
         }
 
-        var layoutRecovered = 0
-        var layoutErrors: [String] = []
-        var layoutHandledWindowIds: Set<Int> = []
-
-        if let projectId = projectId(fromWorkspace: workspace), screenModeDetector != nil {
-            let layoutResult = recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
-            layoutRecovered = layoutResult.recovered
-            layoutErrors = layoutResult.errors
-            layoutHandledWindowIds = layoutResult.handledWindowIds
-        }
-
-        let genericWindows = windows.filter { !layoutHandledWindowIds.contains($0.windowId) }
-        let genericResult = recoverWindows(genericWindows)
-
-        let totalRecovered = layoutRecovered + genericResult.windowsRecovered
-        let totalErrors = layoutErrors + genericResult.errors
-        let result = RecoveryResult(
-            windowsProcessed: windows.count,
-            windowsRecovered: totalRecovered,
-            errors: totalErrors
-        )
-
-        if let originalFocus {
-            _ = aerospace.focusWindow(windowId: originalFocus.windowId)
-        }
-
-        logEvent("recover_workspace.completed", context: [
-            "workspace": workspace,
-            "processed": "\(result.windowsProcessed)",
-            "recovered": "\(result.windowsRecovered)",
-            "errors": "\(result.errors.count)"
-        ])
-
-        return .success(result)
+        return performWorkspaceRecovery(workspace: workspace)
     }
 
     /// Recovers the currently focused window in the given workspace.
     ///
     /// The target is resolved by window id from a workspace snapshot to avoid title-only ambiguity.
-    /// Returns `.failure` if the workspace cannot be listed, the target window is missing, or
-    /// focus/AX recovery fails.
+    /// Returns `.failure` if the workspace cannot be focused or listed, the target window is
+    /// missing, or focus/AX recovery fails.
     public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError> {
         logEvent("recover_current_window.started", context: [
             "window_id": "\(windowId)",
@@ -139,9 +108,14 @@ public final class WindowRecoveryManager {
 
         let originalFocus = try? aerospace.focusedWindow().get()
         defer {
-            if let originalFocus {
-                _ = aerospace.focusWindow(windowId: originalFocus.windowId)
-            }
+            restoreOriginalFocus(originalFocus, eventPrefix: "recover_current_window")
+        }
+
+        switch focusWorkspaceForRecovery(workspace: workspace, eventPrefix: "recover_current_window") {
+        case .success:
+            break
+        case .failure(let error):
+            return .failure(error)
         }
 
         let windows: [ApWindow]
@@ -223,6 +197,9 @@ public final class WindowRecoveryManager {
         logEvent("recover_all.started")
 
         let originalFocus = try? aerospace.focusedWindow().get()
+        defer {
+            restoreOriginalFocus(originalFocus, eventPrefix: "recover_all")
+        }
 
         let workspaces: [String]
         switch aerospace.getWorkspaces() {
@@ -248,10 +225,6 @@ public final class WindowRecoveryManager {
 
         let totalWindows = allWindows.count
         if totalWindows == 0 {
-            if let originalFocus {
-                _ = aerospace.focusWindow(windowId: originalFocus.windowId)
-            }
-
             let result = RecoveryResult(windowsProcessed: 0, windowsRecovered: 0, errors: errors)
             logEvent("recover_all.completed", context: [
                 "processed": "0",
@@ -297,15 +270,24 @@ public final class WindowRecoveryManager {
         for workspace in recoveryWorkspaces.sorted() {
             let plannedWindowCount = plannedWorkspaceWindowCounts[workspace] ?? 0
 
-            switch recoverWorkspaceWindows(workspace: workspace) {
-            case .success(let recovery):
-                recovered += recovery.windowsRecovered
-                errors.append(contentsOf: recovery.errors)
-            case .failure(let error):
-                errors.append("Recovery failed for workspace \(workspace): \(error.message)")
-                logEvent("recover_all.workspace_recover_failed", level: .warn, message: error.message, context: [
+            // Focus the workspace once, then run recovery without the
+            // save/restore wrapper that the public method adds.
+            if case .failure(let focusError) = focusWorkspaceForRecovery(workspace: workspace, eventPrefix: "recover_all") {
+                errors.append("Recovery failed for workspace \(workspace): \(focusError.message)")
+                logEvent("recover_all.workspace_recover_failed", level: .warn, message: focusError.message, context: [
                     "workspace": workspace
                 ])
+            } else {
+                switch performWorkspaceRecovery(workspace: workspace) {
+                case .success(let recovery):
+                    recovered += recovery.windowsRecovered
+                    errors.append(contentsOf: recovery.errors)
+                case .failure(let error):
+                    errors.append("Recovery failed for workspace \(workspace): \(error.message)")
+                    logEvent("recover_all.workspace_recover_failed", level: .warn, message: error.message, context: [
+                        "workspace": workspace
+                    ])
+                }
             }
 
             reportProgress(
@@ -323,10 +305,6 @@ public final class WindowRecoveryManager {
                 increment: totalWindows - progressProcessed,
                 total: totalWindows
             )
-        }
-
-        if let originalFocus {
-            _ = aerospace.focusWindow(windowId: originalFocus.windowId)
         }
 
         let result = RecoveryResult(
@@ -356,6 +334,106 @@ public final class WindowRecoveryManager {
         for _ in 0..<increment {
             processed += 1
             progress(min(processed, total), total)
+        }
+    }
+
+    /// Core workspace recovery logic without focus save/restore.
+    /// Caller is responsible for workspace focus and focus restoration.
+    private func performWorkspaceRecovery(workspace: String) -> Result<RecoveryResult, ApCoreError> {
+        let windows: [ApWindow]
+        switch aerospace.listWindowsWorkspace(workspace: workspace) {
+        case .success(let result):
+            windows = result
+        case .failure(let error):
+            logEvent("recover_workspace.list_failed", level: .error, message: error.message)
+            return .failure(error)
+        }
+
+        var layoutRecovered = 0
+        var layoutErrors: [String] = []
+        var layoutHandledWindowIds: Set<Int> = []
+
+        if let projectId = projectId(fromWorkspace: workspace), screenModeDetector != nil {
+            let layoutResult = recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
+            layoutRecovered = layoutResult.recovered
+            layoutErrors = layoutResult.errors
+            layoutHandledWindowIds = layoutResult.handledWindowIds
+        }
+
+        let genericWindows = windows.filter { !layoutHandledWindowIds.contains($0.windowId) }
+        let genericResult = recoverWindows(genericWindows)
+
+        let totalRecovered = layoutRecovered + genericResult.windowsRecovered
+        let totalErrors = layoutErrors + genericResult.errors
+        let result = RecoveryResult(
+            windowsProcessed: windows.count,
+            windowsRecovered: totalRecovered,
+            errors: totalErrors
+        )
+
+        logEvent("recover_workspace.completed", context: [
+            "workspace": workspace,
+            "processed": "\(result.windowsProcessed)",
+            "recovered": "\(result.windowsRecovered)",
+            "errors": "\(result.errors.count)"
+        ])
+
+        return .success(result)
+    }
+
+    private func focusWorkspaceForRecovery(
+        workspace: String,
+        eventPrefix: String
+    ) -> Result<Void, ApCoreError> {
+        // Switch to the target workspace before any per-window focus calls.
+        // This prevents AeroSpace tree-node crashes when the current macOS Space
+        // differs from the workspace's Space (aerospace#focus double-unbind bug).
+        switch aerospace.focusWorkspace(name: workspace) {
+        case .success:
+            return .success(())
+        case .failure(let error):
+            logEvent(
+                "\(eventPrefix).focus_workspace_failed",
+                level: .error,
+                message: error.message,
+                context: ["workspace": workspace]
+            )
+            return .failure(error)
+        }
+    }
+
+    private func restoreOriginalFocus(
+        _ originalFocus: ApWindow?,
+        eventPrefix: String
+    ) {
+        guard let originalFocus else { return }
+
+        switch aerospace.focusWorkspace(name: originalFocus.workspace) {
+        case .success:
+            break
+        case .failure(let error):
+            logEvent(
+                "\(eventPrefix).restore_workspace_failed",
+                level: .warn,
+                message: error.message,
+                context: [
+                    "workspace": originalFocus.workspace,
+                    "window_id": "\(originalFocus.windowId)"
+                ]
+            )
+            return
+        }
+
+        if case .failure(let error) = aerospace.focusWindow(windowId: originalFocus.windowId) {
+            logEvent(
+                "\(eventPrefix).restore_window_failed",
+                level: .warn,
+                message: error.message,
+                context: [
+                    "workspace": originalFocus.workspace,
+                    "window_id": "\(originalFocus.windowId)"
+                ]
+            )
         }
     }
 

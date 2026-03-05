@@ -692,10 +692,11 @@ public final class WindowRecoveryManager {
     /// Recovers windows in a workspace. For project workspaces (`ap-<projectId>`),
     /// applies workspace-scoped layout positioning for IDE/Chrome first (only targeting
     /// apps present in the workspace), then generic shrink/center recovery for remaining windows.
+    /// Returns `.failure` when the workspace cannot be focused or listed.
     public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
 
     /// Recovers a single focused window in the given workspace.
-    /// Returns `.failure` when the workspace listing fails, the window is missing,
+    /// Returns `.failure` when the workspace cannot be focused or listed, the window is missing,
     /// or AX recovery cannot locate/recover the window.
     public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError>
 

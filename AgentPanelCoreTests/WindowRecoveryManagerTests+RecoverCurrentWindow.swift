@@ -28,6 +28,14 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls[0].bundleId, "com.test.target")
         XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Target Window")
         XCTAssertEqual(aerospace.focusWindowCalls, [7, 42], "Should focus target window, then restore original focus")
+        XCTAssertEqual(
+            Array(aerospace.callTrace.prefix(2)),
+            [.focusWorkspace("ap-test"), .focusWindow(7)]
+        )
+        XCTAssertEqual(
+            Array(aerospace.callTrace.suffix(2)),
+            [.focusWorkspace("2"), .focusWindow(42)]
+        )
     }
 
     func testRecoverCurrentWindow_workspaceListFailure_returnsError() {
@@ -78,6 +86,27 @@ extension WindowRecoveryManagerTests {
         }
         XCTAssertTrue(error.message.contains("focus denied"))
         XCTAssertTrue(positioner.recoverCalls.isEmpty, "Recovery should not run when focusing target window fails")
+    }
+
+    func testRecoverCurrentWindow_focusWorkspaceFailure_returnsErrorBeforeWindowFocus() {
+        let aerospace = StubAeroSpace()
+        aerospace.focusWorkspaceResult = .failure(ApCoreError(message: "workspace focus denied"))
+        let targetWindow = makeWindow(id: 7, bundleId: "com.test.target", workspace: "ap-test", title: "Target Window")
+        aerospace.windowsByWorkspace["ap-test"] = .success([targetWindow])
+
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = manager.recoverCurrentWindow(windowId: 7, workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("workspace focus denied"))
+        XCTAssertEqual(aerospace.callTrace, [.focusWorkspace("ap-test")])
+        XCTAssertEqual(aerospace.focusWindowCalls, [])
+        XCTAssertTrue(positioner.recoverCalls.isEmpty)
     }
 
     func testRecoverCurrentWindow_positionerNotFound_returnsError() {

@@ -184,7 +184,11 @@ extension WindowRecoveryManagerTests {
 
         // Should restore focus to original window after full recovery pass.
         XCTAssertEqual(aerospace.focusWindowCalls.last, 42)
-        XCTAssertTrue(aerospace.focusWorkspaceCalls.isEmpty)
+        XCTAssertTrue(aerospace.focusWorkspaceCalls.contains("2"))
+        XCTAssertEqual(
+            Array(aerospace.callTrace.suffix(2)),
+            [.focusWorkspace("ap-myproject"), .focusWindow(42)]
+        )
     }
 
     func testRecoverAll_moveFailure_continuesAndRecordsError() {

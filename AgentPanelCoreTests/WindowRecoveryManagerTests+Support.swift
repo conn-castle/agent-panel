@@ -13,16 +13,26 @@ extension WindowRecoveryManagerTests {
     }
 
     final class StubAeroSpace: AeroSpaceProviding {
+        enum RecordedAction: Equatable {
+            case focusWindow(Int)
+            case focusWorkspace(String)
+            case moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool)
+        }
+
         var workspaces: [String] = []
         var windowsByWorkspace: [String: Result<[ApWindow], ApCoreError>] = [:]
         var focusedWindowResult: Result<ApWindow, ApCoreError> = .failure(ApCoreError(message: "no focus"))
         var focusWindowCalls: [Int] = []
         var focusWorkspaceCalls: [String] = []
+        var callTrace: [RecordedAction] = []
         var moveWindowCalls: [(workspace: String, windowId: Int, focusFollows: Bool)] = []
         var moveWindowResult: Result<Void, ApCoreError> = .success(())
         var focusWindowResult: Result<Void, ApCoreError> = .success(())
         /// Per-windowId overrides for focusWindow. Checked before `focusWindowResult`.
         var focusWindowResults: [Int: Result<Void, ApCoreError>] = [:]
+        var focusWorkspaceResult: Result<Void, ApCoreError> = .success(())
+        /// Per-workspace overrides for focusWorkspace. Checked before `focusWorkspaceResult`.
+        var focusWorkspaceResults: [String: Result<Void, ApCoreError>] = [:]
 
         func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(workspaces.contains(name)) }
@@ -53,11 +63,13 @@ extension WindowRecoveryManagerTests {
 
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
             focusWindowCalls.append(windowId)
+            callTrace.append(.focusWindow(windowId))
             return focusWindowResults[windowId] ?? focusWindowResult
         }
 
         func moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool) -> Result<Void, ApCoreError> {
             moveWindowCalls.append((workspace, windowId, focusFollows))
+            callTrace.append(.moveWindowToWorkspace(workspace: workspace, windowId: windowId, focusFollows: focusFollows))
             switch moveWindowResult {
             case .failure(let error):
                 return .failure(error)
@@ -97,7 +109,8 @@ extension WindowRecoveryManagerTests {
 
         func focusWorkspace(name: String) -> Result<Void, ApCoreError> {
             focusWorkspaceCalls.append(name)
-            return .success(())
+            callTrace.append(.focusWorkspace(name))
+            return focusWorkspaceResults[name] ?? focusWorkspaceResult
         }
     }
 
