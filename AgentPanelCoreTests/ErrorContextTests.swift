@@ -174,6 +174,11 @@ final class ErrorContextTests: XCTestCase {
 
 private struct StubRunningApplicationChecker: RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool { false }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in ErrorContextTests for bundleIdentifier=\(bundleIdentifier)")
+        return false
+    }
 }
 
 private struct StubHotkeyStatusProvider: HotkeyStatusProviding {

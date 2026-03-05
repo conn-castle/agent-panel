@@ -17,6 +17,8 @@ final class CommandTimeoutTests: XCTestCase {
         case .success:
             XCTFail("Expected timeout error")
         case .failure(let error):
+            XCTAssertEqual(error.reason, .commandTimeout, "Timeout errors should include a structured reason")
+            XCTAssertTrue(error.isCommandTimeout, "Timeout errors should set isCommandTimeout")
             XCTAssertTrue(error.message.contains("timed out"), "Error message should mention timeout: \(error.message)")
         }
     }

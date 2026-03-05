@@ -829,6 +829,11 @@ private struct StubRunningAppCheckerOverride: RunningApplicationChecking {
         }
         return false
     }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in DoctorCoverageTests for bundleIdentifier=\(bundleIdentifier)")
+        return false
+    }
 }
 
 private struct NilAppDiscovery: AppDiscovering {

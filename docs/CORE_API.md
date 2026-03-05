@@ -46,8 +46,14 @@ public enum ApCoreErrorCategory: String, Sendable {
     case system
 }
 
+public enum ApCoreErrorReason: String, Sendable {
+    case circuitBreakerOpen
+    case commandTimeout
+}
+
 public struct ApCoreError: Error, Equatable, Sendable {
     public let message: String
+    public let reason: ApCoreErrorReason?
 
     /// Full init with structured error fields.
     public init(
@@ -55,8 +61,16 @@ public struct ApCoreError: Error, Equatable, Sendable {
         message: String,
         detail: String? = nil,
         command: String? = nil,
-        exitCode: Int32? = nil
+        exitCode: Int32? = nil,
+        reason: ApCoreErrorReason? = nil
     )
+
+    /// Convenience classifier for breaker-open errors.
+    public var isBreakerOpen: Bool { get }
+
+    /// Convenience classifier for command-timeout errors.
+    /// Uses structured reason when present with legacy message fallback.
+    public var isCommandTimeout: Bool { get }
 
     /// Convenience init (defaults to .command category).
     init(message: String)
@@ -463,6 +477,10 @@ public protocol RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool
 }
 
+public protocol RunningApplicationTerminating {
+    func terminateApplication(bundleIdentifier: String) -> Bool
+}
+
 public protocol HotkeyStatusProviding {
     func hotkeyRegistrationStatus() -> HotkeyRegistrationStatus?
 }
@@ -474,8 +492,7 @@ public enum HotkeyRegistrationStatus: Equatable, Sendable {
 
 public enum FocusCycleRegistrationStatus: Equatable, Sendable {
     case registered
-    case failedNext(osStatus: Int32)
-    case failedPrevious(osStatus: Int32)
+    case failed(osStatus: Int32)
 }
 
 public protocol FocusCycleStatusProviding {
@@ -844,11 +861,27 @@ public struct ApAeroSpace {
     /// AeroSpace app bundle identifier.
     public static let bundleIdentifier: String  // "bobko.aerospace"
 
+    /// Default maximum time to wait for AeroSpace to become ready after launch.
+    public static let defaultStartupTimeoutSeconds: TimeInterval  // 10.0
+
+    /// Default interval between readiness checks during startup.
+    public static let defaultReadinessCheckInterval: TimeInterval  // 0.25
+
     /// Creates a new AeroSpace wrapper.
     /// - Parameter processChecker: Optional process checker for auto-recovery.
-    ///   When provided and AeroSpace crashes (circuit breaker open, process dead),
-    ///   automatically restarts AeroSpace (max 2 attempts). Pass nil (default) to disable.
-    public init(processChecker: RunningApplicationChecking? = nil)
+    ///   When provided and the circuit breaker is open, recovery probes
+    ///   responsiveness directly. Responsive processes skip restart, while
+    ///   running+unresponsive processes attempt termination before restart
+    ///   (max 2 attempts). Pass nil (default) to disable.
+    /// - Parameter startupTimeoutSeconds: Maximum time to wait for readiness after launch.
+    ///   Must be finite and greater than zero.
+    /// - Parameter readinessCheckInterval: Interval between readiness checks during startup.
+    ///   Must be finite, greater than zero, and less than `startupTimeoutSeconds`.
+    public init(
+        processChecker: RunningApplicationChecking? = nil,
+        startupTimeoutSeconds: TimeInterval = defaultStartupTimeoutSeconds,
+        readinessCheckInterval: TimeInterval = defaultReadinessCheckInterval
+    )
 
     /// Returns true when AeroSpace.app is installed.
     public func isAppInstalled() -> Bool

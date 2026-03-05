@@ -407,6 +407,11 @@ private struct TestRunningAppChecker: RunningApplicationChecking {
         }
         return false
     }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in AppHealthCoordinatorTests for bundleIdentifier=\(bundleIdentifier)")
+        return false
+    }
 }
 
 private struct TestDateProvider: DateProviding {

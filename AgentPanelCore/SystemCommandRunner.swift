@@ -250,7 +250,9 @@ struct ApSystemCommandRunner: CommandRunning {
             let label = timeoutSecondsForMessage.map { "\($0)" } ?? "unknown"
             return .failure(
                 ApCoreError(
-                    message: "Command timed out after \(label)s: \(executable) \(arguments.joined(separator: " "))"
+                    category: .command,
+                    message: "Command timed out after \(label)s: \(executable) \(arguments.joined(separator: " "))",
+                    reason: .commandTimeout
                 )
             )
         }

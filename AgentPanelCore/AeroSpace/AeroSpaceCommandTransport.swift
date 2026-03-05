@@ -40,7 +40,7 @@ struct AeroSpaceCommandTransport {
         case .success:
             circuitBreaker.recordSuccess()
         case .failure(let error):
-            if error.message.hasPrefix("Command timed out") {
+            if error.isCommandTimeout {
                 let wasOpen = !circuitBreaker.shouldAllow()
                 circuitBreaker.recordTimeout()
                 if !wasOpen {
@@ -54,12 +54,15 @@ struct AeroSpaceCommandTransport {
 
     /// Returns the standard error for when the circuit breaker is open.
     ///
+    /// - Parameter detailOverride: Optional detail override for specific failure contexts.
     /// - Returns: An error indicating AeroSpace is unresponsive.
-    func breakerOpenError() -> ApCoreError {
-        ApCoreError(
+    func breakerOpenError(detailOverride: String? = nil) -> ApCoreError {
+        let detail = detailOverride
+            ?? "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s."
+        return ApCoreError(
             category: .command,
             message: "AeroSpace is unresponsive (circuit breaker open).",
-            detail: "A previous aerospace command timed out. Failing fast to prevent cascade. Retry in \(Int(circuitBreaker.cooldownSeconds))s.",
+            detail: detail,
             reason: .circuitBreakerOpen
         )
     }

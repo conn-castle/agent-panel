@@ -1001,6 +1001,11 @@ private struct StubRunningAppChecker: RunningApplicationChecking {
     func isApplicationRunning(bundleIdentifier: String) -> Bool {
         bundleIdentifier == "bobko.aerospace"
     }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in DoctorSSHTests (StubRunningAppChecker) for bundleIdentifier=\(bundleIdentifier)")
+        return false
+    }
 }
 
 private struct StubRunningAppCheckerOverride: RunningApplicationChecking {
@@ -1010,6 +1015,11 @@ private struct StubRunningAppCheckerOverride: RunningApplicationChecking {
         if bundleIdentifier == "bobko.aerospace" {
             return runningAeroSpace
         }
+        return false
+    }
+
+    func terminateApplication(bundleIdentifier: String) -> Bool {
+        XCTFail("Unexpected terminateApplication call in DoctorSSHTests (StubRunningAppCheckerOverride) for bundleIdentifier=\(bundleIdentifier)")
         return false
     }
 }

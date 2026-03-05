@@ -31,6 +31,8 @@ public enum ApCoreErrorCategory: String, Sendable {
 public enum ApCoreErrorReason: String, Sendable {
     /// Error was returned because the AeroSpace circuit breaker is currently open.
     case circuitBreakerOpen
+    /// Error was returned because a command exceeded its timeout.
+    case commandTimeout
 }
 
 /// Errors emitted by AgentPanelCore operations.
@@ -81,6 +83,18 @@ public struct ApCoreError: Error, Equatable, Sendable {
             return true
         }
         return message.localizedCaseInsensitiveContains("circuit breaker open")
+    }
+
+    /// Whether this error represents a command timeout.
+    ///
+    /// Prefers the structured reason when available. Message-prefix matching is
+    /// retained for compatibility with legacy call sites and test fixtures that
+    /// still produce unstructured timeout errors.
+    public var isCommandTimeout: Bool {
+        if reason == .commandTimeout {
+            return true
+        }
+        return message.hasPrefix("Command timed out")
     }
 
     /// Creates a new ApCoreError with just a message.
