@@ -6,10 +6,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-03-05
+
+### Added
+
+- **AeroSpace auto-recovery** -- when the AeroSpace process becomes unresponsive, AgentPanel now detects the condition and attempts a graceful restart with force-terminate fallback (max 2 attempts), preventing extended outages from a hung AeroSpace process.
+- **Dedicated Doctor circuit breaker** -- Doctor diagnostics now use an independent circuit breaker so diagnostic checks are never blocked by the shared AeroSpace breaker state.
+
+### Changed
+
+- **Circuit breaker log noise reduction** -- breaker-open errors are now logged at info level instead of warn across ProjectManager, SwitcherPanelController, and menu coordinator, reducing log spam during expected breaker cooldown periods.
+- **Window positioning retry with fallback** -- all window identification paths (activation, capture, recovery) now retry with bounded loops and fall back to focused-or-only-window strategies when VS Code/Chrome title updates lag AX visibility.
+- **Capture skip-save on partial frames** -- when Chrome frame capture fails, the save is skipped entirely instead of writing a partial (IDE-only) layout, preserving the prior complete layout for the next restore.
+- **Off-screen recovery threshold** -- window off-screen detection now uses a percentage-based threshold (10%) instead of absolute pixels, improving reliability across display resolutions.
+- **ProjectManager and SwitcherPanelController split** -- decomposed the monolithic controller into separate focused modules for maintainability.
+- **AeroSpace facade decomposition** -- split ApAeroSpace into Parser, CommandTransport, and Compatibility modules (1054 to 886 LOC in the main file).
+- **Test infrastructure overhaul** -- always-coverage collection, smart pre-commit hook that maps staged files to affected test targets, decomposed monolithic test files into 33 focused suites, and stubbed slow infrastructure dependencies for faster test runs.
+
 ### Fixed
 
 - **Switcher first-open size jump** -- the switcher now seeds workspace-derived state and computes the initial filtered rows before presenting the panel, reducing the initial "starts small then jumps" effect while preserving existing selection and AeroSpace interaction behavior.
 - **Recover-project Escape regression** -- after running switcher `Cmd+R` recovery, the switcher now explicitly restores search-field input focus so `Esc` keeps dismissing the panel.
+- **Timer store-before-resume race** -- `retryTimer` is now stored under lock before calling `resume()`, closing a window where `cancelRetry` could miss an active timer.
+- **Retry coordinator data race** -- moved generation check from background queue to main-thread dispatch to eliminate a data race on `retryGeneration`.
+- **Stale pre-entry focus on activation failure** -- `preEntryFocus` is now stored only after activation succeeds, so failure paths never leave stale entries.
+- **Close-project focus restore with transient lookup failure** -- close now attempts pre-entry `focusWindow` even when window lookup fails transiently, using lookup only as validation when available.
+- **Missing pre-focus capture no longer crashes switcher** -- removed hard-fail guard when `capturedFocus` is nil; proceeds with best-effort restore semantics instead.
+- **Transient close-workspace window misses** -- `closeWorkspace` now includes bounded re-query/retry when windows survive the first close attempt.
+- **Menu workspace state race** -- added a generation counter to prevent background refresh from overwriting an explicit `updateFocusCapture()` call.
+- **Zero-window IDE positioning probe** -- added fast-fail with multi-confirmation confidence thresholds when no IDE windows are found, avoiding wasted retry loops.
+- **Doctor focus steal during accessibility prompts** -- added `skipActivation` plumbing to `DoctorWindowController` to prevent focus steal.
+- **LoginShell timeout precondition** -- `loginShellTimeoutSeconds` now validates with a precondition to fail loudly on invalid (non-positive/non-finite) values.
 
 ## [0.1.12] - 2026-03-01
 
