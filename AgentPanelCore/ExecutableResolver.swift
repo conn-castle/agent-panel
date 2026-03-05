@@ -39,6 +39,10 @@ struct ExecutableResolver {
         loginShellFallbackEnabled: Bool = true,
         loginShellTimeoutSeconds: TimeInterval = 5
     ) {
+        precondition(
+            loginShellTimeoutSeconds.isFinite && loginShellTimeoutSeconds > 0,
+            "loginShellTimeoutSeconds must be finite and positive, got \(loginShellTimeoutSeconds)"
+        )
         self.fileSystem = fileSystem
         self.searchPaths = searchPaths
         self.loginShellFallbackEnabled = loginShellFallbackEnabled

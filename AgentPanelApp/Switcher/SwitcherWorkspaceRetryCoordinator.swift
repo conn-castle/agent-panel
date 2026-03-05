@@ -102,10 +102,10 @@ final class SwitcherWorkspaceRetryCoordinator {
         timer.setEventHandler { [weak self] in
             self?.handleRetryTick(expectedSessionId: timerSessionId, expectedGeneration: generation)
         }
-        timer.resume()
         withStateLock {
             retryTimer = timer
         }
+        timer.resume()
 
         session.logEvent(
             event: "switcher.workspace_retry.scheduled",
