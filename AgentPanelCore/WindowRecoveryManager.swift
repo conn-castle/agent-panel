@@ -624,7 +624,7 @@ public final class WindowRecoveryManager {
                     ])
                     break retryLoop
                 case .failure(let error):
-                    let isTransient = error.message.hasPrefix("No window found with token")
+                    let isTransient = error.isWindowTokenNotFound
                     if isTransient && attempt < maxRecoveryRetries {
                         Thread.sleep(forTimeInterval: recoveryRetryInterval)
                         continue

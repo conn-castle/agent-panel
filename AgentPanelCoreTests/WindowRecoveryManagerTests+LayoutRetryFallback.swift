@@ -19,7 +19,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // IDE: fail once then succeed
         positioner.setFrameSequences["com.microsoft.VSCode"] = [
             .failure(tokenMiss),
@@ -60,7 +64,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // IDE: all 3 retries fail
         positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
         // IDE fallback succeeds
@@ -109,7 +117,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.setFrameSequences["com.google.Chrome"] = Array(repeating: .failure(tokenMiss), count: 3)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
@@ -147,7 +159,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 3 retries fail
         positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
         // Fallback also fails
@@ -185,7 +201,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 3 retries fail
         positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
         // Fallback succeeds but positions 0 windows
@@ -221,7 +241,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.setFrameSequences["com.google.Chrome"] = Array(repeating: .failure(tokenMiss), count: 3)
         // Fallback succeeds
         positioner.setFallbackFrameResults["com.google.Chrome"] =
@@ -258,7 +282,11 @@ extension WindowRecoveryManagerTests {
         let positioner = StubWindowPositioner()
         let detector = StubScreenModeDetector()
 
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Window title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.setFrameSequences["com.microsoft.VSCode"] = Array(repeating: .failure(tokenMiss), count: 3)
         // Fallback would succeed, but focus will fail first
         positioner.setFallbackFrameResults["com.microsoft.VSCode"] =

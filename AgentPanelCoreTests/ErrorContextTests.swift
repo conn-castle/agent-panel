@@ -114,6 +114,94 @@ final class ErrorContextTests: XCTestCase {
         XCTAssertFalse(error.isBreakerOpen)
     }
 
+    // MARK: - isWindowTokenNotFound
+
+    func testIsWindowTokenNotFoundReturnsTrueForStructuredReason() {
+        let error = ApCoreError(
+            category: .window,
+            message: "Unrelated message text",
+            reason: .windowTokenNotFound
+        )
+        XCTAssertTrue(error.isWindowTokenNotFound)
+    }
+
+    func testIsWindowTokenNotFoundReturnsTrueForLegacyMessagePrefix() {
+        let error = ApCoreError(
+            category: .window,
+            message: "No window found with token 'AP:myProject' for com.microsoft.VSCode"
+        )
+        XCTAssertTrue(error.isWindowTokenNotFound)
+    }
+
+    func testIsWindowTokenNotFoundReturnsFalseForUnrelatedError() {
+        let error = ApCoreError(
+            category: .window,
+            message: "Ambiguous: 3 windows found for com.microsoft.VSCode"
+        )
+        XCTAssertFalse(error.isWindowTokenNotFound)
+    }
+
+    func testIsWindowTokenNotFoundReturnsFalseForUnrelatedReason() {
+        let error = ApCoreError(
+            category: .command,
+            message: "Something else entirely",
+            reason: .circuitBreakerOpen
+        )
+        XCTAssertFalse(error.isWindowTokenNotFound)
+    }
+
+    // MARK: - isWindowInventoryEmpty
+
+    func testIsWindowInventoryEmptyReturnsTrueForStructuredReason() {
+        let error = ApCoreError(
+            category: .window,
+            message: "Unrelated message text",
+            reason: .windowInventoryEmpty
+        )
+        XCTAssertTrue(error.isWindowInventoryEmpty)
+    }
+
+    func testIsWindowInventoryEmptyReturnsTrueForNoWindowsMessage() {
+        let error = ApCoreError(
+            category: .window,
+            message: "No windows found for com.microsoft.VSCode (0 windows enumerated)"
+        )
+        XCTAssertTrue(error.isWindowInventoryEmpty)
+    }
+
+    func testIsWindowInventoryEmptyReturnsTrueForZeroWindowsMessage() {
+        let error = ApCoreError(
+            category: .window,
+            message: "App has zero windows open"
+        )
+        XCTAssertTrue(error.isWindowInventoryEmpty)
+    }
+
+    func testIsWindowInventoryEmptyReturnsTrueForRegexCountMatch() {
+        let error = ApCoreError(
+            category: .window,
+            message: "enumerated 0 windows for com.google.Chrome"
+        )
+        XCTAssertTrue(error.isWindowInventoryEmpty)
+    }
+
+    func testIsWindowInventoryEmptyReturnsFalseForUnrelatedError() {
+        let error = ApCoreError(
+            category: .window,
+            message: "No window found with token 'AP:myProject'"
+        )
+        XCTAssertFalse(error.isWindowInventoryEmpty)
+    }
+
+    func testIsWindowInventoryEmptyReturnsFalseForUnrelatedReason() {
+        let error = ApCoreError(
+            category: .command,
+            message: "Something else",
+            reason: .commandTimeout
+        )
+        XCTAssertFalse(error.isWindowInventoryEmpty)
+    }
+
     // MARK: - Equatable
 
     func testErrorContextEquatable() {

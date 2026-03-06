@@ -18,7 +18,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // Fail twice, then succeed
         positioner.setFrameSequences[chromeKey] = [
             .failure(tokenMiss),
@@ -67,7 +71,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 5 retries fail
         positioner.setFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
         // Fallback succeeds
@@ -114,7 +122,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.setFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
         // Fallback also fails
         positioner.setFallbackFrameResults["com.google.Chrome"] =
@@ -201,7 +213,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // Fail twice, succeed on third
         positioner.getFrameSequences[chromeKey] = [
             .failure(tokenMiss),
@@ -241,7 +257,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 5 retries fail
         positioner.getFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
         // Fallback succeeds
@@ -278,7 +298,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let chromeKey = "com.google.Chrome|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "Chrome title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 5 retries fail
         positioner.getFrameSequences[chromeKey] = Array(repeating: .failure(tokenMiss), count: 5)
         // Fallback also fails

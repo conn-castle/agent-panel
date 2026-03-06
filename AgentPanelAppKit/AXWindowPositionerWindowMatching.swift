@@ -197,10 +197,7 @@ extension AXWindowPositioner {
         let titles = allWindows.map { $0.title }
 
         guard !allWindows.isEmpty else {
-            return .failure(ApCoreError(
-                category: .window,
-                message: "No windows found for \(bundleId) (0 windows enumerated)"
-            ))
+            return .failure(Self.windowInventoryEmptyError(bundleId: bundleId))
         }
 
         // Unambiguous: exactly one window

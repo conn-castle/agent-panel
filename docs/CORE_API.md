@@ -49,6 +49,8 @@ public enum ApCoreErrorCategory: String, Sendable {
 public enum ApCoreErrorReason: String, Sendable {
     case circuitBreakerOpen
     case commandTimeout
+    case windowTokenNotFound
+    case windowInventoryEmpty
 }
 
 public struct ApCoreError: Error, Equatable, Sendable {
@@ -71,6 +73,14 @@ public struct ApCoreError: Error, Equatable, Sendable {
     /// Convenience classifier for command-timeout errors.
     /// Uses structured reason when present with legacy message fallback.
     public var isCommandTimeout: Bool { get }
+
+    /// Convenience classifier for transient window token-miss errors.
+    /// Uses structured reason when present with legacy message-prefix fallback.
+    public var isWindowTokenNotFound: Bool { get }
+
+    /// Convenience classifier for confirmed zero-window inventory errors.
+    /// Uses structured reason when present with legacy message-parsing fallback.
+    public var isWindowInventoryEmpty: Bool { get }
 
     /// Convenience init (defaults to .command category).
     init(message: String)

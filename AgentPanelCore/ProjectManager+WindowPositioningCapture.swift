@@ -41,7 +41,7 @@ extension ProjectManager {
                 chromeFrame = frame
                 break captureLoop
             case .failure(let error):
-                let isTransient = error.message.hasPrefix("No window found with token")
+                let isTransient = error.isWindowTokenNotFound
                 if isTransient && captureAttempt < maxCaptureRetries {
                     Thread.sleep(forTimeInterval: captureRetryInterval)
                     continue
