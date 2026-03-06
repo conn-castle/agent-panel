@@ -221,6 +221,7 @@
 		CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */; };
 		CB989666E4E6615CEC882A98 /* AppHealthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C43BE63AECE73C79A2B1BAE3 /* AppHealthCoordinator.swift */; };
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
+		CF924D6A91633AED419A2BB0 /* RecoveryOperationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6D23104F2A05F357FABCF2 /* RecoveryOperationCoordinatorTests.swift */; };
 		D015C5E99D778F76C89DE77C /* ApArgumentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 896E78D7F06BC1951EF83C11 /* ApArgumentParserTests.swift */; };
 		D0BBEDF33BA03BE83EE0C4C0 /* ProjectManagerFocusRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50D542A98D714E507A8E490 /* ProjectManagerFocusRecoveryTests.swift */; };
 		D127B398713F42CD7C4FBF8A /* ApAeroSpace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9EF5D4CAEDF122A883BDDC6 /* ApAeroSpace.swift */; };
@@ -228,6 +229,7 @@
 		D1970DF3172822E69803BF77 /* SwitcherRowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 870A0DB78D9AF375FF72E326 /* SwitcherRowViews.swift */; };
 		D3A05C3FAF2D8486A3DD83E0 /* VSCodeSettingsManagerRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB7542D928AA6E365C4B12D /* VSCodeSettingsManagerRemoteTests.swift */; };
 		D45AEBD89ABD7F241DF04CFA /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9708BB20B7C2071A1EE21D7 /* main.swift */; };
+		D4DC24FE06B4DDA47A73C07E /* RecoveryOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7A248AD8DFB673CF6F8AA8 /* RecoveryOperationCoordinator.swift */; };
 		D63155FDF609AA8164D1D972 /* VSCodeSettingsManagerRemoteTestDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33494DC227E2E8341E9B7FA5 /* VSCodeSettingsManagerRemoteTestDoubles.swift */; };
 		D862975B9DCDDF7FF0493E2F /* AXWindowPositioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02956062A786C0D5A65DF5DB /* AXWindowPositioner.swift */; };
 		D9B161C55622B40E6190A826 /* SwitcherPanelController+PublicInterface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FBA4921D72DD59516D41D79 /* SwitcherPanelController+PublicInterface.swift */; };
@@ -241,6 +243,7 @@
 		E26E645AC8903D61272CF29E /* ProjectManagerWindowPositionTests+IDERetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C895B6F5C34490A752894791 /* ProjectManagerWindowPositionTests+IDERetry.swift */; };
 		E44B4536E82CB1EFDB6C8A95 /* ApCLIRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF1F5AAD8644397B21447C04 /* ApCLIRunnerTests.swift */; };
 		E50BBFF85D3E449F12A9EA9A /* ProjectManagerWindowPositionTests+FallbackModes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC659A0E9503846639304464 /* ProjectManagerWindowPositionTests+FallbackModes.swift */; };
+		E52C109428A5E599563BE05D /* RecoveryOperationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7A248AD8DFB673CF6F8AA8 /* RecoveryOperationCoordinator.swift */; };
 		E6AB4DCAB965EE715A11593A /* AgentPanelAppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DEC2159A7FC49F981E12655 /* AgentPanelAppKit.framework */; };
 		E6C0C4B298A62061F15E47FD /* SwitcherPanelController+Testing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73406CB23EF133F552078808 /* SwitcherPanelController+Testing.swift */; };
 		E8364C94DE1F70EDED7450F8 /* FocusCycleHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA16CCA67CFA8D9F5565D1CD /* FocusCycleHotkeyManager.swift */; };
@@ -437,6 +440,7 @@
 		4BE1A2589DB49055B76D6735 /* LoggerTests+Concurrency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoggerTests+Concurrency.swift"; sourceTree = "<group>"; };
 		4BECC4836AB5638CE1126C31 /* LoggerTestsTestDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerTestsTestDoubles.swift; sourceTree = "<group>"; };
 		4CC3F90043E2A7B9734A5279 /* ExecutableResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExecutableResolverTests.swift; sourceTree = "<group>"; };
+		4F6D23104F2A05F357FABCF2 /* RecoveryOperationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryOperationCoordinatorTests.swift; sourceTree = "<group>"; };
 		51E5F87E9B834D2CF33BA70D /* FocusHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusHistoryStore.swift; sourceTree = "<group>"; };
 		51F3A97C96C3C516D80630AB /* WindowLayoutEngineTests+Clamp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowLayoutEngineTests+Clamp.swift"; sourceTree = "<group>"; };
 		5346229EF143B5582F2DCABD /* ScreenMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenMode.swift; sourceTree = "<group>"; };
@@ -574,6 +578,7 @@
 		DB8EF52077E9BE5CDECD6C61 /* ChromeConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeConfigTests.swift; sourceTree = "<group>"; };
 		DBB64341F13DFA45D908360E /* WindowRecoveryManagerTests+RecoverCurrentWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowRecoveryManagerTests+RecoverCurrentWindow.swift"; sourceTree = "<group>"; };
 		DC6AC2C93CB8ADF4F7AC0804 /* WindowRecoveryManagerTests+Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowRecoveryManagerTests+Support.swift"; sourceTree = "<group>"; };
+		DC7A248AD8DFB673CF6F8AA8 /* RecoveryOperationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryOperationCoordinator.swift; sourceTree = "<group>"; };
 		DCBE896AC444E09D72780446 /* ProjectManager+OperationsWindowMovement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManager+OperationsWindowMovement.swift"; sourceTree = "<group>"; };
 		DCF6EF3D0329228351DD4512 /* ProjectManager+OperationsSelectionClose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManager+OperationsSelectionClose.swift"; sourceTree = "<group>"; };
 		DD299EAAB0E7152234DFC1AD /* ProjectManagerTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerTypes.swift; sourceTree = "<group>"; };
@@ -887,6 +892,7 @@
 				1CD4F815CAF90030F8A02042 /* LaunchAtLoginToggler.swift */,
 				F24E7361C96AE6CA67869987 /* MenuWorkspaceStateCoordinator.swift */,
 				B2C1E7F1518F5E6C6CFF485E /* Onboarding.swift */,
+				DC7A248AD8DFB673CF6F8AA8 /* RecoveryOperationCoordinator.swift */,
 				AD2A435AAD0A46F9C41D8214 /* RecoveryProgressController.swift */,
 				8E889482DE8B9E43D5F2B3E7 /* WindowCycleOverlayController.swift */,
 				36FB9A1AB3DB9720C1092952 /* WindowCycleOverlayCoordinator.swift */,
@@ -919,6 +925,7 @@
 				8FD67FDD38B183122EAFE7B4 /* DoctorActivationTests.swift */,
 				D8518B6406C5D08F07916FE1 /* LaunchAtLoginTogglerTests.swift */,
 				7888205761BCAF38CFFFAC4F /* MenuWorkspaceStateCoordinatorTests.swift */,
+				4F6D23104F2A05F357FABCF2 /* RecoveryOperationCoordinatorTests.swift */,
 				D91B8A121339C460E8955B0E /* SwitcherCoordinatorTestSupport.swift */,
 				F33C8323F7FFF366C896EDF8 /* SwitcherFocusFlowTests.swift */,
 				8934E074DA69A71FEF1DF779 /* SwitcherOperationCoordinatorTests.swift */,
@@ -1272,6 +1279,7 @@
 				3EC6F52ECF3A9485D4B86090 /* LaunchAtLoginToggler.swift in Sources */,
 				C79723E99C531C526A13C9CA /* MenuWorkspaceStateCoordinator.swift in Sources */,
 				0E7C872B0DF575939D4007A1 /* Onboarding.swift in Sources */,
+				E52C109428A5E599563BE05D /* RecoveryOperationCoordinator.swift in Sources */,
 				BF1E222C54CDED4840AC1950 /* RecoveryProgressController.swift in Sources */,
 				A7632845DB21A69F793525E7 /* SwitcherOperationCoordinator.swift in Sources */,
 				DBA917ECD04EDD47B347B856 /* SwitcherPanelController+Configuration.swift in Sources */,
@@ -1308,6 +1316,7 @@
 				9627AFBE527E4FD4AF16F65E /* LaunchAtLoginToggler.swift in Sources */,
 				8751B4FC1E2CB6F359DF16A6 /* MenuWorkspaceStateCoordinator.swift in Sources */,
 				49D9AD837CA9BE6FBC082E32 /* Onboarding.swift in Sources */,
+				D4DC24FE06B4DDA47A73C07E /* RecoveryOperationCoordinator.swift in Sources */,
 				76D2EEC5E45735F445A9216C /* RecoveryProgressController.swift in Sources */,
 				9F4D139DC3664DE955984404 /* SwitcherOperationCoordinator.swift in Sources */,
 				2F12EBF803E98038C1530FED /* SwitcherPanelController+Configuration.swift in Sources */,
@@ -1422,6 +1431,7 @@
 				2AD4A15AB84B23DB35CD4402 /* DoctorActivationTests.swift in Sources */,
 				43566340FE259F8F1D18BFB2 /* LaunchAtLoginTogglerTests.swift in Sources */,
 				C5CF12D956E498B7E6EE2D33 /* MenuWorkspaceStateCoordinatorTests.swift in Sources */,
+				CF924D6A91633AED419A2BB0 /* RecoveryOperationCoordinatorTests.swift in Sources */,
 				B3E83D917EFBB03B6B4424A5 /* SwitcherCoordinatorTestSupport.swift in Sources */,
 				57FBBB4742691FE73CD2DB42 /* SwitcherFocusFlowTests.swift in Sources */,
 				89FBF83B7B9133DD09E8F4B5 /* SwitcherOperationCoordinatorTests.swift in Sources */,

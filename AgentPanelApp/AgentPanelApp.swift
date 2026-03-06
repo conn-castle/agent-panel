@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var didPromptForAccessibilityThisLaunch = false
     private var healthCoordinator: AppHealthCoordinator?
     private var menuWorkspaceCoordinator: MenuWorkspaceStateCoordinator?
+    private var recoveryOperationCoordinator: RecoveryOperationCoordinator?
     /// Serial queue for immediate (non-overlay) Option-Tab fallback to avoid focus races.
     private let immediateWindowCycleQueue = DispatchQueue(
         label: "com.agentpanel.window-cycle-immediate",
@@ -170,6 +171,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         self.healthCoordinator = healthCoord
+
+        let recoveryCoord = RecoveryOperationCoordinator(
+            logger: logger,
+            makeRecoveryManager: { [weak self] screenFrame, layoutConfig in
+                self?.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
+                    ?? WindowRecoveryManager(
+                        windowPositioner: AXWindowPositioner(),
+                        screenVisibleFrame: screenFrame,
+                        logger: AgentPanelLogger()
+                    )
+            },
+            currentLayoutConfig: { [weak self] in
+                self?.projectManager.currentLayoutConfig
+            }
+        )
+        recoveryCoord.onCurrentWindowRecovered = { [weak self] result, windowId, workspace in
+            guard let self else { return }
+            switch result {
+            case .success(let outcome):
+                let outcomeLabel: String
+                switch outcome {
+                case .recovered: outcomeLabel = "recovered"
+                case .unchanged: outcomeLabel = "unchanged"
+                case .notFound: outcomeLabel = "not_found"
+                }
+                self.logAppEvent(
+                    event: "recover_current_window.completed",
+                    context: [
+                        "window_id": "\(windowId)",
+                        "workspace": workspace,
+                        "outcome": outcomeLabel
+                    ]
+                )
+            case .failure(let error):
+                self.logAppEvent(
+                    event: "recover_current_window.failed",
+                    level: .error,
+                    message: error.message
+                )
+            }
+        }
+        recoveryCoord.onWorkspaceRecovered = { [weak self] result, focus in
+            guard let self else { return }
+            switch result {
+            case .success(let recovery):
+                let workspaceType = WorkspaceRouting.isProjectWorkspace(focus.workspace) ? "project" : "non_project"
+                self.logAppEvent(
+                    event: "recover_agent_panel.completed",
+                    context: [
+                        "workspace": focus.workspace,
+                        "workspace_type": workspaceType,
+                        "processed": "\(recovery.windowsProcessed)",
+                        "recovered": "\(recovery.windowsRecovered)"
+                    ]
+                )
+            case .failure(let error):
+                self.logAppEvent(
+                    event: "recover_agent_panel.failed",
+                    level: .error,
+                    message: error.message
+                )
+            }
+        }
+        recoveryCoord.onAllWindowsProgress = { [weak self] current, total in
+            self?.recoveryController?.updateProgress(current: current, total: total)
+        }
+        recoveryCoord.onAllWindowsCompleted = { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let recovery):
+                let message: String
+                if recovery.errors.isEmpty {
+                    message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
+                } else {
+                    message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
+                }
+                self.recoveryController?.showCompletion(message: message)
+                self.logAppEvent(
+                    event: "recover_all_windows.completed",
+                    context: [
+                        "processed": "\(recovery.windowsProcessed)",
+                        "recovered": "\(recovery.windowsRecovered)",
+                        "errors": "\(recovery.errors.count)"
+                    ]
+                )
+            case .failure(let error):
+                self.recoveryController?.showCompletion(
+                    message: "Recovery failed: \(error.message)"
+                )
+                self.logAppEvent(
+                    event: "recover_all_windows.failed",
+                    level: .error,
+                    message: error.message
+                )
+            }
+        }
+        self.recoveryOperationCoordinator = recoveryCoord
 
         requestAccessibilityOnFirstLaunchIfNeeded()
 
@@ -654,7 +752,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            self.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
+            guard let recoveryCoord = self.recoveryOperationCoordinator else {
+                let error = ApCoreError(category: .system, message: "Recovery coordinator unavailable")
+                self.logAppEvent(event: "switcher.recover_project.failed", level: .error, message: error.message)
+                completion(.failure(error))
+                return
+            }
+
+            recoveryCoord.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
                 guard let self else {
                     completion(result)
                     return
@@ -1067,7 +1172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Recovers only the currently focused window.
     @objc private func recoverCurrentWindow() {
-        logAppEvent(event: "recover_current_window.requested")
         statusItem?.menu?.cancelTracking()
 
         guard let focus = menuWorkspaceCoordinator?.menuFocusCapture else {
@@ -1075,47 +1179,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Capture screen frame on main thread (AppKit API)
         guard let screenFrame = NSScreen.main?.visibleFrame else {
             logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
             return
         }
 
-        let windowId = focus.windowId
-        let workspace = focus.workspace
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame)
-            let result = manager.recoverCurrentWindow(windowId: windowId, workspace: workspace)
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let outcome):
-                    let outcomeLabel: String
-                    switch outcome {
-                    case .recovered:
-                        outcomeLabel = "recovered"
-                    case .unchanged:
-                        outcomeLabel = "unchanged"
-                    case .notFound:
-                        outcomeLabel = "not_found"
-                    }
-                    self.logAppEvent(
-                        event: "recover_current_window.completed",
-                        context: [
-                            "window_id": "\(windowId)",
-                            "workspace": workspace,
-                            "outcome": outcomeLabel
-                        ]
-                    )
-                case .failure(let error):
-                    self.logAppEvent(
-                        event: "recover_current_window.failed",
-                        level: .error,
-                        message: error.message
-                    )
-                }
-            }
-        }
+        recoveryOperationCoordinator?.recoverCurrentWindow(
+            windowId: focus.windowId,
+            workspace: focus.workspace,
+            screenFrame: screenFrame
+        )
     }
 
     /// Recovers all windows in the focused workspace.
@@ -1131,74 +1204,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Capture screen frame on main thread (AppKit API)
         guard let screenFrame = NSScreen.main?.visibleFrame else {
             logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
             return
         }
 
-        recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let recovery):
-                let workspaceType = WorkspaceRouting.isProjectWorkspace(focus.workspace) ? "project" : "non_project"
-                self.logAppEvent(
-                    event: "recover_agent_panel.completed",
-                    context: [
-                        "workspace": focus.workspace,
-                        "workspace_type": workspaceType,
-                        "processed": "\(recovery.windowsProcessed)",
-                        "recovered": "\(recovery.windowsRecovered)"
-                    ]
-                )
-            case .failure(let error):
-                self.logAppEvent(
-                    event: "recover_agent_panel.failed",
-                    level: .error,
-                    message: error.message
-                )
-            }
-        }
-    }
-
-    /// Recovers all windows in a specific workspace focus context.
-    /// - Parameters:
-    ///   - focus: Captured focus that determines target workspace.
-    ///   - screenFrame: Visible frame captured on the main thread.
-    ///   - completion: Completion callback invoked on the main thread.
-    private func recoverWorkspaceWindows(
-        focus: CapturedFocus,
-        screenFrame: CGRect,
-        completion: @escaping (Result<RecoveryResult, ApCoreError>) -> Void
-    ) {
-        // Read current layout config without triggering a config load (non-mutating)
-        let layoutConfig = projectManager.currentLayoutConfig
-        let workspace = focus.workspace
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else {
-                DispatchQueue.main.async {
-                    completion(.failure(ApCoreError(category: .command, message: "Recovery manager unavailable.")))
-                }
-                return
-            }
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
-            Task {
-                let result = await manager.recoverWorkspaceWindows(workspace: workspace)
-                DispatchQueue.main.async {
-                    completion(result)
-                }
-            }
-        }
+        recoveryOperationCoordinator?.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame)
     }
 
     /// Recovers all windows across all workspaces.
     /// Project-tagged windows are moved to their project workspace before recovery.
     @objc private func recoverAllWindowsAction() {
-        logAppEvent(event: "recover_all_windows.requested")
         statusItem?.menu?.cancelTracking()
 
-        // Capture screen frame on main thread (AppKit API)
         guard let screenFrame = NSScreen.main?.visibleFrame else {
             logAppEvent(event: "recovery.no_screen", level: .error, message: "No primary screen available")
             return
@@ -1212,49 +1230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recoveryController = controller
         controller.show()
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let layoutConfig = self.projectManager.currentLayoutConfig
-            let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
-
-            Task {
-                let result = await manager.recoverAllWindows { current, total in
-                    DispatchQueue.main.async {
-                        self.recoveryController?.updateProgress(current: current, total: total)
-                    }
-                }
-
-                await MainActor.run {
-                    switch result {
-                    case .success(let recovery):
-                        let message: String
-                        if recovery.errors.isEmpty {
-                            message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
-                        } else {
-                            message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
-                        }
-                        self.recoveryController?.showCompletion(message: message)
-                        self.logAppEvent(
-                            event: "recover_all_windows.completed",
-                            context: [
-                                "processed": "\(recovery.windowsProcessed)",
-                                "recovered": "\(recovery.windowsRecovered)",
-                                "errors": "\(recovery.errors.count)"
-                            ]
-                        )
-                    case .failure(let error):
-                        self.recoveryController?.showCompletion(
-                            message: "Recovery failed: \(error.message)"
-                        )
-                        self.logAppEvent(
-                            event: "recover_all_windows.failed",
-                            level: .error,
-                            message: error.message
-                        )
-                    }
-                }
-            }
-        }
+        recoveryOperationCoordinator?.recoverAllWindows(screenFrame: screenFrame)
     }
 
     /// Moves the focused window to the selected project's workspace.
