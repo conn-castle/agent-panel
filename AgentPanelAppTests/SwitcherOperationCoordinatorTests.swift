@@ -85,18 +85,24 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
         manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
 
         var controlsEnabledHistory: [Bool] = []
+        var controlsEnabledOnMainThread: [Bool] = []
         coordinator.onSetControlsEnabled = { enabled in
             controlsEnabledHistory.append(enabled)
+            controlsEnabledOnMainThread.append(Thread.isMainThread)
         }
 
         var dismissReason: SwitcherDismissReason?
+        var dismissOnMainThread = false
         coordinator.onDismiss = { reason in
             dismissReason = reason
+            dismissOnMainThread = Thread.isMainThread
         }
 
         var focusedIdeWindowId: Int?
+        var focusIdeOnMainThread = false
         coordinator.onFocusIdeWindow = { windowId in
             focusedIdeWindowId = windowId
+            focusIdeOnMainThread = Thread.isMainThread
         }
 
         let capturedFocus = CapturedFocus(windowId: 77, appBundleId: "com.apple.Terminal", workspace: "main")
@@ -129,6 +135,11 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
 
         // IDE window should have been focused.
         XCTAssertEqual(focusedIdeWindowId, ideWindow.windowId)
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(controlsEnabledOnMainThread.allSatisfy { $0 }, "onSetControlsEnabled must run on main thread")
+        XCTAssertTrue(dismissOnMainThread, "onDismiss must run on main thread")
+        XCTAssertTrue(focusIdeOnMainThread, "onFocusIdeWindow must run on main thread")
     }
 
     func testHandleProjectSelectionReportsErrorAndCallsOnOperationFailedOnFailure() async {
@@ -144,18 +155,24 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
         ))
 
         var statusMessages: [(String, StatusLevel)] = []
+        var statusOnMainThread: [Bool] = []
         coordinator.onSetStatus = { message, level in
             statusMessages.append((message, level))
+            statusOnMainThread.append(Thread.isMainThread)
         }
 
         var operationFailedContext: ErrorContext?
+        var operationFailedOnMainThread = false
         coordinator.onOperationFailed = { context in
             operationFailedContext = context
+            operationFailedOnMainThread = Thread.isMainThread
         }
 
         var searchFieldFocusRestored = false
+        var searchFieldFocusOnMainThread = false
         coordinator.onRestoreSearchFieldFocus = {
             searchFieldFocusRestored = true
+            searchFieldFocusOnMainThread = Thread.isMainThread
         }
 
         var dismissCalled = false
@@ -191,6 +208,11 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
 
         // Dismiss should NOT have been called on failure.
         XCTAssertFalse(dismissCalled)
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(statusOnMainThread.allSatisfy { $0 }, "onSetStatus must run on main thread")
+        XCTAssertTrue(operationFailedOnMainThread, "onOperationFailed must run on main thread")
+        XCTAssertTrue(searchFieldFocusOnMainThread, "onRestoreSearchFieldFocus must run on main thread")
     }
 
     // MARK: - handleExitToNonProject
@@ -276,13 +298,17 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
         ))
 
         var dismissReason: SwitcherDismissReason?
+        var dismissOnMainThread = false
         coordinator.onDismiss = { reason in
             dismissReason = reason
+            dismissOnMainThread = Thread.isMainThread
         }
 
         var controlsEnabledHistory: [Bool] = []
+        var controlsEnabledOnMainThread: [Bool] = []
         coordinator.onSetControlsEnabled = { enabled in
             controlsEnabledHistory.append(enabled)
+            controlsEnabledOnMainThread.append(Thread.isMainThread)
         }
 
         let exitExpectation = expectation(description: "exit to non-project succeeds")
@@ -299,7 +325,146 @@ final class SwitcherOperationCoordinatorTests: XCTestCase {
         XCTAssertEqual(dismissReason, .exitedToNonProject)
         XCTAssertEqual(controlsEnabledHistory, [false, true])
         XCTAssertFalse(coordinator.isExitingToNonProject, "Guard should be reset after completion")
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(controlsEnabledOnMainThread.allSatisfy { $0 }, "onSetControlsEnabled must run on main thread")
+        XCTAssertTrue(dismissOnMainThread, "onDismiss must run on main thread")
     }
+
+    // MARK: - performCloseProject
+
+    func testPerformCloseProjectCallsCallbacksOnMainThreadOnSuccess() async {
+        let logger = CoordinatorTestRecordingLogger()
+        let aerospace = CoordinatorTestAeroSpaceStub()
+
+        let projectId = "closable"
+        let workspace = "ap-\(projectId)"
+        let ideWindow = ApWindow(
+            windowId: 200,
+            appBundleId: ApVSCodeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - VS Code"
+        )
+        let chromeWindow = ApWindow(
+            windowId: 201,
+            appBundleId: ApChromeLauncher.bundleId,
+            workspace: workspace,
+            windowTitle: "AP:\(projectId) - Chrome"
+        )
+        // After close, the focused window lands on a non-project window.
+        let terminalWindow = ApWindow(
+            windowId: 300,
+            appBundleId: "com.apple.Terminal",
+            workspace: "main",
+            windowTitle: "Terminal"
+        )
+
+        aerospace.windowsByWorkspace[workspace] = [ideWindow, chromeWindow]
+        aerospace.windowsByBundleId[ApVSCodeLauncher.bundleId] = [ideWindow]
+        aerospace.windowsByBundleId[ApChromeLauncher.bundleId] = [chromeWindow]
+        aerospace.allWindows = [ideWindow, chromeWindow, terminalWindow]
+        aerospace.workspacesWithFocusResult = .success([
+            ApWorkspaceSummary(workspace: workspace, isFocused: true),
+            ApWorkspaceSummary(workspace: "main", isFocused: false)
+        ])
+        aerospace.focusedWindowResult = .success(terminalWindow)
+        aerospace.focusWindowSuccessIds = [terminalWindow.windowId]
+
+        let (coordinator, manager) = makeOperationCoordinator(aerospace: aerospace, logger: logger)
+        let project = ProjectConfig(id: projectId, name: "Closable", path: "/tmp/closable", color: "green", useAgentLayer: false)
+        manager.loadTestConfig(Config(projects: [project], chrome: ChromeConfig()))
+
+        var statusMessages: [(String, StatusLevel)] = []
+        var statusOnMainThread: [Bool] = []
+        coordinator.onSetStatus = { message, level in
+            statusMessages.append((message, level))
+            statusOnMainThread.append(Thread.isMainThread)
+        }
+
+        var refreshCalled = false
+        var refreshOnMainThread = false
+        coordinator.onRefreshWorkspaceAndFilter = { _, _ in
+            refreshCalled = true
+            refreshOnMainThread = Thread.isMainThread
+        }
+
+        var updatedCapturedFocusCalled = false
+        var updateCapturedFocusOnMainThread = false
+        coordinator.onUpdateCapturedFocus = { _ in
+            updatedCapturedFocusCalled = true
+            updateCapturedFocusOnMainThread = Thread.isMainThread
+        }
+
+        let closeExpectation = expectation(description: "close project completes")
+        logger.onLog = { entry in
+            if entry.event == "switcher.close_project.succeeded" {
+                closeExpectation.fulfill()
+            }
+        }
+
+        coordinator.performCloseProject(
+            projectId: projectId,
+            projectName: "Closable",
+            source: "test",
+            fallbackSelectionKey: nil
+        )
+
+        await fulfillment(of: [closeExpectation], timeout: 5.0)
+
+        // Callbacks should have been invoked.
+        XCTAssertTrue(refreshCalled, "onRefreshWorkspaceAndFilter should be called on close success")
+        XCTAssertTrue(updatedCapturedFocusCalled, "onUpdateCapturedFocus should be called on close success")
+        XCTAssertFalse(statusMessages.isEmpty, "onSetStatus should be called")
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(statusOnMainThread.allSatisfy { $0 }, "onSetStatus must run on main thread")
+        XCTAssertTrue(refreshOnMainThread, "onRefreshWorkspaceAndFilter must run on main thread")
+        XCTAssertTrue(updateCapturedFocusOnMainThread, "onUpdateCapturedFocus must run on main thread")
+    }
+
+    func testPerformCloseProjectCallsCallbacksOnMainThreadOnFailure() async {
+        let logger = CoordinatorTestRecordingLogger()
+        let aerospace = CoordinatorTestAeroSpaceStub()
+
+        let (coordinator, manager) = makeOperationCoordinator(aerospace: aerospace, logger: logger)
+        // Load config WITHOUT the target project to trigger failure.
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: "other", name: "Other", path: "/tmp/other", color: "blue", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        var statusOnMainThread: [Bool] = []
+        coordinator.onSetStatus = { _, _ in
+            statusOnMainThread.append(Thread.isMainThread)
+        }
+
+        var operationFailedOnMainThread = false
+        coordinator.onOperationFailed = { _ in
+            operationFailedOnMainThread = Thread.isMainThread
+        }
+
+        let failExpectation = expectation(description: "close project fails")
+        logger.onLog = { entry in
+            if entry.event == "switcher.close_project.failed" {
+                failExpectation.fulfill()
+            }
+        }
+
+        coordinator.performCloseProject(
+            projectId: "nonexistent",
+            projectName: "Nonexistent",
+            source: "test",
+            fallbackSelectionKey: nil
+        )
+
+        await fulfillment(of: [failExpectation], timeout: 5.0)
+
+        // Callbacks should have run on the main thread.
+        XCTAssertTrue(statusOnMainThread.allSatisfy { $0 }, "onSetStatus must run on main thread")
+        XCTAssertTrue(operationFailedOnMainThread, "onOperationFailed must run on main thread")
+    }
+
+    // MARK: - handleExitToNonProject (continued)
 
     func testHandleExitToNonProjectBeepsWhenNoBackActionRowFromShortcut() {
         let logger = CoordinatorTestRecordingLogger()

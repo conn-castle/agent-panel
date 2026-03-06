@@ -26,8 +26,3 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 ## Open issues
 
 <!-- ENTRIES START -->
-
-- Issue 2026-03-05 async-switcher-main-thread-tests: App async wrapper threading coverage gap
-    Priority: Low. Area: app-tests
-    Description: The new `Task` bridges around close/exit/recovery flows in `AgentPanelApp` and `SwitcherOperationCoordinator` are covered indirectly, but there are no targeted tests asserting main-thread completion/progress delivery after the async conversion.
-    Next step: Add focused App tests that verify completion callbacks and UI update closures run on the main thread for the async recovery/close paths.

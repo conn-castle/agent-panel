@@ -365,3 +365,8 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Timeout precondition validation extracted into `static func isValidLoginShellTimeout(_ timeout:) -> Bool`. The `init` precondition delegates to this method. Tests cover zero, negative, infinity, NaN, and valid positive values.
     Reason: The precondition traps on invalid values, which the test harness cannot intercept. Extracting the predicate makes the validation contract directly testable.
     Tradeoffs: None — one additional static method, no behavioral change.
+
+- Decision 2026-03-06 recovery-operation-coordinator: Extracted AppDelegate recovery operations into RecoveryOperationCoordinator
+    Decision: Window recovery menu actions (recover current window, recover workspace, recover all) extracted from AppDelegate into `RecoveryOperationCoordinator`. The coordinator owns the background-dispatch → main-thread-callback pattern and is tested for main-thread delivery guarantees.
+    Reason: The async dispatch pattern in AppDelegate was untestable because the methods were private and coupled to AppKit singletons. Extraction follows the same pattern used by `AppHealthCoordinator` and `SwitcherOperationCoordinator`.
+    Tradeoffs: One additional coordinator class; AppDelegate recovery methods are now thin delegates.

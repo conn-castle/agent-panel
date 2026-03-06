@@ -115,6 +115,124 @@ final class SwitcherOperationRecoveryGuardTests: XCTestCase {
         pendingCompletion?(.success(RecoveryResult(windowsProcessed: 1, windowsRecovered: 1, errors: [])))
     }
 
+    // MARK: - handleRecoverProjectFromShortcut (main-thread delivery)
+
+    func testHandleRecoverProjectSuccessCallsCallbacksOnMainThread() {
+        let logger = CoordinatorTestRecordingLogger()
+        let aerospace = CoordinatorTestAeroSpaceStub()
+        let (coordinator, _) = makeOperationCoordinator(aerospace: aerospace, logger: logger)
+
+        let focus = CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test")
+
+        var controlsEnabledHistory: [Bool] = []
+        var controlsEnabledOnMainThread: [Bool] = []
+        coordinator.onSetControlsEnabled = { enabled in
+            controlsEnabledHistory.append(enabled)
+            controlsEnabledOnMainThread.append(Thread.isMainThread)
+        }
+
+        var statusMessages: [(String, StatusLevel)] = []
+        var statusOnMainThread: [Bool] = []
+        coordinator.onSetStatus = { message, level in
+            statusMessages.append((message, level))
+            statusOnMainThread.append(Thread.isMainThread)
+        }
+
+        var searchFieldFocusRestored = false
+        var searchFieldFocusOnMainThread = false
+        coordinator.onRestoreSearchFieldFocus = {
+            searchFieldFocusRestored = true
+            searchFieldFocusOnMainThread = Thread.isMainThread
+        }
+
+        let completionExpectation = expectation(description: "recovery completes")
+
+        coordinator.onRecoverProjectRequested = { _, completion in
+            // Simulate async completion from a background queue.
+            DispatchQueue.global(qos: .userInitiated).async {
+                completion(.success(RecoveryResult(windowsProcessed: 3, windowsRecovered: 3, errors: [])))
+            }
+        }
+
+        coordinator.handleRecoverProjectFromShortcut(capturedFocus: focus)
+
+        // Wait for the DispatchQueue.main.async completion delivery.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            completionExpectation.fulfill()
+        }
+        wait(for: [completionExpectation], timeout: 3.0)
+
+        // Guard should be reset.
+        XCTAssertFalse(coordinator.isRecoveringProject)
+
+        // Controls should have been disabled then re-enabled.
+        XCTAssertEqual(controlsEnabledHistory, [false, true])
+
+        // Status should report success.
+        let infoStatuses = statusMessages.filter { $0.1 == .info }
+        XCTAssertTrue(infoStatuses.contains(where: { $0.0.contains("Recovered 3 of 3") }))
+
+        // Search field focus should be restored.
+        XCTAssertTrue(searchFieldFocusRestored)
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(controlsEnabledOnMainThread.allSatisfy { $0 }, "onSetControlsEnabled must run on main thread")
+        XCTAssertTrue(statusOnMainThread.allSatisfy { $0 }, "onSetStatus must run on main thread")
+        XCTAssertTrue(searchFieldFocusOnMainThread, "onRestoreSearchFieldFocus must run on main thread")
+    }
+
+    func testHandleRecoverProjectFailureCallsCallbacksOnMainThread() {
+        let logger = CoordinatorTestRecordingLogger()
+        let aerospace = CoordinatorTestAeroSpaceStub()
+        let (coordinator, _) = makeOperationCoordinator(aerospace: aerospace, logger: logger)
+
+        let focus = CapturedFocus(windowId: 7, appBundleId: "com.apple.Terminal", workspace: "ap-test")
+
+        var statusOnMainThread: [Bool] = []
+        coordinator.onSetStatus = { _, _ in
+            statusOnMainThread.append(Thread.isMainThread)
+        }
+
+        var operationFailedOnMainThread = false
+        coordinator.onOperationFailed = { _ in
+            operationFailedOnMainThread = Thread.isMainThread
+        }
+
+        var controlsEnabledOnMainThread: [Bool] = []
+        coordinator.onSetControlsEnabled = { _ in
+            controlsEnabledOnMainThread.append(Thread.isMainThread)
+        }
+
+        var searchFieldFocusOnMainThread = false
+        coordinator.onRestoreSearchFieldFocus = {
+            searchFieldFocusOnMainThread = Thread.isMainThread
+        }
+
+        let completionExpectation = expectation(description: "recovery fails")
+
+        coordinator.onRecoverProjectRequested = { _, completion in
+            DispatchQueue.global(qos: .userInitiated).async {
+                completion(.failure(ApCoreError(category: .command, message: "AeroSpace unavailable")))
+            }
+        }
+
+        coordinator.handleRecoverProjectFromShortcut(capturedFocus: focus)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            completionExpectation.fulfill()
+        }
+        wait(for: [completionExpectation], timeout: 3.0)
+
+        // Guard should be reset.
+        XCTAssertFalse(coordinator.isRecoveringProject)
+
+        // All callbacks should have run on the main thread.
+        XCTAssertTrue(controlsEnabledOnMainThread.allSatisfy { $0 }, "onSetControlsEnabled must run on main thread")
+        XCTAssertTrue(statusOnMainThread.allSatisfy { $0 }, "onSetStatus must run on main thread")
+        XCTAssertTrue(operationFailedOnMainThread, "onOperationFailed must run on main thread")
+        XCTAssertTrue(searchFieldFocusOnMainThread, "onRestoreSearchFieldFocus must run on main thread")
+    }
+
     // MARK: - resetGuards
 
     func testResetGuardsClearsAllGuardFlags() {

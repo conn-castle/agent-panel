@@ -205,6 +205,7 @@ final class SwitcherOperationCoordinator {
                     refreshedFocus = self.projectManager.captureCurrentFocus()
                 }
 
+                let capturedFocus = refreshedFocus
                 await MainActor.run {
                     switch closeResult {
                     case .success(let result):
@@ -222,10 +223,10 @@ final class SwitcherOperationCoordinator {
                         )
 
                         // Update captured focus so dismiss doesn't restore stale state.
-                        if let refreshedFocus,
+                        if let capturedFocus,
                            let selfBundleId = Bundle.main.bundleIdentifier,
-                           refreshedFocus.appBundleId != selfBundleId {
-                            self.onUpdateCapturedFocus?(refreshedFocus)
+                           capturedFocus.appBundleId != selfBundleId {
+                            self.onUpdateCapturedFocus?(capturedFocus)
                         } else {
                             self.onUpdateCapturedFocus?(nil)
                         }
