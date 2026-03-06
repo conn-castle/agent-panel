@@ -94,10 +94,11 @@ final class RecoveryOperationCoordinator {
             guard let self else { return }
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
+            let callback = self.onWorkspaceRecovered
             Task {
                 let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
-                await MainActor.run { [weak self] in
-                    self?.onWorkspaceRecovered?(result, focus)
+                await MainActor.run {
+                    callback?(result, focus)
                 }
             }
         }
@@ -153,15 +154,19 @@ final class RecoveryOperationCoordinator {
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
 
-            Task { [weak self] in
-                let result = await manager.recoverAllWindows { [weak self] current, total in
+            // Snapshot callbacks on this queue before entering the @Sendable Task
+            // to avoid capturing non-Sendable self across the isolation boundary.
+            let progressCallback = self.onAllWindowsProgress
+            let completionCallback = self.onAllWindowsCompleted
+            Task {
+                let result = await manager.recoverAllWindows { current, total in
                     DispatchQueue.main.async {
-                        self?.onAllWindowsProgress?(current, total)
+                        progressCallback?(current, total)
                     }
                 }
 
-                await MainActor.run { [weak self] in
-                    self?.onAllWindowsCompleted?(result)
+                await MainActor.run {
+                    completionCallback?(result)
                 }
             }
         }
