@@ -172,16 +172,11 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                // Bridge async closeProject to sync CLI using semaphore with timeout
-                let semaphore = DispatchSemaphore(value: 0)
-                var result: Result<ProjectCloseSuccess, ProjectError>?
-                Task {
-                    result = await manager.closeProject(projectId: projectId)
-                    semaphore.signal()
-                }
-                let timeoutResult = semaphore.wait(timeout: .now() + 30)
-                if timeoutResult == .timedOut {
-                    output.stderr("error: Close project timed out after 30 seconds")
+                guard let result: Result<ProjectCloseSuccess, ProjectError> = runBlocking(
+                    timeout: 30,
+                    timeoutMessage: "Close project timed out after 30 seconds",
+                    operation: { await manager.closeProject(projectId: projectId) }
+                ) else {
                     return ApExitCode.failure.rawValue
                 }
 
@@ -195,9 +190,6 @@ public struct ApCLI {
                     }
                     output.stdout("Closed project: \(projectId)")
                     return ApExitCode.ok.rawValue
-                case .none:
-                    output.stderr("error: Unexpected nil result")
-                    return ApExitCode.failure.rawValue
                 }
             }
 
@@ -208,16 +200,11 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                // Bridge async exitToNonProjectWindow to sync CLI using semaphore with timeout
-                let semaphore = DispatchSemaphore(value: 0)
-                var result: Result<Void, ProjectError>?
-                Task {
-                    result = await manager.exitToNonProjectWindow()
-                    semaphore.signal()
-                }
-                let timeoutResult = semaphore.wait(timeout: .now() + 30)
-                if timeoutResult == .timedOut {
-                    output.stderr("error: Return to non-project space timed out after 30 seconds")
+                guard let result: Result<Void, ProjectError> = runBlocking(
+                    timeout: 30,
+                    timeoutMessage: "Return to non-project space timed out after 30 seconds",
+                    operation: { await manager.exitToNonProjectWindow() }
+                ) else {
                     return ApExitCode.failure.rawValue
                 }
 
@@ -228,12 +215,31 @@ public struct ApCLI {
                 case .success:
                     output.stdout("Returned to non-project space")
                     return ApExitCode.ok.rawValue
-                case .none:
-                    output.stderr("error: Unexpected nil result")
-                    return ApExitCode.failure.rawValue
                 }
             }
         }
+    }
+
+    /// Bridges an async operation to synchronous CLI execution with a timeout.
+    /// Returns `nil` and prints an error if the operation times out. Cancels
+    /// the in-flight task on timeout to prevent stale state mutations.
+    private func runBlocking<T>(
+        timeout seconds: TimeInterval,
+        timeoutMessage: String,
+        operation: @escaping () async -> T
+    ) -> T? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: T?
+        let task = Task {
+            result = await operation()
+            semaphore.signal()
+        }
+        if semaphore.wait(timeout: .now() + seconds) == .timedOut {
+            task.cancel()
+            output.stderr("error: \(timeoutMessage)")
+            return nil
+        }
+        return result
     }
 }
 

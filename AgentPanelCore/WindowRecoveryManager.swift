@@ -345,7 +345,7 @@ public final class WindowRecoveryManager {
         case .success(let result):
             windows = result
         case .failure(let error):
-            logEvent("recover_workspace.list_failed", level: .error, message: error.message)
+            logEvent("recover_workspace.list_failed", level: .error, message: error.message, context: ["workspace": workspace])
             return .failure(error)
         }
 
