@@ -94,12 +94,10 @@ final class RecoveryOperationCoordinator {
             guard let self else { return }
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
-            // Snapshot callback ref to avoid capturing non-Sendable self across isolation boundary.
-            nonisolated(unsafe) let callback = self.onWorkspaceRecovered
             Task {
                 let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
-                DispatchQueue.main.async {
-                    callback?(result, focus)
+                await MainActor.run { [weak self] in
+                    self?.onWorkspaceRecovered?(result, focus)
                 }
             }
         }
@@ -133,7 +131,7 @@ final class RecoveryOperationCoordinator {
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
             Task {
                 let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
-                DispatchQueue.main.async {
+                await MainActor.run {
                     completion(result)
                 }
             }
@@ -155,18 +153,15 @@ final class RecoveryOperationCoordinator {
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
 
-            // Snapshot callback refs to avoid capturing non-Sendable self across isolation boundary.
-            nonisolated(unsafe) let progressCallback = self.onAllWindowsProgress
-            nonisolated(unsafe) let completionCallback = self.onAllWindowsCompleted
-            Task {
-                let result = await manager.recoverAllWindows { current, total in
+            Task { [weak self] in
+                let result = await manager.recoverAllWindows { [weak self] current, total in
                     DispatchQueue.main.async {
-                        progressCallback?(current, total)
+                        self?.onAllWindowsProgress?(current, total)
                     }
                 }
 
-                await MainActor.run {
-                    completionCallback?(result)
+                await MainActor.run { [weak self] in
+                    self?.onAllWindowsCompleted?(result)
                 }
             }
         }

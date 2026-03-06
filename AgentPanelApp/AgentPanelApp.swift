@@ -752,7 +752,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            self.recoveryOperationCoordinator?.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
+            guard let recoveryCoord = self.recoveryOperationCoordinator else {
+                let error = ApCoreError(category: .system, message: "Recovery coordinator unavailable")
+                self.logAppEvent(event: "switcher.recover_project.failed", level: .error, message: error.message)
+                completion(.failure(error))
+                return
+            }
+
+            recoveryCoord.recoverWorkspaceWindows(focus: focus, screenFrame: screenFrame) { [weak self] result in
                 guard let self else {
                     completion(result)
                     return

@@ -140,12 +140,12 @@ final class SwitcherOperationRecoveryGuardTests: XCTestCase {
 
         var searchFieldFocusRestored = false
         var searchFieldFocusOnMainThread = false
+        let completionExpectation = expectation(description: "recovery completes")
         coordinator.onRestoreSearchFieldFocus = {
             searchFieldFocusRestored = true
             searchFieldFocusOnMainThread = Thread.isMainThread
+            completionExpectation.fulfill()
         }
-
-        let completionExpectation = expectation(description: "recovery completes")
 
         coordinator.onRecoverProjectRequested = { _, completion in
             // Simulate async completion from a background queue.
@@ -156,11 +156,7 @@ final class SwitcherOperationRecoveryGuardTests: XCTestCase {
 
         coordinator.handleRecoverProjectFromShortcut(capturedFocus: focus)
 
-        // Wait for the DispatchQueue.main.async completion delivery.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            completionExpectation.fulfill()
-        }
-        wait(for: [completionExpectation], timeout: 3.0)
+        wait(for: [completionExpectation], timeout: 5.0)
 
         // Guard should be reset.
         XCTAssertFalse(coordinator.isRecoveringProject)
@@ -204,11 +200,11 @@ final class SwitcherOperationRecoveryGuardTests: XCTestCase {
         }
 
         var searchFieldFocusOnMainThread = false
+        let completionExpectation = expectation(description: "recovery fails")
         coordinator.onRestoreSearchFieldFocus = {
             searchFieldFocusOnMainThread = Thread.isMainThread
+            completionExpectation.fulfill()
         }
-
-        let completionExpectation = expectation(description: "recovery fails")
 
         coordinator.onRecoverProjectRequested = { _, completion in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -218,10 +214,7 @@ final class SwitcherOperationRecoveryGuardTests: XCTestCase {
 
         coordinator.handleRecoverProjectFromShortcut(capturedFocus: focus)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            completionExpectation.fulfill()
-        }
-        wait(for: [completionExpectation], timeout: 3.0)
+        wait(for: [completionExpectation], timeout: 5.0)
 
         // Guard should be reset.
         XCTAssertFalse(coordinator.isRecoveringProject)
