@@ -4,7 +4,7 @@ extension ProjectManager {
     /// Captures current window positions for a project before closing or exiting.
     ///
     /// Non-fatal: failures are logged but do not block the caller.
-    func captureWindowPositions(projectId: String) {
+    func captureWindowPositions(projectId: String) async {
         guard let positioner = windowPositioner,
               let detector = screenModeDetector,
               let store = windowPositionStore,
@@ -41,9 +41,9 @@ extension ProjectManager {
                 chromeFrame = frame
                 break captureLoop
             case .failure(let error):
-                let isTransient = error.message.hasPrefix("No window found with token")
+                let isTransient = error.isWindowTokenNotFound
                 if isTransient && captureAttempt < maxCaptureRetries {
-                    Thread.sleep(forTimeInterval: captureRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(captureRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback

@@ -1183,9 +1183,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
-            let result = manager.recoverWorkspaceWindows(workspace: workspace)
-            DispatchQueue.main.async {
-                completion(result)
+            Task {
+                let result = await manager.recoverWorkspaceWindows(workspace: workspace)
+                DispatchQueue.main.async {
+                    completion(result)
+                }
             }
         }
     }
@@ -1215,39 +1217,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let layoutConfig = self.projectManager.currentLayoutConfig
             let manager = self.makeWindowRecoveryManager(screenFrame: screenFrame, layoutConfig: layoutConfig)
 
-            let result = manager.recoverAllWindows { current, total in
-                DispatchQueue.main.async {
-                    self.recoveryController?.updateProgress(current: current, total: total)
-                }
-            }
-
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let recovery):
-                    let message: String
-                    if recovery.errors.isEmpty {
-                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
-                    } else {
-                        message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
+            Task {
+                let result = await manager.recoverAllWindows { current, total in
+                    DispatchQueue.main.async {
+                        self.recoveryController?.updateProgress(current: current, total: total)
                     }
-                    self.recoveryController?.showCompletion(message: message)
-                    self.logAppEvent(
-                        event: "recover_all_windows.completed",
-                        context: [
-                            "processed": "\(recovery.windowsProcessed)",
-                            "recovered": "\(recovery.windowsRecovered)",
-                            "errors": "\(recovery.errors.count)"
-                        ]
-                    )
-                case .failure(let error):
-                    self.recoveryController?.showCompletion(
-                        message: "Recovery failed: \(error.message)"
-                    )
-                    self.logAppEvent(
-                        event: "recover_all_windows.failed",
-                        level: .error,
-                        message: error.message
-                    )
+                }
+
+                await MainActor.run {
+                    switch result {
+                    case .success(let recovery):
+                        let message: String
+                        if recovery.errors.isEmpty {
+                            message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows."
+                        } else {
+                            message = "Recovered \(recovery.windowsRecovered) of \(recovery.windowsProcessed) windows (\(recovery.errors.count) errors)."
+                        }
+                        self.recoveryController?.showCompletion(message: message)
+                        self.logAppEvent(
+                            event: "recover_all_windows.completed",
+                            context: [
+                                "processed": "\(recovery.windowsProcessed)",
+                                "recovered": "\(recovery.windowsRecovered)",
+                                "errors": "\(recovery.errors.count)"
+                            ]
+                        )
+                    case .failure(let error):
+                        self.recoveryController?.showCompletion(
+                            message: "Recovery failed: \(error.message)"
+                        )
+                        self.logAppEvent(
+                            event: "recover_all_windows.failed",
+                            level: .error,
+                            message: error.message
+                        )
+                    }
                 }
             }
         }

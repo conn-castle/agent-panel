@@ -8,7 +8,7 @@ extension ProjectManager {
     /// Non-fatal: returns a warning string on failure, nil on success.
     /// Requires windowPositioner, screenModeDetector, and windowPositionStore to all be set.
     /// If only some positioning dependencies are wired, returns a diagnostic warning.
-    func positionWindows(projectId: String) -> String? {
+    func positionWindows(projectId: String) async -> String? {
         // All three positioning deps must be present. If only some are wired, surface a warning.
         let hasPositioner = windowPositioner != nil
         let hasDetector = screenModeDetector != nil
@@ -42,14 +42,11 @@ extension ProjectManager {
         let maxFrameRetries = 10
         let frameRetryInterval = windowPollInterval // ~0.1s default, injectable for tests
         let minimumZeroWindowProbeFailuresForFastFail = 2
-        // Preserve the full token retry budget; evaluate zero-window fast-fail at retry exhaustion.
-        let minimumZeroWindowRetryAttemptsForFastFail = maxFrameRetries
-        let minimumZeroWindowProbeElapsedForFastFail =
-            frameRetryInterval * Double(max(1, minimumZeroWindowRetryAttemptsForFastFail - 2))
+        // Require multiple consecutive zero-window confirmations plus roughly half
+        // the token retry budget so slower VS Code startups can still recover.
+        let minimumZeroWindowRetryAttemptsForFastFail = 6
         var frameAttempt = 0
         var consecutiveZeroWindowProbeFailures = 0
-        var firstZeroWindowProbeFailureAt: Date?
-        var lastZeroWindowProbeMessage: String?
 
         ideFrameLoop: while true {
             frameAttempt += 1
@@ -65,55 +62,44 @@ extension ProjectManager {
             case .failure(let error):
                 // Only retry transient "window not found" errors (title not yet updated).
                 // Permanent errors (AX permission denied, app not running, etc.) fail immediately.
-                let isTransient = error.message.hasPrefix("No window found with token")
+                let isTransient = error.isWindowTokenNotFound
                 if isTransient && frameAttempt < maxFrameRetries {
                     // Probe for a permanent zero-window condition, but require multiple
-                    // confirmations plus minimum retry/time confidence before fast-failing.
+                    // confirmations plus minimum retry confidence before fast-failing.
                     let shouldProbeForZeroWindows = frameAttempt == 1 || consecutiveZeroWindowProbeFailures > 0
                     if shouldProbeForZeroWindows {
                         switch positioner.getFallbackWindowFrame(bundleId: ApVSCodeLauncher.bundleId) {
                         case .success:
                             consecutiveZeroWindowProbeFailures = 0
-                            firstZeroWindowProbeFailureAt = nil
-                            lastZeroWindowProbeMessage = nil
                             // Probe success confirms windows exist. Continue token retries.
                             // Do not use the probe frame here: this path is only for fast-failing
                             // the permanent zero-window condition.
                             break
                         case .failure(let probeError):
-                            if isZeroWindowProbeFailure(probeError.message) {
+                            if probeError.isWindowInventoryEmpty {
                                 consecutiveZeroWindowProbeFailures += 1
-                                if firstZeroWindowProbeFailureAt == nil {
-                                    firstZeroWindowProbeFailureAt = Date()
+                                if consecutiveZeroWindowProbeFailures >= minimumZeroWindowProbeFailuresForFastFail,
+                                   frameAttempt >= minimumZeroWindowRetryAttemptsForFastFail {
+                                    logEvent("position.ide_no_windows", level: .warn,
+                                             message: probeError.message,
+                                             context: [
+                                                "project_id": projectId,
+                                                "attempts": "\(frameAttempt)",
+                                                "probe_failures": "\(consecutiveZeroWindowProbeFailures)"
+                                             ])
+                                    return "Window positioning skipped: \(probeError.message)"
                                 }
-                                lastZeroWindowProbeMessage = probeError.message
                             } else {
                                 consecutiveZeroWindowProbeFailures = 0
-                                firstZeroWindowProbeFailureAt = nil
-                                lastZeroWindowProbeMessage = nil
                             }
                             // Ambiguous or other error — continue retry loop (token may resolve)
                         }
                     }
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback to focused/only window
                 if isTransient {
-                    let zeroWindowProbeElapsed = firstZeroWindowProbeFailureAt.map {
-                        Date().timeIntervalSince($0)
-                    } ?? 0
-                    let hasMinimumAttemptConfidence = frameAttempt >= minimumZeroWindowRetryAttemptsForFastFail
-                    let hasMinimumElapsedConfidence = zeroWindowProbeElapsed >= minimumZeroWindowProbeElapsedForFastFail
-                    if consecutiveZeroWindowProbeFailures >= minimumZeroWindowProbeFailuresForFastFail,
-                       hasMinimumAttemptConfidence,
-                       hasMinimumElapsedConfidence,
-                       let zeroWindowMessage = lastZeroWindowProbeMessage {
-                        logEvent("position.ide_no_windows", level: .warn,
-                                 message: zeroWindowMessage,
-                                 context: ["project_id": projectId])
-                        return "Window positioning skipped: \(zeroWindowMessage)"
-                    }
                     switch positioner.getFallbackWindowFrame(bundleId: ApVSCodeLauncher.bundleId) {
                     case .success(let fallbackFrame):
                         logEvent("position.ide_fallback_used", level: .warn, context: [
@@ -244,9 +230,9 @@ extension ProjectManager {
                 }
                 break ideSetLoop
             case .failure(let error):
-                let isTransient = error.message.hasPrefix("No window found with token")
+                let isTransient = error.isWindowTokenNotFound
                 if isTransient && ideSetAttempt < maxIDESetRetries {
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback
@@ -310,9 +296,9 @@ extension ProjectManager {
                 }
                 break chromeSetLoop
             case .failure(let error):
-                let isTransient = error.message.hasPrefix("No window found with token")
+                let isTransient = error.isWindowTokenNotFound
                 if isTransient && chromeSetAttempt < maxChromeSetRetries {
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback
@@ -348,17 +334,5 @@ extension ProjectManager {
         }
 
         return warnings.isEmpty ? nil : warnings.joined(separator: "; ")
-    }
-
-    /// Returns true when a fallback probe error indicates the app has no windows.
-    private func isZeroWindowProbeFailure(_ message: String) -> Bool {
-        let normalized = message.lowercased()
-        if normalized.contains("no windows") || normalized.contains("zero windows") {
-            return true
-        }
-        return normalized.range(
-            of: #"\b(?:enumerated|found|matched|listed)?\s*0\s+windows?\b"#,
-            options: .regularExpression
-        ) != nil
     }
 }

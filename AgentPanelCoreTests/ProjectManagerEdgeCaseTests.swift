@@ -306,7 +306,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - fallbackToNonProjectWorkspace: focus failure on candidate
 
-    func testFallbackToNonProjectWorkspaceFocusFailsReturnsNoPreviousWindow() {
+    func testFallbackToNonProjectWorkspaceFocusFailsReturnsNoPreviousWindow() async {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
@@ -325,7 +325,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         ]))
 
         // exit should fall through all fallback paths and fail
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result { XCTFail("Expected noPreviousWindow failure") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .noPreviousWindow)
@@ -334,7 +334,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - fallbackToNonProjectWorkspace: all non-project workspaces empty
 
-    func testFallbackToNonProjectFailsWhenAllNonProjectWorkspacesAreEmpty() {
+    func testFallbackToNonProjectFailsWhenAllNonProjectWorkspacesAreEmpty() async {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
@@ -350,7 +350,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         ]))
 
         // exit should fail because no non-project workspace contains a focusable window
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result { XCTFail("Expected noPreviousWindow failure for empty non-project workspaces") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .noPreviousWindow)
@@ -459,7 +459,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - captureWindowPositions: screen mode failure falls back to .wide
 
-    func testCaptureWindowPositionsFallsBackToWideOnScreenModeFailure() {
+    func testCaptureWindowPositionsFallsBackToWideOnScreenModeFailure() async {
         let projectId = "proj"
         let positioner = EdgeRecordingPositioner()
         let store = EdgeRecordingPositionStore()
@@ -484,7 +484,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             projects: [ProjectConfig(id: projectId, name: "Proj", path: "/tmp/proj", color: "blue", useAgentLayer: false)]
         ))
 
-        _ = manager.closeProject(projectId: projectId)
+        _ = await manager.closeProject(projectId: projectId)
 
         XCTAssertEqual(store.saveCalls.count, 1)
         XCTAssertEqual(store.saveCalls[0].mode, .wide, "Should fall back to .wide on detection failure")
@@ -492,7 +492,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - captureWindowPositions: save failure is non-fatal
 
-    func testCaptureWindowPositionsSaveFailureDoesNotBlockClose() {
+    func testCaptureWindowPositionsSaveFailureDoesNotBlockClose() async {
         let projectId = "proj"
         let positioner = EdgeRecordingPositioner()
         let store = EdgeRecordingPositionStore()
@@ -510,7 +510,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             projects: [ProjectConfig(id: projectId, name: "Proj", path: "/tmp/proj", color: "blue", useAgentLayer: false)]
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Close should succeed despite save failure: \(error)") }
     }
 
@@ -592,7 +592,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - closeProject: close workspace fails
 
-    func testCloseProjectFailsWhenCloseWorkspaceFails() {
+    func testCloseProjectFailsWhenCloseWorkspaceFails() async {
         let aero = EdgeAeroSpaceStub()
         aero.closeWorkspaceResult = .failure(ApCoreError(message: "ws close failed"))
 
@@ -601,7 +601,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
             ProjectConfig(id: "test", name: "Test", path: "/test", color: "blue", useAgentLayer: false)
         ]))
 
-        let result = manager.closeProject(projectId: "test")
+        let result = await manager.closeProject(projectId: "test")
         if case .success = result { XCTFail("Expected failure from workspace close") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .aeroSpaceError(detail: "ws close failed"))
@@ -610,13 +610,13 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - closeProject: project not found
 
-    func testCloseProjectFailsWhenProjectNotFound() {
+    func testCloseProjectFailsWhenProjectNotFound() async {
         let manager = makeManager(aerospace: EdgeAeroSpaceStub())
         manager.loadTestConfig(Config(projects: [
             ProjectConfig(id: "test", name: "Test", path: "/test", color: "blue", useAgentLayer: false)
         ]))
 
-        let result = manager.closeProject(projectId: "nonexistent")
+        let result = await manager.closeProject(projectId: "nonexistent")
         if case .success = result { XCTFail("Expected failure for unknown project") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .projectNotFound(projectId: "nonexistent"))
@@ -625,14 +625,14 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - exitToNonProjectWindow: workspaceState failure
 
-    func testExitFailsWhenWorkspaceStateQueryFails() {
+    func testExitFailsWhenWorkspaceStateQueryFails() async {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .failure(ApCoreError(message: "aero down"))
 
         let manager = makeManager(aerospace: aero)
         manager.loadTestConfig(Config(projects: []))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result { XCTFail("Expected failure") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .aeroSpaceError(detail: "aero down"))
@@ -641,7 +641,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
 
     // MARK: - exitToNonProjectWindow: no active project
 
-    func testExitFailsWhenNoProjectFocused() {
+    func testExitFailsWhenNoProjectFocused() async {
         let aero = EdgeAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "main", isFocused: true)
@@ -650,7 +650,7 @@ final class ProjectManagerEdgeCaseTests: XCTestCase {
         let manager = makeManager(aerospace: aero)
         manager.loadTestConfig(Config(projects: []))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result { XCTFail("Expected noActiveProject") }
         if case .failure(let error) = result {
             XCTAssertEqual(error, .noActiveProject)

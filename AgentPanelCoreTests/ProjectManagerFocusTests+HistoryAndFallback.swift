@@ -35,7 +35,7 @@ extension ProjectManagerFocusTests {
         }
 
         // Push should still be on the stack — verify by closing the project
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Focus should have been restored from stack despite activation failure")
         case .failure(let error):
@@ -66,7 +66,7 @@ extension ProjectManagerFocusTests {
         }
 
         // Close should restore window 99 (pushed by the real selectProject path)
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Should restore window 99 pushed by selectProject")
         case .failure(let error):
@@ -76,7 +76,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Move window updates focus history
 
-    func testMoveWindowToProjectInvalidatesFocusHistory() {
+    func testMoveWindowToProjectInvalidatesFocusHistory() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
@@ -93,7 +93,7 @@ extension ProjectManagerFocusTests {
         _ = manager.moveWindowToProject(windowId: 99, projectId: "test")
 
         // Exit should no longer restore the moved window.
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result {
             XCTFail("Expected noPreviousWindow after history invalidation")
         }
@@ -102,7 +102,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testMoveWindowFromProjectUpdatesMostRecentNonProjectFocus() {
+    func testMoveWindowFromProjectUpdatesMostRecentNonProjectFocus() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [77]
         aero.workspacesWithFocusResult = .success([
@@ -115,7 +115,7 @@ extension ProjectManagerFocusTests {
 
         _ = manager.moveWindowFromProject(windowId: 77)
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .failure(let error) = result {
             XCTFail("Expected success but got: \(error)")
         }
@@ -141,7 +141,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Workspace fallback when focus stack exhausted
 
-    func testCloseProjectFallsBackToNonProjectWorkspaceWhenStackEmpty() {
+    func testCloseProjectFallsBackToNonProjectWorkspaceWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         let manager = makeFocusManager(aerospace: aero)
         loadTestConfig(manager: manager)
@@ -161,7 +161,7 @@ extension ProjectManagerFocusTests {
         aero.windowsByWorkspace["1"] = [fallbackWindow]
         aero.focusWindowSuccessIds = [fallbackWindow.windowId]
 
-        let result = manager.closeProject(projectId: "test")
+        let result = await manager.closeProject(projectId: "test")
 
         if case .failure = result { XCTFail("Expected close to succeed") }
         XCTAssertEqual(aero.focusedWorkspaces.last, "1", "Should fall back to first non-project workspace")
@@ -171,7 +171,7 @@ extension ProjectManagerFocusTests {
         )
     }
 
-    func testCloseProjectLogsExhaustedWhenOnlyProjectWorkspaces() {
+    func testCloseProjectLogsExhaustedWhenOnlyProjectWorkspaces() async {
         let aero = FocusAeroSpaceStub()
         let manager = makeFocusManager(aerospace: aero)
         loadTestConfig(manager: manager)
@@ -182,7 +182,7 @@ extension ProjectManagerFocusTests {
             ApWorkspaceSummary(workspace: "ap-other", isFocused: false)
         ])
 
-        let result = manager.closeProject(projectId: "test")
+        let result = await manager.closeProject(projectId: "test")
 
         // Close still succeeds (focus restoration is non-fatal)
         if case .failure = result { XCTFail("Expected close to succeed") }
@@ -190,7 +190,7 @@ extension ProjectManagerFocusTests {
         XCTAssertTrue(aero.focusedWorkspaces.isEmpty, "Should not attempt to focus a project workspace as fallback")
     }
 
-    func testExitFallsBackToNonProjectWorkspaceWhenStackEmpty() {
+    func testExitFallsBackToNonProjectWorkspaceWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         let manager = makeFocusManager(aerospace: aero)
         loadTestConfig(manager: manager)
@@ -209,7 +209,7 @@ extension ProjectManagerFocusTests {
         aero.windowsByWorkspace["main"] = [fallbackWindow]
         aero.focusWindowSuccessIds = [fallbackWindow.windowId]
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
 
         if case .failure = result { XCTFail("Expected exit to succeed via workspace fallback") }
         XCTAssertEqual(aero.focusedWorkspaces.last, "main")
@@ -219,7 +219,7 @@ extension ProjectManagerFocusTests {
         )
     }
 
-    func testExitFailsWhenNoNonProjectWorkspace() {
+    func testExitFailsWhenNoNonProjectWorkspace() async {
         let aero = FocusAeroSpaceStub()
         let manager = makeFocusManager(aerospace: aero)
         loadTestConfig(manager: manager)
@@ -229,7 +229,7 @@ extension ProjectManagerFocusTests {
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
         ])
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
 
         if case .success = result { XCTFail("Expected exit to fail when no non-project workspace") }
         if case .failure(let error) = result {

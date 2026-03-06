@@ -92,6 +92,32 @@ final class ExecutableResolverTests: XCTestCase {
         XCTAssertEqual(paths[2], "/usr/bin")
         XCTAssertEqual(paths[3], "/bin")
     }
+    // MARK: - Login Shell Timeout Validation
+
+    func testIsValidLoginShellTimeoutAcceptsPositiveFiniteValues() {
+        XCTAssertTrue(ExecutableResolver.isValidLoginShellTimeout(0.001))
+        XCTAssertTrue(ExecutableResolver.isValidLoginShellTimeout(1.0))
+        XCTAssertTrue(ExecutableResolver.isValidLoginShellTimeout(5.0))
+        XCTAssertTrue(ExecutableResolver.isValidLoginShellTimeout(100.0))
+    }
+
+    func testIsValidLoginShellTimeoutRejectsZero() {
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(0))
+    }
+
+    func testIsValidLoginShellTimeoutRejectsNegativeValues() {
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(-1.0))
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(-0.001))
+    }
+
+    func testIsValidLoginShellTimeoutRejectsInfinity() {
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(.infinity))
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(-.infinity))
+    }
+
+    func testIsValidLoginShellTimeoutRejectsNaN() {
+        XCTAssertFalse(ExecutableResolver.isValidLoginShellTimeout(.nan))
+    }
 }
 
 // MARK: - Test Doubles

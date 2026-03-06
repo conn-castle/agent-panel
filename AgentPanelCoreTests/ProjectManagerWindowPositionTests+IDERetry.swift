@@ -16,7 +16,11 @@ extension ProjectManagerWindowPositionTests {
         ]
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All 10 retries fail with transient token-miss
         positioner.getFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 10)
         // Fallback succeeds
@@ -63,7 +67,11 @@ extension ProjectManagerWindowPositionTests {
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.getFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 10)
         // Fallback also fails
         positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
@@ -147,7 +155,11 @@ extension ProjectManagerWindowPositionTests {
         ]
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // Persistent transient token misses with repeated zero-window probes.
         // Fast-fail should require additional confidence before short-circuiting.
         positioner.getFrameSequences[ideKey] = [
@@ -164,7 +176,11 @@ extension ProjectManagerWindowPositionTests {
         ]
         // Probe reports zero windows.
         positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
-            .failure(ApCoreError(category: .window, message: "No windows found for com.microsoft.VSCode (count=0)"))
+            .failure(ApCoreError(
+                category: .window,
+                message: "Window inventory is empty for com.microsoft.VSCode",
+                reason: .windowInventoryEmpty
+            ))
 
         let manager = makeManager(
             aerospace: aerospace,
@@ -186,24 +202,83 @@ extension ProjectManagerWindowPositionTests {
             XCTFail("Expected success: \(error)")
         case .success(let success):
             XCTAssertNotNil(success.layoutWarning, "Should have layout warning for zero windows")
-            XCTAssertTrue(success.layoutWarning?.contains("No windows found") == true)
+            XCTAssertTrue(success.layoutWarning?.contains("Window inventory is empty") == true)
         }
 
-        // Fast-fail should trigger only after retry confidence is met.
+        // Fast-fail should trigger after multiple confirmations, without waiting
+        // for the entire token retry budget to drain.
         let ideGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
         XCTAssertEqual(
             ideGetCalls.count,
-            10,
-            "Should preserve the full token retry budget before confirming permanent zero-window fast-fail"
+            6,
+            "Persistent zero-window probes should fast-fail before exhausting the full token retry budget"
         )
 
-        // Probe was called on each retry before the final exhausted attempt.
-        // The exhausted attempt should use zero-window fast-fail (not fallback frame resolution).
-        XCTAssertEqual(positioner.getFallbackFrameCalls.count, ideGetCalls.count - 1)
+        // Probe was called on each failed attempt until zero-window confidence was met.
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, ideGetCalls.count)
         XCTAssertTrue(positioner.getFallbackFrameCalls.allSatisfy { $0 == "com.microsoft.VSCode" })
 
         // No setWindowFrames since IDE frame was never resolved
         XCTAssertTrue(positioner.setFrameCalls.isEmpty)
+    }
+
+    func testConfirmedZeroWindowsStillAllowLateTokenRecoveryAtFastFailThreshold() async {
+        let projectId = "zw-late-1"
+        let positioner = RecordingWindowPositioner()
+        let store = RecordingPositionStore()
+        let detector = StubScreenModeDetector()
+        let aerospace = SimpleAeroSpaceStub(projectId: projectId)
+        aerospace.allWindows = [
+            ApWindow(windowId: 42, appBundleId: "com.other", workspace: "main", windowTitle: "Other")
+        ]
+
+        let ideKey = "com.microsoft.VSCode|\(projectId)"
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
+        positioner.getFrameSequences[ideKey] = [
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .failure(tokenMiss),
+            .success(defaultIdeFrame)
+        ]
+        positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
+            .failure(ApCoreError(
+                category: .window,
+                message: "Window inventory is empty for com.microsoft.VSCode",
+                reason: .windowInventoryEmpty
+            ))
+
+        let manager = makeManager(
+            aerospace: aerospace,
+            windowPositioner: positioner,
+            windowPositionStore: store,
+            screenModeDetector: detector,
+            windowPollInterval: 0.001
+        )
+        manager.loadTestConfig(Config(
+            projects: [ProjectConfig(id: projectId, name: "Late", path: "/tmp/late", color: "orange", useAgentLayer: false)],
+            chrome: ChromeConfig()
+        ))
+
+        let preFocus = CapturedFocus(windowId: 1, appBundleId: "other", workspace: "main")
+        let result = await manager.selectProject(projectId: projectId, preCapturedFocus: preFocus)
+
+        switch result {
+        case .failure(let error):
+            XCTFail("Expected success: \(error)")
+        case .success(let success):
+            XCTAssertNil(success.layoutWarning, "Late token recovery should still allow positioning to proceed")
+        }
+
+        let ideGetCalls = positioner.getFrameCalls.filter { $0.bundleId == "com.microsoft.VSCode" }
+        XCTAssertEqual(ideGetCalls.count, 6, "Token retries should continue through the late recovery window")
+        XCTAssertEqual(positioner.getFallbackFrameCalls.count, 5, "Zero-window probes should not force an early fast-fail before late recovery")
+        XCTAssertEqual(positioner.setFrameCalls.count, 2, "Positioning should continue after IDE recovery")
     }
 
     func testTransientEarlyZeroWindowProbesDoNotFastFailWhenTokenRetryRecovers() async {
@@ -217,7 +292,11 @@ extension ProjectManagerWindowPositionTests {
         ]
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // Two early token misses occur before the title token settles, then recovery succeeds.
         positioner.getFrameSequences[ideKey] = [
             .failure(tokenMiss),
@@ -226,7 +305,11 @@ extension ProjectManagerWindowPositionTests {
         ]
         // Early zero-window probe failures are transient/noisy and should not short-circuit retries.
         positioner.getFallbackFrameResults["com.microsoft.VSCode"] =
-            .failure(ApCoreError(category: .window, message: "No windows found for com.microsoft.VSCode (count=0)"))
+            .failure(ApCoreError(
+                category: .window,
+                message: "Window inventory is empty for com.microsoft.VSCode",
+                reason: .windowInventoryEmpty
+            ))
 
         let manager = makeManager(
             aerospace: aerospace,
@@ -276,7 +359,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // Fail twice, then succeed.
         positioner.setFrameSequences[ideKey] = [
             .failure(tokenMiss),
@@ -324,7 +411,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         // All retries fail.
         positioner.setFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 5)
         positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
@@ -371,7 +462,11 @@ extension ProjectManagerWindowPositionTests {
         positioner.getFrameResults["com.microsoft.VSCode|\(projectId)"] = .success(defaultIdeFrame)
 
         let ideKey = "com.microsoft.VSCode|\(projectId)"
-        let tokenMiss = ApCoreError(category: .window, message: "No window found with token 'AP:\(projectId)'")
+        let tokenMiss = ApCoreError(
+            category: .window,
+            message: "VS Code title token is still propagating",
+            reason: .windowTokenNotFound
+        )
         positioner.setFrameSequences[ideKey] = Array(repeating: .failure(tokenMiss), count: 5)
         positioner.setFallbackFrameResults["com.microsoft.VSCode"] =
             .failure(ApCoreError(category: .window, message: "Ambiguous: 2 windows"))

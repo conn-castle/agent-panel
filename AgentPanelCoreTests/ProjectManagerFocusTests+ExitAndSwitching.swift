@@ -5,7 +5,7 @@ import XCTest
 extension ProjectManagerFocusTests {
     // MARK: - Exit fails when stack empty
 
-    func testExitToNonProjectFailsWhenStackEmpty() {
+    func testExitToNonProjectFailsWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -14,7 +14,7 @@ extension ProjectManagerFocusTests {
         let manager = makeFocusManager(aerospace: aero)
         loadTestConfig(manager: manager)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTFail("Expected noPreviousWindow failure")
         case .failure(let error):
@@ -24,7 +24,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Exit restores most recent non-project focus when stack is empty
 
-    func testExitToNonProjectUsesMostRecentNonProjectFocusWhenStackEmpty() {
+    func testExitToNonProjectUsesMostRecentNonProjectFocusWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -42,7 +42,7 @@ extension ProjectManagerFocusTests {
         XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 321)
         aero.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(321), "Should restore most recent non-project window")
         case .failure(let error):
@@ -50,7 +50,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectRestoresOlderThanRetryAgeCandidateWhenStillValid() {
+    func testExitToNonProjectRestoresOlderThanRetryAgeCandidateWhenStillValid() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -75,7 +75,7 @@ extension ProjectManagerFocusTests {
         )
         loadTestConfig(manager: manager)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
@@ -83,7 +83,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectSkipsAppMismatch() {
+    func testExitToNonProjectSkipsAppMismatch() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -96,7 +96,7 @@ extension ProjectManagerFocusTests {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .success = result {
             XCTFail("Expected noPreviousWindow due to app mismatch")
         }
@@ -130,7 +130,7 @@ extension ProjectManagerFocusTests {
         }
 
         // Stack should be empty — project workspace was filtered by real push path
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTFail("Expected noPreviousWindow (stack should be empty)")
         case .failure(let error):
@@ -169,7 +169,7 @@ extension ProjectManagerFocusTests {
         }
 
         // Exit from project B → should restore Z (window 99), not A (window 50)
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Should restore to Z (window 99)")
             XCTAssertFalse(aero.focusedWindowIds.contains(50), "Should not have tried to focus project A window")
@@ -180,7 +180,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Multiple non-project entries across entry/exit cycles
 
-    func testMultipleNonProjectEntriesThenReenter() {
+    func testMultipleNonProjectEntriesThenReenter() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99, 88]
         registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
@@ -192,20 +192,20 @@ extension ProjectManagerFocusTests {
         // Cycle 1: push Z, close (pop Z)
         let focusZ = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focusZ)
-        _ = manager.closeProject(projectId: "test")
+        _ = await manager.closeProject(projectId: "test")
         XCTAssertTrue(aero.focusedWindowIds.contains(99))
 
         // Cycle 2: push Y, close (pop Y)
         aero.focusedWindowIds = []
         let focusY = CapturedFocus(windowId: 88, appBundleId: "com.apple.Terminal", workspace: "main")
         manager.pushFocusForTest(focusY)
-        _ = manager.closeProject(projectId: "test")
+        _ = await manager.closeProject(projectId: "test")
         XCTAssertTrue(aero.focusedWindowIds.contains(88))
     }
 
     // MARK: - Close → reopen → exit (the key bug scenario)
 
-    func testCloseThenReopenThenExitStillWorks() {
+    func testCloseThenReopenThenExitStillWorks() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99, 88]
         registerWindow(aero: aero, windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari")
@@ -217,7 +217,7 @@ extension ProjectManagerFocusTests {
         // First cycle: push X, close (pop X)
         let focusX = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focusX)
-        _ = manager.closeProject(projectId: "test")
+        _ = await manager.closeProject(projectId: "test")
 
         // Second cycle: push Y, exit
         aero.focusedWindowIds = []
@@ -227,7 +227,7 @@ extension ProjectManagerFocusTests {
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
         ])
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(88))
         case .failure(let error):
@@ -253,7 +253,7 @@ extension ProjectManagerFocusTests {
         }
 
         // Exit should fail with noPreviousWindow because no focus was pushed
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTFail("Expected noPreviousWindow (no focus was pushed for nil preCapturedFocus)")
         case .failure(let error):
@@ -290,7 +290,7 @@ extension ProjectManagerFocusTests {
             XCTFail("Expected activation success with nil preCapturedFocus but got: \(error)")
         }
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .failure(let error):
             XCTFail("Expected exit to restore existing focus history, got: \(error)")
         case .success:

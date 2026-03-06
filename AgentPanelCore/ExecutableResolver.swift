@@ -25,6 +25,11 @@ struct ExecutableResolver {
     private let loginShellFallbackEnabled: Bool
     private let loginShellTimeoutSeconds: TimeInterval
 
+    /// Whether a login-shell timeout value is valid (finite and positive).
+    static func isValidLoginShellTimeout(_ timeout: TimeInterval) -> Bool {
+        timeout.isFinite && timeout > 0
+    }
+
     /// Creates an executable resolver.
     /// - Parameters:
     ///   - fileSystem: File system accessor for existence and executable checks.
@@ -40,7 +45,7 @@ struct ExecutableResolver {
         loginShellTimeoutSeconds: TimeInterval = 5
     ) {
         precondition(
-            loginShellTimeoutSeconds.isFinite && loginShellTimeoutSeconds > 0,
+            Self.isValidLoginShellTimeout(loginShellTimeoutSeconds),
             "loginShellTimeoutSeconds must be finite and positive, got \(loginShellTimeoutSeconds)"
         )
         self.fileSystem = fileSystem

@@ -49,6 +49,8 @@ public enum ApCoreErrorCategory: String, Sendable {
 public enum ApCoreErrorReason: String, Sendable {
     case circuitBreakerOpen
     case commandTimeout
+    case windowTokenNotFound
+    case windowInventoryEmpty
 }
 
 public struct ApCoreError: Error, Equatable, Sendable {
@@ -71,6 +73,14 @@ public struct ApCoreError: Error, Equatable, Sendable {
     /// Convenience classifier for command-timeout errors.
     /// Uses structured reason when present with legacy message fallback.
     public var isCommandTimeout: Bool { get }
+
+    /// Convenience classifier for transient window token-miss errors.
+    /// Uses structured reason when present with legacy message-prefix fallback.
+    public var isWindowTokenNotFound: Bool { get }
+
+    /// Convenience classifier for confirmed zero-window inventory errors.
+    /// Uses structured reason when present with legacy message-parsing fallback.
+    public var isWindowInventoryEmpty: Bool { get }
 
     /// Convenience init (defaults to .command category).
     init(message: String)
@@ -282,7 +292,7 @@ public final class ProjectManager {
     public func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
 
     /// Closes a project by ID and restores focus to non-project space.
-    public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
+    public func closeProject(projectId: String) async -> Result<ProjectCloseSuccess, ProjectError>
 
     /// Moves a window to the given project's workspace.
     public func moveWindowToProject(
@@ -294,7 +304,7 @@ public final class ProjectManager {
     public func moveWindowFromProject(windowId: Int) -> Result<Void, ProjectError>
 
     /// Exits to the last non-project window without closing the project.
-    public func exitToNonProjectWindow() -> Result<Void, ProjectError>
+    public func exitToNonProjectWindow() async -> Result<Void, ProjectError>
 }
 
 public struct ProjectWorkspaceState: Equatable, Sendable {
@@ -692,10 +702,11 @@ public final class WindowRecoveryManager {
     /// Recovers windows in a workspace. For project workspaces (`ap-<projectId>`),
     /// applies workspace-scoped layout positioning for IDE/Chrome first (only targeting
     /// apps present in the workspace), then generic shrink/center recovery for remaining windows.
-    public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError>
+    /// Returns `.failure` when the workspace cannot be focused or listed.
+    public func recoverWorkspaceWindows(workspace: String) async -> Result<RecoveryResult, ApCoreError>
 
     /// Recovers a single focused window in the given workspace.
-    /// Returns `.failure` when the workspace listing fails, the window is missing,
+    /// Returns `.failure` when the workspace cannot be focused or listed, the window is missing,
     /// or AX recovery cannot locate/recover the window.
     public func recoverCurrentWindow(windowId: Int, workspace: String) -> Result<RecoveryOutcome, ApCoreError>
 
@@ -705,7 +716,7 @@ public final class WindowRecoveryManager {
     /// (layout-aware in project workspaces).
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
-    ) -> Result<RecoveryResult, ApCoreError>
+    ) async -> Result<RecoveryResult, ApCoreError>
 }
 ```
 

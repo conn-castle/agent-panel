@@ -5,12 +5,12 @@ import XCTest
 extension WindowRecoveryManagerTests {
     // MARK: - recoverWorkspaceWindows Tests
 
-    func testRecoverWorkspace_emptyWorkspace_succeeds() {
+    func testRecoverWorkspace_emptyWorkspace_succeeds() async {
         let aerospace = StubAeroSpace()
         aerospace.windowsByWorkspace["ap-test"] = .success([])
         let manager = makeManager(aerospace: aerospace)
 
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -21,7 +21,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertTrue(recovery.errors.isEmpty)
     }
 
-    func testRecoverWorkspace_oversizedWindowRecovered() {
+    func testRecoverWorkspace_oversizedWindowRecovered() async {
         let aerospace = StubAeroSpace()
         let window = makeWindow(id: 1, title: "Big Window")
         aerospace.windowsByWorkspace["ap-test"] = .success([window])
@@ -31,7 +31,7 @@ extension WindowRecoveryManagerTests {
         positioner.recoverResults["Big Window"] = .success(.recovered)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -44,7 +44,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Big Window")
     }
 
-    func testRecoverWorkspace_normalWindowNotRecovered() {
+    func testRecoverWorkspace_normalWindowNotRecovered() async {
         let aerospace = StubAeroSpace()
         let window = makeWindow(id: 1, title: "Normal Window")
         aerospace.windowsByWorkspace["ap-test"] = .success([window])
@@ -53,7 +53,7 @@ extension WindowRecoveryManagerTests {
         positioner.defaultRecoverResult = .success(.unchanged)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -63,7 +63,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsRecovered, 0)
     }
 
-    func testRecoverWorkspace_axFailureRecordedAsError() {
+    func testRecoverWorkspace_axFailureRecordedAsError() async {
         let aerospace = StubAeroSpace()
         let window = makeWindow(id: 1, title: "Broken Window")
         aerospace.windowsByWorkspace["ap-test"] = .success([window])
@@ -72,7 +72,7 @@ extension WindowRecoveryManagerTests {
         positioner.recoverResults["Broken Window"] = .failure(ApCoreError(category: .window, message: "AX denied"))
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -84,20 +84,41 @@ extension WindowRecoveryManagerTests {
         XCTAssertTrue(recovery.errors[0].contains("AX denied"))
     }
 
-    func testRecoverWorkspace_restoresFocusAfterRecovery() {
+    func testRecoverWorkspace_restoresFocusAfterRecovery() async {
         let aerospace = StubAeroSpace()
-        let originalWindow = makeWindow(id: 42, title: "My Window")
+        let originalWindow = makeWindow(id: 42, workspace: "main", title: "My Window")
         aerospace.focusedWindowResult = .success(originalWindow)
-        let otherWindow = makeWindow(id: 99, title: "Other")
+        let otherWindow = makeWindow(id: 99, workspace: "ap-test", title: "Other")
         aerospace.windowsByWorkspace["ap-test"] = .success([otherWindow])
 
         let manager = makeManager(aerospace: aerospace)
-        _ = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        _ = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
-        XCTAssertEqual(aerospace.focusWindowCalls.last, 42)
+        XCTAssertEqual(
+            Array(aerospace.callTrace.suffix(2)),
+            [.focusWorkspace("main"), .focusWindow(42)]
+        )
     }
 
-    func testRecoverWorkspace_multipleWindows_allProcessed() {
+    func testRecoverWorkspace_focusesWorkspaceBeforeWindowFocus() async {
+        let aerospace = StubAeroSpace()
+        let window = makeWindow(id: 1, title: "Win1")
+        aerospace.windowsByWorkspace["ap-test"] = .success([window])
+
+        let positioner = StubWindowPositioner()
+        positioner.recoverResults["Win1"] = .success(.recovered)
+
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+        _ = await manager.recoverWorkspaceWindows(workspace: "ap-test")
+
+        // Workspace focus must happen to prevent cross-Space AeroSpace crashes.
+        XCTAssertEqual(
+            Array(aerospace.callTrace.prefix(2)),
+            [.focusWorkspace("ap-test"), .focusWindow(1)]
+        )
+    }
+
+    func testRecoverWorkspace_multipleWindows_allProcessed() async {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 1, title: "Win1")
         let w2 = makeWindow(id: 2, title: "Win2")
@@ -110,7 +131,7 @@ extension WindowRecoveryManagerTests {
         positioner.recoverResults["Win3"] = .success(.recovered)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -121,10 +142,10 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls.count, 3)
     }
 
-    func testRecoverWorkspace_unknownWorkspace_succeedsWithZeroProcessed() {
+    func testRecoverWorkspace_unknownWorkspace_succeedsWithZeroProcessed() async {
         let aerospace = StubAeroSpace()
         let manager = makeManager(aerospace: aerospace)
-        let result = manager.recoverWorkspaceWindows(workspace: "nonexistent")
+        let result = await manager.recoverWorkspaceWindows(workspace: "nonexistent")
 
         // Unknown workspace returns empty window list — success with 0 processed
         guard case .success(let recovery) = result else {
@@ -134,12 +155,12 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsProcessed, 0)
     }
 
-    func testRecoverWorkspace_listFailure_returnsError() {
+    func testRecoverWorkspace_listFailure_returnsError() async {
         let aerospace = StubAeroSpace()
         aerospace.windowsByWorkspace["ap-broken"] = .failure(ApCoreError(message: "workspace gone"))
         let manager = makeManager(aerospace: aerospace)
 
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-broken")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-broken")
 
         guard case .failure(let error) = result else {
             XCTFail("Expected failure, got \(result)")
@@ -148,7 +169,46 @@ extension WindowRecoveryManagerTests {
         XCTAssertTrue(error.message.contains("workspace gone"))
     }
 
-    func testRecoverWorkspace_focusFailure_surfacedAsError() {
+    func testRecoverWorkspace_listFailure_restoresOriginalFocus() async {
+        let aerospace = StubAeroSpace()
+        let originalWindow = makeWindow(id: 42, workspace: "main", title: "Original")
+        aerospace.focusedWindowResult = .success(originalWindow)
+        aerospace.windowsByWorkspace["ap-broken"] = .failure(ApCoreError(message: "workspace gone"))
+        let manager = makeManager(aerospace: aerospace)
+
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-broken")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("workspace gone"))
+        XCTAssertEqual(
+            Array(aerospace.callTrace.suffix(2)),
+            [.focusWorkspace("main"), .focusWindow(42)]
+        )
+    }
+
+    func testRecoverWorkspace_focusWorkspaceFailure_returnsErrorBeforeWindowFocus() async {
+        let aerospace = StubAeroSpace()
+        aerospace.focusWorkspaceResult = .failure(ApCoreError(message: "workspace focus denied"))
+        aerospace.windowsByWorkspace["ap-test"] = .success([makeWindow(id: 1, title: "Test")])
+        let positioner = StubWindowPositioner()
+        let manager = makeManager(aerospace: aerospace, positioner: positioner)
+
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
+
+        guard case .failure(let error) = result else {
+            XCTFail("Expected failure, got \(result)")
+            return
+        }
+        XCTAssertTrue(error.message.contains("workspace focus denied"))
+        XCTAssertTrue(positioner.recoverCalls.isEmpty)
+        XCTAssertEqual(aerospace.focusWindowCalls, [])
+        XCTAssertEqual(aerospace.callTrace, [.focusWorkspace("ap-test")])
+    }
+
+    func testRecoverWorkspace_focusFailure_surfacedAsError() async {
         let aerospace = StubAeroSpace()
         let window = makeWindow(id: 1, title: "Test")
         aerospace.windowsByWorkspace["ap-test"] = .success([window])
@@ -156,7 +216,7 @@ extension WindowRecoveryManagerTests {
 
         let positioner = StubWindowPositioner()
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -170,7 +230,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls.count, 0)
     }
 
-    func testRecoverWorkspace_focusesEachWindowBeforeRecovery() {
+    func testRecoverWorkspace_focusesEachWindowBeforeRecovery() async {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 10, title: "A")
         let w2 = makeWindow(id: 20, title: "B")
@@ -178,7 +238,7 @@ extension WindowRecoveryManagerTests {
 
         let positioner = StubWindowPositioner()
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        _ = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        _ = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         // Focus calls should include both window IDs (before each recovery)
         XCTAssertTrue(aerospace.focusWindowCalls.contains(10))
@@ -187,7 +247,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls.count, 2)
     }
 
-    func testRecoverWorkspace_notFoundSurfacedAsError() {
+    func testRecoverWorkspace_notFoundSurfacedAsError() async {
         let aerospace = StubAeroSpace()
         let window = makeWindow(id: 1, title: "Ghost")
         aerospace.windowsByWorkspace["ap-test"] = .success([window])
@@ -196,7 +256,7 @@ extension WindowRecoveryManagerTests {
         positioner.recoverResults["Ghost"] = .success(.notFound)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: "ap-test")
+        let result = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")

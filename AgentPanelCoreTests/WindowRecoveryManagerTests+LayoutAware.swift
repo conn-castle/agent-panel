@@ -5,7 +5,7 @@ import XCTest
 extension WindowRecoveryManagerTests {
     // MARK: - Layout-aware Recovery Tests
 
-    func testRecoverWorkspace_projectWorkspace_appliesLayoutForIDEAndChrome() {
+    func testRecoverWorkspace_projectWorkspace_appliesLayoutForIDEAndChrome() async {
         let aerospace = StubAeroSpace()
         let projectId = "myproj"
         let workspace = "ap-\(projectId)"
@@ -23,7 +23,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -51,7 +51,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsRecovered, 2, "Layout phase positioned 2 windows (default stub result)")
     }
 
-    func testRecoverWorkspace_projectWorkspace_partialLayoutAllowsGenericRecoveryForTokenWindows() {
+    func testRecoverWorkspace_projectWorkspace_partialLayoutAllowsGenericRecoveryForTokenWindows() async {
         let aerospace = StubAeroSpace()
         let projectId = "partial"
         let workspace = "ap-\(projectId)"
@@ -70,7 +70,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
             return
@@ -84,7 +84,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsRecovered, 1)
     }
 
-    func testRecoverWorkspace_projectWorkspace_onlyTargetsBundleIdsInWorkspace() {
+    func testRecoverWorkspace_projectWorkspace_onlyTargetsBundleIdsInWorkspace() async {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
 
@@ -98,7 +98,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+        _ = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         // Layout should only call setWindowFrames for VS Code (present in workspace), not Chrome
         let setBundleIds = positioner.setFrameCalls.map { $0.bundleId }
@@ -108,7 +108,7 @@ extension WindowRecoveryManagerTests {
                        "Chrome is not in workspace — should not be targeted")
     }
 
-    func testRecoverWorkspace_projectWorkspace_noLayoutApps_skipsLayoutPhase() {
+    func testRecoverWorkspace_projectWorkspace_noLayoutApps_skipsLayoutPhase() async {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
 
@@ -122,7 +122,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -137,7 +137,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsProcessed, 1)
     }
 
-    func testRecoverWorkspace_projectWorkspace_noDetector_skipsLayoutPhase() {
+    func testRecoverWorkspace_projectWorkspace_noDetector_skipsLayoutPhase() async {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
         let window = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
@@ -148,7 +148,7 @@ extension WindowRecoveryManagerTests {
         // No screenModeDetector — layout phase should be skipped
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
 
-        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+        _ = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         // No setWindowFrames calls — layout phase skipped
         XCTAssertTrue(positioner.setFrameCalls.isEmpty,
@@ -157,7 +157,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls.count, 1)
     }
 
-    func testRecoverWorkspace_nonProjectWorkspace_skipsLayoutPhase() {
+    func testRecoverWorkspace_nonProjectWorkspace_skipsLayoutPhase() async {
         let aerospace = StubAeroSpace()
         let workspace = "main"
         let window = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
@@ -169,7 +169,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        _ = manager.recoverWorkspaceWindows(workspace: workspace)
+        _ = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         // No setWindowFrames calls — non-project workspace
         XCTAssertTrue(positioner.setFrameCalls.isEmpty,
@@ -178,7 +178,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls.count, 1)
     }
 
-    func testRecoverWorkspace_nonProjectWorkspace_onlyRecoversRequestedWorkspaceWindows() {
+    func testRecoverWorkspace_nonProjectWorkspace_onlyRecoversRequestedWorkspaceWindows() async {
         let aerospace = StubAeroSpace()
         let workspace = "main"
         let currentDesktopWindow = makeWindow(id: 1, bundleId: "com.test.Main", workspace: workspace,
@@ -192,7 +192,7 @@ extension WindowRecoveryManagerTests {
         positioner.recoverResults["Current Desktop Window"] = .success(.recovered)
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -205,7 +205,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Current Desktop Window")
     }
 
-    func testRecoverWorkspace_detectorFailure_usesWideFallbackAndWarns() {
+    func testRecoverWorkspace_detectorFailure_usesWideFallbackAndWarns() async {
         let aerospace = StubAeroSpace()
         let workspace = "ap-proj"
         let ideWindow = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: workspace,
@@ -220,7 +220,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -238,7 +238,7 @@ extension WindowRecoveryManagerTests {
                       "Width failure should surface a warning: \(recovery.errors)")
     }
 
-    func testRecoverWorkspace_projectWorkspace_nonTokenWindowGetsGenericRecovery() {
+    func testRecoverWorkspace_projectWorkspace_nonTokenWindowGetsGenericRecovery() async {
         let aerospace = StubAeroSpace()
         let projectId = "myproj"
         let workspace = "ap-\(projectId)"
@@ -256,7 +256,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -277,7 +277,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsProcessed, 2)
     }
 
-    func testRecoverAll_usesLayoutPhaseForProjectWorkspaces() {
+    func testRecoverAll_usesLayoutPhaseForProjectWorkspaces() async {
         let aerospace = StubAeroSpace()
         let w1 = makeWindow(id: 1, bundleId: "com.microsoft.VSCode", workspace: "ap-proj",
                             title: "AP:proj - VS Code")
@@ -288,7 +288,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        _ = manager.recoverAllWindows { _, _ in }
+        _ = await manager.recoverAllWindows { _, _ in }
 
         XCTAssertEqual(positioner.setFrameCalls.count, 1)
         XCTAssertEqual(positioner.setFrameCalls[0].bundleId, "com.microsoft.VSCode")

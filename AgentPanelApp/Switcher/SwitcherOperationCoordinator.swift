@@ -196,57 +196,60 @@ final class SwitcherOperationCoordinator {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let closeResult = self.projectManager.closeProject(projectId: projectId)
 
-            var refreshedFocus: CapturedFocus?
-            if case .success = closeResult {
-                refreshedFocus = self.projectManager.captureCurrentFocus()
-            }
+            Task {
+                let closeResult = await self.projectManager.closeProject(projectId: projectId)
 
-            DispatchQueue.main.async {
-                switch closeResult {
-                case .success(let result):
-                    if let warning = result.tabCaptureWarning {
+                var refreshedFocus: CapturedFocus?
+                if case .success = closeResult {
+                    refreshedFocus = self.projectManager.captureCurrentFocus()
+                }
+
+                await MainActor.run {
+                    switch closeResult {
+                    case .success(let result):
+                        if let warning = result.tabCaptureWarning {
+                            self.session.logEvent(
+                                event: "switcher.close_project.tab_capture_warning",
+                                level: .warn,
+                                message: warning,
+                                context: ["project_id": projectId]
+                            )
+                        }
                         self.session.logEvent(
-                            event: "switcher.close_project.tab_capture_warning",
-                            level: .warn,
-                            message: warning,
+                            event: "switcher.close_project.succeeded",
                             context: ["project_id": projectId]
                         )
-                    }
-                    self.session.logEvent(
-                        event: "switcher.close_project.succeeded",
-                        context: ["project_id": projectId]
-                    )
 
-                    // Update captured focus so dismiss doesn't restore stale state.
-                    if let refreshedFocus,
-                       let selfBundleId = Bundle.main.bundleIdentifier,
-                       refreshedFocus.appBundleId != selfBundleId {
-                        self.onUpdateCapturedFocus?(refreshedFocus)
-                    } else {
-                        self.onUpdateCapturedFocus?(nil)
-                    }
+                        // Update captured focus so dismiss doesn't restore stale state.
+                        if let refreshedFocus,
+                           let selfBundleId = Bundle.main.bundleIdentifier,
+                           refreshedFocus.appBundleId != selfBundleId {
+                            self.onUpdateCapturedFocus?(refreshedFocus)
+                        } else {
+                            self.onUpdateCapturedFocus?(nil)
+                        }
 
-                    self.onRefreshWorkspaceAndFilter?(fallbackSelectionKey, false)
-                    if result.tabCaptureWarning != nil {
-                        self.onSetStatus?("Closed '\(projectName)' (tab capture failed)", .warning)
-                    } else {
-                        self.onSetStatus?("Closed '\(projectName)'", .info)
+                        self.onRefreshWorkspaceAndFilter?(fallbackSelectionKey, false)
+                        if result.tabCaptureWarning != nil {
+                            self.onSetStatus?("Closed '\(projectName)' (tab capture failed)", .warning)
+                        } else {
+                            self.onSetStatus?("Closed '\(projectName)'", .info)
+                        }
+                    case .failure(let error):
+                        self.onSetStatus?(self.projectErrorMessage(error), .error)
+                        self.session.logEvent(
+                            event: "switcher.close_project.failed",
+                            level: .error,
+                            message: "\(error)",
+                            context: ["project_id": projectId]
+                        )
+                        self.onOperationFailed?(ErrorContext(
+                            category: .command,
+                            message: "\(error)",
+                            trigger: "closeProject"
+                        ))
                     }
-                case .failure(let error):
-                    self.onSetStatus?(self.projectErrorMessage(error), .error)
-                    self.session.logEvent(
-                        event: "switcher.close_project.failed",
-                        level: .error,
-                        message: "\(error)",
-                        context: ["project_id": projectId]
-                    )
-                    self.onOperationFailed?(ErrorContext(
-                        category: .command,
-                        message: "\(error)",
-                        trigger: "closeProject"
-                    ))
                 }
             }
         }
@@ -273,30 +276,34 @@ final class SwitcherOperationCoordinator {
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let result = self.projectManager.exitToNonProjectWindow()
-            DispatchQueue.main.async {
-                self.onSetControlsEnabled?(true)
-                switch result {
-                case .success:
-                    self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
-                    self.onDismiss?(.exitedToNonProject)
-                    self.isExitingToNonProject = false
-                case .failure(let error):
-                    self.isExitingToNonProject = false
-                    self.onSetStatus?(self.projectErrorMessage(error), .error)
-                    self.session.logEvent(
-                        event: "switcher.exit_to_previous.failed",
-                        level: .error,
-                        message: "\(error)"
-                    )
-                    self.onOperationFailed?(ErrorContext(
-                        category: .command,
-                        message: "\(error)",
-                        trigger: "exitToPrevious"
-                    ))
-                    NSSound.beep()
 
-                    self.onRefreshWorkspaceAndFilter?(nil, false)
+            Task {
+                let result = await self.projectManager.exitToNonProjectWindow()
+
+                await MainActor.run {
+                    self.onSetControlsEnabled?(true)
+                    switch result {
+                    case .success:
+                        self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
+                        self.onDismiss?(.exitedToNonProject)
+                        self.isExitingToNonProject = false
+                    case .failure(let error):
+                        self.isExitingToNonProject = false
+                        self.onSetStatus?(self.projectErrorMessage(error), .error)
+                        self.session.logEvent(
+                            event: "switcher.exit_to_previous.failed",
+                            level: .error,
+                            message: "\(error)"
+                        )
+                        self.onOperationFailed?(ErrorContext(
+                            category: .command,
+                            message: "\(error)",
+                            trigger: "exitToPrevious"
+                        ))
+                        NSSound.beep()
+
+                        self.onRefreshWorkspaceAndFilter?(nil, false)
+                    }
                 }
             }
         }

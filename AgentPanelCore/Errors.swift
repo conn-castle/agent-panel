@@ -33,6 +33,10 @@ public enum ApCoreErrorReason: String, Sendable {
     case circuitBreakerOpen
     /// Error was returned because a command exceeded its timeout.
     case commandTimeout
+    /// Error was returned because a window title token could not be matched yet.
+    case windowTokenNotFound
+    /// Error was returned because window enumeration confirmed the app has zero windows.
+    case windowInventoryEmpty
 }
 
 /// Errors emitted by AgentPanelCore operations.
@@ -97,6 +101,29 @@ public struct ApCoreError: Error, Equatable, Sendable {
         return message.hasPrefix("Command timed out")
     }
 
+    /// Whether this error represents a transient token-miss during window lookup.
+    ///
+    /// Prefers the structured reason when available. Message-prefix matching is
+    /// retained for compatibility with legacy fixtures and stub errors that still
+    /// model this condition as text only.
+    public var isWindowTokenNotFound: Bool {
+        if reason == .windowTokenNotFound {
+            return true
+        }
+        return message.hasPrefix("No window found with token")
+    }
+
+    /// Whether this error represents a confirmed zero-window inventory result.
+    ///
+    /// Prefers the structured reason when available. Message parsing is retained
+    /// for compatibility with existing fixtures until all producers are updated.
+    public var isWindowInventoryEmpty: Bool {
+        if reason == .windowInventoryEmpty {
+            return true
+        }
+        return Self.messageIndicatesEmptyWindowInventory(message)
+    }
+
     /// Creates a new ApCoreError with just a message.
     /// Defaults to `.command` category for backward compatibility.
     /// - Parameter message: Error message.
@@ -107,6 +134,17 @@ public struct ApCoreError: Error, Equatable, Sendable {
         self.command = nil
         self.exitCode = nil
         self.reason = nil
+    }
+
+    private static func messageIndicatesEmptyWindowInventory(_ message: String) -> Bool {
+        let normalized = message.lowercased()
+        if normalized.contains("no windows") || normalized.contains("zero windows") {
+            return true
+        }
+        return normalized.range(
+            of: #"\b(?:enumerated|found|matched|listed)?\s*0\s+windows?\b"#,
+            options: .regularExpression
+        ) != nil
     }
 }
 

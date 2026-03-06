@@ -7,7 +7,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
 
     // MARK: - Close captures and saves ALL tabs verbatim
 
-    func testCloseProjectCapturesAndSavesAllTabs() {
+    func testCloseProjectCapturesAndSavesAllTabs() async {
         let tabCapture = PMTabCaptureStub()
         tabCapture.captureResult = .success(["https://pinned.com", "https://regular.com", "https://other.com"])
 
@@ -23,7 +23,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         )
         manager.loadTestConfig(config)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success(let result):
             XCTAssertNil(result.tabCaptureWarning)
         case .failure(let error):
@@ -46,7 +46,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
 
     // MARK: - Close saves all tabs including project pinned
 
-    func testCloseProjectSavesAllTabsIncludingProjectPinned() {
+    func testCloseProjectSavesAllTabsIncludingProjectPinned() async {
         let tabCapture = PMTabCaptureStub()
         tabCapture.captureResult = .success(["https://global-pinned.com", "https://project-pinned.com", "https://regular.com"])
 
@@ -62,7 +62,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         )
         manager.loadTestConfig(config)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success(let result):
             XCTAssertNil(result.tabCaptureWarning)
         case .failure(let error):
@@ -81,7 +81,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
 
     // MARK: - Close produces warning when capture fails but preserves snapshot
 
-    func testCloseProjectWarnsOnCaptureFailureAndPreservesSnapshot() {
+    func testCloseProjectWarnsOnCaptureFailureAndPreservesSnapshot() async {
         let chromeTabsDir = tempDir("close-warn")
 
         // Pre-populate a snapshot
@@ -100,7 +100,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         let config = Config(projects: [testProject()])
         manager.loadTestConfig(config)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success(let result):
             XCTAssertNotNil(result.tabCaptureWarning)
             XCTAssertTrue(result.tabCaptureWarning!.contains("Chrome not running"))
@@ -118,7 +118,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         }
     }
 
-    func testCloseProjectWarnsWhenSnapshotSaveFails() {
+    func testCloseProjectWarnsWhenSnapshotSaveFails() async {
         let tabCapture = PMTabCaptureStub()
         tabCapture.captureResult = .success(["https://one.com", "https://two.com"])
 
@@ -136,7 +136,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         let config = Config(projects: [testProject()])
         manager.loadTestConfig(config)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success(let result):
             XCTAssertEqual(result.tabCaptureWarning, "Tab save failed: Failed to write tab snapshot for test")
         case .failure(let error):
@@ -146,7 +146,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
 
     // MARK: - Close with empty capture deletes stale snapshot
 
-    func testCloseProjectEmptyCaptureDeletesSnapshot() {
+    func testCloseProjectEmptyCaptureDeletesSnapshot() async {
         let chromeTabsDir = tempDir("close-empty")
 
         // Pre-populate a stale snapshot
@@ -165,7 +165,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         let config = Config(projects: [testProject()])
         manager.loadTestConfig(config)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success(let result):
             XCTAssertNil(result.tabCaptureWarning)
         case .failure(let error):
@@ -183,7 +183,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
 
     // MARK: - Close without config (no-op for tabs)
 
-    func testCloseProjectWithoutConfigSkipsTabs() {
+    func testCloseProjectWithoutConfigSkipsTabs() async {
         let tabCapture = PMTabCaptureStub()
         tabCapture.captureResult = .success(["https://a.com"])
 
@@ -193,7 +193,7 @@ final class ProjectManagerChromeTabCloseTests: XCTestCase {
         )
         // Don't load config
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             XCTFail("Expected failure (config not loaded)")
         case .failure(let error):

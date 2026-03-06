@@ -17,6 +17,26 @@ public struct AXWindowPositioner: WindowPositioning {
 
     public init() {}
 
+    // MARK: - Error Factories
+
+    /// Creates a structured error for a token-miss during window lookup.
+    static func windowTokenNotFoundError(bundleId: String, token: String) -> ApCoreError {
+        ApCoreError(
+            category: .window,
+            message: "No window found with token '\(token)' for \(bundleId)",
+            reason: .windowTokenNotFound
+        )
+    }
+
+    /// Creates a structured error for a confirmed zero-window inventory result.
+    static func windowInventoryEmptyError(bundleId: String) -> ApCoreError {
+        ApCoreError(
+            category: .window,
+            message: "No windows found for \(bundleId) (0 windows enumerated)",
+            reason: .windowInventoryEmpty
+        )
+    }
+
     // MARK: - WindowPositioning Protocol
 
     public func getPrimaryWindowFrame(bundleId: String, projectId: String) -> Result<CGRect, ApCoreError> {
@@ -38,10 +58,7 @@ public struct AXWindowPositioner: WindowPositioning {
         }
 
         guard let primary = matches.first else {
-            return .failure(ApCoreError(
-                category: .window,
-                message: "No window found with token '\(token)' for \(bundleId)"
-            ))
+            return .failure(Self.windowTokenNotFoundError(bundleId: bundleId, token: token))
         }
 
         return readFrameNSScreen(element: primary, bundleId: bundleId)
@@ -71,10 +88,7 @@ public struct AXWindowPositioner: WindowPositioning {
         }
 
         guard !matches.isEmpty else {
-            return .failure(ApCoreError(
-                category: .window,
-                message: "No window found with token '\(token)' for \(bundleId)"
-            ))
+            return .failure(Self.windowTokenNotFoundError(bundleId: bundleId, token: token))
         }
 
         // Screen-selection heuristic: find which screen contains the target midpoint

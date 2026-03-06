@@ -178,6 +178,28 @@ extension ApCLIRunnerTests {
         XCTAssertEqual(output.stderr, ["warning: capture failed"])
     }
 
+    func testCloseProjectSuccessWaitsForSuspendingAsyncOperation() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: ["a"]))
+        manager.closeProjectResult = .success(ProjectCloseSuccess(tabCaptureWarning: nil))
+        manager.closeProjectDelayNanoseconds = 10_000_000
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["close-project", "a"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Closed project: a"])
+        XCTAssertEqual(output.stderr, [])
+        XCTAssertEqual(manager.closeProjectCalls, ["a"])
+    }
+
     func testCloseProjectFailurePrintsErrorAndReturnsFailureExit() {
         let output = OutputRecorder()
         let manager = MockProjectManager()
@@ -275,6 +297,28 @@ extension ApCLIRunnerTests {
         XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
         XCTAssertEqual(output.stdout, ["Returned to non-project space"])
         XCTAssertEqual(output.stderr, [])
+    }
+
+    func testReturnCommandWaitsForSuspendingAsyncOperation() {
+        let output = OutputRecorder()
+        let manager = MockProjectManager()
+        manager.loadConfigResult = .success(makeConfig(projectIds: []))
+        manager.exitToNonProjectResult = .success(())
+        manager.exitDelayNanoseconds = 10_000_000
+
+        let deps = ApCLIDependencies(
+            version: { "0.0.0" },
+            projectManagerFactory: { manager },
+            doctorRunner: { makeDoctorReport(hasFailures: false) }
+        )
+        let cli = ApCLI(parser: ApArgumentParser(), dependencies: deps, output: output.sink)
+
+        let exitCode = cli.run(arguments: ["return"])
+
+        XCTAssertEqual(exitCode, ApExitCode.ok.rawValue)
+        XCTAssertEqual(output.stdout, ["Returned to non-project space"])
+        XCTAssertEqual(output.stderr, [])
+        XCTAssertEqual(manager.exitCalls, 1)
     }
 
     func testReturnCommandFailurePrintsErrorAndReturnsFailureExit() {

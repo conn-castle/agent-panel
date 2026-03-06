@@ -8,8 +8,8 @@ public protocol ProjectManaging {
     func sortedProjects(query: String) -> [ProjectConfig]
     func captureCurrentFocus() -> CapturedFocus?
     func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
-    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
-    func exitToNonProjectWindow() -> Result<Void, ProjectError>
+    func closeProject(projectId: String) async -> Result<ProjectCloseSuccess, ProjectError>
+    func exitToNonProjectWindow() async -> Result<Void, ProjectError>
 }
 
 extension ProjectManager: ProjectManaging {}
@@ -172,7 +172,15 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                switch manager.closeProject(projectId: projectId) {
+                guard let result: Result<ProjectCloseSuccess, ProjectError> = runBlocking(
+                    timeout: 30,
+                    timeoutMessage: "Close project timed out after 30 seconds",
+                    operation: { await manager.closeProject(projectId: projectId) }
+                ) else {
+                    return ApExitCode.failure.rawValue
+                }
+
+                switch result {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
@@ -192,7 +200,15 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                switch manager.exitToNonProjectWindow() {
+                guard let result: Result<Void, ProjectError> = runBlocking(
+                    timeout: 30,
+                    timeoutMessage: "Return to non-project space timed out after 30 seconds",
+                    operation: { await manager.exitToNonProjectWindow() }
+                ) else {
+                    return ApExitCode.failure.rawValue
+                }
+
+                switch result {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
@@ -202,6 +218,28 @@ public struct ApCLI {
                 }
             }
         }
+    }
+
+    /// Bridges an async operation to synchronous CLI execution with a timeout.
+    /// Returns `nil` and prints an error if the operation times out. Cancels
+    /// the in-flight task on timeout to prevent stale state mutations.
+    private func runBlocking<T>(
+        timeout seconds: TimeInterval,
+        timeoutMessage: String,
+        operation: @escaping () async -> T
+    ) -> T? {
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: T?
+        let task = Task {
+            result = await operation()
+            semaphore.signal()
+        }
+        if semaphore.wait(timeout: .now() + seconds) == .timedOut {
+            task.cancel()
+            output.stderr("error: \(timeoutMessage)")
+            return nil
+        }
+        return result
     }
 }
 
