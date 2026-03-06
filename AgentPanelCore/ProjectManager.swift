@@ -217,6 +217,8 @@ public final class ProjectManager {
             maxAge: Self.focusHistoryMaxAge,
             maxEntries: Self.focusHistoryMaxEntries
         )
+        precondition(windowPollTimeout.isFinite && windowPollTimeout >= 0, "windowPollTimeout must be finite and non-negative")
+        precondition(windowPollInterval.isFinite && windowPollInterval >= 0, "windowPollInterval must be finite and non-negative")
         self.windowPollTimeout = windowPollTimeout
         self.windowPollInterval = windowPollInterval
 
