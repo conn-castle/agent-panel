@@ -8,7 +8,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
 
     // MARK: - Recovery called after focus restore
 
-    func testExitRestoresFocusAndCallsRecovery() {
+    func testExitRestoresFocusAndCallsRecovery() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         aero.workspacesWithFocusResult = .success([
@@ -27,7 +27,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertEqual(positioner.recoverFocusedCalls.count, 1)
             XCTAssertEqual(positioner.recoverFocusedCalls.first?.bundleId, "com.apple.Safari")
@@ -39,7 +39,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
 
     // MARK: - Recovery failure does not affect focus restore
 
-    func testRecoveryFailureDoesNotBlockFocusRestore() {
+    func testRecoveryFailureDoesNotBlockFocusRestore() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         aero.workspacesWithFocusResult = .success([
@@ -60,7 +60,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Focus restore should succeed even when recovery fails")
         case .failure(let error):
@@ -70,7 +70,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
 
     // MARK: - Recovery skipped when no positioner
 
-    func testRecoverySkippedWhenNoPositioner() {
+    func testRecoverySkippedWhenNoPositioner() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         aero.workspacesWithFocusResult = .success([
@@ -85,7 +85,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
         manager.pushFocusForTest(focus)
 
         // Should succeed without crash — no positioner configured
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             break
         case .failure(let error):
@@ -95,7 +95,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
 
     // MARK: - Recovery called during fallback
 
-    func testFallbackToNonProjectWorkspaceCallsRecovery() {
+    func testFallbackToNonProjectWorkspaceCallsRecovery() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true),
@@ -115,7 +115,7 @@ final class ProjectManagerFocusRecoveryTests: XCTestCase {
         loadTestConfig(manager: manager)
 
         // No focus stack entries → falls back to non-project workspace
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertEqual(positioner.recoverFocusedCalls.count, 1)
             XCTAssertEqual(positioner.recoverFocusedCalls.first?.bundleId, "com.apple.Terminal")

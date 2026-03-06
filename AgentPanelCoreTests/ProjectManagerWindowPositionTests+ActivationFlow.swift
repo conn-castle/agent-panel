@@ -144,7 +144,7 @@ extension ProjectManagerWindowPositionTests {
 
     // MARK: - closeProject Tests
 
-    func testCloseProjectCapturesWindowPositions() {
+    func testCloseProjectCapturesWindowPositions() async {
         let projectId = "epsilon"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -165,7 +165,7 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
 
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
@@ -177,7 +177,7 @@ extension ProjectManagerWindowPositionTests {
         XCTAssertEqual(store.saveCalls[0].frames.chrome!.x, Double(defaultChromeFrame.origin.x), accuracy: 1)
     }
 
-    func testCloseProjectSkipsSaveWhenIDEFrameReadFails() {
+    func testCloseProjectSkipsSaveWhenIDEFrameReadFails() async {
         let projectId = "zeta"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -200,13 +200,13 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
         XCTAssertTrue(store.saveCalls.isEmpty, "Should not save when IDE frame unreadable")
     }
 
-    func testCloseProjectSkipsSaveWhenChromeFramePermanentlyFails() {
+    func testCloseProjectSkipsSaveWhenChromeFramePermanentlyFails() async {
         let projectId = "eta"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -229,7 +229,7 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
         // Skip save entirely when Chrome frame unavailable — preserves previous complete layout
@@ -238,7 +238,7 @@ extension ProjectManagerWindowPositionTests {
 
     // MARK: - exitToNonProjectWindow Tests
 
-    func testExitCapturesWindowPositionsBeforeFocusRestore() {
+    func testExitCapturesWindowPositionsBeforeFocusRestore() async {
         let projectId = "theta"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -265,7 +265,7 @@ extension ProjectManagerWindowPositionTests {
         // Push a non-project focus entry for exit to restore
         manager.pushFocusForTest(CapturedFocus(windowId: 42, appBundleId: "com.other", workspace: "main"))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
 
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
@@ -273,7 +273,7 @@ extension ProjectManagerWindowPositionTests {
         XCTAssertEqual(store.saveCalls[0].projectId, projectId)
     }
 
-    func testExitSkipsCaptureWhenNoPositioner() {
+    func testExitSkipsCaptureWhenNoPositioner() async {
         let projectId = "iota"
         let aerospace = SimpleAeroSpaceStub(projectId: projectId)
         aerospace.allWindows = [
@@ -289,7 +289,7 @@ extension ProjectManagerWindowPositionTests {
         // Push a non-project focus entry
         manager.pushFocusForTest(CapturedFocus(windowId: 42, appBundleId: "com.other", workspace: "main"))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
         // No crash = positioning gracefully skipped
     }

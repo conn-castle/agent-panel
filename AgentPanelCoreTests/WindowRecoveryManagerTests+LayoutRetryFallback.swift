@@ -5,7 +5,7 @@ import XCTest
 extension WindowRecoveryManagerTests {
     // MARK: - Layout Recovery Retry + Fallback Tests
 
-    func testRecoverLayout_retriesTransientTokenMissAndSucceeds() {
+    func testRecoverLayout_retriesTransientTokenMissAndSucceeds() async {
         let aerospace = StubAeroSpace()
         let projectId = "retry-proj"
         let workspace = "ap-\(projectId)"
@@ -33,7 +33,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -47,7 +47,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsRecovered, 2, "Both IDE and Chrome should be recovered")
     }
 
-    func testRecoverLayout_usesFallbackAfterRetryExhaustion() {
+    func testRecoverLayout_usesFallbackAfterRetryExhaustion() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-proj"
         let workspace = "ap-\(projectId)"
@@ -78,7 +78,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -103,7 +103,7 @@ extension WindowRecoveryManagerTests {
                        "Fallback anchor + Chrome should be counted as recovered")
     }
 
-    func testRecoverLayout_fallbackRequiresUniqueWorkspaceWindow() {
+    func testRecoverLayout_fallbackRequiresUniqueWorkspaceWindow() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-ambiguous"
         let workspace = "ap-\(projectId)"
@@ -126,7 +126,7 @@ extension WindowRecoveryManagerTests {
 
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -147,7 +147,7 @@ extension WindowRecoveryManagerTests {
                        "Ambiguous fallback should not count any windows as recovered")
     }
 
-    func testRecoverLayout_fallbackFailureAddsError() {
+    func testRecoverLayout_fallbackFailureAddsError() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-fail"
         let workspace = "ap-\(projectId)"
@@ -173,7 +173,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -189,7 +189,7 @@ extension WindowRecoveryManagerTests {
                        "Failed fallback should not count windows as recovered")
     }
 
-    func testRecoverLayout_fallbackPositionedZeroAddsError() {
+    func testRecoverLayout_fallbackPositionedZeroAddsError() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-zero"
         let workspace = "ap-\(projectId)"
@@ -215,7 +215,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -228,7 +228,7 @@ extension WindowRecoveryManagerTests {
                        "positioned: 0 fallback should not count as recovered")
     }
 
-    func testRecoverLayout_fallbackAnchorFromBundleWindowWhenNoTokenMatch() {
+    func testRecoverLayout_fallbackAnchorFromBundleWindowWhenNoTokenMatch() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-bundle"
         let workspace = "ap-\(projectId)"
@@ -254,7 +254,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -270,7 +270,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(recovery.windowsRecovered, 1)
     }
 
-    func testRecoverLayout_fallbackFocusFailureAddsError() {
+    func testRecoverLayout_fallbackFocusFailureAddsError() async {
         let aerospace = StubAeroSpace()
         let projectId = "fb-focus-fail"
         let workspace = "ap-\(projectId)"
@@ -299,7 +299,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")
@@ -314,7 +314,7 @@ extension WindowRecoveryManagerTests {
                        "Focus failure should not count windows as recovered")
     }
 
-    func testRecoverLayout_permanentErrorSkipsFallback() {
+    func testRecoverLayout_permanentErrorSkipsFallback() async {
         let aerospace = StubAeroSpace()
         let projectId = "perm-err"
         let workspace = "ap-\(projectId)"
@@ -333,7 +333,7 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner,
                                   screenModeDetector: detector)
 
-        let result = manager.recoverWorkspaceWindows(workspace: workspace)
+        let result = await manager.recoverWorkspaceWindows(workspace: workspace)
 
         guard case .success(let recovery) = result else {
             XCTFail("Expected success, got \(result)")

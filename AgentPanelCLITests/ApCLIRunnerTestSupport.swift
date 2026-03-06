@@ -61,8 +61,10 @@ final class MockProjectManager: ProjectManaging {
     var selectProjectCalls: [(projectId: String, focus: CapturedFocus)] = []
     var closeProjectResult: Result<ProjectCloseSuccess, ProjectError> = .success(ProjectCloseSuccess(tabCaptureWarning: nil))
     var closeProjectCalls: [String] = []
+    var closeProjectDelayNanoseconds: UInt64 = 0
     var exitToNonProjectResult: Result<Void, ProjectError> = .success(())
     var exitCalls: Int = 0
+    var exitDelayNanoseconds: UInt64 = 0
 
     func loadConfig() -> Result<ConfigLoadSuccess, ConfigLoadError> {
         loadConfigResult
@@ -82,12 +84,18 @@ final class MockProjectManager: ProjectManaging {
         return selectProjectResult
     }
 
-    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
+    func closeProject(projectId: String) async -> Result<ProjectCloseSuccess, ProjectError> {
+        if closeProjectDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: closeProjectDelayNanoseconds)
+        }
         closeProjectCalls.append(projectId)
         return closeProjectResult
     }
 
-    func exitToNonProjectWindow() -> Result<Void, ProjectError> {
+    func exitToNonProjectWindow() async -> Result<Void, ProjectError> {
+        if exitDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: exitDelayNanoseconds)
+        }
         exitCalls += 1
         return exitToNonProjectResult
     }

@@ -2,7 +2,7 @@ import XCTest
 @testable import AgentPanelCore
 
 final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
-    func testFocusHistoryPersistsAcrossManagers() {
+    func testFocusHistoryPersistsAcrossManagers() async {
         let fileSystem = FocusHistoryTestInMemoryFileSystem()
         let focusHistoryPath = URL(fileURLWithPath: "/focus-history.json", isDirectory: false)
 
@@ -41,14 +41,14 @@ final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
         ))
         aero2.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
 
-        let result = manager2.exitToNonProjectWindow()
+        let result = await manager2.exitToNonProjectWindow()
         if case .failure(let error) = result {
             XCTFail("Expected success, got \(error)")
         }
         XCTAssertTrue(aero2.focusedWindowIds.contains(42))
     }
 
-    func testFocusHistoryPrunesStaleEntries() {
+    func testFocusHistoryPrunesStaleEntries() async {
         let fileSystem = FocusHistoryTestInMemoryFileSystem()
         let focusHistoryPath = URL(fileURLWithPath: "/focus-history.json", isDirectory: false)
         let store = FocusHistoryStore(
@@ -86,7 +86,7 @@ final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         switch result {
         case .failure(.noPreviousWindow):
             break
@@ -97,7 +97,7 @@ final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
         }
     }
 
-    func testLoadFocusHistoryFailureFallsBackToEmptyHistory() {
+    func testLoadFocusHistoryFailureFallsBackToEmptyHistory() async {
         let fileSystem = FocusHistoryTestFailingFileSystem()
         fileSystem.fileExistsValue = true
         fileSystem.readError = NSError(domain: "ProjectManagerFocusHistoryPersistenceTests", code: 10, userInfo: [
@@ -120,14 +120,14 @@ final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .failure(.noPreviousWindow) = result {
             return
         }
         XCTFail("Expected noPreviousWindow when persisted history cannot be loaded")
     }
 
-    func testPersistFocusHistoryFailureDoesNotBreakInMemoryRestore() {
+    func testPersistFocusHistoryFailureDoesNotBreakInMemoryRestore() async {
         let fileSystem = FocusHistoryTestFailingFileSystem()
         fileSystem.writeError = NSError(domain: "ProjectManagerFocusHistoryPersistenceTests", code: 11, userInfo: [
             NSLocalizedDescriptionKey: "write failed"
@@ -158,7 +158,7 @@ final class ProjectManagerFocusHistoryPersistenceTests: XCTestCase {
             workspace: "main"
         ))
 
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         if case .failure(let error) = result {
             XCTFail("Expected success with in-memory focus despite save failure, got \(error)")
         }

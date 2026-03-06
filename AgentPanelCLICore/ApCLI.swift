@@ -8,8 +8,8 @@ public protocol ProjectManaging {
     func sortedProjects(query: String) -> [ProjectConfig]
     func captureCurrentFocus() -> CapturedFocus?
     func selectProject(projectId: String, preCapturedFocus: CapturedFocus) async -> Result<ProjectActivationSuccess, ProjectError>
-    func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError>
-    func exitToNonProjectWindow() -> Result<Void, ProjectError>
+    func closeProject(projectId: String) async -> Result<ProjectCloseSuccess, ProjectError>
+    func exitToNonProjectWindow() async -> Result<Void, ProjectError>
 }
 
 extension ProjectManager: ProjectManaging {}
@@ -172,7 +172,20 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                switch manager.closeProject(projectId: projectId) {
+                // Bridge async closeProject to sync CLI using semaphore with timeout
+                let semaphore = DispatchSemaphore(value: 0)
+                var result: Result<ProjectCloseSuccess, ProjectError>?
+                Task {
+                    result = await manager.closeProject(projectId: projectId)
+                    semaphore.signal()
+                }
+                let timeoutResult = semaphore.wait(timeout: .now() + 30)
+                if timeoutResult == .timedOut {
+                    output.stderr("error: Close project timed out after 30 seconds")
+                    return ApExitCode.failure.rawValue
+                }
+
+                switch result {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
@@ -182,6 +195,9 @@ public struct ApCLI {
                     }
                     output.stdout("Closed project: \(projectId)")
                     return ApExitCode.ok.rawValue
+                case .none:
+                    output.stderr("error: Unexpected nil result")
+                    return ApExitCode.failure.rawValue
                 }
             }
 
@@ -192,13 +208,29 @@ public struct ApCLI {
                 output.stderr("error: \(formatConfigError(error))")
                 return ApExitCode.failure.rawValue
             case .success:
-                switch manager.exitToNonProjectWindow() {
+                // Bridge async exitToNonProjectWindow to sync CLI using semaphore with timeout
+                let semaphore = DispatchSemaphore(value: 0)
+                var result: Result<Void, ProjectError>?
+                Task {
+                    result = await manager.exitToNonProjectWindow()
+                    semaphore.signal()
+                }
+                let timeoutResult = semaphore.wait(timeout: .now() + 30)
+                if timeoutResult == .timedOut {
+                    output.stderr("error: Return to non-project space timed out after 30 seconds")
+                    return ApExitCode.failure.rawValue
+                }
+
+                switch result {
                 case .failure(let error):
                     output.stderr("error: \(formatProjectError(error))")
                     return ApExitCode.failure.rawValue
                 case .success:
                     output.stdout("Returned to non-project space")
                     return ApExitCode.ok.rawValue
+                case .none:
+                    output.stderr("error: Unexpected nil result")
+                    return ApExitCode.failure.rawValue
                 }
             }
         }

@@ -135,7 +135,7 @@ extension ProjectManager {
     }
 
     /// Exits to the last non-project window without closing the project.
-    public func exitToNonProjectWindow() -> Result<Void, ProjectError> {
+    public func exitToNonProjectWindow() async -> Result<Void, ProjectError> {
         let state: ProjectWorkspaceState
         switch workspaceState() {
         case .failure(let error):
@@ -150,7 +150,7 @@ extension ProjectManager {
         }
 
         // Capture window positions before exiting (non-fatal)
-        captureWindowPositions(projectId: activeProjectId)
+        await captureWindowPositions(projectId: activeProjectId)
 
         let restoredFocus = restoreNonProjectFocus(windowLookup: listAllWindowsById())
 

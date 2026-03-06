@@ -203,7 +203,7 @@ extension ProjectManagerWindowPositionTests {
 
     // MARK: - Capture Retry + Fallback + Skip-Save Tests
 
-    func testCaptureRetriesChromeReadAndSaves() {
+    func testCaptureRetriesChromeReadAndSaves() async {
         let projectId = "cap-retry-1"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -236,7 +236,7 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
         // Save should have happened with both IDE and Chrome frames
@@ -247,7 +247,7 @@ extension ProjectManagerWindowPositionTests {
         XCTAssertEqual(chromeGetCalls.count, 3)
     }
 
-    func testCaptureUsesChromeReadFallbackAndSaves() {
+    func testCaptureUsesChromeReadFallbackAndSaves() async {
         let projectId = "cap-fb-1"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -278,7 +278,7 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
         // Save should have happened with fallback Chrome frame
@@ -288,7 +288,7 @@ extension ProjectManagerWindowPositionTests {
         XCTAssertEqual(positioner.getFallbackFrameCalls[0], "com.google.Chrome")
     }
 
-    func testCaptureSkipsSaveWhenChromeRetryAndFallbackFail() {
+    func testCaptureSkipsSaveWhenChromeRetryAndFallbackFail() async {
         let projectId = "cap-skip-1"
         let positioner = RecordingWindowPositioner()
         let store = RecordingPositionStore()
@@ -320,7 +320,7 @@ extension ProjectManagerWindowPositionTests {
             chrome: ChromeConfig()
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         if case .failure(let error) = result { XCTFail("Expected success: \(error)") }
 
         // Skip save entirely — preserves previous complete layout

@@ -5,7 +5,7 @@ import XCTest
 extension ProjectManagerFocusTests {
     // MARK: - Close restores focus from stack
 
-    func testCloseProjectRestoresFocusFromStack() {
+    func testCloseProjectRestoresFocusFromStack() async {
         let aero = FocusAeroSpaceStub()
         aero.focusedWindowResult = .success(ApWindow(
             windowId: 99, appBundleId: "com.apple.Safari", workspace: "main", windowTitle: "Safari"
@@ -23,7 +23,7 @@ extension ProjectManagerFocusTests {
         manager.pushFocusForTest(captured)
         aero.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             break
         case .failure(let error):
@@ -35,7 +35,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Close with stale focus exhausts gracefully
 
-    func testCloseProjectSkipsStaleFocus() {
+    func testCloseProjectSkipsStaleFocus() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = []
 
@@ -45,7 +45,7 @@ extension ProjectManagerFocusTests {
         let staleFocus = CapturedFocus(windowId: 42, appBundleId: "com.gone.App", workspace: "main")
         manager.pushFocusForTest(staleFocus)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             break
         case .failure(let error):
@@ -53,7 +53,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testCloseProjectRestoresFromHistoryWhenWindowLookupFails() {
+    func testCloseProjectRestoresFromHistoryWhenWindowLookupFails() async {
         let aero = FocusAeroSpaceStub()
         aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
         aero.focusWindowSuccessIds = [99]
@@ -65,7 +65,7 @@ extension ProjectManagerFocusTests {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Should restore from persisted history without window lookup")
         case .failure(let error):
@@ -73,7 +73,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testCloseProjectUsesMostRecentNonProjectFocusWhenStackEmpty() {
+    func testCloseProjectUsesMostRecentNonProjectFocusWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         aero.focusedWindowResult = .success(
             ApWindow(windowId: 777, appBundleId: "com.apple.Terminal", workspace: "main", windowTitle: "Terminal")
@@ -87,7 +87,7 @@ extension ProjectManagerFocusTests {
         XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 777)
         aero.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
 
-        switch manager.closeProject(projectId: "test") {
+        switch await manager.closeProject(projectId: "test") {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(777), "Should restore most recent non-project window")
         case .failure(let error):
@@ -97,7 +97,7 @@ extension ProjectManagerFocusTests {
 
     // MARK: - Exit restores focus from stack
 
-    func testExitToNonProjectRestoresFocusFromStack() {
+    func testExitToNonProjectRestoresFocusFromStack() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         aero.workspacesWithFocusResult = .success([
@@ -111,7 +111,7 @@ extension ProjectManagerFocusTests {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
@@ -119,7 +119,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectRestoresFromHistoryWhenWindowLookupFails() {
+    func testExitToNonProjectRestoresFromHistoryWhenWindowLookupFails() async {
         let aero = FocusAeroSpaceStub()
         aero.focusWindowSuccessIds = [99]
         aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
@@ -134,7 +134,7 @@ extension ProjectManagerFocusTests {
         let focus = CapturedFocus(windowId: 99, appBundleId: "com.apple.Safari", workspace: "main")
         manager.pushFocusForTest(focus)
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
@@ -142,7 +142,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectUsesMostRecentFocusWithoutLookupWhenStackEmpty() {
+    func testExitToNonProjectUsesMostRecentFocusWithoutLookupWhenStackEmpty() async {
         let aero = FocusAeroSpaceStub()
         aero.listAllWindowsResultOverride = .failure(ApCoreError(message: "listAllWindows failed"))
         aero.workspacesWithFocusResult = .success([
@@ -160,7 +160,7 @@ extension ProjectManagerFocusTests {
         XCTAssertEqual(manager.captureCurrentFocus()?.windowId, 321)
         aero.focusedWindowResult = .failure(ApCoreError(message: "no focus"))
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(321))
         case .failure(let error):
@@ -168,7 +168,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectPreservesStackCandidateWhenFocusUnstable() {
+    func testExitToNonProjectPreservesStackCandidateWhenFocusUnstable() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -183,14 +183,14 @@ extension ProjectManagerFocusTests {
 
         // First attempt fails to stabilize and should preserve the entry for retry.
         aero.focusWindowSuccessIds = []
-        let firstResult = manager.exitToNonProjectWindow()
+        let firstResult = await manager.exitToNonProjectWindow()
         if case .success = firstResult {
             XCTFail("Expected noPreviousWindow when focus cannot stabilize")
         }
 
         // Second attempt succeeds and should still restore from history.
         aero.focusWindowSuccessIds = [99]
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
@@ -198,7 +198,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectDoesNotRetryMostRecentInSameInvocationAfterStackFailure() {
+    func testExitToNonProjectDoesNotRetryMostRecentInSameInvocationAfterStackFailure() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -216,17 +216,17 @@ extension ProjectManagerFocusTests {
         manager.pushFocusForTest(focus)
         aero.focusWindowSuccessIds = []
 
-        let firstResult = manager.exitToNonProjectWindow()
+        let firstResult = await manager.exitToNonProjectWindow()
         if case .success = firstResult {
             XCTFail("Expected noPreviousWindow when focus cannot stabilize")
         }
-        let secondResult = manager.exitToNonProjectWindow()
+        let secondResult = await manager.exitToNonProjectWindow()
         if case .success = secondResult {
             XCTFail("Expected noPreviousWindow when focus cannot stabilize")
         }
 
         aero.focusWindowSuccessIds = [99]
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99), "Candidate should remain retriable after two failed invocations")
         case .failure(let error):
@@ -234,7 +234,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectRestoresFocusWhenReassertSucceedsNearTimeoutBoundary() {
+    func testExitToNonProjectRestoresFocusWhenReassertSucceedsNearTimeoutBoundary() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -252,7 +252,7 @@ extension ProjectManagerFocusTests {
         manager.pushFocusForTest(focus)
         aero.focusWindowSuccessIds = [99]
 
-        switch manager.exitToNonProjectWindow() {
+        switch await manager.exitToNonProjectWindow() {
         case .success:
             XCTAssertTrue(aero.focusedWindowIds.contains(99))
         case .failure(let error):
@@ -260,7 +260,7 @@ extension ProjectManagerFocusTests {
         }
     }
 
-    func testExitToNonProjectRetryLimitEventuallyInvalidatesUnstableCandidate() {
+    func testExitToNonProjectRetryLimitEventuallyInvalidatesUnstableCandidate() async {
         let aero = FocusAeroSpaceStub()
         aero.workspacesWithFocusResult = .success([
             ApWorkspaceSummary(workspace: "ap-test", isFocused: true)
@@ -279,7 +279,7 @@ extension ProjectManagerFocusTests {
         aero.focusWindowSuccessIds = []
 
         for _ in 0..<3 {
-            let failure = manager.exitToNonProjectWindow()
+            let failure = await manager.exitToNonProjectWindow()
             guard case .failure(let error) = failure else {
                 XCTFail("Expected noPreviousWindow while focus remains unstable")
                 return
@@ -288,7 +288,7 @@ extension ProjectManagerFocusTests {
         }
 
         aero.focusWindowSuccessIds = [99]
-        let result = manager.exitToNonProjectWindow()
+        let result = await manager.exitToNonProjectWindow()
         guard case .failure(let error) = result else {
             XCTFail("Expected retry limit to invalidate unstable candidate")
             return

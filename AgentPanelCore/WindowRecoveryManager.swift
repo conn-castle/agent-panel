@@ -77,7 +77,7 @@ public final class WindowRecoveryManager {
 
     /// Recovers all windows in the given workspace.
     /// Returns `.failure` when the workspace cannot be focused or listed.
-    public func recoverWorkspaceWindows(workspace: String) -> Result<RecoveryResult, ApCoreError> {
+    public func recoverWorkspaceWindows(workspace: String) async -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_workspace.started", context: ["workspace": workspace])
 
         let originalFocus = try? aerospace.focusedWindow().get()
@@ -92,7 +92,7 @@ public final class WindowRecoveryManager {
             return .failure(error)
         }
 
-        return performWorkspaceRecovery(workspace: workspace)
+        return await performWorkspaceRecovery(workspace: workspace)
     }
 
     /// Recovers the currently focused window in the given workspace.
@@ -193,7 +193,7 @@ public final class WindowRecoveryManager {
     /// recovery for project workspaces and generic recovery for non-project workspaces.
     public func recoverAllWindows(
         progress: @escaping (_ current: Int, _ total: Int) -> Void
-    ) -> Result<RecoveryResult, ApCoreError> {
+    ) async -> Result<RecoveryResult, ApCoreError> {
         logEvent("recover_all.started")
 
         let originalFocus = try? aerospace.focusedWindow().get()
@@ -278,7 +278,7 @@ public final class WindowRecoveryManager {
                     "workspace": workspace
                 ])
             } else {
-                switch performWorkspaceRecovery(workspace: workspace) {
+                switch await performWorkspaceRecovery(workspace: workspace) {
                 case .success(let recovery):
                     recovered += recovery.windowsRecovered
                     errors.append(contentsOf: recovery.errors)
@@ -339,7 +339,7 @@ public final class WindowRecoveryManager {
 
     /// Core workspace recovery logic without focus save/restore.
     /// Caller is responsible for workspace focus and focus restoration.
-    private func performWorkspaceRecovery(workspace: String) -> Result<RecoveryResult, ApCoreError> {
+    private func performWorkspaceRecovery(workspace: String) async -> Result<RecoveryResult, ApCoreError> {
         let windows: [ApWindow]
         switch aerospace.listWindowsWorkspace(workspace: workspace) {
         case .success(let result):
@@ -354,7 +354,7 @@ public final class WindowRecoveryManager {
         var layoutHandledWindowIds: Set<Int> = []
 
         if let projectId = projectId(fromWorkspace: workspace), screenModeDetector != nil {
-            let layoutResult = recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
+            let layoutResult = await recoverProjectWorkspaceLayout(projectId: projectId, workspaceWindows: windows)
             layoutRecovered = layoutResult.recovered
             layoutErrors = layoutResult.errors
             layoutHandledWindowIds = layoutResult.handledWindowIds
@@ -530,7 +530,7 @@ public final class WindowRecoveryManager {
     private func recoverProjectWorkspaceLayout(
         projectId: String,
         workspaceWindows: [ApWindow]
-    ) -> (recovered: Int, errors: [String], handledWindowIds: Set<Int>) {
+    ) async -> (recovered: Int, errors: [String], handledWindowIds: Set<Int>) {
         guard let detector = screenModeDetector else { return (0, [], []) }
 
         var errors: [String] = []
@@ -626,7 +626,7 @@ public final class WindowRecoveryManager {
                 case .failure(let error):
                     let isTransient = error.isWindowTokenNotFound
                     if isTransient && attempt < maxRecoveryRetries {
-                        Thread.sleep(forTimeInterval: recoveryRetryInterval)
+                        try? await Task.sleep(nanoseconds: UInt64(recoveryRetryInterval * 1_000_000_000))
                         continue
                     }
                     // Retry exhausted or permanent error — try fallback

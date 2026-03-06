@@ -69,7 +69,7 @@ extension ProjectManager {
             // Capture window positions for the source project before switching away.
             // Only when coming from another project workspace (ap-*).
             if let sourceProjectId = Self.projectId(fromWorkspace: preCapturedFocus.workspace) {
-                captureWindowPositions(projectId: sourceProjectId)
+                await captureWindowPositions(projectId: sourceProjectId)
             }
         } else {
             logEvent("select.no_prefocus", level: .warn, context: [
@@ -208,7 +208,7 @@ extension ProjectManager {
         }
 
         // Position windows (non-fatal)
-        let layoutWarning = positionWindows(projectId: projectId)
+        let layoutWarning = await positionWindows(projectId: projectId)
 
         // Store pre-entry focus for close-project restoration now that activation
         // succeeded. Stored here (not earlier) so failure paths never leave stale entries.
@@ -235,7 +235,7 @@ extension ProjectManager {
     }
 
     /// Closes a project by ID and restores focus to non-project space.
-    public func closeProject(projectId: String) -> Result<ProjectCloseSuccess, ProjectError> {
+    public func closeProject(projectId: String) async -> Result<ProjectCloseSuccess, ProjectError> {
         let configSnapshot = withState { config }
         guard let configSnapshot else {
             return .failure(.configNotLoaded)
@@ -249,7 +249,7 @@ extension ProjectManager {
         let tabCaptureWarning = performTabCapture(projectId: projectId)
 
         // Capture window positions before closing (non-fatal)
-        captureWindowPositions(projectId: projectId)
+        await captureWindowPositions(projectId: projectId)
 
         let workspace = Self.workspacePrefix + projectId
 

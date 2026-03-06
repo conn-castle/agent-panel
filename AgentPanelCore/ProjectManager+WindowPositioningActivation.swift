@@ -8,7 +8,7 @@ extension ProjectManager {
     /// Non-fatal: returns a warning string on failure, nil on success.
     /// Requires windowPositioner, screenModeDetector, and windowPositionStore to all be set.
     /// If only some positioning dependencies are wired, returns a diagnostic warning.
-    func positionWindows(projectId: String) -> String? {
+    func positionWindows(projectId: String) async -> String? {
         // All three positioning deps must be present. If only some are wired, surface a warning.
         let hasPositioner = windowPositioner != nil
         let hasDetector = screenModeDetector != nil
@@ -95,7 +95,7 @@ extension ProjectManager {
                             // Ambiguous or other error — continue retry loop (token may resolve)
                         }
                     }
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback to focused/only window
@@ -232,7 +232,7 @@ extension ProjectManager {
             case .failure(let error):
                 let isTransient = error.isWindowTokenNotFound
                 if isTransient && ideSetAttempt < maxIDESetRetries {
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback
@@ -298,7 +298,7 @@ extension ProjectManager {
             case .failure(let error):
                 let isTransient = error.isWindowTokenNotFound
                 if isTransient && chromeSetAttempt < maxChromeSetRetries {
-                    Thread.sleep(forTimeInterval: frameRetryInterval)
+                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
                     continue
                 }
                 // Retry exhausted or permanent error — try fallback

@@ -54,7 +54,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
 
     // MARK: - Pre-Entry Focus Restoration on Close
 
-    func testCloseProjectRestoresPreEntryFocusFromNonProject() {
+    func testCloseProjectRestoresPreEntryFocusFromNonProject() async {
         // Safari focused → activate Project A → close Project A → restores Safari
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -82,7 +82,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
             focus: CapturedFocus(windowId: safariWindow.windowId, appBundleId: safariWindow.appBundleId, workspace: safariWindow.workspace)
         )
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         XCTAssertNotNil(try? result.get())
 
         // Safari window should have been focused
@@ -91,7 +91,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertTrue(logger.entries.contains { $0.event == "project_manager.close.focus_restored_pre_entry" })
     }
 
-    func testCloseProjectRestoresPreEntryFocusCrossProject() {
+    func testCloseProjectRestoresPreEntryFocusCrossProject() async {
         // Project A focused → activate Project B → close Project B → restores Project A's window
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -123,7 +123,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
             focus: CapturedFocus(windowId: projectAWindow.windowId, appBundleId: projectAWindow.appBundleId, workspace: projectAWindow.workspace)
         )
 
-        let result = manager.closeProject(projectId: projectB)
+        let result = await manager.closeProject(projectId: projectB)
         XCTAssertNotNil(try? result.get())
 
         // Project A's window should have been focused
@@ -131,7 +131,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertTrue(logger.entries.contains { $0.event == "project_manager.close.focus_restored_pre_entry" })
     }
 
-    func testCloseProjectFallsBackToStackWhenPreEntryWindowGone() {
+    func testCloseProjectFallsBackToStackWhenPreEntryWindowGone() async {
         // Pre-entry window closed/invalid → falls back to existing stack behavior
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -166,7 +166,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
             workspace: terminalWindow.workspace
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         XCTAssertNotNil(try? result.get())
 
         // Should fall back to Terminal from the focus stack
@@ -175,7 +175,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
         XCTAssertFalse(logger.entries.contains { $0.event == "project_manager.close.focus_restored_pre_entry" })
     }
 
-    func testCloseProjectWithNoPreEntryUsesStack() {
+    func testCloseProjectWithNoPreEntryUsesStack() async {
         // No pre-entry focus stored → falls back to stack as before
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -205,14 +205,14 @@ final class SwitcherFocusFlowTests: XCTestCase {
             workspace: terminalWindow.workspace
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         XCTAssertNotNil(try? result.get())
 
         XCTAssertTrue(aerospace.focusedWindowIds.contains(terminalWindow.windowId))
         XCTAssertFalse(logger.entries.contains { $0.event == "project_manager.close.focus_restored_pre_entry" })
     }
 
-    func testCloseProjectSkipsPreEntryFocusFromSameWorkspace() {
+    func testCloseProjectSkipsPreEntryFocusFromSameWorkspace() async {
         // Pre-entry snapshot from the workspace being closed should be ignored.
         let logger = RecordingLogger()
         let fileSystem = InMemoryFileSystem()
@@ -256,7 +256,7 @@ final class SwitcherFocusFlowTests: XCTestCase {
             workspace: fallbackWindow.workspace
         ))
 
-        let result = manager.closeProject(projectId: projectId)
+        let result = await manager.closeProject(projectId: projectId)
         XCTAssertNotNil(try? result.get())
 
         XCTAssertFalse(aerospace.focusedWindowIds.contains(staleProjectWindow.windowId))
