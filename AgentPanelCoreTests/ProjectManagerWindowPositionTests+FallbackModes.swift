@@ -87,7 +87,7 @@ extension ProjectManagerWindowPositionTests {
             XCTFail("Expected success: \(error)")
         case .success(let success):
             XCTAssertNotNil(success.layoutWarning)
-            XCTAssertTrue(success.layoutWarning?.contains("screen not found") == true)
+            XCTAssertTrue(success.layoutWarning?.contains("no displays available") == true)
         }
 
         // No setWindowFrames calls since positioning was skipped

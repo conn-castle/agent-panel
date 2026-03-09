@@ -219,6 +219,7 @@
 		C74250A629CEC3C3AD9D3FAB /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D887283BEEE6E7B82797E8 /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift */; };
 		C79723E99C531C526A13C9CA /* MenuWorkspaceStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24E7361C96AE6CA67869987 /* MenuWorkspaceStateCoordinator.swift */; };
 		C8CADF3C0725227D574B6CB2 /* SwitcherPanelController+SelectionActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF873760C3FB4741F49E258 /* SwitcherPanelController+SelectionActions.swift */; };
+		CAF58E0BDAF21526AE00ED1F /* ProjectManagerWindowPositionTests+ScreenFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */; };
 		CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */; };
 		CB989666E4E6615CEC882A98 /* AppHealthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C43BE63AECE73C79A2B1BAE3 /* AppHealthCoordinator.swift */; };
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
@@ -401,6 +402,7 @@
 		0D8F15558CAB2CBF4F4C1EAC /* DoctorReportRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorReportRendererTests.swift; sourceTree = "<group>"; };
 		0EA055C7FE30E0DD13A951C0 /* SwitcherPanelController+WindowDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwitcherPanelController+WindowDelegate.swift"; sourceTree = "<group>"; };
 		0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherDismissPolicy.swift; sourceTree = "<group>"; };
+		14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManagerWindowPositionTests+ScreenFallback.swift"; sourceTree = "<group>"; };
 		171F3509EC794CEB1DDB5EE9 /* SwitcherPanelController+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwitcherPanelController+Configuration.swift"; sourceTree = "<group>"; };
 		18C9B00EFD2668A8515EB0D4 /* ProjectManager+WindowPositioningCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManager+WindowPositioningCapture.swift"; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
@@ -762,6 +764,7 @@
 				7BD4AE056C65DCE71137BC83 /* ProjectManagerWindowPositionTests+ChromeRetry.swift */,
 				BC659A0E9503846639304464 /* ProjectManagerWindowPositionTests+FallbackModes.swift */,
 				C895B6F5C34490A752894791 /* ProjectManagerWindowPositionTests+IDERetry.swift */,
+				14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */,
 				98996472E8BD7F30C409C926 /* ProjectManagerWindowPositionTests+Support.swift */,
 				30D887283BEEE6E7B82797E8 /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift */,
 				77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */,
@@ -1539,6 +1542,7 @@
 				E86E988EFEEBF960BCB5AE70 /* ProjectManagerWindowPositionTests+ChromeRetry.swift in Sources */,
 				E50BBFF85D3E449F12A9EA9A /* ProjectManagerWindowPositionTests+FallbackModes.swift in Sources */,
 				E26E645AC8903D61272CF29E /* ProjectManagerWindowPositionTests+IDERetry.swift in Sources */,
+				CAF58E0BDAF21526AE00ED1F /* ProjectManagerWindowPositionTests+ScreenFallback.swift in Sources */,
 				06E6A14E6AE5EDAE85779DCB /* ProjectManagerWindowPositionTests+Support.swift in Sources */,
 				C74250A629CEC3C3AD9D3FAB /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift in Sources */,
 				A22FFCC30437BD8FA3FFF5A9 /* ProjectManagerWindowPositionTests.swift in Sources */,

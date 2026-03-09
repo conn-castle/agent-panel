@@ -81,10 +81,26 @@ extension ProjectManager {
             return
         }
 
-        // Detect screen mode
+        // Detect screen mode.
+        // If the center point references a disconnected display (e.g., after undocking),
+        // fall back to the primary display for screen mode detection.
         let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
+        let effectiveCenterPoint: CGPoint
+        if detector.screenVisibleFrame(containingPoint: centerPoint) != nil {
+            effectiveCenterPoint = centerPoint
+        } else if let primaryFrame = detector.primaryScreenVisibleFrame() {
+            effectiveCenterPoint = CGPoint(x: primaryFrame.midX, y: primaryFrame.midY)
+            logEvent("capture_position.screen_fallback_to_primary", level: .warn,
+                     message: "Window center references disconnected display; using primary display for mode detection",
+                     context: ["stored_center": "(\(centerPoint.x), \(centerPoint.y))"])
+        } else {
+            logEvent("capture_position.screen_not_found", level: .warn,
+                     message: "No display found and no primary display available; skipping capture")
+            return
+        }
+
         let screenMode: ScreenMode
-        switch detector.detectMode(containingPoint: centerPoint, threshold: config.layout.smallScreenThreshold) {
+        switch detector.detectMode(containingPoint: effectiveCenterPoint, threshold: config.layout.smallScreenThreshold) {
         case .success(let mode):
             screenMode = mode
         case .failure(let error):

@@ -368,6 +368,17 @@ public protocol ScreenModeDetecting {
     ///
     /// - Returns: `nil` if no display contains the point.
     func screenVisibleFrame(containingPoint: CGPoint) -> CGRect?
+
+    /// Returns the visible frame of the primary display, or nil if no displays are available.
+    ///
+    /// Used as a fallback when `screenVisibleFrame(containingPoint:)` returns nil
+    /// because the point references a disconnected display (e.g., after undocking).
+    func primaryScreenVisibleFrame() -> CGRect?
+}
+
+/// Default so existing conformers (e.g., test stubs) are not forced to implement.
+extension ScreenModeDetecting {
+    public func primaryScreenVisibleFrame() -> CGRect? { nil }
 }
 
 /// Persistence for saved window positions per project per screen mode.

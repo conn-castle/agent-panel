@@ -125,11 +125,29 @@ extension ProjectManager {
             break ideFrameLoop
         }
 
-        // Detect screen mode (use center of IDE frame as reference point)
+        // Detect screen mode (use center of IDE frame as reference point).
+        // If the center point references a disconnected display (e.g., after undocking),
+        // fall back to the primary display for all screen queries.
         let centerPoint = CGPoint(x: ideFrame.midX, y: ideFrame.midY)
+        let effectiveCenterPoint: CGPoint
+        let screenVisibleFrame: CGRect
+        if let frame = detector.screenVisibleFrame(containingPoint: centerPoint) {
+            effectiveCenterPoint = centerPoint
+            screenVisibleFrame = frame
+        } else if let primaryFrame = detector.primaryScreenVisibleFrame() {
+            effectiveCenterPoint = CGPoint(x: primaryFrame.midX, y: primaryFrame.midY)
+            screenVisibleFrame = primaryFrame
+            logEvent("position.screen_fallback_to_primary", level: .warn,
+                     message: "Window center references disconnected display; using primary display",
+                     context: ["stored_center": "(\(centerPoint.x), \(centerPoint.y))"])
+        } else {
+            logEvent("position.screen_frame_not_found", level: .warn)
+            return "Window positioning skipped: no displays available"
+        }
+
         let screenMode: ScreenMode
         let physicalWidth: Double
-        switch detector.detectMode(containingPoint: centerPoint, threshold: config.layout.smallScreenThreshold) {
+        switch detector.detectMode(containingPoint: effectiveCenterPoint, threshold: config.layout.smallScreenThreshold) {
         case .success(let mode):
             screenMode = mode
         case .failure(let error):
@@ -138,18 +156,13 @@ extension ProjectManager {
             screenMode = .wide
         }
 
-        switch detector.physicalWidthInches(containingPoint: centerPoint) {
+        switch detector.physicalWidthInches(containingPoint: effectiveCenterPoint) {
         case .success(let width):
             physicalWidth = width
         case .failure(let error):
             logEvent("position.physical_width_detection_failed", level: .warn, message: error.message)
             physicalWidth = 32.0
             warnings.append("Display physical width unknown (using 32\" fallback); layout may be imprecise")
-        }
-
-        guard let screenVisibleFrame = detector.screenVisibleFrame(containingPoint: centerPoint) else {
-            logEvent("position.screen_frame_not_found", level: .warn)
-            return "Window positioning skipped: screen not found"
         }
 
         // Determine target frames (saved or computed)

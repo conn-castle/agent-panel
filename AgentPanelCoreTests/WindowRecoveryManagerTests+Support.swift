@@ -186,10 +186,12 @@ extension WindowRecoveryManagerTests {
         var mode: Result<ScreenMode, ApCoreError> = .success(.wide)
         var physicalWidth: Result<Double, ApCoreError> = .success(27.0)
         var visibleFrame: CGRect? = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        var primaryVisibleFrame: CGRect?
 
         func detectMode(containingPoint: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError> { mode }
         func physicalWidthInches(containingPoint: CGPoint) -> Result<Double, ApCoreError> { physicalWidth }
         func screenVisibleFrame(containingPoint: CGPoint) -> CGRect? { visibleFrame }
+        func primaryScreenVisibleFrame() -> CGRect? { primaryVisibleFrame }
     }
 
     // MARK: - Helpers

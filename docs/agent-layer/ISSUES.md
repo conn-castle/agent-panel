@@ -27,11 +27,6 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 
 <!-- ENTRIES START -->
 
-- Issue 2026-03-08 stalecoords: Stored window position coordinates reference disconnected monitors
-    Priority: High. Area: AgentPanelCore/ProjectManager (position capture/restore)
-    Description: After undocking, saved window position center points (e.g., `(2591.0, -510.0)`, `(6100.0, -637.5)`) reference the external monitor's coordinate space. `ScreenModeDetector.detectMode(containingPoint:)` returns `No display found` because no current display contains those points. Project selection then skips window positioning entirely ("Window positioning skipped: screen not found"). Observed 24 warn-level occurrences in logs.
-    Next step: When the stored center point resolves to no display, fall back to the primary display's center point instead of skipping positioning.
-
 - Issue 2026-03-08 lockord: Lock ordering inversion between stateQueue and persistenceQueue
     Priority: High. Area: AgentPanelCore/ProjectManager
     Description: `loadFocusHistory` acquires persistenceQueue then stateQueue; `persistFocusHistory` acquires stateQueue then persistenceQueue. AB-BA lock ordering is structurally unsound. Mitigated because `loadFocusHistory` only runs during `init`.
