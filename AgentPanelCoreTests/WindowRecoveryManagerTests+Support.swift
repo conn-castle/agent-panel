@@ -30,9 +30,14 @@ extension WindowRecoveryManagerTests {
         var focusWindowResult: Result<Void, ApCoreError> = .success(())
         /// Per-windowId overrides for focusWindow. Checked before `focusWindowResult`.
         var focusWindowResults: [Int: Result<Void, ApCoreError>] = [:]
+        /// Sequential results for focusWindow by windowId. Each call shifts the first element;
+        /// when the sequence is empty, falls back to `focusWindowResults` / `focusWindowResult`.
+        var focusWindowSequences: [Int: [Result<Void, ApCoreError>]] = [:]
         var focusWorkspaceResult: Result<Void, ApCoreError> = .success(())
         /// Per-workspace overrides for focusWorkspace. Checked before `focusWorkspaceResult`.
         var focusWorkspaceResults: [String: Result<Void, ApCoreError>] = [:]
+        var reloadConfigCalls = 0
+        var reloadConfigResult: Result<Void, ApCoreError> = .success(())
 
         func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(workspaces.contains(name)) }
@@ -64,6 +69,11 @@ extension WindowRecoveryManagerTests {
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
             focusWindowCalls.append(windowId)
             callTrace.append(.focusWindow(windowId))
+            if var seq = focusWindowSequences[windowId], !seq.isEmpty {
+                let result = seq.removeFirst()
+                focusWindowSequences[windowId] = seq
+                return result
+            }
             return focusWindowResults[windowId] ?? focusWindowResult
         }
 
@@ -111,6 +121,11 @@ extension WindowRecoveryManagerTests {
             focusWorkspaceCalls.append(name)
             callTrace.append(.focusWorkspace(name))
             return focusWorkspaceResults[name] ?? focusWorkspaceResult
+        }
+
+        func reloadConfig() -> Result<Void, ApCoreError> {
+            reloadConfigCalls += 1
+            return reloadConfigResult
         }
     }
 

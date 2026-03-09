@@ -157,6 +157,9 @@ protocol AeroSpaceProviding {
 
     // Workspace actions
     func focusWorkspace(name: String) -> Result<Void, ApCoreError>
+
+    // Maintenance
+    func reloadConfig() -> Result<Void, ApCoreError>
 }
 
 /// Internal protocol for IDE launching.
@@ -197,6 +200,11 @@ protocol GitRemoteResolving {
     /// - Parameter projectPath: Absolute path to the project directory.
     /// - Returns: The remote URL if one exists, nil otherwise.
     func resolve(projectPath: String) -> String?
+}
+
+// Default no-op so that only recovery-aware call sites need to override.
+extension AeroSpaceProviding {
+    func reloadConfig() -> Result<Void, ApCoreError> { .success(()) }
 }
 
 extension ApAeroSpace: AeroSpaceProviding {}

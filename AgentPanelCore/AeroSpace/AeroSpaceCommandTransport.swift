@@ -41,7 +41,7 @@ struct AeroSpaceCommandTransport {
             circuitBreaker.recordSuccess()
         case .failure(let error):
             if error.isCommandTimeout {
-                let wasOpen = !circuitBreaker.shouldAllow()
+                let wasOpen = circuitBreaker.isOpen
                 circuitBreaker.recordTimeout()
                 if !wasOpen {
                     Self.logger.warning("circuit_breaker.tripped command=aerospace \(arguments.joined(separator: " "), privacy: .public) timeout=\(timeoutSeconds)s")

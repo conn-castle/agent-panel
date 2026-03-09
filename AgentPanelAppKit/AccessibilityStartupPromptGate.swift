@@ -40,7 +40,10 @@ public struct AccessibilityStartupPromptGate {
         isAccessibilityTrusted: Bool
     ) -> Bool {
         let normalizedBuild = currentBuild.trimmingCharacters(in: .whitespacesAndNewlines)
-        precondition(!normalizedBuild.isEmpty, "currentBuild must not be empty")
+        guard !normalizedBuild.isEmpty else {
+            // Missing CFBundleVersion — skip prompt rather than crash.
+            return false
+        }
 
         if defaults.string(forKey: promptedBuildKey) == normalizedBuild {
             return false

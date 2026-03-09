@@ -15,6 +15,8 @@ set -euo pipefail
 signing_dir="$RUNNER_TEMP/signing"
 keychain_path="$RUNNER_TEMP/release.keychain-db"
 
+trap 'rm -rf "$signing_dir" 2>/dev/null || true' EXIT
+
 mkdir -p "$signing_dir"
 
 echo "Decoding signing materials..."
@@ -30,8 +32,12 @@ security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
 # Prepend our keychain to the existing search list (preserving login.keychain-db
 # and System.keychain). Removing them breaks IDEDistribution's certificate chain
 # validation during xcodebuild -exportArchive.
-existing_keychains=$(security list-keychains -d user | sed 's/^ *//;s/"//g')
-security list-keychains -d user -s "$keychain_path" $existing_keychains
+existing_keychains=()
+while IFS= read -r kc; do
+  kc=$(echo "$kc" | sed 's/^ *//;s/"//g')
+  [[ -n "$kc" ]] && existing_keychains+=("$kc")
+done < <(security list-keychains -d user)
+security list-keychains -d user -s "$keychain_path" "${existing_keychains[@]}"
 echo "Keychain search list:"
 security list-keychains -d user
 

@@ -58,6 +58,18 @@ final class AeroSpaceCircuitBreaker {
         return state
     }
 
+    /// Read-only check: true when the breaker is in the open state and the
+    /// cooldown has **not** yet expired. Unlike ``shouldAllow()``, this does
+    /// not transition the breaker back to closed when cooldown expires.
+    var isOpen: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if case .open(let until) = state, Date() < until {
+            return true
+        }
+        return false
+    }
+
     /// Returns true if calls should be allowed through.
     ///
     /// When the breaker is open and the cooldown has expired, it transitions
