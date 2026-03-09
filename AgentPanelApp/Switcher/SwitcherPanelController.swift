@@ -343,7 +343,7 @@ final class SwitcherPanelController: NSObject {
         workspaceRetryCoordinator.onRetryExhausted = { [weak self] error in
             guard let self else { return }
             self.setStatus(
-                message: "Workspace state unavailable: \(self.projectErrorMessage(error))",
+                message: "Workspace state unavailable: \(error.userFacingMessage)",
                 level: .warning
             )
         }

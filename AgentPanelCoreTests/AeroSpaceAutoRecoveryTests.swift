@@ -16,7 +16,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
 
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace list-workspaces --focused (readiness)
             .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
         ]
 
@@ -45,7 +45,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             runner,
             equals: [
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
             ]
         )
@@ -92,8 +92,8 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             runner,
             equals: [
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
             ]
         )
@@ -174,7 +174,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
         runner.results = [
             .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")), // aerospace list-workspaces --focused probe
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // aerospace list-workspaces --focused (readiness)
             .success(ApCommandResult(exitCode: 0, stdout: "ws-1\n", stderr: "")) // retried getWorkspaces
         ]
 
@@ -204,7 +204,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             equals: [
                 commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
             ]
         )
@@ -295,7 +295,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             equals: [
                 commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2),
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("aerospace", ["list-workspaces", "--all"], timeoutSeconds: 5)
             ]
         )
@@ -492,7 +492,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
 
         runner.results = [
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace list-workspaces --focused (readiness)
         ]
 
         let aero = ApAeroSpace(
@@ -523,7 +523,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             runner,
             equals: [
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2)
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)
             ]
         )
     }
@@ -590,7 +590,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
         runner.results = [
             .failure(CircuitBreakerRecoveryTestValues.timeoutError(command: "aerospace list-workspaces --focused")), // aerospace list-workspaces --focused probe
             .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")), // open -a AeroSpace
-            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace --help (readiness)
+            .success(ApCommandResult(exitCode: 0, stdout: "", stderr: "")) // aerospace list-workspaces --focused (readiness)
         ]
 
         let aero = ApAeroSpace(
@@ -622,7 +622,7 @@ final class AeroSpaceAutoRecoveryTests: XCTestCase {
             equals: [
                 commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2),
                 commandCall("open", ["-a", "AeroSpace"], timeoutSeconds: 10),
-                commandCall("aerospace", ["--help"], timeoutSeconds: 2)
+                commandCall("aerospace", ["list-workspaces", "--focused"], timeoutSeconds: 2)
             ]
         )
     }

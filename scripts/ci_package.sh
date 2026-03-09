@@ -32,6 +32,11 @@ if [[ "$CLI_INSTALL_PATH" != /* ]]; then
   echo "error: CLI_INSTALL_PATH must be an absolute path, got: $CLI_INSTALL_PATH" >&2
   exit 1
 fi
+if ! command -v create-dmg &>/dev/null; then
+  echo "error: create-dmg not found" >&2
+  echo "Fix: brew install create-dmg" >&2
+  exit 1
+fi
 
 # --- DMG ---
 dmg_name="AgentPanel-v${VERSION}-macos-arm64.dmg"
@@ -44,6 +49,10 @@ rm -rf "$dmg_source"
 mkdir -p "$dmg_source"
 cp -R "$staging_path/AgentPanel.app" "$dmg_source/AgentPanel.app"
 
+# create-dmg returns exit code 2 when it successfully creates the DMG but
+# cannot set a custom icon (common in headless CI). Accept 0 and 2 as success
+# when the output file exists.
+dmg_exit=0
 create-dmg \
   --volname "AgentPanel" \
   --window-pos 200 120 \
@@ -53,7 +62,20 @@ create-dmg \
   --app-drop-link 450 190 \
   --no-internet-enable \
   "$artifacts_path/$dmg_name" \
-  "$dmg_source"
+  "$dmg_source" \
+  || dmg_exit=$?
+
+if [[ $dmg_exit -ne 0 && $dmg_exit -ne 2 ]]; then
+  echo "error: create-dmg failed with exit code $dmg_exit" >&2
+  exit 1
+fi
+if [[ ! -f "$artifacts_path/$dmg_name" ]]; then
+  echo "error: create-dmg exited $dmg_exit but DMG was not created" >&2
+  exit 1
+fi
+if [[ $dmg_exit -eq 2 ]]; then
+  echo "warning: create-dmg exited 2 (icon not set); DMG created successfully"
+fi
 rm -rf "$dmg_source"
 
 echo "Codesigning DMG..."

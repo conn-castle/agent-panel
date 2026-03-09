@@ -381,3 +381,13 @@ A rolling log of important, non-obvious decisions that materially affect future 
     Decision: Both `positionWindows` and `captureWindowPositions` now check if the IDE frame center point resolves to an active display via `screenVisibleFrame(containingPoint:)`. If nil (disconnected monitor), they use `primaryScreenVisibleFrame()` to get the primary display's visible frame and center, using it for all screen queries (mode detection, physical width, visible frame). `ScreenModeDetecting` protocol gained `primaryScreenVisibleFrame()` with a default nil extension. `ScreenModeDetector` implements it via `NSScreen.main?.visibleFrame`.
     Reason: After undocking, IDE windows may still report coordinates from the disconnected external monitor. The center point (e.g., `(2591.0, -510.0)`) falls outside all current displays, causing `screenVisibleFrame` to return nil. Previously, positioning was skipped entirely ("screen not found") and capture saved with an incorrect `.wide` mode fallback. Observed 24 warn-level occurrences in user logs.
     Tradeoffs: One extra `screenVisibleFrame` call per positioning/capture to check for display presence before proceeding. Capture fallback also skips save entirely when no display is available (prevents corrupting saved layouts with stale coordinates).
+
+- Decision 2026-03-09 readiness-probe-daemon: Readiness probe uses daemon-backed command instead of --help
+    Decision: `isCliReadyOffBreakerProbe()` and `performBackgroundBreakerRecovery` readiness polling use `list-workspaces --focused` instead of `--help`.
+    Reason: `--help` only tests CLI binary availability, not daemon connectivity. After AeroSpace restart, the CLI can be present while the daemon is still initializing, causing premature readiness signals and subsequent failures.
+    Tradeoffs: Slightly slower probe (~50ms vs ~5ms) but detects actual daemon health. If the daemon is down, the probe correctly reports not-ready.
+
+- Decision 2026-03-09 recovery-auto-clear: Circuit breaker recovery flag auto-clears after 60 seconds
+    Decision: `AeroSpaceCircuitBreaker.beginRecovery()` records `recoveryStartedAt` and auto-clears `_isRecoveryInProgress` if 60+ seconds have elapsed since the last `beginRecovery()` call.
+    Reason: If recovery is abandoned without calling `endRecovery()` (crash, timeout, code path error), the flag stays true permanently, blocking all future recovery attempts with no way to self-heal.
+    Tradeoffs: 60s is long enough for legitimate recovery (typical: 2-5s) but short enough to unblock within a minute. A stuck recovery state is worse than a spurious retry.

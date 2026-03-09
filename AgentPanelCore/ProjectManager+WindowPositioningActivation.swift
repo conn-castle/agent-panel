@@ -1,6 +1,43 @@
 import Foundation
 
 extension ProjectManager {
+    // MARK: - Transient Window Op Retry
+
+    /// Executes `operation` with retry on transient window-token errors, falling back
+    /// to `fallback` when retries are exhausted.
+    ///
+    /// - Parameters:
+    ///   - maxRetries: Maximum number of attempts before falling back.
+    ///   - retryInterval: Delay in seconds between retry attempts.
+    ///   - operation: The primary operation to attempt (called synchronously each attempt).
+    ///   - fallback: A fallback operation invoked when retries are exhausted on a transient error.
+    /// - Returns: A tuple of the final `Result`, the number of attempts made, and whether the fallback was invoked.
+    func retryTransientWindowOp<T>(
+        maxRetries: Int,
+        retryInterval: TimeInterval,
+        operation: () -> Result<T, ApCoreError>,
+        fallback: () -> Result<T, ApCoreError>
+    ) async -> (result: Result<T, ApCoreError>, attempts: Int, usedFallback: Bool) {
+        var attempt = 0
+        while true {
+            attempt += 1
+            switch operation() {
+            case .success(let value):
+                return (.success(value), attempt, false)
+            case .failure(let error):
+                let isTransient = error.isWindowTokenNotFound
+                if isTransient && attempt < maxRetries {
+                    try? await Task.sleep(nanoseconds: UInt64(retryInterval * 1_000_000_000))
+                    continue
+                }
+                if isTransient {
+                    return (fallback(), attempt, true)
+                }
+                return (.failure(error), attempt, false)
+            }
+        }
+    }
+
     // MARK: - Window Positioning
 
     /// Positions IDE and Chrome windows after activation.
@@ -215,135 +252,105 @@ extension ProjectManager {
         let cascadeOffsetPoints = CGFloat(0.5 * (Double(screenVisibleFrame.width) / physicalWidth))
 
         // Position IDE windows (retry briefly — IDE title may not be visible to AX immediately)
-        let maxIDESetRetries = 5
-        var ideSetAttempt = 0
-        ideSetLoop: while true {
-            ideSetAttempt += 1
-            switch positioner.setWindowFrames(
-                bundleId: ApVSCodeLauncher.bundleId,
-                projectId: projectId,
-                primaryFrame: targetLayout.ideFrame,
-                cascadeOffsetPoints: cascadeOffsetPoints
-            ) {
-            case .success(let result):
-                if ideSetAttempt > 1 {
-                    logEvent("position.ide_set_retried", context: [
-                        "project_id": projectId,
-                        "attempts": "\(ideSetAttempt)"
-                    ])
-                }
-                if result.positioned < 1 {
-                    logEvent("position.ide_set_none", level: .warn)
-                    warnings.append("IDE: no windows were positioned")
-                } else if result.hasPartialFailure {
-                    logEvent("position.ide_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
-                    warnings.append("IDE: positioned \(result.positioned) of \(result.matched) windows")
-                } else {
-                    logEvent("position.ide_positioned", context: ["count": "\(result.positioned)"])
-                }
-                break ideSetLoop
-            case .failure(let error):
-                let isTransient = error.isWindowTokenNotFound
-                if isTransient && ideSetAttempt < maxIDESetRetries {
-                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
-                    continue
-                }
-                // Retry exhausted or permanent error — try fallback
-                if isTransient {
-                    switch positioner.setFallbackWindowFrames(
-                        bundleId: ApVSCodeLauncher.bundleId,
-                        primaryFrame: targetLayout.ideFrame,
-                        cascadeOffsetPoints: cascadeOffsetPoints
-                    ) {
-                    case .success(let result):
-                        logEvent("position.ide_set_fallback_used", level: .warn, context: [
-                            "project_id": projectId,
-                            "attempts": "\(ideSetAttempt)",
-                            "positioned": "\(result.positioned)"
-                        ])
-                        if result.positioned < 1 {
-                            warnings.append("IDE: no windows were positioned")
-                        }
-                        break ideSetLoop
-                    case .failure(let fallbackError):
-                        logEvent("position.ide_set_failed", level: .warn,
-                                 message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
-                                 context: ["project_id": projectId, "attempts": "\(ideSetAttempt)"])
-                        warnings.append("IDE positioning failed: \(fallbackError.message)")
-                        break ideSetLoop
-                    }
-                } else {
-                    logEvent("position.ide_set_failed", level: .warn, message: error.message)
-                    warnings.append("IDE positioning failed: \(error.message)")
-                    break ideSetLoop
-                }
+        let (ideSetResult, ideSetAttempts, ideUsedFallback) = await retryTransientWindowOp(
+            maxRetries: 5,
+            retryInterval: frameRetryInterval,
+            operation: {
+                positioner.setWindowFrames(
+                    bundleId: ApVSCodeLauncher.bundleId,
+                    projectId: projectId,
+                    primaryFrame: targetLayout.ideFrame,
+                    cascadeOffsetPoints: cascadeOffsetPoints
+                )
+            },
+            fallback: {
+                positioner.setFallbackWindowFrames(
+                    bundleId: ApVSCodeLauncher.bundleId,
+                    primaryFrame: targetLayout.ideFrame,
+                    cascadeOffsetPoints: cascadeOffsetPoints
+                )
             }
+        )
+        switch ideSetResult {
+        case .success(let result):
+            if ideUsedFallback {
+                logEvent("position.ide_set_fallback_used", level: .warn, context: [
+                    "project_id": projectId,
+                    "attempts": "\(ideSetAttempts)"
+                ])
+            } else if ideSetAttempts > 1 {
+                logEvent("position.ide_set_retried", context: [
+                    "project_id": projectId,
+                    "attempts": "\(ideSetAttempts)"
+                ])
+            }
+            if result.positioned < 1 {
+                logEvent("position.ide_set_none", level: .warn)
+                warnings.append("IDE: no windows were positioned")
+            } else if result.hasPartialFailure {
+                logEvent("position.ide_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                warnings.append("IDE: positioned \(result.positioned) of \(result.matched) windows")
+            } else {
+                logEvent("position.ide_positioned", context: ["count": "\(result.positioned)"])
+            }
+        case .failure(let error):
+            let ideFailMsg = ideUsedFallback
+                ? "Token retry exhausted and fallback failed: \(error.message)"
+                : error.message
+            logEvent("position.ide_set_failed", level: .warn, message: ideFailMsg,
+                     context: ["project_id": projectId, "attempts": "\(ideSetAttempts)"])
+            warnings.append("IDE positioning failed: \(error.message)")
         }
 
         // Position Chrome windows (retry briefly — Chrome title may not be visible to AX immediately)
-        let maxChromeSetRetries = 5
-        var chromeSetAttempt = 0
-        chromeSetLoop: while true {
-            chromeSetAttempt += 1
-            switch positioner.setWindowFrames(
-                bundleId: ApChromeLauncher.bundleId,
-                projectId: projectId,
-                primaryFrame: targetLayout.chromeFrame,
-                cascadeOffsetPoints: cascadeOffsetPoints
-            ) {
-            case .success(let result):
-                if chromeSetAttempt > 1 {
-                    logEvent("position.chrome_set_retried", context: [
-                        "project_id": projectId,
-                        "attempts": "\(chromeSetAttempt)"
-                    ])
-                }
-                if result.positioned < 1 {
-                    logEvent("position.chrome_set_none", level: .warn)
-                    warnings.append("Chrome: no windows were positioned")
-                } else if result.hasPartialFailure {
-                    logEvent("position.chrome_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
-                    warnings.append("Chrome: positioned \(result.positioned) of \(result.matched) windows")
-                } else {
-                    logEvent("position.chrome_positioned", context: ["count": "\(result.positioned)"])
-                }
-                break chromeSetLoop
-            case .failure(let error):
-                let isTransient = error.isWindowTokenNotFound
-                if isTransient && chromeSetAttempt < maxChromeSetRetries {
-                    try? await Task.sleep(nanoseconds: UInt64(frameRetryInterval * 1_000_000_000))
-                    continue
-                }
-                // Retry exhausted or permanent error — try fallback
-                if isTransient {
-                    switch positioner.setFallbackWindowFrames(
-                        bundleId: ApChromeLauncher.bundleId,
-                        primaryFrame: targetLayout.chromeFrame,
-                        cascadeOffsetPoints: cascadeOffsetPoints
-                    ) {
-                    case .success(let result):
-                        logEvent("position.chrome_set_fallback_used", level: .warn, context: [
-                            "project_id": projectId,
-                            "attempts": "\(chromeSetAttempt)",
-                            "positioned": "\(result.positioned)"
-                        ])
-                        if result.positioned < 1 {
-                            warnings.append("Chrome: no windows were positioned")
-                        }
-                        break chromeSetLoop
-                    case .failure(let fallbackError):
-                        logEvent("position.chrome_set_failed", level: .warn,
-                                 message: "Token retry exhausted and fallback failed: \(fallbackError.message)",
-                                 context: ["project_id": projectId, "attempts": "\(chromeSetAttempt)"])
-                        warnings.append("Chrome positioning failed: \(fallbackError.message)")
-                        break chromeSetLoop
-                    }
-                } else {
-                    logEvent("position.chrome_set_failed", level: .warn, message: error.message)
-                    warnings.append("Chrome positioning failed: \(error.message)")
-                    break chromeSetLoop
-                }
+        let (chromeSetResult, chromeSetAttempts, chromeUsedFallback) = await retryTransientWindowOp(
+            maxRetries: 5,
+            retryInterval: frameRetryInterval,
+            operation: {
+                positioner.setWindowFrames(
+                    bundleId: ApChromeLauncher.bundleId,
+                    projectId: projectId,
+                    primaryFrame: targetLayout.chromeFrame,
+                    cascadeOffsetPoints: cascadeOffsetPoints
+                )
+            },
+            fallback: {
+                positioner.setFallbackWindowFrames(
+                    bundleId: ApChromeLauncher.bundleId,
+                    primaryFrame: targetLayout.chromeFrame,
+                    cascadeOffsetPoints: cascadeOffsetPoints
+                )
             }
+        )
+        switch chromeSetResult {
+        case .success(let result):
+            if chromeUsedFallback {
+                logEvent("position.chrome_set_fallback_used", level: .warn, context: [
+                    "project_id": projectId,
+                    "attempts": "\(chromeSetAttempts)"
+                ])
+            } else if chromeSetAttempts > 1 {
+                logEvent("position.chrome_set_retried", context: [
+                    "project_id": projectId,
+                    "attempts": "\(chromeSetAttempts)"
+                ])
+            }
+            if result.positioned < 1 {
+                logEvent("position.chrome_set_none", level: .warn)
+                warnings.append("Chrome: no windows were positioned")
+            } else if result.hasPartialFailure {
+                logEvent("position.chrome_partial", level: .warn, context: ["positioned": "\(result.positioned)", "matched": "\(result.matched)"])
+                warnings.append("Chrome: positioned \(result.positioned) of \(result.matched) windows")
+            } else {
+                logEvent("position.chrome_positioned", context: ["count": "\(result.positioned)"])
+            }
+        case .failure(let error):
+            let chromeFailMsg = chromeUsedFallback
+                ? "Token retry exhausted and fallback failed: \(error.message)"
+                : error.message
+            logEvent("position.chrome_set_failed", level: .warn, message: chromeFailMsg,
+                     context: ["project_id": projectId, "attempts": "\(chromeSetAttempts)"])
+            warnings.append("Chrome positioning failed: \(error.message)")
         }
 
         return warnings.isEmpty ? nil : warnings.joined(separator: "; ")

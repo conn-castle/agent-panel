@@ -42,10 +42,14 @@ final class WindowCycleOverlayCoordinator {
     ///   - direction: Initial cycle direction.
     ///   - fallbackCycle: Immediate fallback behavior (legacy cycle).
     func start(direction: CycleDirection, fallbackCycle: @escaping () -> Void) {
+        // Read suppression state before dispatching to the serial queue to avoid
+        // calling DispatchQueue.main.sync from within the queue, which risks
+        // deadlock if start() is ever invoked from the main thread.
+        let suppressed = isOverlaySuppressed()
         queue.async { [weak self] in
             guard let self else { return }
 
-            if self.isOverlaySuppressed() {
+            if suppressed {
                 self.activeSession = nil
                 self.hideOverlay()
                 fallbackCycle()

@@ -4,9 +4,12 @@ extension ProjectManager {
     // MARK: - Focus History Persistence
 
     func loadFocusHistory() {
-        let loadResult = withPersistence {
-            focusHistoryStore.load(now: Date())
-        }
+        // Read from persistence directly (without withPersistence) to avoid
+        // lock-ordering inversion: persistFocusHistory() acquires stateQueue
+        // then persistenceQueue, so acquiring them in reverse order here would
+        // risk AB-BA deadlock. This is safe because loadFocusHistory() is only
+        // called during init(), so there is no concurrent persistence access.
+        let loadResult = focusHistoryStore.load(now: Date())
         switch loadResult {
         case .success(nil):
             withState {

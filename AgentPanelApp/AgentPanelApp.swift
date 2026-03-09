@@ -372,8 +372,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 // On startup, run Doctor after settings blocks are written so it doesn't
                 // report spurious warnings for blocks that are still being written.
-                if self?.healthCoordinator?.lastHealthRefreshAt == nil {
-                    DispatchQueue.main.async {
+                // Check lastHealthRefreshAt on the main thread (AppHealthCoordinator
+                // is main-thread-confined) to avoid a data race.
+                DispatchQueue.main.async {
+                    if self?.healthCoordinator?.lastHealthRefreshAt == nil {
                         self?.healthCoordinator?.refreshHealthInBackground(trigger: "startup", force: true)
                     }
                 }

@@ -157,21 +157,35 @@ extension ProjectManager {
         return nil
     }
 
+    /// Maximum number of resolved stack candidates to focus-attempt before giving up.
+    /// Only candidates that pass `resolveNonProjectFocusCandidate` (non-nil) count
+    /// toward this limit; stale/unresolvable entries are popped and skipped cheaply.
+    private static let restoreMaxCandidates = 5
+    /// Total wall-clock budget for the restore-from-stack loop (seconds).
+    private static let restoreBudgetSeconds: TimeInterval = 30
+
     private func restoreNonProjectFocusFromStack(
         windowLookup: [Int: ApWindow]?,
         attemptedWindowIds: inout Set<Int>
     ) -> CapturedFocus? {
         let method = windowLookup == nil ? "stack-no-lookup" : "stack"
-        while let (candidate, snapshot) = popNextFocusStackEntry() {
+        let restoreDeadline = Date().addingTimeInterval(Self.restoreBudgetSeconds)
+        var candidatesAttempted = 0
+        while Date() < restoreDeadline,
+              candidatesAttempted < Self.restoreMaxCandidates,
+              let (candidate, snapshot) = popNextFocusStackEntry() {
             guard let resolved = resolveNonProjectFocusCandidate(candidate, windowLookup: windowLookup) else {
                 continue
             }
-            return attemptRestoreFocusCandidate(
+            candidatesAttempted += 1
+            if let result = attemptRestoreFocusCandidate(
                 resolved,
                 method: method,
                 snapshot: snapshot,
                 attemptedWindowIds: &attemptedWindowIds
-            )
+            ) {
+                return result
+            }
         }
         return nil
     }

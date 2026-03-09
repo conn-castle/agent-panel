@@ -9,12 +9,22 @@ import Foundation
 /// - Project selection, closing, and exit
 /// - Focus capture/restore for switcher UX
 ///
-/// Thread Safety: ProjectManager state is serialized internally, so callers may invoke
-/// methods from background queues without racing mutable state. Long-running AeroSpace
-/// CLI calls still execute on the caller's thread/queue (callers should dispatch off-main).
-/// Exception: `restoreFocus(_:)`, `focusWorkspace(name:)`, and `focusWindow(windowId:)` may be
-/// called from a detached task for non-blocking focus restoration (these only invoke AeroSpace CLI
-/// commands and do not mutate ProjectManager state).
+/// ## Thread Safety
+///
+/// **All mutable state** is serialized via two internal serial queues:
+/// - `stateQueue`: protects config, projects, focus stack, recency, and callbacks.
+/// - `persistenceQueue`: protects file I/O for focus history and recency.
+///
+/// **Lock ordering**: always acquire `stateQueue` before `persistenceQueue`
+/// when both are needed in a single operation.
+///
+/// **Callers** may invoke any public method from any queue. Long-running
+/// AeroSpace CLI calls execute on the caller's thread/queue, so callers
+/// should dispatch off-main to avoid UI freezes.
+///
+/// **Stateless methods** (`restoreFocus(_:)`, `focusWorkspace(name:)`,
+/// `focusWindow(windowId:)`) only invoke AeroSpace CLI commands and do not
+/// mutate ProjectManager state; they may safely be called from detached tasks.
 public final class ProjectManager {
     /// Prefix for all AgentPanel workspaces (delegates to ``WorkspaceRouting/projectPrefix``).
     public static let workspacePrefix = WorkspaceRouting.projectPrefix

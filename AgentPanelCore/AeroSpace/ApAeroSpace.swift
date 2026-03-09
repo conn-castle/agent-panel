@@ -752,8 +752,11 @@ public struct ApAeroSpace {
             switch listWindowsWorkspace(workspace: workspace) {
             case .success(let windows):
                 allWindows.append(contentsOf: windows)
-            case .failure:
-                // Skip workspaces that fail (e.g., transient workspaces that disappeared)
+            case .failure(let error):
+                // Propagate infrastructure errors immediately; skip transient workspace errors
+                if error.reason == .circuitBreakerOpen || error.isCommandTimeout {
+                    return .failure(error)
+                }
                 continue
             }
         }
@@ -797,34 +800,26 @@ public struct ApAeroSpace {
                 // Main thread: fire-and-forget recovery in the background, fail fast now.
                 // start() blocks for up to ~10s (open + readiness poll) — unacceptable on main.
                 // The next off-main call will benefit from the recovered state.
+                //
+                // Extract reference-type dependencies into local bindings before the
+                // @Sendable closure to avoid capturing non-Sendable self (a struct).
+                let recoveryCommandRunner = commandRunner
+                let recoveryCircuitBreaker = circuitBreaker
+                let recoveryStartupTimeout = startupTimeoutSeconds
+                let recoveryReadinessInterval = readinessCheckInterval
                 DispatchQueue.global(qos: .userInitiated).async {
-                    switch self.prepareForRecoveryStart(
+                    Self.performBackgroundBreakerRecovery(
+                        commandRunner: recoveryCommandRunner,
+                        circuitBreaker: recoveryCircuitBreaker,
                         processChecker: checker,
-                        terminatingChecker: terminatingChecker
-                    ) {
-                    case .readyToRestart:
-                        break
-                    case .recoveredWithoutRestart:
-                        Self.logger.info("circuit_breaker.recovery_succeeded_without_restart")
-                        self.circuitBreaker.endRecovery(success: true)
-                        return
-                    case .failed(let detail):
-                        Self.logger.warning("circuit_breaker.recovery_failed reason=prepare_failed detail=\(detail, privacy: .public)")
-                        self.circuitBreaker.endRecovery(success: false)
-                        return
-                    }
-
-                    switch self.start() {
-                    case .success:
-                        Self.logger.info("circuit_breaker.recovery_succeeded")
-                        self.circuitBreaker.endRecovery(success: true)
-                    case .failure:
-                        Self.logger.warning("circuit_breaker.recovery_failed")
-                        self.circuitBreaker.endRecovery(success: false)
-                    }
+                        terminatingChecker: terminatingChecker,
+                        startupTimeoutSeconds: recoveryStartupTimeout,
+                        readinessCheckInterval: recoveryReadinessInterval
+                    )
                 }
             } else {
-                switch prepareForRecoveryStart(
+                switch Self.prepareForRecoveryStart(
+                    commandRunner: commandRunner,
                     processChecker: checker,
                     terminatingChecker: terminatingChecker
                 ) {
@@ -924,48 +919,96 @@ public struct ApAeroSpace {
         case failed(detail: String)
     }
 
-    /// Prepares breaker-open recovery before restart.
+    /// Performs circuit-breaker recovery on a background queue.
     ///
-    /// If AeroSpace is not running, restart can proceed immediately.
-    /// If AeroSpace is running, a direct (breaker-bypassed) probe checks CLI
-    /// responsiveness. Termination is attempted only for timeout-class probe
-    /// failures (hung-process signals); all other probe failures fail recovery
-    /// without terminating the process.
-    ///
-    /// - Parameters:
-    ///   - processChecker: Running-process checker for AeroSpace.
-    ///   - terminatingChecker: Termination-capable checker for hung-process recovery.
-    /// - Returns: Preparation outcome indicating whether recovery should restart,
-    ///   is already complete, or must fail.
-    private func prepareForRecoveryStart(
+    /// Static to avoid capturing non-Sendable `ApAeroSpace` (a struct) in the
+    /// `@Sendable` GCD closure. Only reference-type dependencies (which handle
+    /// their own synchronization) and value-type parameters are passed in.
+    private static func performBackgroundBreakerRecovery(
+        commandRunner: CommandRunning,
+        circuitBreaker: AeroSpaceCircuitBreaker,
+        processChecker: RunningApplicationChecking,
+        terminatingChecker: (RunningApplicationChecking & RunningApplicationTerminating)?,
+        startupTimeoutSeconds: TimeInterval,
+        readinessCheckInterval: TimeInterval
+    ) {
+        switch prepareForRecoveryStart(
+            commandRunner: commandRunner,
+            processChecker: processChecker,
+            terminatingChecker: terminatingChecker
+        ) {
+        case .readyToRestart:
+            break
+        case .recoveredWithoutRestart:
+            logger.info("circuit_breaker.recovery_succeeded_without_restart")
+            circuitBreaker.endRecovery(success: true)
+            return
+        case .failed(let detail):
+            logger.warning("circuit_breaker.recovery_failed reason=prepare_failed detail=\(detail, privacy: .public)")
+            circuitBreaker.endRecovery(success: false)
+            return
+        }
+
+        // Start AeroSpace and wait for readiness (recovery-specific path).
+        // Uses off-breaker probes since circuitBreaker.isRecoveryInProgress is true.
+        switch commandRunner.run(executable: "open", arguments: ["-a", "AeroSpace"], timeoutSeconds: 10) {
+        case .failure:
+            logger.warning("circuit_breaker.recovery_failed")
+            circuitBreaker.endRecovery(success: false)
+            return
+        case .success(let result):
+            guard result.exitCode == 0 else {
+                logger.warning("circuit_breaker.recovery_failed")
+                circuitBreaker.endRecovery(success: false)
+                return
+            }
+            // Poll for readiness using off-breaker CLI probe
+            let deadline = Date().addingTimeInterval(startupTimeoutSeconds)
+            while Date() < deadline {
+                switch commandRunner.run(executable: "aerospace", arguments: ["list-workspaces", "--focused"], timeoutSeconds: 2) {
+                case .success(let r) where r.exitCode == 0:
+                    logger.info("circuit_breaker.recovery_succeeded")
+                    circuitBreaker.endRecovery(success: true)
+                    return
+                default:
+                    Thread.sleep(forTimeInterval: readinessCheckInterval)
+                }
+            }
+            logger.warning("circuit_breaker.recovery_failed")
+            circuitBreaker.endRecovery(success: false)
+        }
+    }
+
+    private static func prepareForRecoveryStart(
+        commandRunner: CommandRunning,
         processChecker: RunningApplicationChecking,
         terminatingChecker: (RunningApplicationChecking & RunningApplicationTerminating)?
     ) -> RecoveryPreparationResult {
-        guard processChecker.isApplicationRunning(bundleIdentifier: Self.bundleIdentifier) else {
-            Self.logger.info("circuit_breaker.recovery_process_not_running")
+        guard processChecker.isApplicationRunning(bundleIdentifier: bundleIdentifier) else {
+            logger.info("circuit_breaker.recovery_process_not_running")
             return .readyToRestart
         }
 
-        switch recoveryProbeResultOffBreaker() {
+        switch recoveryProbeResultOffBreaker(commandRunner: commandRunner) {
         case .responsive:
-            Self.logger.info("circuit_breaker.recovery_process_responsive")
+            logger.info("circuit_breaker.recovery_process_responsive")
             return .recoveredWithoutRestart
         case .failed(let detail):
-            Self.logger.warning("circuit_breaker.recovery_probe_failed_non_timeout detail=\(detail, privacy: .public)")
+            logger.warning("circuit_breaker.recovery_probe_failed_non_timeout detail=\(detail, privacy: .public)")
             return .failed(detail: detail)
         case .timedOut:
             break
         }
 
         guard let terminatingChecker else {
-            Self.logger.warning("circuit_breaker.recovery_terminate_unsupported")
-            return .failed(detail: Self.recoveryTerminateUnsupportedDetail)
+            logger.warning("circuit_breaker.recovery_terminate_unsupported")
+            return .failed(detail: recoveryTerminateUnsupportedDetail)
         }
 
-        Self.logger.info("circuit_breaker.recovery_terminating_unresponsive_process")
-        guard terminatingChecker.terminateApplication(bundleIdentifier: Self.bundleIdentifier) else {
-            Self.logger.warning("circuit_breaker.recovery_terminate_failed")
-            return .failed(detail: Self.recoveryTerminateFailedDetail)
+        logger.info("circuit_breaker.recovery_terminating_unresponsive_process")
+        guard terminatingChecker.terminateApplication(bundleIdentifier: bundleIdentifier) else {
+            logger.warning("circuit_breaker.recovery_terminate_failed")
+            return .failed(detail: recoveryTerminateFailedDetail)
         }
 
         return .readyToRestart
@@ -979,18 +1022,18 @@ public struct ApAeroSpace {
     /// availability.
     ///
     /// - Returns: Probe outcome used to decide whether termination is allowed.
-    private func recoveryProbeResultOffBreaker() -> RecoveryProbeResult {
-        let probeTimeoutSeconds = recoveryProbeTimeoutSeconds()
+    private static func recoveryProbeResultOffBreaker(commandRunner: CommandRunning) -> RecoveryProbeResult {
+        let probeTimeoutSeconds = recoveryProbeTimeoutSeconds(commandRunner: commandRunner)
         switch commandRunner.run(
             executable: "aerospace",
             arguments: ["list-workspaces", "--focused"],
             timeoutSeconds: probeTimeoutSeconds
         ) {
         case .failure(let error):
-            if isTimeoutCommandError(error) {
+            if error.isCommandTimeout {
                 return .timedOut
             }
-            return .failed(detail: recoveryProbeNonTimeoutFailureDetail(error))
+            return .failed(detail: recoveryProbeNonTimeoutFailureDetail(error, commandRunner: commandRunner))
         case .success(let result):
             guard result.exitCode == 0 else {
                 return .failed(detail: recoveryProbeNonZeroExitDetail(exitCode: result.exitCode))
@@ -1005,11 +1048,11 @@ public struct ApAeroSpace {
     /// start()->readiness probes from re-entering recovery while a recovery
     /// attempt is already running.
     ///
-    /// - Returns: True when `aerospace --help` exits successfully.
+    /// - Returns: True when `aerospace list-workspaces --focused` exits successfully.
     private func isCliReadyOffBreakerProbe() -> Bool {
         switch commandRunner.run(
             executable: "aerospace",
-            arguments: ["--help"],
+            arguments: ["list-workspaces", "--focused"],
             timeoutSeconds: 2
         ) {
         case .failure:
@@ -1019,29 +1062,24 @@ public struct ApAeroSpace {
         }
     }
 
-    /// Returns true when an error corresponds to a command timeout.
-    private func isTimeoutCommandError(_ error: ApCoreError) -> Bool {
-        error.isCommandTimeout
-    }
-
     /// Recovery detail for non-zero responsiveness probe exits.
-    private func recoveryProbeNonZeroExitDetail(exitCode: Int32) -> String {
+    private static func recoveryProbeNonZeroExitDetail(exitCode: Int32) -> String {
         "AeroSpace responsiveness probe exited with code \(exitCode). Refusing automatic termination; restart AeroSpace manually."
     }
 
     /// Recovery detail for non-timeout responsiveness probe failures.
     ///
     /// Includes a concise, sanitized probe error context for diagnostics.
-    private func recoveryProbeNonTimeoutFailureDetail(_ error: ApCoreError) -> String {
-        guard shouldIncludeRecoveryProbeErrorContext() else {
-            return Self.recoveryProbeNonTimeoutFailureDetail
+    private static func recoveryProbeNonTimeoutFailureDetail(_ error: ApCoreError, commandRunner: CommandRunning) -> String {
+        guard commandRunner is ApSystemCommandRunner else {
+            return recoveryProbeNonTimeoutFailureDetail
         }
         let context = conciseRecoveryProbeErrorContext(error)
-        return "\(Self.recoveryProbeNonTimeoutFailureDetail) Probe error: \(context)."
+        return "\(recoveryProbeNonTimeoutFailureDetail) Probe error: \(context)."
     }
 
     /// Produces a bounded, single-line diagnostic context from a probe failure.
-    private func conciseRecoveryProbeErrorContext(_ error: ApCoreError) -> String {
+    private static func conciseRecoveryProbeErrorContext(_ error: ApCoreError) -> String {
         let rawContext = [error.detail, error.message]
             .compactMap { $0 }
             .map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
@@ -1063,23 +1101,23 @@ public struct ApAeroSpace {
     /// timeout to avoid classifying a process as hung more aggressively than
     /// normal command execution. Injected runners keep the legacy probe timeout
     /// to preserve deterministic test contracts.
-    private func recoveryProbeTimeoutSeconds() -> TimeInterval {
+    private static func recoveryProbeTimeoutSeconds(commandRunner: CommandRunning) -> TimeInterval {
         if commandRunner is ApSystemCommandRunner {
-            return max(2, Self.defaultCommandTimeoutSeconds)
+            return max(2, defaultCommandTimeoutSeconds)
         }
         return 2
     }
 
-    /// Returns true when probe failure diagnostics should include underlying context.
-    private func shouldIncludeRecoveryProbeErrorContext() -> Bool {
-        commandRunner is ApSystemCommandRunner
-    }
-
     /// Returns help output for a CLI command.
+    ///
+    /// Bypasses the circuit breaker intentionally: `--help` tests the CLI binary,
+    /// not daemon connectivity, and must work during compatibility checks even
+    /// when the breaker is open.
+    ///
     /// - Parameter command: AeroSpace command name to query.
     /// - Returns: Help output or an error.
     private func commandHelpOutput(command: String) -> Result<String, ApCoreError> {
-        switch runAerospace(arguments: [command, "--help"], timeoutSeconds: 2) {
+        switch commandRunner.run(executable: "aerospace", arguments: [command, "--help"], timeoutSeconds: 2) {
         case .failure(let error):
             return .failure(error)
         case .success(let result):

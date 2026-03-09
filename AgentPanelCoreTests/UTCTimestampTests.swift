@@ -129,6 +129,7 @@ private struct StubAppDiscovery: AppDiscovering {
 
 private struct StubFileSystem: FileSystem {
     func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { false }
     func isExecutableFile(at url: URL) -> Bool { false }
     func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
     func createDirectory(at url: URL) throws {}

@@ -17,6 +17,12 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if ! command -v xcbeautify &>/dev/null; then
+  echo "error: xcbeautify not found" >&2
+  echo "Fix: brew install xcbeautify" >&2
+  exit 1
+fi
+
 archive_path="$RUNNER_TEMP/AgentPanel.xcarchive"
 staging_path="$RUNNER_TEMP/staging"
 derived_data_path="build/DerivedData"

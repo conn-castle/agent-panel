@@ -69,12 +69,16 @@ final class RecoveryOperationCoordinator {
     func recoverCurrentWindow(windowId: Int, workspace: String, screenFrame: CGRect) {
         logEvent("recover_current_window.requested")
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Snapshot mutable callback on the caller's thread (main) before entering
+        // the detached task to avoid a data race on the non-Sendable property.
+        let callback = onCurrentWindowRecovered
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let manager = self.makeRecoveryManager(screenFrame, nil)
             let result = manager.recoverCurrentWindow(windowId: windowId, workspace: workspace)
-            DispatchQueue.main.async {
-                self.onCurrentWindowRecovered?(result, windowId, workspace)
+            await MainActor.run {
+                callback?(result, windowId, workspace)
             }
         }
     }
@@ -90,16 +94,15 @@ final class RecoveryOperationCoordinator {
     func recoverWorkspaceWindows(focus: CapturedFocus, screenFrame: CGRect) {
         logEvent("recover_workspace.requested")
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        let callback = onWorkspaceRecovered
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
-            let callback = self.onWorkspaceRecovered
-            Task {
-                let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
-                await MainActor.run {
-                    callback?(result, focus)
-                }
+            let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
+            await MainActor.run {
+                callback?(result, focus)
             }
         }
     }
@@ -121,20 +124,18 @@ final class RecoveryOperationCoordinator {
     ) {
         logEvent("recover_workspace.requested")
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     completion(.failure(ApCoreError(category: .command, message: "Recovery coordinator unavailable.")))
                 }
                 return
             }
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
-            Task {
-                let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
-                await MainActor.run {
-                    completion(result)
-                }
+            let result = await manager.recoverWorkspaceWindows(workspace: focus.workspace)
+            await MainActor.run {
+                completion(result)
             }
         }
     }
@@ -149,25 +150,23 @@ final class RecoveryOperationCoordinator {
     func recoverAllWindows(screenFrame: CGRect) {
         logEvent("recover_all_windows.requested")
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Snapshot mutable callbacks on the caller's thread (main) before
+        // entering the detached task to avoid a data race on non-Sendable properties.
+        let progressCallback = onAllWindowsProgress
+        let completionCallback = onAllWindowsCompleted
+
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             let layoutConfig = self.currentLayoutConfig()
             let manager = self.makeRecoveryManager(screenFrame, layoutConfig)
-
-            // Snapshot callbacks on this queue before entering the @Sendable Task
-            // to avoid capturing non-Sendable self across the isolation boundary.
-            let progressCallback = self.onAllWindowsProgress
-            let completionCallback = self.onAllWindowsCompleted
-            Task {
-                let result = await manager.recoverAllWindows { current, total in
-                    DispatchQueue.main.async {
-                        progressCallback?(current, total)
-                    }
+            let result = await manager.recoverAllWindows { current, total in
+                DispatchQueue.main.async {
+                    progressCallback?(current, total)
                 }
+            }
 
-                await MainActor.run {
-                    completionCallback?(result)
-                }
+            await MainActor.run {
+                completionCallback?(result)
             }
         }
     }
