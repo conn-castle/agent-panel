@@ -111,6 +111,7 @@ extension ProjectManager {
         timeout: TimeInterval,
         pollInterval: TimeInterval
     ) -> Bool {
+        dispatchPrecondition(condition: .notOnQueue(.main))
         let deadline = Date().addingTimeInterval(timeout)
 
         while true {

@@ -53,6 +53,7 @@ func withShell(_ shell: String?, _ body: () throws -> Void) rethrows {
 
 struct AlwaysExecutableFileSystem: FileSystem {
     func fileExists(at url: URL) -> Bool { false }
+    func directoryExists(at url: URL) -> Bool { false }
     func isExecutableFile(at url: URL) -> Bool { true }
     func readFile(at url: URL) throws -> Data { Data() }
     func createDirectory(at url: URL) throws {}

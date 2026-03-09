@@ -86,7 +86,7 @@ public struct ApCoreError: Error, Equatable, Sendable {
         if reason == .circuitBreakerOpen {
             return true
         }
-        return message.localizedCaseInsensitiveContains("circuit breaker open")
+        return message.range(of: "circuit breaker open", options: .caseInsensitive) != nil
     }
 
     /// Whether this error represents a command timeout.
@@ -111,6 +111,18 @@ public struct ApCoreError: Error, Equatable, Sendable {
             return true
         }
         return message.hasPrefix("No window found with token")
+    }
+
+    /// Whether this error originates from a stale AeroSpace tree-node state.
+    ///
+    /// AeroSpace may leave floating window tree nodes in an unbound state after a
+    /// monitor-configuration change (e.g., undocking). A subsequent `focus` command
+    /// then crashes internally with "already unbound". This property detects that
+    /// condition from the error detail (stderr output) so callers can retry or
+    /// fall through to AX-only recovery.
+    public var isAeroSpaceTreeNodeError: Bool {
+        guard let detail else { return false }
+        return detail.contains("already unbound")
     }
 
     /// Whether this error represents a confirmed zero-window inventory result.

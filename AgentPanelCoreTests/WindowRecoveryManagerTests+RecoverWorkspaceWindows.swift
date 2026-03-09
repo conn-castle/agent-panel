@@ -111,10 +111,10 @@ extension WindowRecoveryManagerTests {
         let manager = makeManager(aerospace: aerospace, positioner: positioner)
         _ = await manager.recoverWorkspaceWindows(workspace: "ap-test")
 
-        // Workspace focus must happen to prevent cross-Space AeroSpace crashes.
+        // reloadConfig then workspace focus must happen to prevent cross-Space AeroSpace crashes.
         XCTAssertEqual(
-            Array(aerospace.callTrace.prefix(2)),
-            [.focusWorkspace("ap-test"), .focusWindow(1)]
+            Array(aerospace.callTrace.prefix(3)),
+            [.reloadConfig, .focusWorkspace("ap-test"), .focusWindow(1)]
         )
     }
 
@@ -205,7 +205,7 @@ extension WindowRecoveryManagerTests {
         XCTAssertTrue(error.message.contains("workspace focus denied"))
         XCTAssertTrue(positioner.recoverCalls.isEmpty)
         XCTAssertEqual(aerospace.focusWindowCalls, [])
-        XCTAssertEqual(aerospace.callTrace, [.focusWorkspace("ap-test")])
+        XCTAssertEqual(aerospace.callTrace, [.reloadConfig, .focusWorkspace("ap-test")])
     }
 
     func testRecoverWorkspace_focusFailure_surfacedAsError() async {

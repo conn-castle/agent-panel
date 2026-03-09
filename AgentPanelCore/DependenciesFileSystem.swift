@@ -25,13 +25,6 @@ protocol FileSystem {
 }
 
 extension FileSystem {
-    /// Default directory existence check.
-    ///
-    /// Concrete file systems may override this to distinguish between files and directories.
-    func directoryExists(at url: URL) -> Bool {
-        false
-    }
-
     /// Default directory listing.
     ///
     /// Returns an empty array by default. Override in production or test implementations

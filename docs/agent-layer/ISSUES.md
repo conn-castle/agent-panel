@@ -26,3 +26,9 @@ Deferred defects, maintainability refactors, technical debt, risks, and engineer
 ## Open issues
 
 <!-- ENTRIES START -->
+
+- Issue 2026-03-09 testgap: Missing unit tests for new extraction/refactor surfaces
+    Priority: Medium. Area: tests
+    Description: Several refactored or newly extracted methods lack direct unit test coverage: `retryTransientWindowOp` (retry+fallback logic), `AeroSpaceCircuitBreaker.beginRecovery` 60s stuck-recovery timeout, `listAllWindows` infrastructure error propagation (circuitBreakerOpen/timeout), `ProjectError.userFacingMessage`, `performBackgroundBreakerRecovery` readiness polling, and `restoreNonProjectFocusFromStack` multi-candidate loop.
+    Next step: Add focused unit tests for `retryTransientWindowOp` covering immediate success, transient retry, fallback invocation, and permanent failure paths.
+

@@ -105,6 +105,7 @@
 		4E515B23E39A0EEE89B794ED /* SwitcherPanelController+TableDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2391B647D560BD66E334C76 /* SwitcherPanelController+TableDelegate.swift */; };
 		5141A819B89EBFC8A69B9211 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A646649932F90C2FCB262BD /* Config.swift */; };
 		521329AD085C9ED2DAA84EE9 /* DoctorCoverageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51D100373F078D8660A112C /* DoctorCoverageTests.swift */; };
+		52D7111ED809AA44653DA2A1 /* WindowRecoveryManagerTests+TreeNodeRecovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE831FBB6365CD516BF99EAE /* WindowRecoveryManagerTests+TreeNodeRecovery.swift */; };
 		531DF792834FE2B04B05BFE4 /* SwitcherPanelController+StateAndProjectLoading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4680D1D8963A39D50AADBD /* SwitcherPanelController+StateAndProjectLoading.swift */; };
 		534C04B714BF962C54E5B19E /* ConfigParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864A81338BB0B54C44CE3817 /* ConfigParserTests.swift */; };
 		543ACE1A1244E0DCA561CD2A /* ProjectManagerEdgeCaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC8F7409A9D958D816281AFE /* ProjectManagerEdgeCaseTests.swift */; };
@@ -218,6 +219,7 @@
 		C74250A629CEC3C3AD9D3FAB /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D887283BEEE6E7B82797E8 /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift */; };
 		C79723E99C531C526A13C9CA /* MenuWorkspaceStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24E7361C96AE6CA67869987 /* MenuWorkspaceStateCoordinator.swift */; };
 		C8CADF3C0725227D574B6CB2 /* SwitcherPanelController+SelectionActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF873760C3FB4741F49E258 /* SwitcherPanelController+SelectionActions.swift */; };
+		CAF58E0BDAF21526AE00ED1F /* ProjectManagerWindowPositionTests+ScreenFallback.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */; };
 		CAF6B5D9A2628568AF0D0902 /* WindowPositionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32774CD77E6E4809BA743C44 /* WindowPositionStore.swift */; };
 		CB989666E4E6615CEC882A98 /* AppHealthCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C43BE63AECE73C79A2B1BAE3 /* AppHealthCoordinator.swift */; };
 		CDF994CDDB5FCE613AE8D443 /* WindowLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE7A6CD31FAB2B2F7C629585 /* WindowLayoutEngine.swift */; };
@@ -400,6 +402,7 @@
 		0D8F15558CAB2CBF4F4C1EAC /* DoctorReportRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoctorReportRendererTests.swift; sourceTree = "<group>"; };
 		0EA055C7FE30E0DD13A951C0 /* SwitcherPanelController+WindowDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwitcherPanelController+WindowDelegate.swift"; sourceTree = "<group>"; };
 		0F44F4A9B0CF90A9D802DA72 /* SwitcherDismissPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherDismissPolicy.swift; sourceTree = "<group>"; };
+		14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManagerWindowPositionTests+ScreenFallback.swift"; sourceTree = "<group>"; };
 		171F3509EC794CEB1DDB5EE9 /* SwitcherPanelController+Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwitcherPanelController+Configuration.swift"; sourceTree = "<group>"; };
 		18C9B00EFD2668A8515EB0D4 /* ProjectManager+WindowPositioningCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManager+WindowPositioningCapture.swift"; sourceTree = "<group>"; };
 		1A646649932F90C2FCB262BD /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
@@ -583,6 +586,7 @@
 		DCF6EF3D0329228351DD4512 /* ProjectManager+OperationsSelectionClose.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProjectManager+OperationsSelectionClose.swift"; sourceTree = "<group>"; };
 		DD299EAAB0E7152234DFC1AD /* ProjectManagerTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerTypes.swift; sourceTree = "<group>"; };
 		DDCF207DCD3CAB37C2756708 /* FocusStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusStackTests.swift; sourceTree = "<group>"; };
+		DE831FBB6365CD516BF99EAE /* WindowRecoveryManagerTests+TreeNodeRecovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WindowRecoveryManagerTests+TreeNodeRecovery.swift"; sourceTree = "<group>"; };
 		DEC0C4903DB483512BC9E797 /* ConfigParserProjectSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigParserProjectSection.swift; sourceTree = "<group>"; };
 		DF321384360A2C91780A5D89 /* SystemCommandRunnerLoginShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemCommandRunnerLoginShellTests.swift; sourceTree = "<group>"; };
 		E06D0D92D76D722E481FBCAC /* Identity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Identity.swift; sourceTree = "<group>"; };
@@ -760,6 +764,7 @@
 				7BD4AE056C65DCE71137BC83 /* ProjectManagerWindowPositionTests+ChromeRetry.swift */,
 				BC659A0E9503846639304464 /* ProjectManagerWindowPositionTests+FallbackModes.swift */,
 				C895B6F5C34490A752894791 /* ProjectManagerWindowPositionTests+IDERetry.swift */,
+				14A80A36920A695FA1301555 /* ProjectManagerWindowPositionTests+ScreenFallback.swift */,
 				98996472E8BD7F30C409C926 /* ProjectManagerWindowPositionTests+Support.swift */,
 				30D887283BEEE6E7B82797E8 /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift */,
 				77C71158D21AEA68BF4547D9 /* SwitcherDismissPolicyTests.swift */,
@@ -789,6 +794,7 @@
 				DBB64341F13DFA45D908360E /* WindowRecoveryManagerTests+RecoverCurrentWindow.swift */,
 				EC6E6C42F48CF1F4BD979034 /* WindowRecoveryManagerTests+RecoverWorkspaceWindows.swift */,
 				DC6AC2C93CB8ADF4F7AC0804 /* WindowRecoveryManagerTests+Support.swift */,
+				DE831FBB6365CD516BF99EAE /* WindowRecoveryManagerTests+TreeNodeRecovery.swift */,
 				6A098C6B7741B4A3324E086D /* WorkspaceRoutingTests.swift */,
 			);
 			path = AgentPanelCoreTests;
@@ -1536,6 +1542,7 @@
 				E86E988EFEEBF960BCB5AE70 /* ProjectManagerWindowPositionTests+ChromeRetry.swift in Sources */,
 				E50BBFF85D3E449F12A9EA9A /* ProjectManagerWindowPositionTests+FallbackModes.swift in Sources */,
 				E26E645AC8903D61272CF29E /* ProjectManagerWindowPositionTests+IDERetry.swift in Sources */,
+				CAF58E0BDAF21526AE00ED1F /* ProjectManagerWindowPositionTests+ScreenFallback.swift in Sources */,
 				06E6A14E6AE5EDAE85779DCB /* ProjectManagerWindowPositionTests+Support.swift in Sources */,
 				C74250A629CEC3C3AD9D3FAB /* ProjectManagerWindowPositionTests+SwitchAndPartialRestore.swift in Sources */,
 				A22FFCC30437BD8FA3FFF5A9 /* ProjectManagerWindowPositionTests.swift in Sources */,
@@ -1565,6 +1572,7 @@
 				0C74AB178C388E8589BC43FC /* WindowRecoveryManagerTests+RecoverCurrentWindow.swift in Sources */,
 				215E218BBC3ED9AFA73493AA /* WindowRecoveryManagerTests+RecoverWorkspaceWindows.swift in Sources */,
 				95655E99DD3F7F7068374D93 /* WindowRecoveryManagerTests+Support.swift in Sources */,
+				52D7111ED809AA44653DA2A1 /* WindowRecoveryManagerTests+TreeNodeRecovery.swift in Sources */,
 				7026D536055667A8B78770E5 /* WindowRecoveryManagerTests.swift in Sources */,
 				562C6716865A76BE638FC9A0 /* WorkspaceRoutingTests.swift in Sources */,
 			);

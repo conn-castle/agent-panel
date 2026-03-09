@@ -17,6 +17,12 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if ! command -v xcbeautify &>/dev/null; then
+  echo "error: xcbeautify not found" >&2
+  echo "Fix: brew install xcbeautify" >&2
+  exit 1
+fi
+
 archive_path="$RUNNER_TEMP/AgentPanel.xcarchive"
 staging_path="$RUNNER_TEMP/staging"
 derived_data_path="build/DerivedData"
@@ -59,7 +65,7 @@ cp -R "$app_source" "$staging_path/AgentPanel.app"
 # The archive already signed the app, but we re-sign explicitly to ensure
 # the correct identity, hardened runtime, entitlements, and secure timestamp.
 echo "Codesigning app with Developer ID (hardened runtime)..."
-codesign --force --deep --options runtime --timestamp \
+codesign --force --options runtime --timestamp \
   --entitlements "$repo_root/release/AgentPanel.entitlements" \
   --sign "$DEVELOPER_ID_APP_IDENTITY" \
   "$staging_path/AgentPanel.app"

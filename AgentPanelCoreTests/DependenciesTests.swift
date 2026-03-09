@@ -309,6 +309,7 @@ struct ALSelectiveFileSystem: FileSystem {
     let executablePaths: Set<String>
 
     func fileExists(at url: URL) -> Bool { executablePaths.contains(url.path) }
+    func directoryExists(at url: URL) -> Bool { false }
     func isExecutableFile(at url: URL) -> Bool { executablePaths.contains(url.path) }
     func readFile(at url: URL) throws -> Data { throw NSError(domain: "stub", code: 1) }
     func createDirectory(at url: URL) throws {}

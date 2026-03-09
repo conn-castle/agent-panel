@@ -36,6 +36,8 @@ final class AeroSpaceCircuitBreaker {
 
     /// Maximum number of automatic recovery attempts before giving up.
     static let maxRecoveryAttempts = 2
+    /// Safety timeout (seconds) to auto-clear a stuck recovery flag.
+    private static let recoveryStuckTimeoutSeconds: TimeInterval = 60
 
     /// Cooldown period after a timeout trips the breaker (seconds).
     let cooldownSeconds: TimeInterval
@@ -43,6 +45,7 @@ final class AeroSpaceCircuitBreaker {
     private var state: State = .closed
     private var recoveryAttemptCount = 0
     private var _isRecoveryInProgress = false
+    private var recoveryStartedAt: Date?
     private let lock = NSLock()
 
     /// Creates a circuit breaker.
@@ -56,6 +59,18 @@ final class AeroSpaceCircuitBreaker {
         lock.lock()
         defer { lock.unlock() }
         return state
+    }
+
+    /// Read-only check: true when the breaker is in the open state and the
+    /// cooldown has **not** yet expired. Unlike ``shouldAllow()``, this does
+    /// not transition the breaker back to closed when cooldown expires.
+    var isOpen: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if case .open(let until) = state, Date() < until {
+            return true
+        }
+        return false
     }
 
     /// Returns true if calls should be allowed through.
@@ -109,6 +124,7 @@ final class AeroSpaceCircuitBreaker {
         state = .closed
         recoveryAttemptCount = 0
         _isRecoveryInProgress = false
+        recoveryStartedAt = nil
     }
 
     // MARK: - Recovery
@@ -154,10 +170,27 @@ final class AeroSpaceCircuitBreaker {
             if Date() >= until {
                 return false
             }
-            guard recoveryAttemptCount < Self.maxRecoveryAttempts, !_isRecoveryInProgress else {
+            guard recoveryAttemptCount < Self.maxRecoveryAttempts else {
                 return false
             }
+            if _isRecoveryInProgress {
+                // Safety timeout: auto-clear if recovery has been stuck longer than expected.
+                // Count the stuck attempt against the budget so persistent hangs hit maxRecoveryAttempts.
+                if let startedAt = recoveryStartedAt, Date().timeIntervalSince(startedAt) > Self.recoveryStuckTimeoutSeconds {
+                    _isRecoveryInProgress = false
+                    recoveryStartedAt = nil
+                    recoveryAttemptCount += 1
+                    // Re-check budget after counting the stuck attempt; the guard at the
+                    // top of the .open case was evaluated before the increment.
+                    guard recoveryAttemptCount < Self.maxRecoveryAttempts else {
+                        return false
+                    }
+                } else {
+                    return false
+                }
+            }
             _isRecoveryInProgress = true
+            recoveryStartedAt = Date()
             return true
         }
     }
@@ -173,6 +206,7 @@ final class AeroSpaceCircuitBreaker {
         lock.lock()
         defer { lock.unlock() }
         _isRecoveryInProgress = false
+        recoveryStartedAt = nil
         if success {
             state = .closed
             recoveryAttemptCount = 0

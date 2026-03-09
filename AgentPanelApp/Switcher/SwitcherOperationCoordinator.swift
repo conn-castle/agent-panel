@@ -79,6 +79,7 @@ final class SwitcherOperationCoordinator {
 
     /// Resets all operation guards. Called on dismiss.
     func resetGuards() {
+        dispatchPrecondition(condition: .onQueue(.main))
         isActivating = false
         isExitingToNonProject = false
         isRecoveringProject = false
@@ -92,6 +93,7 @@ final class SwitcherOperationCoordinator {
     ///   - project: The project to activate.
     ///   - capturedFocus: The pre-switcher focus for exit restoration.
     func handleProjectSelection(_ project: ProjectConfig, capturedFocus: CapturedFocus?) {
+        dispatchPrecondition(condition: .onQueue(.main))
         session.logEvent(
             event: "switcher.project.selected",
             context: [
@@ -113,54 +115,52 @@ final class SwitcherOperationCoordinator {
         }
 
         let projectId = project.id
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            Task {
-                let result = await self.projectManager.selectProject(
-                    projectId: projectId,
-                    preCapturedFocus: capturedFocus
-                )
+            let result = await self.projectManager.selectProject(
+                projectId: projectId,
+                preCapturedFocus: capturedFocus
+            )
 
-                await MainActor.run {
-                    self.isActivating = false
-                    self.onSetControlsEnabled?(true)
+            await MainActor.run {
+                self.isActivating = false
+                self.onSetControlsEnabled?(true)
 
-                    switch result {
-                    case .success(let activation):
-                        if let warning = activation.tabRestoreWarning {
-                            self.session.logEvent(
-                                event: "switcher.project.tab_restore_warning",
-                                level: .warn,
-                                message: warning,
-                                context: ["project_id": projectId]
-                            )
-                        }
-                        if let warning = activation.layoutWarning {
-                            self.session.logEvent(
-                                event: "switcher.project.layout_warning",
-                                level: .warn,
-                                message: warning,
-                                context: ["project_id": projectId]
-                            )
-                        }
-                        self.onDismiss?(.projectSelected)
-                        self.onFocusIdeWindow?(activation.ideWindowId)
-                    case .failure(let error):
-                        self.onSetStatus?(self.projectErrorMessage(error), .error)
-                        self.onRestoreSearchFieldFocus?()
+                switch result {
+                case .success(let activation):
+                    if let warning = activation.tabRestoreWarning {
                         self.session.logEvent(
-                            event: "switcher.project.activation_failed",
-                            level: .error,
-                            message: "\(error)",
+                            event: "switcher.project.tab_restore_warning",
+                            level: .warn,
+                            message: warning,
                             context: ["project_id": projectId]
                         )
-                        self.onOperationFailed?(ErrorContext(
-                            category: .command,
-                            message: "\(error)",
-                            trigger: "activation"
-                        ))
                     }
+                    if let warning = activation.layoutWarning {
+                        self.session.logEvent(
+                            event: "switcher.project.layout_warning",
+                            level: .warn,
+                            message: warning,
+                            context: ["project_id": projectId]
+                        )
+                    }
+                    self.onDismiss?(.projectSelected)
+                    self.onFocusIdeWindow?(activation.ideWindowId)
+                case .failure(let error):
+                    self.onSetStatus?(error.userFacingMessage, .error)
+                    self.onRestoreSearchFieldFocus?()
+                    self.session.logEvent(
+                        event: "switcher.project.activation_failed",
+                        level: .error,
+                        message: "\(error)",
+                        context: ["project_id": projectId]
+                    )
+                    self.onOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "activation"
+                    ))
                 }
             }
         }
@@ -184,6 +184,7 @@ final class SwitcherOperationCoordinator {
         source: String,
         fallbackSelectionKey: String?
     ) {
+        dispatchPrecondition(condition: .onQueue(.main))
         session.logEvent(
             event: "switcher.close_project.requested",
             context: [
@@ -194,63 +195,61 @@ final class SwitcherOperationCoordinator {
 
         onSetStatus?("Closing '\(projectName)'\u{2026}", .info)
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            Task {
-                let closeResult = await self.projectManager.closeProject(projectId: projectId)
+            let closeResult = await self.projectManager.closeProject(projectId: projectId)
 
-                var refreshedFocus: CapturedFocus?
-                if case .success = closeResult {
-                    refreshedFocus = self.projectManager.captureCurrentFocus()
-                }
+            var refreshedFocus: CapturedFocus?
+            if case .success = closeResult {
+                refreshedFocus = self.projectManager.captureCurrentFocus()
+            }
 
-                let capturedFocus = refreshedFocus
-                await MainActor.run {
-                    switch closeResult {
-                    case .success(let result):
-                        if let warning = result.tabCaptureWarning {
-                            self.session.logEvent(
-                                event: "switcher.close_project.tab_capture_warning",
-                                level: .warn,
-                                message: warning,
-                                context: ["project_id": projectId]
-                            )
-                        }
+            let capturedFocus = refreshedFocus
+            await MainActor.run {
+                switch closeResult {
+                case .success(let result):
+                    if let warning = result.tabCaptureWarning {
                         self.session.logEvent(
-                            event: "switcher.close_project.succeeded",
+                            event: "switcher.close_project.tab_capture_warning",
+                            level: .warn,
+                            message: warning,
                             context: ["project_id": projectId]
                         )
-
-                        // Update captured focus so dismiss doesn't restore stale state.
-                        if let capturedFocus,
-                           let selfBundleId = Bundle.main.bundleIdentifier,
-                           capturedFocus.appBundleId != selfBundleId {
-                            self.onUpdateCapturedFocus?(capturedFocus)
-                        } else {
-                            self.onUpdateCapturedFocus?(nil)
-                        }
-
-                        self.onRefreshWorkspaceAndFilter?(fallbackSelectionKey, false)
-                        if result.tabCaptureWarning != nil {
-                            self.onSetStatus?("Closed '\(projectName)' (tab capture failed)", .warning)
-                        } else {
-                            self.onSetStatus?("Closed '\(projectName)'", .info)
-                        }
-                    case .failure(let error):
-                        self.onSetStatus?(self.projectErrorMessage(error), .error)
-                        self.session.logEvent(
-                            event: "switcher.close_project.failed",
-                            level: .error,
-                            message: "\(error)",
-                            context: ["project_id": projectId]
-                        )
-                        self.onOperationFailed?(ErrorContext(
-                            category: .command,
-                            message: "\(error)",
-                            trigger: "closeProject"
-                        ))
                     }
+                    self.session.logEvent(
+                        event: "switcher.close_project.succeeded",
+                        context: ["project_id": projectId]
+                    )
+
+                    // Update captured focus so dismiss doesn't restore stale state.
+                    if let capturedFocus,
+                       let selfBundleId = Bundle.main.bundleIdentifier,
+                       capturedFocus.appBundleId != selfBundleId {
+                        self.onUpdateCapturedFocus?(capturedFocus)
+                    } else {
+                        self.onUpdateCapturedFocus?(nil)
+                    }
+
+                    self.onRefreshWorkspaceAndFilter?(fallbackSelectionKey, false)
+                    if result.tabCaptureWarning != nil {
+                        self.onSetStatus?("Closed '\(projectName)' (tab capture failed)", .warning)
+                    } else {
+                        self.onSetStatus?("Closed '\(projectName)'", .info)
+                    }
+                case .failure(let error):
+                    self.onSetStatus?(error.userFacingMessage, .error)
+                    self.session.logEvent(
+                        event: "switcher.close_project.failed",
+                        level: .error,
+                        message: "\(error)",
+                        context: ["project_id": projectId]
+                    )
+                    self.onOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "closeProject"
+                    ))
                 }
             }
         }
@@ -263,6 +262,7 @@ final class SwitcherOperationCoordinator {
     /// - Parameter fromShortcut: Whether triggered from a keyboard shortcut.
     /// - Parameter hasBackActionRow: Whether the back-action row is present.
     func handleExitToNonProject(fromShortcut: Bool, hasBackActionRow: Bool) {
+        dispatchPrecondition(condition: .onQueue(.main))
         guard hasBackActionRow else {
             if fromShortcut {
                 NSSound.beep()
@@ -275,36 +275,34 @@ final class SwitcherOperationCoordinator {
         isExitingToNonProject = true
         onSetControlsEnabled?(false)
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            Task {
-                let result = await self.projectManager.exitToNonProjectWindow()
+            let result = await self.projectManager.exitToNonProjectWindow()
 
-                await MainActor.run {
-                    self.onSetControlsEnabled?(true)
-                    switch result {
-                    case .success:
-                        self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
-                        self.onDismiss?(.exitedToNonProject)
-                        self.isExitingToNonProject = false
-                    case .failure(let error):
-                        self.isExitingToNonProject = false
-                        self.onSetStatus?(self.projectErrorMessage(error), .error)
-                        self.session.logEvent(
-                            event: "switcher.exit_to_previous.failed",
-                            level: .error,
-                            message: "\(error)"
-                        )
-                        self.onOperationFailed?(ErrorContext(
-                            category: .command,
-                            message: "\(error)",
-                            trigger: "exitToPrevious"
-                        ))
-                        NSSound.beep()
+            await MainActor.run {
+                self.onSetControlsEnabled?(true)
+                switch result {
+                case .success:
+                    self.session.logEvent(event: "switcher.exit_to_previous.succeeded")
+                    self.onDismiss?(.exitedToNonProject)
+                    self.isExitingToNonProject = false
+                case .failure(let error):
+                    self.isExitingToNonProject = false
+                    self.onSetStatus?(error.userFacingMessage, .error)
+                    self.session.logEvent(
+                        event: "switcher.exit_to_previous.failed",
+                        level: .error,
+                        message: "\(error)"
+                    )
+                    self.onOperationFailed?(ErrorContext(
+                        category: .command,
+                        message: "\(error)",
+                        trigger: "exitToPrevious"
+                    ))
+                    NSSound.beep()
 
-                        self.onRefreshWorkspaceAndFilter?(nil, false)
-                    }
+                    self.onRefreshWorkspaceAndFilter?(nil, false)
                 }
             }
         }
@@ -316,6 +314,7 @@ final class SwitcherOperationCoordinator {
     ///
     /// - Parameter capturedFocus: The pre-switcher focus for workspace identification.
     func handleRecoverProjectFromShortcut(capturedFocus: CapturedFocus?) {
+        dispatchPrecondition(condition: .onQueue(.main))
         guard let focus = capturedFocus else {
             session.logEvent(
                 event: "switcher.recover_project.skipped",
@@ -392,29 +391,4 @@ final class SwitcherOperationCoordinator {
         }
     }
 
-    // MARK: - Helpers
-
-    /// Converts ProjectError to a user-friendly message.
-    private func projectErrorMessage(_ error: ProjectError) -> String {
-        switch error {
-        case .projectNotFound(let id):
-            return "Project not found: \(id)"
-        case .configNotLoaded:
-            return "Config not loaded"
-        case .aeroSpaceError(let detail):
-            return "AeroSpace error: \(detail)"
-        case .ideLaunchFailed(let detail):
-            return "IDE launch failed: \(detail)"
-        case .chromeLaunchFailed(let detail):
-            return "Chrome launch failed: \(detail)"
-        case .noActiveProject:
-            return "No active project"
-        case .noPreviousWindow:
-            return "No recent non-project window"
-        case .windowNotFound(let detail):
-            return "Window not found: \(detail)"
-        case .focusUnstable(let detail):
-            return "Focus unstable: \(detail)"
-        }
-    }
 }

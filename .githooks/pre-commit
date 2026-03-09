@@ -41,7 +41,10 @@ if "$run_all"; then
 fi
 
 # Deduplicate targets
-unique_targets=($(printf '%s\n' "${targets[@]}" 2>/dev/null | sort -u))
+unique_targets=()
+while IFS= read -r t; do
+  [[ -n "$t" ]] && unique_targets+=("$t")
+done < <(printf '%s\n' "${targets[@]}" 2>/dev/null | sort -u)
 
 if [[ ${#unique_targets[@]} -eq 0 ]]; then
   echo "pre-commit: no source changes staged — skipping tests."

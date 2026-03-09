@@ -51,6 +51,10 @@ public struct ScreenModeDetector: ScreenModeDetecting {
         screen(containingPoint: point)?.visibleFrame
     }
 
+    public func primaryScreenVisibleFrame() -> CGRect? {
+        NSScreen.screens.first?.visibleFrame
+    }
+
     // MARK: - Private
 
     private func screen(containingPoint point: CGPoint) -> NSScreen? {

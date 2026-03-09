@@ -306,6 +306,7 @@ private final class ConfigurableChromeTabFileSystem: FileSystem {
     var writeFileError: Error?
 
     func fileExists(at url: URL) -> Bool { fileExistsValue }
+    func directoryExists(at url: URL) -> Bool { false }
     func isExecutableFile(at url: URL) -> Bool { false }
 
     func readFile(at url: URL) throws -> Data {
@@ -342,6 +343,10 @@ private final class InMemoryFileSystem: FileSystem {
 
     func fileExists(at url: URL) -> Bool {
         files[url.path] != nil
+    }
+
+    func directoryExists(at url: URL) -> Bool {
+        directories.contains(url.path)
     }
 
     func isExecutableFile(at url: URL) -> Bool {

@@ -172,32 +172,6 @@ extension SwitcherPanelController {
         }
     }
 
-    // MARK: - Error Display Helpers
-
-    /// Converts ProjectError to a user-friendly message.
-    func projectErrorMessage(_ error: ProjectError) -> String {
-        switch error {
-        case .projectNotFound(let id):
-            return "Project not found: \(id)"
-        case .configNotLoaded:
-            return "Config not loaded"
-        case .aeroSpaceError(let detail):
-            return "AeroSpace error: \(detail)"
-        case .ideLaunchFailed(let detail):
-            return "IDE launch failed: \(detail)"
-        case .chromeLaunchFailed(let detail):
-            return "Chrome launch failed: \(detail)"
-        case .noActiveProject:
-            return "No active project"
-        case .noPreviousWindow:
-            return "No recent non-project window"
-        case .windowNotFound(let detail):
-            return "Window not found: \(detail)"
-        case .focusUnstable(let detail):
-            return "Focus unstable: \(detail)"
-        }
-    }
-
     // MARK: - Table Click Action
 
     /// Handles single-click actions on selectable rows.

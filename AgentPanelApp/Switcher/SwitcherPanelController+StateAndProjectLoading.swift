@@ -216,7 +216,7 @@ extension SwitcherPanelController {
                         self.workspaceRetryCoordinator.scheduleRetry()
                     } else {
                         self.setStatus(
-                            message: "Workspace state unavailable: \(self.projectErrorMessage(error))",
+                            message: "Workspace state unavailable: \(error.userFacingMessage)",
                             level: .warning
                         )
                     }

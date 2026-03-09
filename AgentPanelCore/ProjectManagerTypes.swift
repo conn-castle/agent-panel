@@ -29,6 +29,30 @@ public enum ProjectError: Error, Equatable, Sendable {
 
     /// Focus could not be stabilized on the IDE window.
     case focusUnstable(detail: String)
+
+    /// User-friendly error message for display in the UI.
+    public var userFacingMessage: String {
+        switch self {
+        case .projectNotFound(let id):
+            return "Project not found: \(id)"
+        case .configNotLoaded:
+            return "Config not loaded"
+        case .aeroSpaceError(let detail):
+            return "AeroSpace error: \(detail)"
+        case .ideLaunchFailed(let detail):
+            return "IDE launch failed: \(detail)"
+        case .chromeLaunchFailed(let detail):
+            return "Chrome launch failed: \(detail)"
+        case .noActiveProject:
+            return "No active project"
+        case .noPreviousWindow:
+            return "No recent non-project window"
+        case .windowNotFound(let detail):
+            return "Window not found: \(detail)"
+        case .focusUnstable(let detail):
+            return "Focus unstable: \(detail)"
+        }
+    }
 }
 
 /// Snapshot of AgentPanel workspace state from a single AeroSpace query.

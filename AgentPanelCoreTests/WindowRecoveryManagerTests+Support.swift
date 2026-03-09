@@ -17,6 +17,7 @@ extension WindowRecoveryManagerTests {
             case focusWindow(Int)
             case focusWorkspace(String)
             case moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool)
+            case reloadConfig
         }
 
         var workspaces: [String] = []
@@ -30,9 +31,14 @@ extension WindowRecoveryManagerTests {
         var focusWindowResult: Result<Void, ApCoreError> = .success(())
         /// Per-windowId overrides for focusWindow. Checked before `focusWindowResult`.
         var focusWindowResults: [Int: Result<Void, ApCoreError>] = [:]
+        /// Sequential results for focusWindow by windowId. Each call shifts the first element;
+        /// when the sequence is empty, falls back to `focusWindowResults` / `focusWindowResult`.
+        var focusWindowSequences: [Int: [Result<Void, ApCoreError>]] = [:]
         var focusWorkspaceResult: Result<Void, ApCoreError> = .success(())
         /// Per-workspace overrides for focusWorkspace. Checked before `focusWorkspaceResult`.
         var focusWorkspaceResults: [String: Result<Void, ApCoreError>] = [:]
+        var reloadConfigCalls = 0
+        var reloadConfigResult: Result<Void, ApCoreError> = .success(())
 
         func getWorkspaces() -> Result<[String], ApCoreError> { .success(workspaces) }
         func workspaceExists(_ name: String) -> Result<Bool, ApCoreError> { .success(workspaces.contains(name)) }
@@ -64,6 +70,11 @@ extension WindowRecoveryManagerTests {
         func focusWindow(windowId: Int) -> Result<Void, ApCoreError> {
             focusWindowCalls.append(windowId)
             callTrace.append(.focusWindow(windowId))
+            if var seq = focusWindowSequences[windowId], !seq.isEmpty {
+                let result = seq.removeFirst()
+                focusWindowSequences[windowId] = seq
+                return result
+            }
             return focusWindowResults[windowId] ?? focusWindowResult
         }
 
@@ -111,6 +122,12 @@ extension WindowRecoveryManagerTests {
             focusWorkspaceCalls.append(name)
             callTrace.append(.focusWorkspace(name))
             return focusWorkspaceResults[name] ?? focusWorkspaceResult
+        }
+
+        func reloadConfig() -> Result<Void, ApCoreError> {
+            reloadConfigCalls += 1
+            callTrace.append(.reloadConfig)
+            return reloadConfigResult
         }
     }
 
@@ -171,10 +188,12 @@ extension WindowRecoveryManagerTests {
         var mode: Result<ScreenMode, ApCoreError> = .success(.wide)
         var physicalWidth: Result<Double, ApCoreError> = .success(27.0)
         var visibleFrame: CGRect? = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        var primaryVisibleFrame: CGRect?
 
         func detectMode(containingPoint: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError> { mode }
         func physicalWidthInches(containingPoint: CGPoint) -> Result<Double, ApCoreError> { physicalWidth }
         func screenVisibleFrame(containingPoint: CGPoint) -> CGRect? { visibleFrame }
+        func primaryScreenVisibleFrame() -> CGRect? { primaryVisibleFrame }
     }
 
     // MARK: - Helpers

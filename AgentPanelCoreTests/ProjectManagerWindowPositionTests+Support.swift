@@ -115,7 +115,8 @@ extension ProjectManagerWindowPositionTests {
     struct StubScreenModeDetector: ScreenModeDetecting {
         var mode: ScreenMode = .wide
         var physicalWidth: Double = 27.0
-        var visibleFrame: CGRect = CGRect(x: 0, y: 0, width: 2560, height: 1415)
+        var visibleFrame: CGRect? = CGRect(x: 0, y: 0, width: 2560, height: 1415)
+        var primaryVisibleFrame: CGRect?
 
         func detectMode(containingPoint point: CGPoint, threshold: Double) -> Result<ScreenMode, ApCoreError> {
             .success(mode)
@@ -127,6 +128,10 @@ extension ProjectManagerWindowPositionTests {
 
         func screenVisibleFrame(containingPoint point: CGPoint) -> CGRect? {
             visibleFrame
+        }
+
+        func primaryScreenVisibleFrame() -> CGRect? {
+            primaryVisibleFrame
         }
     }
 

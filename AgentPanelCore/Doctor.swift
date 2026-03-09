@@ -349,31 +349,112 @@ public struct Doctor {
         let runStart = DispatchTime.now().uptimeNanoseconds
         var findings: [DoctorFinding] = []
         var sectionTimings: [String: Int] = [:]
-        let appDisplayName = AgentPanel.displayName
 
-        // Check Homebrew
+        // Homebrew
         var sectionStart = runStart
-        if executableResolver.resolve("brew") != nil {
-            findings.append(DoctorFinding(
-                severity: .pass,
-                title: "Homebrew installed"
-            ))
-        } else {
+        findings.append(contentsOf: checkHomebrew())
+        sectionTimings["homebrew"] = Self.elapsedMs(since: sectionStart)
+
+        // AeroSpace
+        sectionStart = DispatchTime.now().uptimeNanoseconds
+        let aeroResult = checkAeroSpace()
+        findings.append(contentsOf: aeroResult.findings)
+        sectionTimings["aerospace"] = Self.elapsedMs(since: sectionStart)
+
+        // Config and projects
+        sectionStart = DispatchTime.now().uptimeNanoseconds
+        let configResult = checkConfigAndProjects()
+        findings.append(contentsOf: configResult.findings)
+        sectionTimings["config_and_projects"] = Self.elapsedMs(since: sectionStart)
+
+        // Apps (VS Code, Chrome, Peacock)
+        sectionStart = DispatchTime.now().uptimeNanoseconds
+        findings.append(contentsOf: checkApps(
+            vscodeURL: configResult.vscodeURL,
+            chromeURL: configResult.chromeURL,
+            hasValidProjects: configResult.hasValidProjects
+        ))
+        sectionTimings["apps"] = Self.elapsedMs(since: sectionStart)
+
+        // Accessibility and hotkeys
+        sectionStart = DispatchTime.now().uptimeNanoseconds
+        let accessResult = checkAccessibilityAndHotkeys()
+        findings.append(contentsOf: accessResult.findings)
+        sectionTimings["accessibility_and_hotkeys"] = Self.elapsedMs(since: sectionStart)
+
+        // Critical failures that onboarding can fix
+        let appDisplayName = AgentPanel.displayName
+        let hasCriticalAeroSpaceFailure = !aeroResult.installStatus.isInstalled || !aeroResult.cliAvailable
+        if hasCriticalAeroSpaceFailure {
             findings.append(DoctorFinding(
                 severity: .fail,
-                title: "Homebrew not found",
-                fix: "Install Homebrew from https://brew.sh"
+                title: "Critical: AeroSpace setup incomplete",
+                fix: "Launch \(appDisplayName).app to run onboarding, or install manually: brew install --cask nikitabobko/tap/aerospace"
             ))
         }
 
-        sectionTimings["homebrew"] = Self.elapsedMs(since: sectionStart)
+        let totalDurationMs = Self.elapsedMs(since: runStart)
+        let metadata = DoctorMetadata(
+            timestamp: makeUTCTimestamp(),
+            agentPanelVersion: AgentPanel.version,
+            macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            aerospaceApp: aeroResult.appLabel,
+            aerospaceCli: aeroResult.cliLabel,
+            errorContext: context,
+            durationMs: totalDurationMs,
+            sectionTimings: sectionTimings
+        )
 
-        // Check AeroSpace app
-        sectionStart = DispatchTime.now().uptimeNanoseconds
+        let actions = DoctorActionAvailability(
+            canInstallAeroSpace: !aeroResult.installStatus.isInstalled,
+            canStartAeroSpace: aeroResult.installStatus.isInstalled && !aeroResult.isRunning,
+            canReloadAeroSpaceConfig: aeroResult.isRunning,
+            canRequestAccessibility: accessResult.accessibilityNotGranted
+        )
+
+        return DoctorReport(metadata: metadata, findings: findings, actions: actions)
+    }
+
+    // MARK: - Section: Homebrew
+
+    /// Checks whether Homebrew is installed.
+    /// - Returns: Findings for the Homebrew section.
+    private func checkHomebrew() -> [DoctorFinding] {
+        if executableResolver.resolve("brew") != nil {
+            return [DoctorFinding(severity: .pass, title: "Homebrew installed")]
+        } else {
+            return [DoctorFinding(
+                severity: .fail,
+                title: "Homebrew not found",
+                fix: "Install Homebrew from https://brew.sh"
+            )]
+        }
+    }
+
+    // MARK: - Section: AeroSpace
+
+    /// Result of the AeroSpace section check, carrying findings and state
+    /// needed by later sections and the report metadata/actions.
+    private struct AeroSpaceCheckResult {
+        let findings: [DoctorFinding]
+        let appLabel: String
+        let cliLabel: String
+        let installStatus: AeroSpaceInstallStatus
+        let cliAvailable: Bool
+        let isRunning: Bool
+    }
+
+    /// Checks AeroSpace app, CLI, compatibility, running state, and config.
+    /// - Returns: Findings and metadata needed for the report header and actions.
+    private func checkAeroSpace() -> AeroSpaceCheckResult {
+        let appDisplayName = AgentPanel.displayName
+        var findings: [DoctorFinding] = []
+
+        // App installation
         let installStatus = aerospaceHealth.installStatus()
-        var aerospaceAppLabel = "NOT FOUND"
+        var appLabel = "NOT FOUND"
         if installStatus.isInstalled {
-            aerospaceAppLabel = installStatus.appPath ?? "FOUND"
+            appLabel = installStatus.appPath ?? "FOUND"
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace.app installed",
@@ -387,17 +468,17 @@ public struct Doctor {
             ))
         }
 
-        // Check AeroSpace CLI
-        var aerospaceCliLabel = "NOT FOUND"
+        // CLI availability
+        var cliLabel = "NOT FOUND"
         let cliAvailable = aerospaceHealth.isCliAvailable()
         if cliAvailable {
-            aerospaceCliLabel = "AVAILABLE"
+            cliLabel = "AVAILABLE"
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "aerospace CLI available"
             ))
 
-            // Check AeroSpace compatibility
+            // Compatibility
             switch aerospaceHealth.healthCheckCompatibility() {
             case .compatible:
                 findings.append(DoctorFinding(
@@ -425,9 +506,9 @@ public struct Doctor {
             ))
         }
 
-        // Check AeroSpace running
-        let aerospaceRunning = runningApplicationChecker.isApplicationRunning(bundleIdentifier: "bobko.aerospace")
-        if aerospaceRunning {
+        // Running state
+        let isRunning = runningApplicationChecker.isApplicationRunning(bundleIdentifier: "bobko.aerospace")
+        if isRunning {
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace is running"
@@ -440,14 +521,13 @@ public struct Doctor {
             ))
         }
 
-        // Check AeroSpace config
+        // Config
         switch configManager.configStatus() {
         case .managedByAgentPanel:
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "AeroSpace config managed by \(appDisplayName)"
             ))
-            // Check config version staleness
             let currentVer = configManager.currentConfigVersion()
             let templateVer = configManager.templateVersion()
             if let templateVer {
@@ -460,7 +540,6 @@ public struct Doctor {
                     ))
                 }
             } else if configManager.isTemplateAvailable() {
-                // Template resource exists but has no version line — corrupted bundle
                 findings.append(DoctorFinding(
                     severity: .fail,
                     title: "AeroSpace config template has no version",
@@ -468,7 +547,6 @@ public struct Doctor {
                     fix: "Reinstall \(appDisplayName) — the app bundle may be corrupted."
                 ))
             }
-            // else: template not available (CLI context) — skip staleness check
         case .missing:
             findings.append(DoctorFinding(
                 severity: .fail,
@@ -491,11 +569,38 @@ public struct Doctor {
             ))
         }
 
-        sectionTimings["aerospace"] = Self.elapsedMs(since: sectionStart)
+        return AeroSpaceCheckResult(
+            findings: findings,
+            appLabel: appLabel,
+            cliLabel: cliLabel,
+            installStatus: installStatus,
+            cliAvailable: cliAvailable,
+            isRunning: isRunning
+        )
+    }
 
-        // Detect VS Code / Chrome installation (findings emitted after config load,
-        // since severity depends on whether projects are configured).
-        sectionStart = DispatchTime.now().uptimeNanoseconds
+    // MARK: - Section: Config and Projects
+
+    /// Result of the config-and-projects section check.
+    private struct ConfigAndProjectsResult {
+        let findings: [DoctorFinding]
+        let hasValidProjects: Bool
+        let vscodeURL: URL?
+        let chromeURL: URL?
+    }
+
+    /// Checks VS Code / Chrome installation detection, required directories,
+    /// AgentPanel config, and project paths.
+    ///
+    /// VS Code / Chrome URLs are detected here (alongside config) but their
+    /// findings are emitted in ``checkApps(vscodeURL:chromeURL:hasValidProjects:)``
+    /// because severity depends on whether projects are configured.
+    ///
+    /// - Returns: Findings and state needed by the apps section.
+    private func checkConfigAndProjects() -> ConfigAndProjectsResult {
+        var findings: [DoctorFinding] = []
+
+        // Detect VS Code / Chrome installation
         let vscodeURL = appDiscovery.applicationURL(bundleIdentifier: Self.vscodeBundleId)
         let chromeURL = appDiscovery.applicationURL(bundleIdentifier: Self.chromeBundleId)
 
@@ -508,7 +613,6 @@ public struct Doctor {
                 detail: logsDir.path
             ))
         } else {
-            // This is a PASS with note - directory will be created on first log write
             findings.append(DoctorFinding(
                 severity: .pass,
                 title: "Logs directory will be created on first use",
@@ -563,8 +667,6 @@ public struct Doctor {
             }
 
             // Check project paths exist and agent-layer if required.
-            // Local checks are fast (filesystem); SSH checks may block on network I/O,
-            // so SSH projects are checked concurrently to avoid sequential timeouts.
             let localProjects = result.projects.filter { !$0.isSSH }
             let sshProjects = result.projects.filter { $0.isSSH }
 
@@ -578,10 +680,26 @@ public struct Doctor {
             }
         }
 
-        sectionTimings["config_and_projects"] = Self.elapsedMs(since: sectionStart)
+        return ConfigAndProjectsResult(
+            findings: findings,
+            hasValidProjects: hasValidProjects,
+            vscodeURL: vscodeURL,
+            chromeURL: chromeURL
+        )
+    }
 
-        // Emit VS Code / Chrome findings (severity depends on whether projects are configured)
-        sectionStart = DispatchTime.now().uptimeNanoseconds
+    // MARK: - Section: Apps
+
+    /// Checks VS Code, Chrome, and Peacock extension installation.
+    ///
+    /// - Parameters:
+    ///   - vscodeURL: VS Code application URL (nil if not found).
+    ///   - chromeURL: Chrome application URL (nil if not found).
+    ///   - hasValidProjects: Whether any valid projects are configured (affects severity).
+    /// - Returns: Findings for the apps section.
+    private func checkApps(vscodeURL: URL?, chromeURL: URL?, hasValidProjects: Bool) -> [DoctorFinding] {
+        var findings: [DoctorFinding] = []
+
         if let vscodeURL {
             findings.append(DoctorFinding(
                 severity: .pass,
@@ -614,7 +732,7 @@ public struct Doctor {
             ))
         }
 
-        // Check Peacock VS Code extension (only when any project has a color)
+        // Check Peacock VS Code extension (only when projects are configured)
         if hasValidProjects {
             let extensionsDir = dataStore.vscodeExtensionsDirectory
             let hasPeacock: Bool
@@ -639,11 +757,24 @@ public struct Doctor {
             }
         }
 
-        sectionTimings["apps"] = Self.elapsedMs(since: sectionStart)
+        return findings
+    }
 
-        // Check Accessibility permission for window positioning
-        sectionStart = DispatchTime.now().uptimeNanoseconds
+    // MARK: - Section: Accessibility and Hotkeys
+
+    /// Result of the accessibility-and-hotkeys section check.
+    private struct AccessibilityCheckResult {
+        let findings: [DoctorFinding]
+        let accessibilityNotGranted: Bool
+    }
+
+    /// Checks accessibility permission and hotkey registration status.
+    /// - Returns: Findings and whether accessibility permission was not granted (for action availability).
+    private func checkAccessibilityAndHotkeys() -> AccessibilityCheckResult {
+        let appDisplayName = AgentPanel.displayName
+        var findings: [DoctorFinding] = []
         var accessibilityNotGranted = false
+
         if let positioner = windowPositioner {
             if positioner.isAccessibilityTrusted() {
                 findings.append(DoctorFinding(
@@ -661,7 +792,6 @@ public struct Doctor {
             }
         }
 
-        // Check hotkey status if provider available
         if let provider = hotkeyStatusProvider {
             switch provider.hotkeyRegistrationStatus() {
             case .registered:
@@ -681,7 +811,6 @@ public struct Doctor {
             }
         }
 
-        // Check focus-cycle hotkey status if provider available
         if let provider = focusCycleStatusProvider {
             switch provider.focusCycleRegistrationStatus() {
             case .registered:
@@ -701,38 +830,10 @@ public struct Doctor {
             }
         }
 
-        sectionTimings["accessibility_and_hotkeys"] = Self.elapsedMs(since: sectionStart)
-
-        // Check for critical failures that onboarding can fix
-        let hasCriticalAeroSpaceFailure = !installStatus.isInstalled || !cliAvailable
-        if hasCriticalAeroSpaceFailure {
-            findings.append(DoctorFinding(
-                severity: .fail,
-                title: "Critical: AeroSpace setup incomplete",
-                fix: "Launch \(appDisplayName).app to run onboarding, or install manually: brew install --cask nikitabobko/tap/aerospace"
-            ))
-        }
-
-        let totalDurationMs = Self.elapsedMs(since: runStart)
-        let metadata = DoctorMetadata(
-            timestamp: makeUTCTimestamp(),
-            agentPanelVersion: AgentPanel.version,
-            macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-            aerospaceApp: aerospaceAppLabel,
-            aerospaceCli: aerospaceCliLabel,
-            errorContext: context,
-            durationMs: totalDurationMs,
-            sectionTimings: sectionTimings
+        return AccessibilityCheckResult(
+            findings: findings,
+            accessibilityNotGranted: accessibilityNotGranted
         )
-
-        let actions = DoctorActionAvailability(
-            canInstallAeroSpace: !installStatus.isInstalled,
-            canStartAeroSpace: installStatus.isInstalled && !aerospaceRunning,
-            canReloadAeroSpaceConfig: aerospaceRunning,
-            canRequestAccessibility: accessibilityNotGranted
-        )
-
-        return DoctorReport(metadata: metadata, findings: findings, actions: actions)
     }
 
     // MARK: - Project Path Checks

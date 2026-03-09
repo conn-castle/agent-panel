@@ -121,6 +121,12 @@ public struct ConfigWriteBack {
     }
 
     /// Returns the trailing inline comment segment, including spacing before `#`.
+    ///
+    /// Uses naive `#` detection (first occurrence). This is safe because this method
+    /// is only called for `autoStartAtLogin` lines, which are boolean-valued and never
+    /// contain `#` inside quoted strings. If extended to keys whose values may contain
+    /// `#` (e.g., hex color strings), this must be replaced with TOML-aware parsing.
+    ///
     /// - Parameter line: Config line.
     /// - Returns: Empty string when no inline comment exists.
     private static func trailingCommentSegment(in line: String) -> String {

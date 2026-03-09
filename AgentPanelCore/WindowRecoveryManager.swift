@@ -142,11 +142,24 @@ public final class WindowRecoveryManager {
         }
 
         if case .failure(let error) = aerospace.focusWindow(windowId: windowId) {
-            logEvent("recover_current_window.focus_failed", level: .error, message: error.message, context: [
-                "window_id": "\(windowId)",
-                "workspace": workspace
-            ])
-            return .failure(error)
+            if error.isAeroSpaceTreeNodeError {
+                logEvent("recover_current_window.tree_node_error", level: .warn,
+                         message: "AeroSpace tree-node error for window \(windowId), retrying after reload",
+                         context: ["window_id": "\(windowId)", "workspace": workspace])
+                _ = aerospace.reloadConfig()
+                if case .failure = aerospace.focusWindow(windowId: windowId) {
+                    logEvent("recover_current_window.tree_node_retry_failed", level: .warn,
+                             message: "Focus retry failed for window \(windowId), attempting AX-only recovery",
+                             context: ["window_id": "\(windowId)", "workspace": workspace])
+                }
+                // Fall through to AX recovery regardless of retry outcome.
+            } else {
+                logEvent("recover_current_window.focus_failed", level: .error, message: error.message, context: [
+                    "window_id": "\(windowId)",
+                    "workspace": workspace
+                ])
+                return .failure(error)
+            }
         }
 
         switch windowPositioner.recoverWindow(
@@ -385,6 +398,20 @@ public final class WindowRecoveryManager {
         workspace: String,
         eventPrefix: String
     ) -> Result<Void, ApCoreError> {
+        // Reload config before workspace focus to flush stale AeroSpace tree-node
+        // state that can accumulate after monitor-configuration changes (e.g., undocking).
+        // Without this, the subsequent focus command may hit the "already unbound" bug
+        // inside AeroSpace's makeFloatingWindowsSeenAsTiling.
+        if case .failure(let reloadError) = aerospace.reloadConfig() {
+            logEvent(
+                "\(eventPrefix).pre_recovery_reload_failed",
+                level: .warn,
+                message: reloadError.message,
+                context: ["workspace": workspace]
+            )
+            // Non-fatal: continue with workspace focus even if reload fails.
+        }
+
         // Switch to the target workspace before any per-window focus calls.
         // This prevents AeroSpace tree-node crashes when the current macOS Space
         // differs from the workspace's Space (aerospace#focus double-unbind bug).
@@ -446,7 +473,23 @@ public final class WindowRecoveryManager {
 
     private func recoverSingleWindow(_ window: ApWindow) -> SingleRecoveryResult {
         if case .failure(let error) = aerospace.focusWindow(windowId: window.windowId) {
-            return .error("Focus failed for window \(window.windowId) (\(window.windowTitle)): \(error.message)")
+            if error.isAeroSpaceTreeNodeError {
+                // AeroSpace tree-node bug (stale state after monitor change).
+                // Reload config to flush stale nodes, then retry focus once.
+                logEvent("recover_single.tree_node_error", level: .warn,
+                         message: "AeroSpace tree-node error for window \(window.windowId), retrying after reload",
+                         context: ["window_id": "\(window.windowId)"])
+                _ = aerospace.reloadConfig()
+                if case .failure = aerospace.focusWindow(windowId: window.windowId) {
+                    // Retry failed — still attempt AX recovery without AeroSpace focus.
+                    // The window is on screen; the positioner identifies it by bundleId + title.
+                    logEvent("recover_single.tree_node_retry_failed", level: .warn,
+                             message: "Focus retry failed for window \(window.windowId), attempting AX-only recovery",
+                             context: ["window_id": "\(window.windowId)"])
+                }
+            } else {
+                return .error("Focus failed for window \(window.windowId) (\(window.windowTitle)): \(error.message)")
+            }
         }
 
         switch windowPositioner.recoverWindow(

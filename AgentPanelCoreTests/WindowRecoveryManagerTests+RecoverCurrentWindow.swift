@@ -29,8 +29,8 @@ extension WindowRecoveryManagerTests {
         XCTAssertEqual(positioner.recoverCalls[0].windowTitle, "Target Window")
         XCTAssertEqual(aerospace.focusWindowCalls, [7, 42], "Should focus target window, then restore original focus")
         XCTAssertEqual(
-            Array(aerospace.callTrace.prefix(2)),
-            [.focusWorkspace("ap-test"), .focusWindow(7)]
+            Array(aerospace.callTrace.prefix(3)),
+            [.reloadConfig, .focusWorkspace("ap-test"), .focusWindow(7)]
         )
         XCTAssertEqual(
             Array(aerospace.callTrace.suffix(2)),
@@ -104,7 +104,7 @@ extension WindowRecoveryManagerTests {
             return
         }
         XCTAssertTrue(error.message.contains("workspace focus denied"))
-        XCTAssertEqual(aerospace.callTrace, [.focusWorkspace("ap-test")])
+        XCTAssertEqual(aerospace.callTrace, [.reloadConfig, .focusWorkspace("ap-test")])
         XCTAssertEqual(aerospace.focusWindowCalls, [])
         XCTAssertTrue(positioner.recoverCalls.isEmpty)
     }
