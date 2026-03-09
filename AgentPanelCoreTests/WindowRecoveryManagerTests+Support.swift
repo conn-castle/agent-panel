@@ -17,6 +17,7 @@ extension WindowRecoveryManagerTests {
             case focusWindow(Int)
             case focusWorkspace(String)
             case moveWindowToWorkspace(workspace: String, windowId: Int, focusFollows: Bool)
+            case reloadConfig
         }
 
         var workspaces: [String] = []
@@ -125,6 +126,7 @@ extension WindowRecoveryManagerTests {
 
         func reloadConfig() -> Result<Void, ApCoreError> {
             reloadConfigCalls += 1
+            callTrace.append(.reloadConfig)
             return reloadConfigResult
         }
     }

@@ -52,7 +52,7 @@ public struct ScreenModeDetector: ScreenModeDetecting {
     }
 
     public func primaryScreenVisibleFrame() -> CGRect? {
-        NSScreen.main?.visibleFrame
+        NSScreen.screens.first?.visibleFrame
     }
 
     // MARK: - Private

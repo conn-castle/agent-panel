@@ -44,9 +44,14 @@ extension WindowRecoveryManagerTests {
 
         XCTAssertGreaterThanOrEqual(aerospace.reloadConfigCalls, 1,
                                     "reloadConfig should be called before workspace focus")
-        // reloadConfig must happen before the first workspace focus
-        // (focusWorkspaceCalls[0] is the pre-recovery focus for "ap-test")
-        XCTAssertEqual(aerospace.focusWorkspaceCalls.first, "ap-test")
+        // Verify ordering: reloadConfig must appear before the first focusWorkspace in the call trace.
+        let reloadIndex = aerospace.callTrace.firstIndex(of: .reloadConfig)
+        let firstFocusWsIndex = aerospace.callTrace.firstIndex(of: .focusWorkspace("ap-test"))
+        XCTAssertNotNil(reloadIndex, "reloadConfig should be recorded in callTrace")
+        XCTAssertNotNil(firstFocusWsIndex, "focusWorkspace should be recorded in callTrace")
+        if let ri = reloadIndex, let fi = firstFocusWsIndex {
+            XCTAssertTrue(ri < fi, "reloadConfig (index \(ri)) must precede focusWorkspace (index \(fi))")
+        }
     }
 
     func testRecoverWorkspace_reloadConfigFailure_continuesRecovery() async {
