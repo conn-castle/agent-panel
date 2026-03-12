@@ -229,7 +229,19 @@ if [[ -f "$signing_script" ]]; then
   fi
 fi
 
-# 12. Identity.swift buildVersion matches MARKETING_VERSION
+# 12. ci_setup_signing.sh must not delete the API key needed by notarization
+# The signing setup script runs in its own step. An EXIT trap that removes the
+# entire signing directory also deletes AuthKey.p8, which ci_notarize.sh reads
+# from $RUNNER_TEMP/signing/AuthKey.p8 in a later step.
+if [[ -f "$signing_script" ]]; then
+  if grep -qE "trap\b.*rm\b.*signing" "$signing_script"; then
+    fail "ci_setup_signing.sh has an EXIT trap that removes the signing directory — this deletes AuthKey.p8 before notarization can use it"
+  else
+    echo "PASS: ci_setup_signing.sh does not trap-remove the signing directory"
+  fi
+fi
+
+# 13. Identity.swift buildVersion matches MARKETING_VERSION
 identity_swift="$REPO_ROOT/AgentPanelCore/Identity.swift"
 if [[ -f "$identity_swift" ]]; then
   swift_version=$(grep 'static let buildVersion' "$identity_swift" | head -1 | sed 's/.*= *"\([^"]*\)".*/\1/')

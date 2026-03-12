@@ -15,8 +15,6 @@ set -euo pipefail
 signing_dir="$RUNNER_TEMP/signing"
 keychain_path="$RUNNER_TEMP/release.keychain-db"
 
-trap 'rm -rf "$signing_dir" 2>/dev/null || true' EXIT
-
 mkdir -p "$signing_dir"
 
 echo "Decoding signing materials..."
@@ -69,5 +67,10 @@ security set-key-partition-list -S apple-tool:,apple:,codesign: \
 
 echo "Verifying identities..."
 security find-identity -v -p codesigning "$keychain_path"
+
+# Clean up .p12 files (imported into keychain; no longer needed on disk).
+# AuthKey.p8 is intentionally preserved — ci_notarize.sh reads it in a later step.
+# The workflow cleanup step (rm -rf $RUNNER_TEMP/signing) handles final removal.
+rm -f "$signing_dir/app.p12" "$signing_dir/installer.p12"
 
 echo "ci_setup_signing: OK"
