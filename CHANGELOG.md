@@ -6,6 +6,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-03-11
+
+### Changed
+
+- **RecoveryOperationCoordinator extraction** -- moved recover-current-window, recover-workspace, and recover-all-windows operations from AppDelegate into a dedicated testable coordinator, matching the SwitcherOperationCoordinator pattern.
+- **Async close/exit/recovery operations** -- converted close, exit, and recovery operations from Thread.sleep to async/await with Task.sleep for cooperative, non-blocking retry delays.
+- **Structured window positioning errors** -- replaced message-text matching with structured `ApCoreError.reason` values (`.windowTokenNotFound`, `.windowInventoryEmpty`) across all window positioning retry/fallback paths.
+- **Non-project focus restoration bounded** -- `restoreNonProjectFocusFromStack` now limited to 5 candidates with a 30-second budget to prevent runaway loops.
+- **retryTransientWindowOp extraction** -- extracted shared retry helper, eliminating 4x duplication across window operation paths.
+- **Doctor decomposition** -- decomposed `Doctor.run()` into per-section methods for maintainability.
+- **CI script hardening** -- validate tool availability in archive/package scripts, handle `create-dmg` exit code 2, and capture notarization submission ID on failure.
+
+### Fixed
+
+- **Cross-Space recovery crash** -- focus workspace before window recovery to prevent AeroSpace double-unbind crash (`makeFloatingWindowsSeenAsTiling`) when recovering from a different macOS desktop Space.
+- **Disconnected monitor window positioning** -- fall back to primary display when IDE window center references a disconnected external monitor's coordinate space, preventing skipped positioning and corrupted layout saves.
+- **AeroSpace tree-node stale state after undocking** -- pre-recovery `reloadConfig()` flushes stale tree nodes; focus retry with AX-only fallback keeps recovery working when AeroSpace is in a bad state.
+- **Circuit breaker stuck recovery** -- auto-clear stuck recovery flag after 60 seconds to prevent permanent breaker lockout.
+- **Non-Sendable capture warnings** -- snapshot mutable callbacks before `@Sendable` Task closures to avoid non-Sendable capture across isolation boundaries.
+- **Data races in health and overlay coordinators** -- fix healthCoordinator read race (move inside main queue), WindowCycleOverlayCoordinator potential deadlock, and lock ordering inversion in `loadFocusHistory`.
+- **Primary screen fallback** -- use `NSScreen.screens.first` instead of `NSScreen.main` for primary display fallback, since `NSScreen.main` tracks the key window's screen and may be nil.
+- **Precondition guards for poll parameters** -- validate `windowPollTimeout` and `windowPollInterval` are finite and non-negative at init to prevent `UInt64` conversion traps in `Task.sleep`.
+
 ## [0.1.13] - 2026-03-05
 
 ### Added
